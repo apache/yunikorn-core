@@ -190,7 +190,7 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 	queues := p.duplicateQueueSnapshots()
 	currentQueue, ok := queues[p.queuePath]
 	if !ok {
-		log.Logger().Warn("BUG: Didn't find current queue in snapshot list",
+		log.Log(log.SchedPreemption).Warn("BUG: Didn't find current queue in snapshot list",
 			zap.String("queuePath", p.queuePath))
 		return false
 	}
@@ -227,7 +227,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 	// get the current queue snapshot
 	askQueue, ok := allocationsByQueueSnap[p.queuePath]
 	if !ok {
-		log.Logger().Warn("BUG: Queue not found by name", zap.String("queuePath", p.queuePath))
+		log.Log(log.SchedPreemption).Warn("BUG: Queue not found by name", zap.String("queuePath", p.queuePath))
 		return -1, nil
 	}
 
@@ -281,7 +281,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 	// get the current queue snapshot
 	askQueue, ok2 := allocationsByQueueSnap[p.queuePath]
 	if !ok2 {
-		log.Logger().Warn("BUG: Queue not found by name", zap.String("queuePath", p.queuePath))
+		log.Log(log.SchedPreemption).Warn("BUG: Queue not found by name", zap.String("queuePath", p.queuePath))
 		return -1, nil
 	}
 
@@ -353,7 +353,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 	if plugin == nil {
 		// if a plugin isn't registered, assume checks will succeed and synthesize a result
 		check := predicateChecks[0]
-		log.Logger().Debug("No RM callback plugin registered, using first selected node for preemption",
+		log.Log(log.SchedPreemption).Debug("No RM callback plugin registered, using first selected node for preemption",
 			zap.String("NodeID", check.NodeID),
 			zap.String("AllocationKey", check.AllocationKey))
 
@@ -412,7 +412,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 	// get the current queue snapshot
 	askQueue, ok := allocationsByQueueSnap[p.queuePath]
 	if !ok {
-		log.Logger().Warn("BUG: Queue not found by name", zap.String("queuePath", p.queuePath))
+		log.Log(log.SchedPreemption).Warn("BUG: Queue not found by name", zap.String("queuePath", p.queuePath))
 		return nil, false
 	}
 
@@ -518,7 +518,7 @@ func (p *Preemptor) tryNodes() (string, string, []*Allocation, bool) {
 		instType, ok := p.nodeInstanceTypeMap[result.nodeID]
 		if !ok {
 			// If the key doesn't exist, log error and use UnknownInstanceType
-			log.Logger().Error("BUG: Didn't find instance type in the nodeInstanceTypeMap",
+			log.Log(log.SchedPreemption).Error("BUG: Didn't find instance type in the nodeInstanceTypeMap",
 				zap.String("nodeId", result.nodeID))
 			instType = UnknownInstanceType
 		}
@@ -560,13 +560,13 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 		if victimQueue := p.queue.FindQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
 			victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
 			victim.MarkPreempted()
-			log.Logger().Info("Preempting task",
+			log.Log(log.SchedPreemption).Info("Preempting task",
 				zap.String("applicationID", victim.GetApplicationID()),
 				zap.String("allocationKey", victim.GetAllocationKey()),
 				zap.String("nodeID", victim.GetNodeID()),
 				zap.Stringer("resources", victim.GetAllocatedResource()))
 		} else {
-			log.Logger().Warn("BUG: Queue not found for preemption victim",
+			log.Log(log.SchedPreemption).Warn("BUG: Queue not found for preemption victim",
 				zap.String("applicationID", victim.GetApplicationID()),
 				zap.String("allocationKey", victim.GetAllocationKey()))
 		}
@@ -581,7 +581,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 
 	// reserve the selected node for the new allocation if it will fit
 	if p.headRoom.FitInMaxUndef(p.ask.GetAllocatedResource()) {
-		log.Logger().Info("Reserving node for ask after preemption",
+		log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
 			zap.String("allocationKey", p.ask.GetAllocationKey()),
 			zap.String("nodeID", nodeID),
 			zap.Int("victimCount", len(victims)))
@@ -589,7 +589,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 	}
 
 	// can't reserve as queue is still too full, but scheduling should succeed after preemption occurs
-	log.Logger().Info("Preempting allocations for ask, but not reserving yet as queue is still above capacity",
+	log.Log(log.SchedPreemption).Info("Preempting allocations for ask, but not reserving yet as queue is still above capacity",
 		zap.String("allocationKey", p.ask.GetAllocationKey()),
 		zap.Int("victimCount", len(victims)))
 
@@ -655,7 +655,7 @@ func (pcr *predicateCheckResult) populateVictims(victimsByNode map[string][]*All
 	// abort if node was not found
 	victimList, ok := victimsByNode[pcr.nodeID]
 	if !ok {
-		log.Logger().Warn("BUG: Unable to find node in victim map", zap.String("nodeID", pcr.nodeID))
+		log.Log(log.SchedPreemption).Warn("BUG: Unable to find node in victim map", zap.String("nodeID", pcr.nodeID))
 		pcr.success = false
 		pcr.index = -1
 		return
@@ -663,7 +663,7 @@ func (pcr *predicateCheckResult) populateVictims(victimsByNode map[string][]*All
 
 	// abort if index is too large
 	if pcr.index >= len(victimList) {
-		log.Logger().Warn("BUG: Got invalid index into allocation list",
+		log.Log(log.SchedPreemption).Warn("BUG: Got invalid index into allocation list",
 			zap.String("nodeID", pcr.nodeID),
 			zap.Int("index", pcr.index),
 			zap.Int("length", len(victimList)))

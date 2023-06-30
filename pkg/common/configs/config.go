@@ -19,12 +19,13 @@
 package configs
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"strings"
 
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/apache/yunikorn-core/pkg/log"
 )
@@ -164,16 +165,18 @@ func SetChecksum(content []byte, conf *SchedulerConfig) {
 
 func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	conf := &SchedulerConfig{}
-	err := yaml.UnmarshalStrict(content, conf)
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+	decoder.KnownFields(true) // Enable strict unmarshaling behavior
+	err := decoder.Decode(conf)
 	if err != nil {
-		log.Logger().Error("failed to parse queue configuration",
+		log.Log(log.Config).Error("failed to parse queue configuration",
 			zap.Error(err))
 		return nil, err
 	}
 	// validate the config
 	err = Validate(conf)
 	if err != nil {
-		log.Logger().Error("queue configuration validation failed",
+		log.Log(log.Config).Error("queue configuration validation failed",
 			zap.Error(err))
 		return nil, err
 	}

@@ -19,18 +19,20 @@
 package ugm
 
 import (
-	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/common/security"
+	"strings"
+
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 )
 
-// Tracker Defines a set of interfaces to track and retrieve the user group resource usage
-type Tracker interface {
-	GetUserResources(user security.UserGroup) *resources.Resource
-	GetGroupResources(group string) *resources.Resource
-
-	GetUsersResources() []*UserTracker
-	GetGroupsResources() []*GroupTracker
-
-	IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) bool
-	DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) bool
+func getChildQueuePath(queuePath string) (string, string) {
+	idx := strings.Index(queuePath, configs.DOT)
+	if idx == -1 {
+		return "", ""
+	}
+	childQueuePath := queuePath[idx+1:]
+	idx = strings.Index(childQueuePath, configs.DOT)
+	if idx == -1 {
+		return childQueuePath, childQueuePath
+	}
+	return childQueuePath, childQueuePath[:idx]
 }

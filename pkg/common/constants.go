@@ -16,21 +16,12 @@
  limitations under the License.
 */
 
-package ugm
+package common
 
-import (
-	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/common/security"
+const (
+	Empty = ""
+
+	Wildcard  = "*"
+	Separator = ","
+	Space     = " "
 )
-
-// Tracker Defines a set of interfaces to track and retrieve the user group resource usage
-type Tracker interface {
-	GetUserResources(user security.UserGroup) *resources.Resource
-	GetGroupResources(group string) *resources.Resource
-
-	GetUsersResources() []*UserTracker
-	GetGroupsResources() []*GroupTracker
-
-	IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) bool
-	DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) bool
-}

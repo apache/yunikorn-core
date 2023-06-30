@@ -112,7 +112,7 @@ func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	case ec.channel <- event:
 		metrics.GetEventMetrics().IncEventsChanneled()
 	default:
-		log.Logger().Debug("could not add Event to channel")
+		log.Log(log.Events).Debug("could not add Event to channel")
 		metrics.GetEventMetrics().IncEventsNotChanneled()
 	}
 }

@@ -1507,7 +1507,7 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 		"positive overflow": {
 			capacity: NewResourceFromMap(map[string]Quantity{"memory": 10}),
 			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
-			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
 		},
 		"negative overflow": {
 			capacity: NewResourceFromMap(map[string]Quantity{"memory": 10}),
@@ -1517,7 +1517,7 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 		"zero resource, non zero used": {
 			capacity: zeroResource,
 			used:     usageSet,
-			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64, "vcores": math.MaxInt64}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64, "vcores": math.MinInt64}),
 		},
 	}
 	for _, test := range tests {

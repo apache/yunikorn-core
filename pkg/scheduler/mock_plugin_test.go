@@ -36,24 +36,24 @@ type fakePredicatePlugin struct {
 
 func (f *fakePredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 	if f.mustFail {
-		log.Logger().Info("fake predicate plugin fail: must fail set")
+		log.Log(log.Test).Info("fake predicate plugin fail: must fail set")
 		return fmt.Errorf("fake predicate plugin failed")
 	}
 	if fail, ok := f.nodes[args.NodeID]; ok {
 		if args.Allocate && fail >= 0 {
-			log.Logger().Info("fake predicate plugin node allocate fail",
+			log.Log(log.Test).Info("fake predicate plugin node allocate fail",
 				zap.String("node", args.NodeID),
 				zap.Int("fail mode", fail))
 			return fmt.Errorf("fake predicate plugin failed")
 		}
 		if !args.Allocate && fail <= 0 {
-			log.Logger().Info("fake predicate plugin node reserve fail",
+			log.Log(log.Test).Info("fake predicate plugin node reserve fail",
 				zap.String("node", args.NodeID),
 				zap.Int("fail mode", fail))
 			return fmt.Errorf("fake predicate plugin failed")
 		}
 	}
-	log.Logger().Info("fake predicate plugin pass",
+	log.Log(log.Test).Info("fake predicate plugin pass",
 		zap.String("node", args.NodeID))
 	return nil
 }

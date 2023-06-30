@@ -27,7 +27,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 var emptySum = ""
@@ -732,9 +732,12 @@ partitions:
   - name: default
     queues:
       - name: root
+        queues:
+          - name: default
+            parent: false
     placementrules:
       - name: fixed
-        value: root
+        value: root.default
       - name: tag
         value: Just Any value
 `
@@ -1845,6 +1848,7 @@ partitions:
 `
 	return fmt.Sprintf(data, leafQueueMaxResource, leafQueueMaxResource, leafQueueMaxApps, userMaxResource)
 }
+
 func TestUserLimitsWithHierarchicalQueue(t *testing.T) {
 	// Make sure parent queue user max apps should not less than the child queue max resource
 	// validate the config and check after the update
@@ -2047,6 +2051,7 @@ partitions:
 `
 	return fmt.Sprintf(data, leafQueueMaxResources, leafQueueMaxResources, leafQueueMaxApps, groupMaxResources)
 }
+
 func TestGroupLimitsWithHierarchicalQueue(t *testing.T) {
 	// Make sure parent queue user max apps should not less than the child queue max resource
 	// validate the config and check after the update

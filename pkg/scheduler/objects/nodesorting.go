@@ -113,7 +113,7 @@ func defaultResourceWeights() map[string]float64 {
 func NewNodeSortingPolicy(policyType string, resourceWeights map[string]float64) NodeSortingPolicy {
 	pType, err := policies.SortingPolicyFromString(policyType)
 	if err != nil {
-		log.Logger().Debug("node sorting policy defaulted to 'undefined'",
+		log.Log(log.SchedNode).Debug("node sorting policy defaulted to 'undefined'",
 			zap.Error(err))
 	}
 	weights := resourceWeights
@@ -137,7 +137,7 @@ func NewNodeSortingPolicy(policyType string, resourceWeights map[string]float64)
 		}
 	}
 
-	log.Logger().Debug("new node sorting policy added",
+	log.Log(log.SchedNode).Debug("new node sorting policy added",
 		zap.Stringer("type", pType), zap.Any("resourceWeights", weights))
 	return sp
 }

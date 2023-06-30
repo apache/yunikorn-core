@@ -160,6 +160,12 @@ test: clean
 	go test ./... $(RACE) -tags deadlock -coverprofile=coverage.txt -covermode=atomic
 	go vet $(REPO)...
 
+# Run benchmarks
+.PHONY: bench
+bench:
+	@echo "running benchmarks"
+	go test -v -run '^Benchmark' -bench . ./pkg/...
+
 # Generate FSM graphs (dot/png)
 .PHONY: fsm_graph
 fsm_graph: clean

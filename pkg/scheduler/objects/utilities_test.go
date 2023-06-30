@@ -34,11 +34,12 @@ import (
 )
 
 const (
-	appID0  = "app-0"
-	appID1  = "app-1"
-	appID2  = "app-2"
-	aKey    = "alloc-1"
-	nodeID1 = "node-1"
+	appID0    = "app-0"
+	appID1    = "app-1"
+	appID2    = "app-2"
+	aKey      = "alloc-1"
+	aUUID     = "alloc-uuid-1"
+	nodeID1   = "node-1"
 	instType1 = "itype-1"
 )
 
@@ -159,7 +160,7 @@ func newNodeRes(nodeID string, total *resources.Resource) *Node {
 }
 
 func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
-	return &Node{
+	sn := &Node{
 		NodeID:            nodeID,
 		Hostname:          "",
 		Rackname:          "",
@@ -173,6 +174,8 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 		schedulable:       true,
 		reservations:      make(map[string]*reservation),
 	}
+	sn.nodeEvents = newNodeEvents(sn, nil)
+	return sn
 }
 
 func newProto(nodeID string, totalResource, occupiedResource *resources.Resource, attributes map[string]string) *si.NodeInfo {

@@ -30,10 +30,9 @@ import (
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
-
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -71,7 +70,7 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := w.Write(stack()); err != nil {
-		log.Logger().Error("GetStackInfo error", zap.Error(err))
+		log.Log(log.REST).Error("GetStackInfo error", zap.Error(err))
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -130,7 +129,7 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 	w.WriteHeader(code)
 	errorInfo := dao.NewYAPIError(nil, code, detail)
 	if jsonErr := json.NewEncoder(w).Encode(errorInfo); jsonErr != nil {
-		log.Logger().Error(fmt.Sprintf("Problem in sending error response in JSON format. Error response: %s", detail))
+		log.Log(log.REST).Error(fmt.Sprintf("Problem in sending error response in JSON format. Error response: %s", detail))
 	}
 }
 
@@ -449,16 +448,16 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	result := schedulerContext.GetLastHealthCheckResult()
 	if result != nil {
 		if !result.Healthy {
-			log.Logger().Error("Scheduler is not healthy", zap.Any("health check info", *result))
+			log.Log(log.SchedHealth).Error("Scheduler is not healthy", zap.Any("health check info", *result))
 			buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
 		} else {
-			log.Logger().Info("Scheduler is healthy", zap.Any("health check info", *result))
+			log.Log(log.SchedHealth).Info("Scheduler is healthy", zap.Any("health check info", *result))
 			if err := json.NewEncoder(w).Encode(result); err != nil {
 				buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			}
 		}
 	} else {
-		log.Logger().Info("The healthy status of scheduler is not found", zap.Any("health check info", ""))
+		log.Log(log.SchedHealth).Info("The healthy status of scheduler is not found", zap.Any("health check info", ""))
 		buildJSONErrorResponse(w, "The healthy status of scheduler is not found", http.StatusNotFound)
 	}
 }
@@ -470,7 +469,7 @@ func buildUpdateResponse(err error, w http.ResponseWriter) {
 			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		log.Logger().Info("Configuration update failed with errors",
+		log.Log(log.REST).Info("Configuration update failed with errors",
 			zap.Error(err))
 		buildJSONErrorResponse(w, err.Error(), http.StatusConflict)
 	}
@@ -624,22 +623,13 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 
 func setLogLevel(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	vars := httprouter.ParamsFromContext(r.Context())
-	if vars == nil {
-		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
-		return
-	}
-	level := vars.ByName("level")
-	if err := log.SetLogLevel(level); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
-	}
+	log.Log(log.Deprecation).Warn("Setting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release.")
 }
 
 func getLogLevel(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	zapConfig := log.GetConfig()
-	if _, err := w.Write([]byte(zapConfig.Level.Level().String())); err != nil {
-		log.Logger().Error("Could not get log level", zap.Error(err))
+	log.Log(log.Deprecation).Warn("Getting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release.")
+	if _, err := w.Write([]byte("info")); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -789,14 +779,14 @@ func getResourceManagerDiagnostics() map[string]interface{} {
 	dumpStr, err := plugin.GetStateDump()
 	if err != nil {
 		// might be not implemented
-		log.Logger().Debug("Unable to get RM state dump", zap.Error(err))
+		log.Log(log.REST).Debug("Unable to get RM state dump", zap.Error(err))
 		result["Error"] = err.Error()
 		return result
 	}
 
 	// convert to JSON map
 	if err = json.Unmarshal([]byte(dumpStr), &result); err != nil {
-		log.Logger().Warn("Unable to parse RM state dump", zap.Error(err))
+		log.Log(log.REST).Warn("Unable to parse RM state dump", zap.Error(err))
 		result["Error"] = err.Error()
 	}
 

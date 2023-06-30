@@ -36,5 +36,7 @@ type ResourceUsageDAOInfo struct {
 	QueuePath           string                  `json:"queuePath"`
 	ResourceUsage       *resources.Resource     `json:"resourceUsage"`
 	RunningApplications []string                `json:"runningApplications"`
+	MaxResources        *resources.Resource     `json:"maxResources"`
+	MaxApplications     uint64                  `json:"maxApplications"`
 	Children            []*ResourceUsageDAOInfo `json:"children"`
 }

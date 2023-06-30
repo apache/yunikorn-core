@@ -16,21 +16,39 @@
  limitations under the License.
 */
 
-package ugm
+package log
 
-import (
-	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/common/security"
-)
+import "go.uber.org/zap/zapcore"
 
-// Tracker Defines a set of interfaces to track and retrieve the user group resource usage
-type Tracker interface {
-	GetUserResources(user security.UserGroup) *resources.Resource
-	GetGroupResources(group string) *resources.Resource
+type filteredCore struct {
+	level zapcore.Level
+	inner zapcore.Core
+}
 
-	GetUsersResources() []*UserTracker
-	GetGroupsResources() []*GroupTracker
+var _ zapcore.Core = filteredCore{}
 
-	IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) bool
-	DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) bool
+func (f filteredCore) Enabled(level zapcore.Level) bool {
+	if level < f.level {
+		return false
+	}
+	return f.inner.Enabled(level)
+}
+
+func (f filteredCore) With(fields []zapcore.Field) zapcore.Core {
+	return f.inner.With(fields)
+}
+
+func (f filteredCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {
+	if entry.Level < f.level {
+		return ce
+	}
+	return f.inner.Check(entry, ce)
+}
+
+func (f filteredCore) Write(entry zapcore.Entry, fields []zapcore.Field) error {
+	return f.inner.Write(entry, fields)
+}
+
+func (f filteredCore) Sync() error {
+	return f.inner.Sync()
 }

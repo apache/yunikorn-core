@@ -21,7 +21,9 @@ package objects
 import (
 	"fmt"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type applicationEvents struct {
@@ -47,6 +49,56 @@ func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request
 
 	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource().String(), ph.GetAllocatedResource().String(), ph.GetAllocationKey())
 	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, message, request.GetAllocatedResource())
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendNewAllocationEvent(alloc *Allocation) {
+	if !evt.enabled {
+		return
+	}
+
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendNewAskEvent(request *AllocationAsk) {
+	if !evt.enabled {
+		return
+	}
+
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, request.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_REQUEST, request.GetAllocatedResource())
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, terminationType si.TerminationType) {
+	if !evt.enabled {
+		return
+	}
+
+	var eventChangeDetail si.EventRecord_ChangeDetail
+	switch terminationType {
+	case si.TerminationType_UNKNOWN_TERMINATION_TYPE:
+		eventChangeDetail = si.EventRecord_ALLOC_NODEREMOVED
+	case si.TerminationType_STOPPED_BY_RM:
+		eventChangeDetail = si.EventRecord_ALLOC_CANCEL
+	case si.TerminationType_TIMEOUT:
+		eventChangeDetail = si.EventRecord_ALLOC_TIMEOUT
+	case si.TerminationType_PREEMPTED_BY_SCHEDULER:
+		eventChangeDetail = si.EventRecord_ALLOC_PREEMPT
+	case si.TerminationType_PLACEHOLDER_REPLACED:
+		eventChangeDetail = si.EventRecord_ALLOC_REPLACED
+	}
+
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, detail si.EventRecord_ChangeDetail) {
+	if !evt.enabled {
+		return
+	}
+
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_REMOVE, detail, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 

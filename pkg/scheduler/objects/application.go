@@ -1244,6 +1244,14 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			return alloc
 		}
 
+		userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.user)
+		if !userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
+			log.Log(log.SchedApplication).Warn("User doesn't have required resources to accommodate this request",
+				zap.String("required resource", ask.GetAllocatedResource().String()),
+				zap.String("headroom", userHeadroom.String()))
+			continue
+		}
+
 		// check if this fits in the queue's head room
 		if !headRoom.FitInMaxUndef(ask.GetAllocatedResource()) {
 			continue

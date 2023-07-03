@@ -34,6 +34,10 @@ type UserTracker struct {
 	// and group tracker object as value.
 	appGroupTrackers map[string]*GroupTracker
 	queueTracker     *QueueTracker // Holds the actual resource usage of queue path where application runs
+	// Group selected by matching the list of groups stored in security.UserGroup against the list of groups [Manager.configuredGroups] configured with limit settings.
+	// Manager.configuredGroups holds group only for which limit has been configured in bottom up queue hierarchical order starting from leaf to root.
+	// First matched group would be picked and stored in this variable
+	matchedGroup string
 
 	sync.RWMutex
 }
@@ -75,6 +79,18 @@ func (ut *UserTracker) setGroupForApp(applicationID string, groupTrack *GroupTra
 	if ut.appGroupTrackers[applicationID] == nil {
 		ut.appGroupTrackers[applicationID] = groupTrack
 	}
+}
+
+func (ut *UserTracker) getMatchedGroup() string {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.matchedGroup
+}
+
+func (ut *UserTracker) setMatchedGroup(group string) {
+	ut.Lock()
+	defer ut.Unlock()
+	ut.matchedGroup = group
 }
 
 func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {

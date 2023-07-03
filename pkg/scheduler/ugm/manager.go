@@ -41,6 +41,7 @@ type Manager struct {
 	groupTrackers             map[string]*GroupTracker
 	userWildCardLimitsConfig  map[string]*LimitConfig // Hold limits settings of user '*'
 	groupWildCardLimitsConfig map[string]*LimitConfig // Hold limits settings of group '*'
+	configuredGroups          []string                // Hold groups only for which limit has been configured in bottom up queue hierarchical order starting from leaf to root.
 	sync.RWMutex
 }
 
@@ -98,7 +99,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 	if err := m.ensureGroupTrackerForApp(queuePath, applicationID, user); err != nil {
 		return false
 	}
-	group, err := m.getGroup(user)
+	group, err := m.ensureGroup(user)
 	if err != nil {
 		return false
 	}
@@ -160,7 +161,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		delete(m.userTrackers, user.User)
 	}
 
-	group, err := m.getGroup(user)
+	group, err := m.ensureGroup(user)
 	if err != nil {
 		return false
 	}
@@ -255,7 +256,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 	userTracker := m.userTrackers[user.User]
 	if !userTracker.hasGroupForApp(applicationID) {
 		var groupTracker *GroupTracker
-		group, err := m.getGroup(user)
+		group, err := m.internalEnsureGroup(user)
 		if err != nil {
 			return err
 		}
@@ -280,9 +281,38 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 	return nil
 }
 
-// getGroup Based on the current limitations, username and group name is same. Groups[0] is always set and same as username.
-// It would be changed in future based on user group resolution, limit configuration processing etc
-func (m *Manager) getGroup(user security.UserGroup) (string, error) {
+// ensureGroup User may belong to zero or multiple groups. Limits are configured for different groups at different queue hierarchy.
+// Among these multiple groups stored in security.UserGroup, matching against group for which limit has been configured happens from leaf to root and first
+// matching group would be picked and used as user's group for all activities in UGM module.
+func (m *Manager) ensureGroup(user security.UserGroup) (string, error) {
+	m.RLock()
+	defer m.RUnlock()
+	return m.internalEnsureGroup(user)
+}
+
+// lock free version
+func (m *Manager) internalEnsureGroup(user security.UserGroup) (string, error) {
+	userTracker := m.userTrackers[user.User]
+	if userTracker != nil {
+		// Is there any matched group? If not, then carry out matching user group's against configured limit settings
+		matchedGroup := userTracker.getMatchedGroup()
+		if matchedGroup != "" {
+			return matchedGroup, nil
+		}
+		if len(user.Groups) > 0 && len(m.configuredGroups) > 0 {
+			for _, configuredGroup := range m.configuredGroups {
+				for _, g := range user.Groups {
+					if configuredGroup == g {
+						userTracker.setMatchedGroup(configuredGroup)
+						return configuredGroup, nil
+					}
+				}
+			}
+		}
+	} else {
+		log.Log(log.SchedUGM).Error("user tracker must be available in userTrackers map",
+			zap.String("user", user.User))
+	}
 	if len(user.Groups) > 0 {
 		return user.Groups[0], nil
 	}
@@ -309,6 +339,7 @@ func (m *Manager) UpdateConfig(config configs.QueueConfig, queuePath string) err
 
 	m.userWildCardLimitsConfig = make(map[string]*LimitConfig)
 	m.groupWildCardLimitsConfig = make(map[string]*LimitConfig)
+	m.configuredGroups = []string{}
 	return m.internalProcessConfig(config, queuePath)
 }
 
@@ -363,10 +394,20 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			if err := m.processGroupConfig(group, limitConfig, queuePath, groupLimits); err != nil {
 				return err
 			}
+			// always prepend because queue config traversal follows top-down approach. Hence, leaf queues limit configuration processing happens at the end.
+			m.configuredGroups = append([]string{group}, m.configuredGroups...)
 		}
 	}
 	if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
 		return err
+	}
+
+	// clear earlier set matched group of user for which limits have been configured earlier and even now.
+	// Matched Group would be set as part of increase calls when user carriers out any activity next time
+	for u := range userLimits {
+		if m.userTrackers[u] != nil {
+			m.userTrackers[u].setMatchedGroup("")
+		}
 	}
 
 	if len(cur.Queues) > 0 {

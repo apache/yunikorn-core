@@ -39,13 +39,44 @@ func TestUserManagerOnceInitialization(t *testing.T) {
 func TestGetGroup(t *testing.T) {
 	user := security.UserGroup{User: "test", Groups: []string{"test", "test1"}}
 	manager := GetUserManager()
-	group, err := manager.getGroup(user)
+
+	conf := createUpdateConfig(user.User, user.Groups[0])
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+	group, err := manager.ensureGroup(user)
 	assert.NilError(t, err)
 	assert.Equal(t, group, "test")
-	user = security.UserGroup{User: "test", Groups: []string{}}
-	group, err = manager.getGroup(user)
-	assert.Equal(t, err.Error(), "group is not available in usergroup for user test")
-	assert.Equal(t, group, "")
+
+	user1 := security.UserGroup{User: "test", Groups: []string{"test1", "test"}}
+	group, err = manager.ensureGroup(user1)
+	assert.NilError(t, err)
+	assert.Equal(t, group, "test")
+
+	conf = createConfigWithoutLimits()
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+	group, err = manager.ensureGroup(user1)
+	assert.NilError(t, err)
+	assert.Equal(t, group, "test1")
+
+	user = security.UserGroup{User: "test1", Groups: []string{"test", "test_root", "test_parent"}}
+	conf = createConfigWithDifferentGroups(user.User, user.Groups[0], "memory", "10", 50, 5)
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+	group, err = manager.ensureGroup(user)
+	assert.NilError(t, err)
+	assert.Equal(t, group, "test_parent")
+
+	user = security.UserGroup{User: "test1", Groups: []string{"test", "test_root"}}
+	conf = createConfigWithDifferentGroups(user.User, user.Groups[0], "memory", "10", 50, 5)
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+	group, err = manager.ensureGroup(user)
+	assert.NilError(t, err)
+	assert.Equal(t, group, "test_root")
+
+	user = security.UserGroup{User: "test1", Groups: []string{}}
+	conf = createConfigWithDifferentGroups(user.User, "", "memory", "10", 50, 5)
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+	_, err = manager.ensureGroup(user)
+	assert.Error(t, err, "group is not available in usergroup for user test1")
 }
 
 func TestAddRemoveUserAndGroups(t *testing.T) {
@@ -58,6 +89,8 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
 	manager := GetUserManager()
+	manager.ClearUserTrackers()
+	manager.ClearGroupTrackers()
 
 	increased := manager.IncreaseTrackedResource("", "", usage1, user)
 	if increased {
@@ -620,6 +653,60 @@ func createConfig(user string, group string, resourceKey string, resourceValue s
 						},
 						Groups: []string{
 							group,
+						},
+						MaxResources: map[string]string{
+							"memory": strconv.Itoa(mem * 2),
+							"vcores": strconv.Itoa(mem * 2),
+						},
+						MaxApplications: maxApps * 2,
+					},
+				},
+			},
+		},
+	}
+	return conf
+}
+
+func createConfigWithDifferentGroups(user string, group string, resourceKey string, resourceValue string, mem int, maxApps uint64) configs.PartitionConfig {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "parent",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues:    nil,
+						Limits: []configs.Limit{
+							{
+								Limit: "parent queue limit",
+								Users: []string{
+									user,
+								},
+								Groups: []string{
+									group + "_parent",
+								},
+								MaxResources: map[string]string{
+									"memory": strconv.Itoa(mem),
+									"vcores": strconv.Itoa(mem),
+								},
+								MaxApplications: maxApps,
+							},
+						},
+					},
+				},
+				Limits: []configs.Limit{
+					{
+						Limit: "root queue limit",
+						Users: []string{
+							user,
+						},
+						Groups: []string{
+							group + "_root",
 						},
 						MaxResources: map[string]string{
 							"memory": strconv.Itoa(mem * 2),

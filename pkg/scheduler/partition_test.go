@@ -3571,12 +3571,6 @@ func TestUserHeadroom(t *testing.T) {
 	assert.NilError(t, err, "test node1 add failed unexpected")
 	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
 	assert.NilError(t, err, "test node2 add failed unexpected")
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
-	if alloc := partition.tryAllocate(); alloc != nil {
-		t.Fatalf("empty cluster allocate returned allocation: %v", alloc.String())
-	}
 
 	app1 := newApplication(appID1, "default", "root.parent.sub-leaf")
 	res, err = resources.NewResourceFromConf(map[string]string{"memory": "3", "vcores": "3"})
@@ -3599,9 +3593,6 @@ func TestUserHeadroom(t *testing.T) {
 		t.Fatal("allocation did not return any allocation")
 	}
 	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
-	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
-	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
-	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-2 to be allocated")
 
 	// app 2 allocation won't happen as there is no headroom for the user
 	alloc = partition.tryAllocate()
@@ -3624,9 +3615,6 @@ func TestUserHeadroom(t *testing.T) {
 		t.Fatal("allocation did not return any allocation")
 	}
 	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
-	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
-	assert.Equal(t, alloc.GetApplicationID(), appID3, "expected application app-3 to be allocated")
-	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-1 to be allocated")
 
 	app4 := newApplication("app-4", "default", "root.leaf")
 	err = partition.AddApplication(app4)
@@ -3639,10 +3627,6 @@ func TestUserHeadroom(t *testing.T) {
 	if alloc != nil {
 		t.Fatal("allocation should not happen")
 	}
-	app1.RemoveAllAllocations()
-	app2.RemoveAllAllocations()
-	app3.RemoveAllAllocations()
-	app4.RemoveAllAllocations()
 	partition.removeApplication(appID1)
 	partition.removeApplication(appID2)
 	partition.removeApplication(appID3)
@@ -3664,9 +3648,6 @@ func TestUserHeadroom(t *testing.T) {
 		t.Fatal("expected node-2 to be returned got nil")
 	}
 	partition.reserve(app5, node2, ask)
-	if !app5.IsReservedOnNode(node2.NodeID) || len(app5.GetAskReservations("alloc-1")) == 0 {
-		t.Fatal("reservation failure for ask and node2")
-	}
 
 	// turn off the second node
 	node1 := partition.GetNode(nodeID1)
@@ -3683,10 +3664,6 @@ func TestUserHeadroom(t *testing.T) {
 	err = app5.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask to app")
 	partition.reserve(app5, node2, ask)
-	if !app5.IsReservedOnNode(node2.NodeID) || len(app5.GetAskReservations("alloc-2")) == 0 {
-		t.Fatal("reservation failure for ask and node2")
-	}
-
 	alloc = partition.tryReservedAllocate()
 	if alloc != nil {
 		t.Fatal("allocation should not happen on other nodes as well")

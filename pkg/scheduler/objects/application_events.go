@@ -106,7 +106,7 @@ func (evt *applicationEvents) sendNewApplicationEvent() {
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -114,7 +114,7 @@ func (evt *applicationEvents) sendRemoveApplicationEvent() {
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -122,16 +122,16 @@ func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.allocatedResource.Clone())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
 func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_ChangeDetail) {
-	if !evt.enabled {
-		return
-	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource.Clone())
-	evt.eventSystem.AddEvent(event)
+	//if !evt.enabled {
+	//	return
+	//}
+	//event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource)
+	//evt.eventSystem.AddEvent(event)
 }
 
 func newApplicationEvents(app *Application, evt events.EventSystem) *applicationEvents {

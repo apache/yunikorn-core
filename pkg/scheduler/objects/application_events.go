@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -56,7 +57,7 @@ func (evt *applicationEvents) sendNewAllocationEvent(alloc *Allocation) {
 		return
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", alloc.GetUUID(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -65,7 +66,7 @@ func (evt *applicationEvents) sendNewAskEvent(request *AllocationAsk) {
 		return
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_REQUEST, request.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, request.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_REQUEST, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -88,28 +89,16 @@ func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, termi
 		eventChangeDetail = si.EventRecord_ALLOC_REPLACED
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", alloc.GetUUID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, terminationType si.TerminationType, appRemoved bool) {
+func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, detail si.EventRecord_ChangeDetail) {
 	if !evt.enabled {
 		return
 	}
 
-	var eventChangeDetail si.EventRecord_ChangeDetail
-	switch terminationType {
-	case si.TerminationType_TIMEOUT:
-		eventChangeDetail = si.EventRecord_REQUEST_TIMEOUT
-	case si.TerminationType_STOPPED_BY_RM:
-		if appRemoved {
-			eventChangeDetail = si.EventRecord_REQUEST_CANCEL
-		} else {
-			eventChangeDetail = si.EventRecord_APP_REQUEST
-		}
-	}
-
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_REMOVE, eventChangeDetail, request.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_REMOVE, detail, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -117,7 +106,7 @@ func (evt *applicationEvents) sendNewApplicationEvent() {
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -125,7 +114,7 @@ func (evt *applicationEvents) sendRemoveApplicationEvent() {
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -133,7 +122,7 @@ func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.allocatedResource.Clone())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -141,7 +130,7 @@ func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_C
 	if !evt.enabled {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource.Clone())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 

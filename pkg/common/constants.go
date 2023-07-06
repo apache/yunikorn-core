@@ -19,6 +19,8 @@
 package common
 
 const (
+	Empty = ""
+
 	Wildcard  = "*"
 	Separator = ","
 	Space     = " "

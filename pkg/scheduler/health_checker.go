@@ -173,11 +173,17 @@ func (c *HealthChecker) runOnce() {
 	result := GetSchedulerHealthStatus(schedulerMetrics, c.context)
 	updateSchedulerLastHealthStatus(&result, c.context)
 	if !result.Healthy {
-		log.Log(log.SchedHealth).Warn("Scheduler is not healthy",
-			zap.Any("health check values", result.HealthChecks))
+		for _, v := range result.HealthChecks {
+			if v.Succeeded {
+				continue
+			}
+			log.Log(log.SchedHealth).Warn("Scheduler is not healthy",
+				zap.String("name", v.Name),
+				zap.String("description", v.Description),
+				zap.String("message", v.DiagnosisMessage))
+		}
 	} else {
-		log.Log(log.SchedHealth).Debug("Scheduler is healthy",
-			zap.Any("health check values", result.HealthChecks))
+		log.Log(log.SchedHealth).Debug("Scheduler is healthy")
 	}
 }
 
@@ -303,8 +309,8 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 		"Check for negative resources in the nodes",
 		fmt.Sprintf("Nodes with negative resources: %q", nodesWithNegResources))
 	info[2] = CreateCheckInfo(len(allocationMismatch) == 0, "Consistency of data",
-		"Check if a node's allocated resource <= total resource of the node",
-		fmt.Sprintf("Nodes with inconsistent data: %q", allocationMismatch))
+		"Check if a partition's allocated resource <= total resource of the partition",
+		fmt.Sprintf("Partitions with inconsistent data: %q", allocationMismatch))
 	info[3] = CreateCheckInfo(len(totalResourceMismatch) == 0, "Consistency of data",
 		"Check if total partition resource == sum of the node resources from the partition",
 		fmt.Sprintf("Partitions with inconsistent data: %q", totalResourceMismatch))

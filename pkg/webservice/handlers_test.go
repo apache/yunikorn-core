@@ -29,7 +29,6 @@ import (
 	"testing"
 
 	"github.com/julienschmidt/httprouter"
-
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v3"
 	"gotest.tools/v3/assert"
@@ -1280,8 +1279,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	getGroupResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
 	assert.NilError(t, err, "failed to unmarshal group resource usage dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, groupResourceUsageDao.Queues.ResourceUsage.String(),
-		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+	assert.DeepEqual(t, groupResourceUsageDao, &dao.GroupResourceUsageDAOInfo{GroupName: "", Applications: nil, Queues: nil})
 
 	// Test non-existing group query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
@@ -1322,15 +1320,14 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
 
 	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
+	var expGroupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
 	getGroupsResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
 	assert.NilError(t, err, "failed to unmarshal groups resource usage dao response from response body: %s", string(resp.outputBytes))
-	assert.Equal(t, groupsResourceUsageDao[0].Queues.ResourceUsage.String(),
-		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+	assert.DeepEqual(t, groupsResourceUsageDao, expGroupsResourceUsageDao)
 
 	// Assert existing groups
-	assert.Equal(t, len(groupsResourceUsageDao), 1)
-	assert.Equal(t, groupsResourceUsageDao[0].GroupName, "testgroup")
+	assert.Equal(t, len(groupsResourceUsageDao), 0)
 }
 
 func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {

@@ -41,7 +41,7 @@ type Manager struct {
 	groupTrackers             map[string]*GroupTracker
 	userWildCardLimitsConfig  map[string]*LimitConfig // Hold limits settings of user '*'
 	groupWildCardLimitsConfig map[string]*LimitConfig // Hold limits settings of group '*'
-	configuredGroups          []string                // Hold groups only for which limit has been configured in bottom up queue hierarchical order starting from leaf to root.
+	configuredGroups          map[string][]string     // Hold groups for all configured queue paths.
 	sync.RWMutex
 }
 
@@ -99,19 +99,18 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 	if err := m.ensureGroupTrackerForApp(queuePath, applicationID, user); err != nil {
 		return false
 	}
-	group, err := m.ensureGroup(user)
-	if err != nil {
-		return false
-	}
-	groupTracker := m.getGroupTracker(group, true)
-	log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
-		zap.String("group", group),
-		zap.String("queue path", queuePath),
-		zap.String("application", applicationID),
-		zap.Stringer("resource", usage))
-	increased = groupTracker.increaseTrackedResource(queuePath, applicationID, usage)
-	if !increased {
-		return increased
+	group := m.ensureGroup(user, queuePath)
+	if group != "" {
+		groupTracker := m.getGroupTracker(group, true)
+		log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
+			zap.String("group", group),
+			zap.String("queue path", queuePath),
+			zap.String("application", applicationID),
+			zap.Stringer("resource", usage))
+		increased = groupTracker.increaseTrackedResource(queuePath, applicationID, usage)
+		if !increased {
+			return increased
+		}
 	}
 	return true
 }
@@ -161,33 +160,27 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		delete(m.userTrackers, user.User)
 	}
 
-	group, err := m.ensureGroup(user)
-	if err != nil {
-		return false
-	}
+	group := m.ensureGroup(user, queuePath)
 	groupTracker := m.getGroupTracker(group, false)
-	if groupTracker == nil {
-		log.Log(log.SchedUGM).Error("appGroupTrackers tracker must be available in groupTrackers map",
-			zap.String("appGroupTrackers", group))
-		return false
-	}
-	log.Log(log.SchedUGM).Debug("Decreasing resource usage for group",
-		zap.String("group", group),
-		zap.String("queue path", queuePath),
-		zap.String("application", applicationID),
-		zap.Stringer("resource", usage),
-		zap.Bool("removeApp", removeApp))
-	removeQT, decreased = groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
-	if !decreased {
-		return decreased
-	}
-	if removeApp && removeQT {
-		log.Log(log.SchedUGM).Debug("Removing group from manager",
+	if groupTracker != nil {
+		log.Log(log.SchedUGM).Debug("Decreasing resource usage for group",
 			zap.String("group", group),
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
+			zap.Stringer("resource", usage),
 			zap.Bool("removeApp", removeApp))
-		delete(m.groupTrackers, group)
+		removeQT, decreased = groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+		if !decreased {
+			return decreased
+		}
+		if removeApp && removeQT {
+			log.Log(log.SchedUGM).Debug("Removing group from manager",
+				zap.String("group", group),
+				zap.String("queue path", queuePath),
+				zap.String("application", applicationID),
+				zap.Bool("removeApp", removeApp))
+			delete(m.groupTrackers, group)
+		}
 	}
 	return true
 }
@@ -256,25 +249,24 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 	userTracker := m.userTrackers[user.User]
 	if !userTracker.hasGroupForApp(applicationID) {
 		var groupTracker *GroupTracker
-		group, err := m.internalEnsureGroup(user)
-		if err != nil {
-			return err
-		}
-		if m.groupTrackers[group] == nil {
-			log.Log(log.SchedUGM).Debug("Group tracker doesn't exists. Creating group tracker",
-				zap.String("application", applicationID),
-				zap.String("queue path", queuePath),
-				zap.String("user", user.User),
-				zap.String("group", group))
-			groupTracker = newGroupTracker(group)
-			m.groupTrackers[group] = groupTracker
-		} else {
-			log.Log(log.SchedUGM).Debug("Group tracker already exists and linking (reusing) the same with application",
-				zap.String("application", applicationID),
-				zap.String("queue path", queuePath),
-				zap.String("user", user.User),
-				zap.String("group", group))
-			groupTracker = m.groupTrackers[group]
+		group := m.internalEnsureGroup(user, queuePath)
+		if group != "" {
+			if m.groupTrackers[group] == nil {
+				log.Log(log.SchedUGM).Debug("Group tracker doesn't exists. Creating group tracker",
+					zap.String("application", applicationID),
+					zap.String("queue path", queuePath),
+					zap.String("user", user.User),
+					zap.String("group", group))
+				groupTracker = newGroupTracker(group)
+				m.groupTrackers[group] = groupTracker
+			} else {
+				log.Log(log.SchedUGM).Debug("Group tracker already exists and linking (reusing) the same with application",
+					zap.String("application", applicationID),
+					zap.String("queue path", queuePath),
+					zap.String("user", user.User),
+					zap.String("group", group))
+				groupTracker = m.groupTrackers[group]
+			}
 		}
 		userTracker.setGroupForApp(applicationID, groupTracker)
 	}
@@ -284,39 +276,42 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 // ensureGroup User may belong to zero or multiple groups. Limits are configured for different groups at different queue hierarchy.
 // Among these multiple groups stored in security.UserGroup, matching against group for which limit has been configured happens from leaf to root and first
 // matching group would be picked and used as user's group for all activities in UGM module.
-func (m *Manager) ensureGroup(user security.UserGroup) (string, error) {
+func (m *Manager) ensureGroup(user security.UserGroup, queuePath string) string {
 	m.RLock()
 	defer m.RUnlock()
-	return m.internalEnsureGroup(user)
+	return m.internalEnsureGroup(user, queuePath)
 }
 
 // lock free version
-func (m *Manager) internalEnsureGroup(user security.UserGroup) (string, error) {
+func (m *Manager) internalEnsureGroup(user security.UserGroup, queuePath string) string {
 	userTracker := m.userTrackers[user.User]
 	if userTracker != nil {
 		// Is there any matched group? If not, then carry out matching user group's against configured limit settings
 		matchedGroup := userTracker.getMatchedGroup()
 		if matchedGroup != "" {
-			return matchedGroup, nil
+			return matchedGroup
 		}
-		if len(user.Groups) > 0 && len(m.configuredGroups) > 0 {
-			for _, configuredGroup := range m.configuredGroups {
+		if configGroups, ok := m.configuredGroups[queuePath]; ok {
+			for _, configGroup := range configGroups {
 				for _, g := range user.Groups {
-					if configuredGroup == g {
-						userTracker.setMatchedGroup(configuredGroup)
-						return configuredGroup, nil
+					if configGroup == g {
+						log.Log(log.SchedUGM).Debug("Setting user matched group",
+							zap.String("user", user.User),
+							zap.String("queue path", queuePath),
+							zap.String("matched group", configGroup))
+						userTracker.setMatchedGroup(configGroup)
+						return configGroup
 					}
 				}
 			}
 		}
-	} else {
-		log.Log(log.SchedUGM).Error("user tracker must be available in userTrackers map",
-			zap.String("user", user.User))
+		parentQueuePath, _ := getParentQueuePath(queuePath)
+		if parentQueuePath != "" {
+			qt := userTracker.queueTracker.getChildQueueTracker(parentQueuePath)
+			return m.internalEnsureGroup(user, qt.queuePath)
+		}
 	}
-	if len(user.Groups) > 0 {
-		return user.Groups[0], nil
-	}
-	return "", fmt.Errorf("group is not available in usergroup for user %s", user.User)
+	return ""
 }
 
 func (m *Manager) isUserRemovable(ut *UserTracker) bool {
@@ -339,7 +334,7 @@ func (m *Manager) UpdateConfig(config configs.QueueConfig, queuePath string) err
 
 	m.userWildCardLimitsConfig = make(map[string]*LimitConfig)
 	m.groupWildCardLimitsConfig = make(map[string]*LimitConfig)
-	m.configuredGroups = []string{}
+	m.configuredGroups = make(map[string][]string)
 	return m.internalProcessConfig(config, queuePath)
 }
 
@@ -394,8 +389,7 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			if err := m.processGroupConfig(group, limitConfig, queuePath, groupLimits); err != nil {
 				return err
 			}
-			// always prepend because queue config traversal follows top-down approach. Hence, leaf queues limit configuration processing happens at the end.
-			m.configuredGroups = append([]string{group}, m.configuredGroups...)
+			m.configuredGroups[queuePath] = append(m.configuredGroups[queuePath], group)
 		}
 	}
 	if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
@@ -406,6 +400,9 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 	// Matched Group would be set as part of increase calls when user carriers out any activity next time
 	for u := range userLimits {
 		if m.userTrackers[u] != nil {
+			log.Log(log.SchedUGM).Debug("Cleared earlier set matched group for user",
+				zap.String("user", u),
+				zap.String("matched group", m.userTrackers[u].getMatchedGroup()))
 			m.userTrackers[u].setMatchedGroup("")
 		}
 	}

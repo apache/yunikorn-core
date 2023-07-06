@@ -119,7 +119,9 @@ func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOIn
 	}
 	userResourceUsage.UserName = ut.userName
 	for app, gt := range ut.appGroupTrackers {
-		userResourceUsage.Groups[app] = gt.groupName
+		if gt != nil {
+			userResourceUsage.Groups[app] = gt.groupName
+		}
 	}
 	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo("")
 	return userResourceUsage

@@ -152,6 +152,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
 		zap.Int("tracking type", int(trackType)),
 		zap.String("queue path", queuePath),
+		zap.String("qt queue path", qt.queuePath),
 		zap.String("application", applicationID),
 		zap.Bool("existing app", existingApp),
 		zap.Stringer("resource", usage),

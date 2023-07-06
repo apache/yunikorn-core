@@ -36,3 +36,16 @@ func getChildQueuePath(queuePath string) (string, string) {
 	}
 	return childQueuePath, childQueuePath[:idx]
 }
+
+func getParentQueuePath(queuePath string) (string, string) {
+	idx := strings.LastIndex(queuePath, configs.DOT)
+	if idx == -1 {
+		return "", ""
+	}
+	parentQueuePath := queuePath[:idx]
+	idx = strings.LastIndex(parentQueuePath, configs.DOT)
+	if idx == -1 {
+		return parentQueuePath, parentQueuePath
+	}
+	return parentQueuePath, parentQueuePath[idx+1:]
+}

@@ -28,8 +28,10 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	pkg_common "github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
@@ -414,6 +416,9 @@ func TestAddApplicationWithTag(t *testing.T) {
 }
 
 func TestRemoveApplication(t *testing.T) {
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
 	// create the root
 	root, err := createRootQueue(map[string]string{"first": "100"})
 	assert.NilError(t, err, "queue create failed")
@@ -476,6 +481,24 @@ func TestRemoveApplication(t *testing.T) {
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.allocatedResource), "leaf queue allocated resource not updated correctly")
 	assert.Assert(t, resources.IsZero(root.allocatedResource), "root queue allocated resource not updated correctly")
+
+	// Verify application events
+	err = pkg_common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
+		return eventSystem.Store.CountStoredEvents() == 6
+	})
+	assert.NilError(t, err, "the event should have been processed")
+	records := eventSystem.Store.CollectEvents()
+	if records == nil {
+		t.Fatal("collecting eventChannel should return something")
+	}
+	assert.Equal(t, 6, len(records), "expecting 6 events")
+	isNewApplicationEvent(t, nonExist, records[0])
+	isNewApplicationEvent(t, app, records[1])
+	isRemoveApplicationEvent(t, app, records[2])
+	isRemoveApplicationEvent(t, app, records[3])
+	isRemoveApplicationEvent(t, app, records[4])
+	isRemoveApplicationEvent(t, app, records[5])
 }
 
 func TestQueueStates(t *testing.T) {

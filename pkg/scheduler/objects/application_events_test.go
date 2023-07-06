@@ -27,6 +27,79 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+func isNewAllocAskEvent(t *testing.T, ask *AllocationAsk, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, ask.applicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, ask.allocationKey, record.ReferenceID, "incorrect reference ID, expected alloc ask ID")
+	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
+	assert.Equal(t, si.EventRecord_APP_REQUEST, record.EventChangeDetail, "incorrect change detail, expected app")
+}
+
+func isRemoveAskEvent(t *testing.T, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_REQUEST_TIMEOUT, record.EventChangeDetail)
+}
+
+func isAllocCancelEvent(t *testing.T, ask *AllocationAsk, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, ask.applicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, ask.allocationKey, record.ReferenceID, "incorrect reference ID, expected alloc ID")
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_REQUEST_CANCEL, record.EventChangeDetail, "incorrect change detail, expected request cancel")
+}
+
+func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, record.EventChangeDetail, "incorrect change detail, expected none")
+}
+
+func isRemoveApplicationEvent(t *testing.T, app *Application, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, record.EventChangeDetail, "incorrect change detail, expected none")
+}
+
+func isStateChangeEvent(t *testing.T, app *Application, changeDetail si.EventRecord_ChangeDetail, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_SET, record.EventChangeType, "incorrect change type, expected set")
+	assert.Equal(t, changeDetail, record.EventChangeDetail, "incorrect change detail")
+}
+
+func isNewAllocationEvent(t *testing.T, app *Application, alloc *Allocation, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type)
+	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_ALLOC, record.EventChangeDetail)
+	assert.Equal(t, alloc.GetUUID(), record.ReferenceID)
+	assert.Equal(t, app.ApplicationID, record.ObjectID)
+}
+
+func isRemoveAllocationEvent(t *testing.T, app *Application, alloc *Allocation, eventChangeDetail si.EventRecord_ChangeDetail, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType)
+	assert.Equal(t, eventChangeDetail, record.EventChangeDetail)
+	assert.Equal(t, alloc.GetUUID(), record.ReferenceID)
+	assert.Equal(t, app.ApplicationID, record.ObjectID)
+}
+
+func isPlaceholderLargerEvent(t *testing.T, app *Application, alloc *Allocation, message string, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_REQUEST, record.Type)
+	assert.Equal(t, si.EventRecord_NONE, record.EventChangeType)
+	assert.Equal(t, app.ApplicationID, record.ReferenceID)
+	assert.Equal(t, alloc.allocationKey, record.ObjectID)
+}
+
+func isAppDoesNotFitEvent(t *testing.T, app *Application, ask *AllocationAsk, message string, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_REQUEST, record.Type)
+	assert.Equal(t, si.EventRecord_NONE, record.EventChangeType)
+	assert.Equal(t, app.ApplicationID, record.ReferenceID)
+	assert.Equal(t, ask.GetAllocationKey(), record.ObjectID)
+}
+
 func TestSendAppDoesNotFitEvent(t *testing.T) {
 	app := &Application{
 		queuePath: "root.test",
@@ -281,5 +354,105 @@ func TestSendRemoveAskEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_REQUEST_TIMEOUT, event.EventChangeDetail)
 	assert.Equal(t, "app-0", event.ObjectID)
 	assert.Equal(t, "alloc-1", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
+}
+
+func TestSendNewApplicationEvent(t *testing.T) {
+	app := &Application{
+		ApplicationID: appID0,
+		queuePath:     "root.test",
+	}
+	// not enabled
+	evt := newApplicationEvents(app, nil)
+	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
+	assert.Assert(t, !evt.enabled, "event system should be disabled")
+	evt.sendNewApplicationEvent()
+
+	// enabled
+	mockEvents := newEventSystemMock()
+	appEvents := newApplicationEvents(app, mockEvents)
+
+	appEvents.sendNewApplicationEvent()
+	event := mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
+}
+
+func TestSendRemoveApplicationEvent(t *testing.T) {
+	app := &Application{
+		ApplicationID: appID0,
+		queuePath:     "root.test",
+	}
+	// not enabled
+	evt := newApplicationEvents(app, nil)
+	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
+	assert.Assert(t, !evt.enabled, "event system should be disabled")
+	evt.sendRemoveApplicationEvent()
+
+	// enabled
+	mockEvents := newEventSystemMock()
+	appEvents := newApplicationEvents(app, mockEvents)
+
+	appEvents.sendRemoveApplicationEvent()
+	event := mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
+}
+
+func TestSendRejectApplicationEvent(t *testing.T) {
+	app := &Application{
+		ApplicationID: appID0,
+		queuePath:     "root.test",
+	}
+	// not enabled
+	evt := newApplicationEvents(app, nil)
+	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
+	assert.Assert(t, !evt.enabled, "event system should be disabled")
+	evt.sendRejectApplicationEvent("ResourceReservationTimeout")
+
+	// enabled
+	mockEvents := newEventSystemMock()
+	appEvents := newApplicationEvents(app, mockEvents)
+
+	appEvents.sendRejectApplicationEvent("ResourceReservationTimeout")
+	event := mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_REJECT, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
+	assert.Equal(t, "ResourceReservationTimeout", event.Message)
+}
+
+func TestSendStateChangeEvent(t *testing.T) {
+	app := &Application{
+		ApplicationID: appID0,
+		queuePath:     "root.test",
+	}
+	// not enabled
+	evt := newApplicationEvents(app, nil)
+	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
+	assert.Assert(t, !evt.enabled, "event system should be disabled")
+	evt.sendStateChangeEvent(si.EventRecord_APP_RUNNING)
+
+	// enabled
+	mockEvents := newEventSystemMock()
+	appEvents := newApplicationEvents(app, mockEvents)
+
+	appEvents.sendStateChangeEvent(si.EventRecord_APP_RUNNING)
+	event := mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_RUNNING, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
 	assert.Equal(t, "", event.Message)
 }

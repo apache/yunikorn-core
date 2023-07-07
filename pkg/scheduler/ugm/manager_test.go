@@ -49,7 +49,7 @@ func TestGetGroup(t *testing.T) {
 	user1 := security.UserGroup{User: "test", Groups: []string{"test1", "test"}}
 	group = manager.ensureGroup(user1, "root.parent")
 	assert.Equal(t, group, "test")
-	
+
 	conf = createConfigWithoutLimits()
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 

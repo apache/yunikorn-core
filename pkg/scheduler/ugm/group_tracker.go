@@ -115,3 +115,9 @@ func (gt *GroupTracker) canBeRemoved() bool {
 	defer gt.RUnlock()
 	return len(gt.queueTracker.childQueueTrackers) == 0 && len(gt.queueTracker.runningApplications) == 0
 }
+
+func (gt *GroupTracker) removeApp(applicationID string) {
+	gt.Lock()
+	defer gt.Unlock()
+	delete(gt.applications, applicationID)
+}

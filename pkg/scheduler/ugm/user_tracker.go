@@ -76,9 +76,13 @@ func (ut *UserTracker) hasGroupForApp(applicationID string) bool {
 func (ut *UserTracker) setGroupForApp(applicationID string, groupTrack *GroupTracker) {
 	ut.Lock()
 	defer ut.Unlock()
-	if ut.appGroupTrackers[applicationID] == nil {
-		ut.appGroupTrackers[applicationID] = groupTrack
-	}
+	ut.appGroupTrackers[applicationID] = groupTrack
+}
+
+func (ut *UserTracker) getGroupForApp(applicationID string) *GroupTracker {
+	ut.Lock()
+	defer ut.Unlock()
+	return ut.appGroupTrackers[applicationID]
 }
 
 func (ut *UserTracker) getMatchedGroup() string {

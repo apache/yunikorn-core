@@ -96,10 +96,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 	if !increased {
 		return increased
 	}
-	if err := m.ensureGroupTrackerForApp(queuePath, applicationID, user); err != nil {
-		return false
-	}
-	group := m.ensureGroup(user, queuePath)
+	group := m.ensureGroupTrackerForApp(queuePath, applicationID, user)
 	if group != "" {
 		groupTracker := m.getGroupTracker(group, true)
 		log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
@@ -243,7 +240,7 @@ func (m *Manager) GetGroupTracker(group string) *GroupTracker {
 	return nil
 }
 
-func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) error {
+func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID string, user security.UserGroup) string {
 	m.Lock()
 	defer m.Unlock()
 	userTracker := m.userTrackers[user.User]
@@ -269,8 +266,10 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 			}
 		}
 		userTracker.setGroupForApp(applicationID, groupTracker)
+		return group
+	} else {
+		return userTracker.getGroupForApp(applicationID).groupName
 	}
-	return nil
 }
 
 // ensureGroup User may belong to zero or multiple groups. Limits are configured for different groups at different queue hierarchy.
@@ -476,58 +475,99 @@ func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits 
 	for u, ut := range m.userTrackers {
 		// Is this user already tracked for the queue path?
 		if ut.IsQueuePathTrackedCompletely(queuePath) {
-			// Is there any limit config set for user in the current configuration? If not, then clear those old limit settings
-			if _, ok := userLimits[u]; !ok {
-				log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
-					zap.String("user", u),
-					zap.String("queue path", queuePath))
-				// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
-				if ut.IsUnlinkRequired(queuePath) {
-					ut.UnlinkQT(queuePath)
-				} else {
-					ut.setLimits(queuePath, resources.NewResource(), 0)
-					log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for user",
-						zap.String("user", u),
-						zap.String("queue path", queuePath))
-				}
-				// Does "root" queue has any child queue trackers? At some point during this whole traversal, root might
-				// not have any child queue trackers. When the situation comes, remove the linkage between the user and
-				// its root queue tracker
-				if ut.canBeRemoved() {
-					delete(m.userTrackers, ut.userName)
+			// Traverse all the group trackers linked to user through different applications and remove the linkage
+			for appID, gt := range ut.appGroupTrackers {
+				if gt != nil {
+					g := gt.groupName
+					// Is there any limit config set for group in the current configuration? If not, then remove the linkage by setting it to nil
+					if ok := groupLimits[g]; !ok {
+						log.Log(log.SchedUGM).Debug("Removed the linkage between user and group through applications",
+							zap.String("user", u),
+							zap.String("group", gt.groupName),
+							zap.String("application id", appID),
+							zap.String("queue path", queuePath))
+						// to do: removing the linkage only happens here by setting it to nil and deleting app id
+						// but group resource usage so far remains as it is because we don't have app id wise resource usage with in group as of now.
+						// In case of only one (last) application, group tracker would be removed from the manager.
+						ut.setGroupForApp(appID, nil)
+						gt.removeApp(appID)
+						if len(gt.getTrackedApplications()) == 0 {
+							log.Log(log.SchedUGM).Debug("Is this app the only running application in group?",
+								zap.String("user", u),
+								zap.String("group", gt.groupName),
+								zap.Int("no. of applications", len(gt.getTrackedApplications())),
+								zap.String("application id", appID),
+								zap.String("queue path", queuePath))
+							delete(m.groupTrackers, g)
+						}
+					}
 				}
 			}
 		}
+		m.clearEarlierSetUserLimits(ut, queuePath, userLimits)
 	}
 
 	// Clear already configured limits of group for which limits have been configured before but not now
-	for g, gt := range m.groupTrackers {
-		// Is this group already tracked for the queue path?
-		if gt.IsQueuePathTrackedCompletely(queuePath) {
-			// Is there any limit config set for group in the current configuration? If not, then clear those old limit settings
-			if ok := groupLimits[g]; !ok {
-				log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for group",
-					zap.String("group", g),
+	for _, gt := range m.groupTrackers {
+		m.clearEarlierSetGroupLimits(gt, queuePath, groupLimits)
+	}
+	return nil
+}
+
+func (m *Manager) clearEarlierSetUserLimits(ut *UserTracker, queuePath string, userLimits map[string]bool) {
+	// Is this user already tracked for the queue path?
+	if ut.IsQueuePathTrackedCompletely(queuePath) {
+		u := ut.userName
+		// Is there any limit config set for user in the current configuration? If not, then clear those old limit settings
+		if _, ok := userLimits[u]; !ok {
+			log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
+				zap.String("user", u),
+				zap.String("queue path", queuePath))
+			// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
+			if ut.IsUnlinkRequired(queuePath) {
+				ut.UnlinkQT(queuePath)
+			} else {
+				ut.setLimits(queuePath, resources.NewResource(), 0)
+				log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for user",
+					zap.String("user", u),
 					zap.String("queue path", queuePath))
-				// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
-				if gt.IsUnlinkRequired(queuePath) {
-					gt.UnlinkQT(queuePath)
-				} else {
-					gt.setLimits(queuePath, resources.NewResource(), 0)
-					log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for group",
-						zap.String("group", g),
-						zap.String("queue path", queuePath))
-				}
-				// Does "root" queue has any child queue trackers? At some point during this whole traversal, root might
-				// not have any child queue trackers. When the situation comes, remove the linkage between the group and
-				// its root queue tracker
-				if gt.canBeRemoved() {
-					delete(m.groupTrackers, gt.groupName)
-				}
+			}
+			// Does "root" queue has any child queue trackers? At some point during this whole traversal, root might
+			// not have any child queue trackers. When the situation comes, remove the linkage between the user and
+			// its root queue tracker
+			if ut.canBeRemoved() {
+				delete(m.userTrackers, ut.userName)
 			}
 		}
 	}
-	return nil
+}
+
+func (m *Manager) clearEarlierSetGroupLimits(gt *GroupTracker, queuePath string, groupLimits map[string]bool) {
+	// Is this group already tracked for the queue path?
+	if gt.IsQueuePathTrackedCompletely(queuePath) {
+		g := gt.groupName
+		// Is there any limit config set for group in the current configuration? If not, then clear those old limit settings
+		if ok := groupLimits[g]; !ok {
+			log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for group",
+				zap.String("group", g),
+				zap.String("queue path", queuePath))
+			// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
+			if gt.IsUnlinkRequired(queuePath) {
+				gt.UnlinkQT(queuePath)
+			} else {
+				gt.setLimits(queuePath, resources.NewResource(), 0)
+				log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for group",
+					zap.String("group", g),
+					zap.String("queue path", queuePath))
+			}
+			// Does "root" queue has any child queue trackers? At some point during this whole traversal, root might
+			// not have any child queue trackers. When the situation comes, remove the linkage between the group and
+			// its root queue tracker
+			if gt.canBeRemoved() {
+				delete(m.groupTrackers, gt.groupName)
+			}
+		}
+	}
 }
 
 func (m *Manager) setUserLimits(user string, limitConfig *LimitConfig, queuePath string) error {

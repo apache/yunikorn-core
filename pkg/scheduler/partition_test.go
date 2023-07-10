@@ -3357,3 +3357,113 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 	assert.Equal(t, alloc.GetApplicationID(), appID2, "expected application app-2 to be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-1 to be allocated")
 }
+
+func TestUserHeadroom(t *testing.T) {
+	setupUGM()
+	partition, err := newConfiguredPartition()
+	assert.NilError(t, err, "test partition create failed with error")
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"memory": "10", "vcores": "10"})
+	assert.NilError(t, err, "failed to create basic resource")
+	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
+	assert.NilError(t, err, "test node1 add failed unexpected")
+	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
+	assert.NilError(t, err, "test node2 add failed unexpected")
+
+	app1 := newApplication(appID1, "default", "root.parent.sub-leaf")
+	res, err = resources.NewResourceFromConf(map[string]string{"memory": "3", "vcores": "3"})
+	assert.NilError(t, err, "failed to create resource")
+
+	err = partition.AddApplication(app1)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+	err = app1.AddAllocationAsk(newAllocationAsk(allocID, appID1, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+
+	app2 := newApplication(appID2, "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err, "failed to add app-2 to partition")
+	err = app2.AddAllocationAsk(newAllocationAsk(allocID, appID2, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
+
+	// app 1 would be allocated as there is headroom available for the user
+	alloc := partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
+
+	// app 2 allocation won't happen as there is no headroom for the user
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("allocation should not happen")
+	}
+
+	res1, err := resources.NewResourceFromConf(map[string]string{"memory": "5", "vcores": "5"})
+	assert.NilError(t, err, "failed to create resource")
+
+	app3 := newApplication(appID3, "default", "root.leaf")
+	err = partition.AddApplication(app3)
+	assert.NilError(t, err, "failed to add app-3 to partition")
+	err = app3.AddAllocationAsk(newAllocationAsk(allocID, appID3, res1))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-3")
+
+	// app 3 would be allocated as there is headroom available for the user
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
+
+	app4 := newApplication("app-4", "default", "root.leaf")
+	err = partition.AddApplication(app4)
+	assert.NilError(t, err, "failed to add app-4 to partition")
+	err = app4.AddAllocationAsk(newAllocationAsk(allocID, "app-4", res1))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-4")
+
+	// app 4 allocation won't happen as there is no headroom for the user
+	alloc = partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("allocation should not happen")
+	}
+	partition.removeApplication(appID1)
+	partition.removeApplication(appID2)
+	partition.removeApplication(appID3)
+	partition.removeApplication("app-4")
+
+	// create a reservation and ensure reservation has been allocated because there is enough headroom for the user to run the app
+	app5 := newApplication("app-5", "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app5)
+	assert.NilError(t, err, "failed to add app-5 to partition")
+
+	res, err = resources.NewResourceFromConf(map[string]string{"memory": "3", "vcores": "3"})
+	assert.NilError(t, err, "failed to create resource")
+	ask := newAllocationAskRepeat("alloc-1", "app-5", res, 2)
+	err = app5.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask to app")
+
+	node2 := partition.GetNode(nodeID2)
+	if node2 == nil {
+		t.Fatal("expected node-2 to be returned got nil")
+	}
+	partition.reserve(app5, node2, ask)
+
+	// turn off the second node
+	node1 := partition.GetNode(nodeID1)
+	node1.SetSchedulable(false)
+
+	alloc = partition.tryReservedAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, objects.AllocatedReserved, alloc.GetResult(), "allocation result should have been allocated")
+
+	// create a reservation and ensure reservation has not been allocated because there is no headroom for the user
+	ask = newAllocationAskRepeat("alloc-2", "app-5", res, 2)
+	err = app5.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask to app")
+	partition.reserve(app5, node2, ask)
+	alloc = partition.tryReservedAllocate()
+	if alloc != nil {
+		t.Fatal("allocation should not happen on other nodes as well")
+	}
+}

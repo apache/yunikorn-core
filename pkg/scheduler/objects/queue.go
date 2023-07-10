@@ -680,7 +680,7 @@ func (sq *Queue) AddApplication(app *Application) {
 				zap.String("json quota string", quota),
 				zap.Error(quotaErr))
 		} else if !resources.StrictlyGreaterThanZero(quotaRes) {
-			log.Log(log.SchedQueue).Warn("application resource quota has at least one 0 value: cannot set queue limit",
+			log.Log(log.SchedQueue).Warn("Max resource quantities should be greater than zero: cannot set queue max resource",
 				zap.Stringer("maxResource", quotaRes))
 			quotaRes = nil // Skip setting quota if it has a value <= 0
 		}
@@ -693,15 +693,14 @@ func (sq *Queue) AddApplication(app *Application) {
 			log.Log(log.SchedQueue).Warn("application guaranteed resource conversion failure",
 				zap.String("json guaranteed string", guaranteed),
 				zap.Error(guaranteedErr))
+			if quotaErr != nil {
+				return
+			}
 		} else if !resources.StrictlyGreaterThanZero(guaranteedRes) {
-			log.Log(log.SchedQueue).Warn("application guaranteed resource has at least one 0 value: cannot set queue guaranteed resource",
+			log.Log(log.SchedQueue).Warn("Guaranteed resource quantities should be greater than zero: cannot set queue guaranteed resource",
 				zap.Stringer("guaranteedResource", guaranteedRes))
 			guaranteedRes = nil // Skip setting guaranteed resource if it has a value <= 0
 		}
-	}
-
-	if quotaErr != nil && guaranteedErr != nil {
-		return
 	}
 
 	// set the quota

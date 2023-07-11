@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -3356,6 +3357,38 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.GetApplicationID(), appID2, "expected application app-2 to be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-1 to be allocated")
+}
+
+func TestNewQueueEvents(t *testing.T) {
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err)
+	_, err = partition.createQueue("root.test", security.UserGroup{
+		User: "test",
+	})
+	assert.NilError(t, err)
+	noEvents := 0
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		noEvents = eventSystem.Store.CountStoredEvents()
+		return noEvents == 3
+	})
+	assert.NilError(t, err, "expected 3 events, got %d", noEvents)
+	records := eventSystem.Store.CollectEvents()
+	assert.Equal(t, si.EventRecord_QUEUE, records[0].Type)
+	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[0].EventChangeDetail)
+	assert.Equal(t, "root", records[0].ObjectID)
+	assert.Equal(t, si.EventRecord_QUEUE, records[1].Type)
+	assert.Equal(t, si.EventRecord_ADD, records[1].EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[1].EventChangeDetail)
+	assert.Equal(t, "root.default", records[1].ObjectID)
+	assert.Equal(t, si.EventRecord_QUEUE, records[2].Type)
+	assert.Equal(t, si.EventRecord_ADD, records[2].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_DYNAMIC, records[2].EventChangeDetail)
+	assert.Equal(t, "root.test", records[2].ObjectID)
 }
 
 func TestUserHeadroom(t *testing.T) {

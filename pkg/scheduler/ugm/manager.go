@@ -669,8 +669,8 @@ func (m *Manager) Headroom(queuePath string, user security.UserGroup) *resources
 			zap.String("queue path", queuePath),
 			zap.String("user headroom", userHeadroom.String()))
 	}
-	group, err := m.getGroup(user)
-	if err == nil {
+	group := m.internalEnsureGroup(user, queuePath)
+	if group != "" {
 		if m.groupTrackers[group] != nil {
 			groupHeadroom = m.groupTrackers[group].headroom(queuePath)
 			log.Log(log.SchedUGM).Debug("Calculated headroom for group",

@@ -329,6 +329,9 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 		}
 		limitConfig := &LimitConfig{maxResources: maxResource, maxApplications: limit.MaxApplications}
 		for _, user := range limit.Users {
+			if user == "" {
+				continue
+			}
 			log.Log(log.SchedUGM).Debug("Processing user limits configuration",
 				zap.String("user", user),
 				zap.String("limit", limit.Limit),
@@ -344,6 +347,9 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			}
 		}
 		for _, group := range limit.Groups {
+			if group == "" {
+				continue
+			}
 			log.Log(log.SchedUGM).Debug("Processing group limits configuration",
 				zap.String("group", group),
 				zap.String("limit", limit.Limit),
@@ -570,6 +576,31 @@ func (m *Manager) getGroupWildCardLimitsConfig(queuePath string) *LimitConfig {
 		return config
 	}
 	return nil
+}
+
+func (m *Manager) Headroom(queuePath string, user security.UserGroup) *resources.Resource {
+	m.RLock()
+	defer m.RUnlock()
+	var userHeadroom *resources.Resource
+	var groupHeadroom *resources.Resource
+	if m.userTrackers[user.User] != nil {
+		userHeadroom = m.userTrackers[user.User].headroom(queuePath)
+		log.Log(log.SchedUGM).Debug("Calculated headroom for user",
+			zap.String("user", user.User),
+			zap.String("queue path", queuePath),
+			zap.String("user headroom", userHeadroom.String()))
+	}
+	group, err := m.getGroup(user)
+	if err == nil {
+		if m.groupTrackers[group] != nil {
+			groupHeadroom = m.groupTrackers[group].headroom(queuePath)
+			log.Log(log.SchedUGM).Debug("Calculated headroom for group",
+				zap.String("group", group),
+				zap.String("queue path", queuePath),
+				zap.String("group headroom", groupHeadroom.String()))
+		}
+	}
+	return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
 }
 
 // ClearUserTrackers only for tests

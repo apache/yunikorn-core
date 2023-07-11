@@ -440,6 +440,51 @@ func TestSetMaxLimitsForRemovedUsers(t *testing.T) {
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) == nil, true)
 }
 
+func TestUserGroupHeadroom(t *testing.T) {
+	setupUGM()
+	// Queue setup:
+	// root->parent
+	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
+	conf := createUpdateConfig(user.User, user.Groups[0])
+	manager := GetUserManager()
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+	expectedResource, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcores": "50"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedResource)
+	}
+	usage, err := resources.NewResourceFromConf(map[string]string{"memory": "10", "vcores": "10"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+	}
+	assertMaxLimits(t, user, expectedResource, 5)
+	headroom := manager.Headroom("root.parent.leaf", user)
+	assert.Equal(t, resources.Equals(headroom, usage), true)
+
+	increased := manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage, user)
+	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePath1+", app "+TestApp1+", res "+usage.String())
+
+	headroom = manager.Headroom("root.parent.leaf", user)
+	assert.Equal(t, manager.GetUserTracker(user.User) != nil, true)
+	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) != nil, true)
+	assert.Equal(t, resources.Equals(headroom, resources.Multiply(usage, 0)), true)
+
+	increased = manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage, user)
+	assert.Equal(t, increased, false, "unable to increase tracked resource: queuepath "+queuePath1+", app "+TestApp1+", res "+usage.String())
+
+	// configure limits only for group
+	conf = createUpdateConfigWithWildCardUsersAndGroups("", user.Groups[0], "*", "*", "80", "80")
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+	usage1, err := resources.NewResourceFromConf(map[string]string{"memory": "70", "vcores": "70"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+	}
+	// ensure group headroom returned when there is no limit settings configured for user
+	headroom = manager.Headroom("root.parent", user)
+	assert.Equal(t, resources.Equals(headroom, resources.Sub(usage1, usage)), true)
+}
+
 func createUpdateConfigWithWildCardUsersAndGroups(user string, group string, wildUser string, wildGroup string, memory string, vcores string) configs.PartitionConfig {
 	conf := configs.PartitionConfig{
 		Name: "test",

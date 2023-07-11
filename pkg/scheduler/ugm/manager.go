@@ -486,8 +486,9 @@ func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits 
 							zap.String("group", gt.groupName),
 							zap.String("application id", appID),
 							zap.String("queue path", queuePath))
-						// to do: removing the linkage only happens here by setting it to nil and deleting app id
+						// removing the linkage only happens here by setting it to nil and deleting app id
 						// but group resource usage so far remains as it is because we don't have app id wise resource usage with in group as of now.
+						// YUNIKORN-1858 handles the group resource usage properly
 						// In case of only one (last) application, group tracker would be removed from the manager.
 						ut.setGroupForApp(appID, nil)
 						gt.removeApp(appID)

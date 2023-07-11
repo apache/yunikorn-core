@@ -196,7 +196,6 @@ func (pc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *objects
 		if err != nil {
 			return err
 		}
-		thisQueue.SendNewQueueEvent()
 		// recursive create the queues below
 		if len(queueConf.Queues) > 0 {
 			err = pc.addQueue(queueConf.Queues, thisQueue)
@@ -523,7 +522,6 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 				zap.Error(err))
 			return nil, err
 		}
-		queue.SendNewQueueEvent()
 	}
 	return queue, nil
 }

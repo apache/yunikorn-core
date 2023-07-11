@@ -67,7 +67,6 @@ type Queue struct {
 	preemptionPolicy    policies.PreemptionPolicy // preemption policy
 	preemptionDelay     time.Duration             // time before preemption is considered
 	currentPriority     int32                     // the current scheduling priority of this queue
-	initialized         bool                      // whether the queue is fully initialized or not
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
@@ -141,7 +140,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.queueEvents = newQueueEvents(sq, events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
-	sq.initialized = true
+	sq.queueEvents.sendNewQueueEvent()
 
 	return sq, nil
 }
@@ -176,7 +175,7 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	sq.queueEvents = newQueueEvents(sq, events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
-	sq.initialized = true
+	sq.queueEvents.sendNewQueueEvent()
 
 	return sq, nil
 }
@@ -309,8 +308,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 		sq.isLeaf = false
 	}
 
-	if prevLeaf != sq.isLeaf && sq.initialized {
-		// don't call this during init phase when queueEvents is "nil"
+	if prevLeaf != sq.isLeaf && sq.queueEvents != nil {
 		sq.queueEvents.sendTypeChangedEvent()
 	}
 
@@ -349,7 +347,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 	}
 
 	if resources.StrictlyGreaterThanZero(maxResource) {
-		if !resources.Equals(sq.maxResource, maxResource) && sq.initialized {
+		if !resources.Equals(sq.maxResource, maxResource) && sq.queueEvents != nil {
 			sq.queueEvents.sendMaxResourceChangedEvent()
 		}
 		sq.maxResource = maxResource
@@ -359,7 +357,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 	}
 
 	if resources.StrictlyGreaterThanZero(guaranteedResource) {
-		if !resources.Equals(sq.guaranteedResource, guaranteedResource) && sq.initialized {
+		if !resources.Equals(sq.guaranteedResource, guaranteedResource) && sq.queueEvents != nil {
 			sq.queueEvents.sendGuaranteedResourceChangedEvent()
 		}
 		sq.guaranteedResource = guaranteedResource
@@ -1844,10 +1842,6 @@ func (sq *Queue) recalculatePriority() int32 {
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
-}
-
-func (sq *Queue) SendNewQueueEvent() {
-	sq.queueEvents.sendNewQueueEvent()
 }
 
 func (sq *Queue) SendRemoveQueueEvent() {

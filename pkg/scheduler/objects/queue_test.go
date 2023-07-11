@@ -2480,17 +2480,17 @@ func TestQueueEvents(t *testing.T) {
 	noEvents := 0
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 2
+		return noEvents == 3
 	})
 	assert.NilError(t, err, "expected 2 events, got %d", noEvents)
 	records := eventSystem.Store.CollectEvents()
-	assert.Equal(t, 2, len(records), "number of events")
-	assert.Equal(t, si.EventRecord_QUEUE, records[0].Type)
-	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
-	assert.Equal(t, si.EventRecord_QUEUE_APP, records[0].EventChangeDetail)
+	assert.Equal(t, 3, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_QUEUE, records[1].Type)
-	assert.Equal(t, si.EventRecord_REMOVE, records[1].EventChangeType)
+	assert.Equal(t, si.EventRecord_ADD, records[1].EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_APP, records[1].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_QUEUE, records[2].Type)
+	assert.Equal(t, si.EventRecord_REMOVE, records[2].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_APP, records[2].EventChangeDetail)
 
 	newConf := configs.QueueConfig{
 		Parent: false,

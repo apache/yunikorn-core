@@ -61,12 +61,11 @@ func (q *queueEvents) sendRemoveQueueEvent() {
 		return
 	}
 
-	var detail si.EventRecord_ChangeDetail
+	detail := si.EventRecord_QUEUE_DYNAMIC
 	if q.queue.IsManaged() {
 		detail = si.EventRecord_DETAILS_NONE
-	} else {
-		detail = si.EventRecord_QUEUE_DYNAMIC
 	}
+
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_REMOVE,
 		detail, nil)
 	q.eventSystem.AddEvent(event)
@@ -81,6 +80,7 @@ func (q *queueEvents) sendRemoveApplicationEvent(appID string) {
 		si.EventRecord_QUEUE_APP, nil)
 	q.eventSystem.AddEvent(event)
 }
+
 func (q *queueEvents) sendMaxResourceChangedEvent() {
 	if !q.enabled {
 		return
@@ -106,11 +106,9 @@ func (q *queueEvents) sendTypeChangedEvent() {
 		return
 	}
 
-	var message string
+	message := "leaf queue: false"
 	if q.queue.isLeaf {
 		message = "leaf queue: true"
-	} else {
-		message = "leaf queue: false"
 	}
 
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, message, common.Empty, si.EventRecord_SET,

@@ -32,6 +32,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
@@ -83,6 +84,7 @@ type Queue struct {
 	runningApps            uint64
 	allocatingAcceptedApps map[string]bool
 	template               *template.Template
+	queueEvents            *queueEvents
 
 	sync.RWMutex
 }
@@ -135,9 +137,10 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
 	}
 	sq.UpdateQueueProperties()
-
+	sq.queueEvents = newQueueEvents(sq, events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
+	sq.queueEvents.sendNewQueueEvent()
 
 	return sq, nil
 }
@@ -169,8 +172,10 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	}
 
 	sq.UpdateQueueProperties()
+	sq.queueEvents = newQueueEvents(sq, events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
+	sq.queueEvents.sendNewQueueEvent()
 
 	return sq, nil
 }
@@ -296,10 +301,15 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 		sq.isManaged = true
 	}
 
+	prevLeaf := sq.isLeaf
 	sq.isLeaf = !conf.Parent
 	// Make sure the parent flag is set correctly: config might expect auto parent type creation
 	if len(conf.Queues) > 0 {
 		sq.isLeaf = false
+	}
+
+	if prevLeaf != sq.isLeaf && sq.queueEvents != nil {
+		sq.queueEvents.sendTypeChangedEvent()
 	}
 
 	if !sq.isLeaf {
@@ -337,6 +347,9 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 	}
 
 	if resources.StrictlyGreaterThanZero(maxResource) {
+		if !resources.Equals(sq.maxResource, maxResource) && sq.queueEvents != nil {
+			sq.queueEvents.sendMaxResourceChangedEvent()
+		}
 		sq.maxResource = maxResource
 		sq.updateMaxResourceMetrics()
 	} else {
@@ -344,6 +357,9 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 	}
 
 	if resources.StrictlyGreaterThanZero(guaranteedResource) {
+		if !resources.Equals(sq.guaranteedResource, guaranteedResource) && sq.queueEvents != nil {
+			sq.queueEvents.sendGuaranteedResourceChangedEvent()
+		}
 		sq.guaranteedResource = guaranteedResource
 		sq.updateGuaranteedResourceMetrics()
 	} else {
@@ -658,8 +674,10 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 func (sq *Queue) AddApplication(app *Application) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.applications[app.ApplicationID] = app
-	sq.appPriorities[app.ApplicationID] = app.GetAskMaxPriority()
+	appID := app.ApplicationID
+	sq.applications[appID] = app
+	sq.appPriorities[appID] = app.GetAskMaxPriority()
+	sq.queueEvents.sendNewApplicationEvent(appID)
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.GetTag(common.AppTagNamespaceResourceQuota)
@@ -700,6 +718,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 			zap.String("applicationID", appID))
 		return
 	}
+	sq.queueEvents.sendRemoveApplicationEvent(appID)
 	if appPending := app.GetPendingResource(); !resources.IsZero(appPending) {
 		sq.decPendingResource(appPending)
 	}
@@ -905,6 +924,7 @@ func (sq *Queue) RemoveQueue() bool {
 	log.Log(log.SchedQueue).Info("removing queue", zap.String("queue", sq.QueuePath))
 	// root is always managed and is the only queue with a nil parent: no need to guard
 	sq.parent.removeChildQueue(sq.Name)
+	sq.queueEvents.sendRemoveQueueEvent()
 	return true
 }
 
@@ -1822,4 +1842,8 @@ func (sq *Queue) recalculatePriority() int32 {
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
+}
+
+func (sq *Queue) SendRemoveQueueEvent() {
+	sq.queueEvents.sendRemoveQueueEvent()
 }

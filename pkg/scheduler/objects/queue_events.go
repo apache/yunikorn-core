@@ -35,11 +35,9 @@ func (q *queueEvents) sendNewQueueEvent() {
 		return
 	}
 
-	var detail si.EventRecord_ChangeDetail
+	detail := si.EventRecord_QUEUE_DYNAMIC
 	if q.queue.IsManaged() {
 		detail = si.EventRecord_DETAILS_NONE
-	} else {
-		detail = si.EventRecord_QUEUE_DYNAMIC
 	}
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_ADD,
 		detail, nil)

@@ -381,7 +381,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 	app = newApplication("app-2", "default", "root.leaf-un")
 	leafUn.AddApplication(app)
-	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the Dynamic queue as expected")
+	assert.Equal(t, len(leafUn.applications), 1, "Application was not added to the Dynamic queue as expected")
 	if leafUn.GetMaxResource() != nil {
 		t.Errorf("Max resources should not be set on Dynamic queue got: %s", leafUn.GetMaxResource().String())
 	}
@@ -390,8 +390,13 @@ func TestAddApplicationWithTag(t *testing.T) {
 		map[string]resources.Quantity{
 			"first": 10,
 		})
+	guaranteedRes := resources.NewResourceFromMap(
+		map[string]resources.Quantity{
+			"first": 5,
+		})
 	tags := make(map[string]string)
 	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":5}}}"
 	// add apps again now with the tag set
 	app = newApplicationWithTags("app-3", "default", "root.leaf-man", tags)
 	leaf.AddApplication(app)
@@ -399,20 +404,90 @@ func TestAddApplicationWithTag(t *testing.T) {
 	if leaf.GetMaxResource() != nil {
 		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.GetMaxResource().String())
 	}
+	if leaf.GetGuaranteedResource() != nil {
+		t.Errorf("Guaranteed resources should not be set on managed queue got: %s", leaf.GetGuaranteedResource().String())
+	}
+
 	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
-	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
+	assert.Equal(t, len(leafUn.applications), 2, "Application was not added to the Dynamic queue as expected")
 	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
 		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
 	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
 
-	// set to illegal limit (0 value)
+	// set max to illegal limit (0 value), but guarantee not 0
 	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
-	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
+
+	app = newApplicationWithTags("app-5", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
-	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
+	assert.Equal(t, len(leafUn.applications), 3, "Application was not added to the Dynamic queue as expected")
 	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
 		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
+
+	// set guaranteed resource to illegal limit (0 value), but max resource not 0
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":100}}}"
+
+	app = newApplicationWithTags("app-6", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
+	assert.Equal(t, len(leafUn.applications), 4, "Application was not added to the Dynamic queue as expected")
+	if !resources.Equals(leafUn.GetMaxResource(), resources.NewResourceFromMap(
+		map[string]resources.Quantity{
+			"first": 100,
+		})) {
+		t.Errorf("Max resources not set as expected: %s got: %v", resources.NewResourceFromMap(
+			map[string]resources.Quantity{
+				"first": 100,
+			}).String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
+
+	// set guaranteed resource tag to "", but max resource not ""
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ""
+	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	app = newApplicationWithTags("app-7", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
+	assert.Equal(t, len(leafUn.applications), 5, "Application was not added to the Dynamic queue as expected")
+	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
+		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
+
+	// set both to "" , the max resource and guaranteed resource will not update new value
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ""
+	tags[siCommon.AppTagNamespaceResourceQuota] = ""
+	app = newApplicationWithTags("app-8", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
+	assert.Equal(t, len(leafUn.applications), 6, "Application was not added to the Dynamic queue as expected")
+	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
+		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
+
+	// set both to 0 , the max resource and guaranteed resource will not update new value
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	app = newApplicationWithTags("app-9", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
+	assert.Equal(t, len(leafUn.applications), 7, "Application was not added to the Dynamic queue as expected")
+	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
+		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
 	}
 }
 

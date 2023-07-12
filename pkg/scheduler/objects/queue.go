@@ -681,29 +681,60 @@ func (sq *Queue) AddApplication(app *Application) {
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.GetTag(common.AppTagNamespaceResourceQuota)
-	if quota == "" {
+	// get the tag with the guaranteed resource
+	guaranteed := app.GetTag(common.AppTagNamespaceResourceGuaranteed)
+	if quota == "" && guaranteed == "" {
 		return
 	}
+
+	var quotaRes, guaranteedRes *resources.Resource
+	var quotaErr, guaranteedErr error
+
 	// need to set a quota: convert json string to resource
-	res, err := resources.NewResourceFromString(quota)
-	if err != nil {
-		log.Log(log.SchedQueue).Warn("application resource quota conversion failure",
-			zap.String("json quota string", quota),
-			zap.Error(err))
-		return
+	if quota != "" {
+		quotaRes, quotaErr = resources.NewResourceFromString(quota)
+		if quotaErr != nil {
+			log.Log(log.SchedQueue).Warn("application resource quota conversion failure",
+				zap.String("json quota string", quota),
+				zap.Error(quotaErr))
+		} else if !resources.StrictlyGreaterThanZero(quotaRes) {
+			log.Log(log.SchedQueue).Warn("Max resource quantities should be greater than zero: cannot set queue max resource",
+				zap.Stringer("maxResource", quotaRes))
+			quotaRes = nil // Skip setting quota if it has a value <= 0
+		}
 	}
-	if !resources.StrictlyGreaterThanZero(res) {
-		log.Log(log.SchedQueue).Warn("application resource quota has at least one 0 value: cannot set queue limit",
-			zap.Stringer("maxResource", res))
-		return
+
+	// need to set guaranteed resource: convert json string to resource
+	if guaranteed != "" {
+		guaranteedRes, guaranteedErr = resources.NewResourceFromString(guaranteed)
+		if guaranteedErr != nil {
+			log.Log(log.SchedQueue).Warn("application guaranteed resource conversion failure",
+				zap.String("json guaranteed string", guaranteed),
+				zap.Error(guaranteedErr))
+			if quotaErr != nil {
+				return
+			}
+		} else if !resources.StrictlyGreaterThanZero(guaranteedRes) {
+			log.Log(log.SchedQueue).Warn("Guaranteed resource quantities should be greater than zero: cannot set queue guaranteed resource",
+				zap.Stringer("guaranteedResource", guaranteedRes))
+			guaranteedRes = nil // Skip setting guaranteed resource if it has a value <= 0
+		}
 	}
+
 	// set the quota
 	if sq.isManaged {
-		log.Log(log.SchedQueue).Warn("Trying to set max resources set on a queue that is not an unmanaged leaf",
+		log.Log(log.SchedQueue).Warn("Trying to set max resources on a queue that is not an unmanaged leaf",
 			zap.String("queueName", sq.QueuePath))
 		return
 	}
-	sq.maxResource = res
+
+	if quotaRes != nil {
+		sq.maxResource = quotaRes
+	}
+
+	if guaranteedRes != nil {
+		sq.guaranteedResource = guaranteedRes
+	}
 }
 
 // RemoveApplication removes the app from the list of tracked applications. Make sure that the app

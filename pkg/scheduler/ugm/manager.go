@@ -418,54 +418,18 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 }
 
 func (m *Manager) processUserConfig(user string, limitConfig *LimitConfig, queuePath string, userLimits map[string]bool) error {
-	if user == "*" {
-		// traverse all tracked users
-		for u, ut := range m.userTrackers {
-			// Is this user already tracked for the queue path?
-			if ut.IsQueuePathTrackedCompletely(queuePath) {
-				log.Log(log.SchedUGM).Debug("Processing wild card user limits configuration for all existing users",
-					zap.String("user", u),
-					zap.String("queue path", queuePath),
-					zap.Uint64("max application", limitConfig.maxApplications),
-					zap.Any("max resources", limitConfig.maxResources))
-				if err := m.setUserLimits(u, limitConfig, queuePath); err != nil {
-					return err
-				}
-				userLimits[u] = true
-			}
-		}
-	} else if user != "" {
-		if err := m.setUserLimits(user, limitConfig, queuePath); err != nil {
-			return err
-		}
-		userLimits[user] = true
+	if err := m.setUserLimits(user, limitConfig, queuePath); err != nil {
+		return err
 	}
+	userLimits[user] = true
 	return nil
 }
 
 func (m *Manager) processGroupConfig(group string, limitConfig *LimitConfig, queuePath string, groupLimits map[string]bool) error {
-	if group == "*" {
-		// traverse all tracked groups
-		for g, gt := range m.groupTrackers {
-			// Is this group already tracked for the queue path?
-			if gt.IsQueuePathTrackedCompletely(queuePath) {
-				log.Log(log.SchedUGM).Debug("Processing wild card user limits configuration for all existing groups",
-					zap.String("group", g),
-					zap.String("queue path", queuePath),
-					zap.Uint64("max application", limitConfig.maxApplications),
-					zap.Any("max resources", limitConfig.maxResources))
-				if err := m.setGroupLimits(g, limitConfig, queuePath); err != nil {
-					return err
-				}
-				groupLimits[g] = true
-			}
-		}
-	} else if group != "" {
-		if err := m.setGroupLimits(group, limitConfig, queuePath); err != nil {
-			return err
-		}
-		groupLimits[group] = true
+	if err := m.setGroupLimits(group, limitConfig, queuePath); err != nil {
+		return err
 	}
+	groupLimits[group] = true
 	return nil
 }
 

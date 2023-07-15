@@ -29,47 +29,22 @@ import (
 )
 
 func TestTreeIterator_AcceptAll(t *testing.T) {
-	nodesReserved := newSchedNodeList(0, 5, true)
-	nodes := newSchedNodeList(5, 10, false)
-	nodes = append(nodes, nodesReserved...)
-
-	tree := btree.New(7)
-	for _, n := range nodes {
-		tree.ReplaceOrInsert(nodeRef{
-			node:      n,
-			nodeScore: 1,
-		})
-	}
-
-	treeItr := NewTreeIterator(acceptUnreserved, func() *btree.BTree {
+	tree := getTree()
+	treeItr := NewTreeIterator(acceptAll, func() *btree.BTree {
 		return tree
 	})
 
 	checked := make([]*Node, 0)
-	unreservedIds := make(map[int]bool)
 	treeItr.ForEachNode(func(node *Node) bool {
 		checked = append(checked, node)
-		i, err := strconv.Atoi(node.Hostname)
-		assert.NilError(t, err, "conversion failure")
-		unreservedIds[i] = true
 		return true
 	})
 
+	assert.Equal(t, 10, len(checked))
 }
 
 func TestTreeIterator_AcceptUnreserved(t *testing.T) {
-	nodesReserved := newSchedNodeList(0, 5, true)
-	nodes := newSchedNodeList(5, 10, false)
-	nodes = append(nodes, nodesReserved...)
-
-	tree := btree.New(7)
-	for _, n := range nodes {
-		tree.ReplaceOrInsert(nodeRef{
-			node:      n,
-			nodeScore: 1,
-		})
-	}
-
+	tree := getTree()
 	treeItr := NewTreeIterator(acceptUnreserved, func() *btree.BTree {
 		return tree
 	})
@@ -88,6 +63,22 @@ func TestTreeIterator_AcceptUnreserved(t *testing.T) {
 	for i := 5; i < 10; i++ { // node 5-10 are unreserved
 		assert.Assert(t, unreservedIds[i])
 	}
+}
+
+func getTree() *btree.BTree {
+	nodesReserved := newSchedNodeList(0, 5, true)
+	nodes := newSchedNodeList(5, 10, false)
+	nodes = append(nodes, nodesReserved...)
+
+	tree := btree.New(7)
+	for _, n := range nodes {
+		tree.ReplaceOrInsert(nodeRef{
+			node:      n,
+			nodeScore: 1,
+		})
+	}
+
+	return tree
 }
 
 // A list of nodes that can be iterated over.

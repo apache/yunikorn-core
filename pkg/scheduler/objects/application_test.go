@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/btree"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -1732,9 +1731,8 @@ func TestCanReplace(t *testing.T) {
 
 func TestTryAllocateNoRequests(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 5})
-	nodes := []*Node{node}
 	nodeMap := map[string]*Node{"node1": node}
-	iterator := func() NodeIterator { return NewDefaultNodeIterator(nodes) }
+	iterator := getNodeIteratorFn(node)
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
@@ -1748,7 +1746,7 @@ func TestTryAllocateNoRequests(t *testing.T) {
 func TestTryAllocateFit(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 5})
 	nodeMap := map[string]*Node{"node1": node}
-	iterator := getTreeIteratorFunc(node)
+	iterator := getNodeIteratorFn(node)
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
@@ -1774,7 +1772,7 @@ func TestTryAllocateFit(t *testing.T) {
 func TestTryAllocatePreemptQueue(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 20})
 	nodeMap := map[string]*Node{"node1": node}
-	iterator := getTreeIteratorFunc(node)
+	iterator := getNodeIteratorFn(node)
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
@@ -1829,7 +1827,7 @@ func TestTryAllocatePreemptNode(t *testing.T) {
 	node1 := newNode("node1", map[string]resources.Quantity{"first": 20})
 	node2 := newNode("node2", map[string]resources.Quantity{"first": 20})
 	nodeMap := map[string]*Node{"node1": node1, "node2": node2}
-	iterator := getTreeIteratorFunc(node1, node2)
+	iterator := getNodeIteratorFn(node1, node2)
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
@@ -2258,20 +2256,4 @@ func (sa *Application) handleApplicationEventWithInfoLocking(event applicationEv
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.HandleApplicationEventWithInfo(event, info)
-}
-
-func getTreeIteratorFunc(nodes ...*Node) func() NodeIterator {
-	tree := btree.New(7)
-	for _, node := range nodes {
-		tree.ReplaceOrInsert(nodeRef{
-			node, 1,
-		})
-	}
-
-	iterator := func() NodeIterator {
-		ti := NewTreeIterator(acceptAll, nil)
-		ti.tree = tree
-		return ti
-	}
-	return iterator
 }

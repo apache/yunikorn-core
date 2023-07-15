@@ -21,13 +21,11 @@ package objects
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/google/btree"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
-	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
@@ -174,32 +172,6 @@ func (nc *baseNodeCollection) GetNodeIterator() NodeIterator {
 func (nc *baseNodeCollection) GetFullNodeIterator() NodeIterator {
 	nc.fullIterator.Reset()
 	return nc.fullIterator
-}
-
-func (nc *baseNodeCollection) getNodeIteratorInternal(allow func(*Node) bool) NodeIterator {
-	sortingStart := time.Now()
-	tree := nc.cloneSortedNodes()
-
-	length := tree.Len()
-	if length == 0 {
-		return nil
-	}
-
-	nodes := make([]*Node, 0, length)
-	tree.Ascend(func(item btree.Item) bool {
-		node := item.(nodeRef).node
-		if allow(node) {
-			nodes = append(nodes, node)
-		}
-		return true
-	})
-	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
-
-	if len(nodes) == 0 {
-		return nil
-	}
-
-	return NewDefaultNodeIterator(nodes)
 }
 
 func (nc *baseNodeCollection) cloneSortedNodes() *btree.BTree {

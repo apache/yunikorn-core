@@ -19,7 +19,7 @@
 
 set -e
 
-WORKDIR=$(pwd)/_output/fsm
+WORKDIR=$(pwd)/build/fsm
 
 output_fsm() {
   # print digraph header
@@ -37,7 +37,8 @@ output_fsm() {
 cd "${WORKDIR}"
 
 for dot in *.dot; do
-  base=$(echo "${dot}" | sed "s_\.dot$__")
+  # shellcheck disable=SC2001
+  base=$(echo "${dot}" | sed "s/\.dot$//")
   
   output_fsm "${base}" | dot -Tpng > "${base}.png"
 done

@@ -17,7 +17,13 @@
 
 # Check if this GO tools version used is at least the version of go specified in
 # the go.mod file. The version in go.mod should be in sync with other repos.
-GO_VERSION := $(shell go version | awk '{print substr($$3, 3, 10)}')
+
+# Go compiler selection
+ifeq ($(GO),)
+GO := go
+endif
+
+GO_VERSION := $(shell "$(GO)" version | awk '{print substr($$3, 3, 10)}')
 MOD_VERSION := $(shell cat .go_version) 
 
 GM := $(word 1,$(subst ., ,$(GO_VERSION)))
@@ -35,6 +41,7 @@ endif
 
 # Make sure we are in the same directory as the Makefile
 BASE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+TOOLS_DIR=tools
 
 # Force Go modules even when checked out inside GOPATH
 GO111MODULE := on
@@ -55,55 +62,83 @@ endif
 # Kernel (OS) Name
 OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
 
+# Allow architecture to be overwritten
+ifeq ($(HOST_ARCH),)
+HOST_ARCH := $(shell uname -m)
+endif
+
+# Build architecture settings:
+# EXEC_ARCH defines the architecture of the executables that gets compiled
+ifeq (x86_64, $(HOST_ARCH))
+EXEC_ARCH := amd64
+else ifeq (i386, $(HOST_ARCH))
+EXEC_ARCH := 386
+else ifneq (,$(filter $(HOST_ARCH), arm64 aarch64))
+EXEC_ARCH := arm64
+else ifeq (armv7l, $(HOST_ARCH))
+EXEC_ARCH := arm
+else
+$(info Unknown architecture "${HOST_ARCH}" defaulting to: amd64)
+EXEC_ARCH := amd64
+endif
+
+# shellcheck
+SHELLCHECK_VERSION=v0.9.0
+SHELLCHECK_BIN=${TOOLS_DIR}/shellcheck
+SHELLCHECK_ARCHIVE := shellcheck-$(SHELLCHECK_VERSION).$(OS).$(HOST_ARCH).tar.xz
+ifeq (darwin, $(OS))
+ifeq (arm64, $(HOST_ARCH))
+SHELLCHECK_ARCHIVE := shellcheck-$(SHELLCHECK_VERSION).$(OS).x86_64.tar.xz
+endif
+else ifeq (linux, $(OS))
+ifeq (armv7l, $(HOST_ARCH))
+SHELLCHECK_ARCHIVE := shellcheck-$(SHELLCHECK_VERSION).$(OS).armv6hf.tar.xz
+endif
+endif
+
+# golangci-lint
+GOLANGCI_LINT_VERSION=1.53.3
+GOLANGCI_LINT_BIN=$(TOOLS_DIR)/golangci-lint
+GOLANGCI_LINT_ARCHIVE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH).tar.gz
+GOLANGCI_LINT_ARCHIVEBASE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH)
+
 all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
-LINTBASE := $(shell go env GOPATH)/bin
-LINTBIN  := $(LINTBASE)/golangci-lint
-$(LINTBIN):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(LINTBASE) v1.51.2
-	stat $@ > /dev/null 2>&1
+# Install tools
+.PHONY: tools
+tools: $(SHELLCHECK_BIN) $(GOLANGCI_LINT_BIN)
+
+# Install shellcheck
+$(SHELLCHECK_BIN):
+	@echo "installing shellcheck $(SHELLCHECK_VERSION)"
+	@mkdir -p "$(TOOLS_DIR)"
+	@curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/$(SHELLCHECK_VERSION)/$(SHELLCHECK_ARCHIVE)" \
+		| tar -x -J --strip-components=1 -C "$(TOOLS_DIR)" "shellcheck-$(SHELLCHECK_VERSION)/shellcheck"
+
+# Install golangci-lint
+$(GOLANGCI_LINT_BIN):
+	@echo "installing golangci-lint v$(GOLANGCI_LINT_VERSION)"
+	@mkdir -p "$(TOOLS_DIR)"
+	@curl -sSfL "https://github.com/golangci/golangci-lint/releases/download/v$(GOLANGCI_LINT_VERSION)/$(GOLANGCI_LINT_ARCHIVE)" \
+		| tar -x -z --strip-components=1 -C "$(TOOLS_DIR)" "$(GOLANGCI_LINT_ARCHIVEBASE)/golangci-lint"
 
 .PHONY: lint
 # Run lint against the previous commit for PR and branch build
 # In dev setup look at all changes on top of master
-lint: $(LINTBIN)
+lint: $(GOLANGCI_LINT_BIN)
 	@echo "running golangci-lint"
-	git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
+	@git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
 	headSHA=$$(git rev-parse --short=12 $${REV}) ; \
 	echo "checking against commit sha $${headSHA}" ; \
-	${LINTBIN} run --new-from-rev=$${headSHA}
-
-.PHONY: install_shellcheck
-SHELLCHECK_PATH := "$(BASE_DIR)shellcheck"
-SHELLCHECK_VERSION := "v0.8.0"
-SHELLCHECK_ARCHIVE := "shellcheck-$(SHELLCHECK_VERSION).$(OS).$(HOST_ARCH).tar.xz"
-install_shellcheck:
-	@echo ${SHELLCHECK_PATH}
-	@if command -v "shellcheck" &> /dev/null; then \
-		exit 0 ; \
-	elif [ -x ${SHELLCHECK_PATH} ]; then \
-		exit 0 ; \
-	elif [ "${HOST_ARCH}" = "arm64" ]; then \
-		echo "Unsupported architecture 'arm64'" \
-		exit 1 ; \
-	else \
-		curl -sSfL https://github.com/koalaman/shellcheck/releases/download/${SHELLCHECK_VERSION}/${SHELLCHECK_ARCHIVE} | tar -x -J --strip-components=1 shellcheck-${SHELLCHECK_VERSION}/shellcheck ; \
-	fi
+	"${GOLANGCI_LINT_BIN}" run --new-from-rev=$${headSHA}
 
 # Check scripts
 .PHONY: check_scripts
-ALLSCRIPTS := $(shell find . -name '*.sh')
-check_scripts: install_shellcheck
+ALLSCRIPTS := $(shell find . -not \( -path ./tools -prune \) -not \( -path ./build -prune \) -name '*.sh')
+check_scripts: $(SHELLCHECK_BIN)
 	@echo "running shellcheck"
-	@if command -v "shellcheck" &> /dev/null; then \
-		shellcheck ${ALLSCRIPTS} ; \
-	elif [ -x ${SHELLCHECK_PATH} ]; then \
-		${SHELLCHECK_PATH} ${ALLSCRIPTS} ; \
-	else \
-		echo "shellcheck not found: failing target" \
-		exit 1; \
-	fi
+	@"$(SHELLCHECK_BIN)" ${ALLSCRIPTS}
 
 .PHONY: license-check
 # This is a bit convoluted but using a recursive grep on linux fails to write anything when run
@@ -113,23 +148,21 @@ check_scripts: install_shellcheck
 license-check:
 	@echo "checking license headers:"
 ifeq (darwin,$(OS))
-	$(shell find -E . -not -path "./.git*" -regex ".*\.(go|sh|md|yaml|yml|mod)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > LICRES)
+	$(shell mkdir -p build && find -E . -not \( -path './.git*' -prune \) -not \( -path ./build -prune \) -not \( -path ./tools -prune \) -regex ".*\.(go|sh|md|yaml|yml|mod)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > build/license-check.txt)
 else
-	$(shell find . -not -path "./.git*" -regex ".*\.\(go\|sh\|md\|yaml\|yml\|mod\)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > LICRES)
+	$(shell mkdir -p build && find . -not \( -path './.git*' -prune \) -not \( -path ./build -prune \) -not \( -path ./tools -prune \) -regex ".*\.\(go\|sh\|md\|yaml\|yml\|mod\)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > build/license-check.txt)
 endif
-	@if [ -s LICRES ]; then \
+	@if [ -s "build/license-check.txt" ]; then \
 		echo "following files are missing license header:" ; \
-		cat LICRES ; \
-		rm -f LICRES ; \
+		cat build/license-check.txt ; \
 		exit 1; \
-	fi ; \
-	rm -f LICRES
+	fi
 	@echo "  all OK"
 
 # Check that we use pseudo versions in master
 .PHONY: pseudo
 BRANCH := $(shell git branch --show-current)
-SI_REF := $(shell go list -m -f '{{ .Version }}' github.com/apache/yunikorn-scheduler-interface)
+SI_REF := $(shell "$(GO)" list -m -f '{{ .Version }}' github.com/apache/yunikorn-scheduler-interface)
 SI_MATCH := $(shell expr "${SI_REF}" : "v0.0.0-")
 pseudo:
 	@echo "pseudo version check"
@@ -144,10 +177,17 @@ pseudo:
 
 # Build the example binaries for dev and test
 .PHONY: commands
-commands:
-	@echo "building examples"
-	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/simplescheduler ./cmd/simplescheduler
-	go build $(RACE) -a -ldflags '-extldflags "-static"' -o _output/schedulerclient ./cmd/schedulerclient
+commands: build/simplescheduler build/schedulerclient
+
+build/simplescheduler: go.mod go.sum cmd
+	@echo "building example scheduler"
+	@mkdir -p build
+	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/simplescheduler ./cmd/simplescheduler
+
+build/schedulerclient:
+	@echo "building example client"
+	@mkdir -p build
+	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/schedulerclient ./cmd/schedulerclient
 
 # Build binaries for dev and test
 .PHONY: build
@@ -155,27 +195,39 @@ build: commands
 
 # Run the tests after building
 .PHONY: test
-test: clean
+test:
 	@echo "running unit tests"
-	go test ./... $(RACE) -tags deadlock -coverprofile=coverage.txt -covermode=atomic
-	go vet $(REPO)...
+	@mkdir -p build
+	"$(GO)" clean -testcache
+	"$(GO)" test ./... $(RACE) -tags deadlock -coverprofile=build/coverage.txt -covermode=atomic
+	"$(GO)" vet $(REPO)...
 
 # Run benchmarks
 .PHONY: bench
 bench:
 	@echo "running benchmarks"
-	go test -v -run '^Benchmark' -bench . ./pkg/...
+	"$(GO)" clean -testcache
+	"$(GO)" test -v -run '^Benchmark' -bench . ./pkg/...
 
 # Generate FSM graphs (dot/png)
 .PHONY: fsm_graph
-fsm_graph: clean
+fsm_graph:
 	@echo "generating FSM graphs"
-	go test -tags graphviz -run 'Test.*FsmGraph' ./pkg/scheduler/objects
+	"$(GO)" clean -testcache
+	"$(GO)" test -tags graphviz -run 'Test.*FsmGraph' ./pkg/scheduler/objects
 	scripts/generate-fsm-graph-images.sh
 
-# Simple clean of generated files only (no local cleanup).
+# Remove generated build artifacts
 .PHONY: clean
 clean:
 	@echo "cleaning up caches and output"
-	go clean -cache -testcache -r
-	-rm -rf _output
+	"$(GO)" clean -cache -testcache -r
+	@echo "removing generated files"
+	@rm -rf build
+
+# Remove all generated content
+.PHONY: distclean
+distclean: clean
+	@echo "removing tools"
+	@rm -rf "${TOOLS_DIR}"
+

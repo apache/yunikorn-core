@@ -106,6 +106,10 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 			zap.Stringer("resource", usage))
 		increased = groupTracker.increaseTrackedResource(queuePath, applicationID, usage)
 		if !increased {
+			decreased := m.DecreaseTrackedResource(queuePath, applicationID, usage, user, true)
+			if !decreased {
+				return decreased
+			}
 			return increased
 		}
 	}
@@ -247,6 +251,18 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 	if !userTracker.hasGroupForApp(applicationID) {
 		var groupTracker *GroupTracker
 		group := m.internalEnsureGroup(user, queuePath)
+
+		// Use wild card group (if configured) for users doesn't have any matching group
+		if group == "" {
+			parentQueuePath := queuePath
+			for parentQueuePath != "" {
+				parentQueuePath, _ = getParentQueuePath(parentQueuePath)
+				if _, ok := m.groupWildCardLimitsConfig[parentQueuePath]; ok {
+					group = common.Wildcard
+					break
+				}
+			}
+		}
 		if group != "" {
 			if m.groupTrackers[group] == nil {
 				log.Log(log.SchedUGM).Debug("Group tracker doesn't exists. Creating group tracker",
@@ -381,18 +397,15 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 				zap.String("queue path", queuePath),
 				zap.Uint64("max application", limit.MaxApplications),
 				zap.Any("max resources", limit.MaxResources))
-			if group == common.Wildcard {
-				m.groupWildCardLimitsConfig[queuePath] = limitConfig
-				continue
-			}
 			if err := m.processGroupConfig(group, limitConfig, queuePath, groupLimits); err != nil {
 				return err
 			}
-			m.configuredGroups[queuePath] = append(m.configuredGroups[queuePath], group)
+			if group == common.Wildcard {
+				m.groupWildCardLimitsConfig[queuePath] = limitConfig
+			} else {
+				m.configuredGroups[queuePath] = append(m.configuredGroups[queuePath], group)
+			}
 		}
-	}
-	if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
-		return err
 	}
 
 	// clear earlier set matched group of user for which limits have been configured earlier and even now.
@@ -404,6 +417,10 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 				zap.String("matched group", m.userTrackers[u].getMatchedGroup()))
 			m.userTrackers[u].setMatchedGroup("")
 		}
+	}
+
+	if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
+		return err
 	}
 
 	if len(cur.Queues) > 0 {
@@ -444,7 +461,7 @@ func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits 
 				if gt != nil {
 					g := gt.groupName
 					// Is there any limit config set for group in the current configuration? If not, then remove the linkage by setting it to nil
-					if ok := groupLimits[g]; !ok {
+					if ok := groupLimits[g]; !ok || ut.getMatchedGroup() != g {
 						log.Log(log.SchedUGM).Debug("Removed the linkage between user and group through applications",
 							zap.String("user", u),
 							zap.String("group", gt.groupName),

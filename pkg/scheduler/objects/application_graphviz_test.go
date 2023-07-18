@@ -32,8 +32,8 @@ import (
 func TestApplicationFsmGraph(t *testing.T) {
 	graph := fsm.Visualize(NewAppState())
 
-	err := os.MkdirAll("../../../_output/fsm", 0755)
+	err := os.MkdirAll("../../../build/fsm", 0755)
 	assert.NilError(t, err, "Creating output dir failed")
-	os.WriteFile("../../../_output/fsm/application-state.dot", []byte(graph), 0644)
+	os.WriteFile("../../../build/fsm/application-state.dot", []byte(graph), 0644)
 	assert.NilError(t, err, "Writing graph failed")
 }

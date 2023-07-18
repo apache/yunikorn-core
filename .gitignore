@@ -3,8 +3,10 @@
 .build
 *.swp
 *.a
-_output
+/tools/
+/build/
+/_output/
 .idea
-coverage.txt
+/coverage.txt
 yunikorn-state.txt
-shellcheck
+/shellcheck

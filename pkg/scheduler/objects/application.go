@@ -104,10 +104,11 @@ type Application struct {
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 	askMaxPriority       int32                       // highest priority value of outstanding asks
 
-	rmEventHandler     handler.EventHandler
-	rmID               string
-	terminatedCallback func(appID string)
-	appEvents          *applicationEvents
+	rmEventHandler      handler.EventHandler
+	rmID                string
+	terminatedCallback  func(appID string)
+	appEvents           *applicationEvents
+	enableAppStateEvent bool
 
 	sync.RWMutex
 }
@@ -156,7 +157,7 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	return appSummary
 }
 
-func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
+func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string, disableNewAppEvent ...bool) *Application {
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
 		Partition:            siApp.PartitionName,
@@ -179,6 +180,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		stateLog:             make([]*StateLogEntry, 0),
 		askMaxPriority:       configs.MinPriority,
 		sortedRequests:       sortedRequests{},
+		enableAppStateEvent:  true,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -200,6 +202,14 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
 	app.appEvents.sendNewApplicationEvent()
 	return app
+}
+
+func (sa *Application) SetEnableAppStateEvent(enable bool) {
+	sa.enableAppStateEvent = enable
+}
+
+func (sa *Application) ResetAppEvents() {
+	sa.appEvents = newApplicationEvents(sa, events.GetEventSystem())
 }
 
 func (sa *Application) String() string {

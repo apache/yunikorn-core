@@ -127,7 +127,7 @@ func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
 }
 
 func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_ChangeDetail) {
-	if !evt.enabled {
+	if !evt.enabled || !evt.app.enableAppStateEvent {
 		return
 	}
 	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource)

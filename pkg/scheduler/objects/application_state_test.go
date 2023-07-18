@@ -31,10 +31,6 @@ import (
 )
 
 func TestAcceptStateTransition(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
-
 	// Accept only from new
 	app := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, app.CurrentState(), New.String())
@@ -54,27 +50,9 @@ func TestAcceptStateTransition(t *testing.T) {
 	assert.NilError(t, err, "no error expected accepted to failing")
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, app.IsFailing)
 	assert.NilError(t, err, "App should be in Failing state")
-
-	// Verify application events
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 3
-	})
-	assert.NilError(t, err, "the event should have been processed")
-	records := eventSystem.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, 3, len(records), "expecting 3 events")
-	isNewApplicationEvent(t, app, records[0])
-	isStateChangeEvent(t, app, si.EventRecord_APP_ACCEPTED, records[1])
-	isStateChangeEvent(t, app, si.EventRecord_APP_FAILING, records[2])
 }
 
 func TestRejectStateTransition(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
 	// Reject only from new
 	app := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, app.CurrentState(), New.String())
@@ -93,27 +71,9 @@ func TestRejectStateTransition(t *testing.T) {
 	err = app.HandleApplicationEvent(FailApplication)
 	assert.Assert(t, err != nil, "error expected rejected to failing")
 	assert.Equal(t, app.CurrentState(), Rejected.String())
-
-	// Verify application events
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 2
-	})
-	assert.NilError(t, err, "the event should have been processed")
-	records := eventSystem.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, 2, len(records), "expecting 2 events")
-	isNewApplicationEvent(t, app, records[0])
-	isStateChangeEvent(t, app, si.EventRecord_APP_ACCEPTED, records[1])
 }
 
 func TestStartStateTransition(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
-
 	// starting only from accepted
 	appInfo := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
@@ -136,29 +96,9 @@ func TestStartStateTransition(t *testing.T) {
 	assert.NilError(t, err, "no error expected starting to failing")
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
 	assert.NilError(t, err, "App should be in Failing state")
-
-	// Verify application events
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 4
-	})
-	assert.NilError(t, err, "the event should have been processed")
-	records := eventSystem.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, 4, len(records), "expecting 4 events")
-	isNewApplicationEvent(t, appInfo, records[0])
-	isStateChangeEvent(t, appInfo, si.EventRecord_APP_ACCEPTED, records[1])
-	isStateChangeEvent(t, appInfo, si.EventRecord_APP_STARTING, records[2])
-	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILING, records[3])
 }
 
 func TestRunStateTransition(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
-
 	// run only from starting
 	appInfo := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
@@ -193,29 +133,9 @@ func TestRunStateTransition(t *testing.T) {
 	err = appInfo.HandleApplicationEvent(RunApplication)
 	assert.Assert(t, err != nil, "error expected failing to running")
 	assert.Equal(t, appInfo.CurrentState(), Failing.String())
-
-	// Verify application events
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 4
-	})
-	assert.NilError(t, err, "the event should have been processed")
-	records := eventSystem.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, 4, len(records), "expecting 4 events")
-	isNewApplicationEvent(t, appInfo, records[0])
-	isStateChangeEvent(t, appInfo, si.EventRecord_APP_ACCEPTED, records[1])
-	isStateChangeEvent(t, appInfo, si.EventRecord_APP_STARTING, records[2])
-	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILING, records[3])
 }
 
 func TestCompletedStateTransition(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
-
 	// complete only from completing
 	appInfo1 := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo1.CurrentState(), New.String())
@@ -263,35 +183,9 @@ func TestCompletedStateTransition(t *testing.T) {
 	err = appInfo3.HandleApplicationEvent(CompleteApplication)
 	assert.Assert(t, err != nil, "error expected new to completed")
 	assert.Equal(t, appInfo3.CurrentState(), New.String())
-
-	// Verify application events
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 10
-	})
-	assert.NilError(t, err, "the event should have been processed")
-	records := eventSystem.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, 10, len(records), "expecting 10 events")
-	isNewApplicationEvent(t, appInfo1, records[0])
-	isStateChangeEvent(t, appInfo1, si.EventRecord_APP_ACCEPTED, records[1])
-	isStateChangeEvent(t, appInfo1, si.EventRecord_APP_STARTING, records[2])
-	isStateChangeEvent(t, appInfo1, si.EventRecord_APP_COMPLETING, records[3])
-	isStateChangeEvent(t, appInfo1, si.EventRecord_APP_COMPLETED, records[4])
-	isNewApplicationEvent(t, appInfo2, records[5])
-	isStateChangeEvent(t, appInfo2, si.EventRecord_APP_ACCEPTED, records[6])
-	isStateChangeEvent(t, appInfo2, si.EventRecord_APP_COMPLETING, records[7])
-	isStateChangeEvent(t, appInfo2, si.EventRecord_APP_COMPLETED, records[8])
-	isNewApplicationEvent(t, appInfo3, records[9])
 }
 
 func TestCompletingStateTransition(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
-
 	appInfo1 := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo1.CurrentState(), New.String())
 	err := appInfo1.HandleApplicationEvent(RunApplication)
@@ -320,34 +214,9 @@ func TestCompletingStateTransition(t *testing.T) {
 	err = appInfo2.HandleApplicationEvent(CompleteApplication)
 	assert.NilError(t, err, "no error expected running to completing")
 	assert.Equal(t, appInfo2.CurrentState(), Completing.String())
-
-	// Verify application events
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 9
-	})
-	assert.NilError(t, err, "the event should have been processed")
-	records := eventSystem.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, 9, len(records), "expecting 9 events")
-	isNewApplicationEvent(t, appInfo1, records[0])
-	isStateChangeEvent(t, appInfo1, si.EventRecord_APP_ACCEPTED, records[1])
-	isStateChangeEvent(t, appInfo1, si.EventRecord_APP_COMPLETING, records[2])
-	isNewApplicationEvent(t, appInfo2, records[3])
-	isStateChangeEvent(t, appInfo2, si.EventRecord_APP_ACCEPTED, records[4])
-	isStateChangeEvent(t, appInfo2, si.EventRecord_APP_STARTING, records[5])
-	isStateChangeEvent(t, appInfo2, si.EventRecord_APP_COMPLETING, records[6])
-	isStateChangeEvent(t, appInfo2, si.EventRecord_APP_RUNNING, records[7])
-	isStateChangeEvent(t, appInfo2, si.EventRecord_APP_COMPLETING, records[8])
 }
 
 func TestFailedStateTransition(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
-
 	// failing from all but rejected & completed
 	appInfo := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
@@ -368,20 +237,57 @@ func TestFailedStateTransition(t *testing.T) {
 	assert.Assert(t, err != nil, "error expected failing to rejected")
 	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailed)
 	assert.NilError(t, err, "App should be in Failed state")
+}
+
+func TestAppStateTransitionEvents(t *testing.T) {
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+	// Accept only from new
+	appInfo := newApplication("app-00001", "default", "root.a")
+	assert.Equal(t, appInfo.CurrentState(), New.String())
+
+	// new to accepted
+	err := appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected new to accepted")
+	assert.Equal(t, appInfo.CurrentState(), Accepted.String())
+
+	// accepted to completing
+	err = appInfo.HandleApplicationEvent(CompleteApplication)
+	assert.NilError(t, err, "no error expected accepted to completing")
+	assert.Equal(t, appInfo.CurrentState(), Completing.String())
+
+	// completing to run
+	err = appInfo.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected starting to running (completing test)")
+
+	// run to failing
+	err = appInfo.HandleApplicationEvent(FailApplication)
+	assert.NilError(t, err, "no error expected new to failing")
+	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
+	assert.NilError(t, err, "App should be in Failing state")
+
+	// failing to failed
+	err = appInfo.HandleApplicationEvent(FailApplication)
+	assert.NilError(t, err, "no error expected failing to failed")
+	assert.Assert(t, appInfo.IsFailed(), "App should be in Failed state")
 
 	// Verify application events
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 4
+		return eventSystem.Store.CountStoredEvents() == 6
 	})
 	assert.NilError(t, err, "the event should have been processed")
 	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 4, len(records), "expecting 4 events")
+	assert.Equal(t, 6, len(records), "expecting 6 events")
 	isNewApplicationEvent(t, appInfo, records[0])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_ACCEPTED, records[1])
-	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILING, records[2])
-	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILED, records[3])
+	isStateChangeEvent(t, appInfo, si.EventRecord_APP_COMPLETING, records[2])
+	isStateChangeEvent(t, appInfo, si.EventRecord_APP_RUNNING, records[3])
+	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILING, records[4])
+	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILED, records[5])
+
 }

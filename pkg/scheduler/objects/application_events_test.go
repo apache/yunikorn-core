@@ -434,8 +434,9 @@ func TestSendRejectApplicationEvent(t *testing.T) {
 
 func TestSendStateChangeEvent(t *testing.T) {
 	app := &Application{
-		ApplicationID: appID0,
-		queuePath:     "root.test",
+		ApplicationID:       appID0,
+		queuePath:           "root.test",
+		enableAppStateEvent: true,
 	}
 	// not enabled
 	evt := newApplicationEvents(app, nil)

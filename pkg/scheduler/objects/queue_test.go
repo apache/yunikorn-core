@@ -492,9 +492,6 @@ func TestAddApplicationWithTag(t *testing.T) {
 }
 
 func TestRemoveApplication(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
 	// create the root
 	root, err := createRootQueue(map[string]string{"first": "100"})
 	assert.NilError(t, err, "queue create failed")
@@ -557,24 +554,6 @@ func TestRemoveApplication(t *testing.T) {
 	assert.Equal(t, len(leaf.applications), 0, "Application was not removed from the queue as expected")
 	assert.Assert(t, resources.IsZero(leaf.allocatedResource), "leaf queue allocated resource not updated correctly")
 	assert.Assert(t, resources.IsZero(root.allocatedResource), "root queue allocated resource not updated correctly")
-
-	// Verify application events
-	err = pkg_common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 6
-	})
-	assert.NilError(t, err, "the event should have been processed")
-	records := eventSystem.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, 6, len(records), "expecting 6 events")
-	isNewApplicationEvent(t, nonExist, records[0])
-	isNewApplicationEvent(t, app, records[1])
-	isRemoveApplicationEvent(t, app, records[2])
-	isRemoveApplicationEvent(t, app, records[3])
-	isRemoveApplicationEvent(t, app, records[4])
-	isRemoveApplicationEvent(t, app, records[5])
 }
 
 func TestQueueStates(t *testing.T) {
@@ -2574,19 +2553,20 @@ func TestQueueEvents(t *testing.T) {
 	queue.AddApplication(app)
 	queue.RemoveApplication(app)
 	noEvents := 0
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = pkg_common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 3
+		return noEvents == 5
 	})
-	assert.NilError(t, err, "expected 2 events, got %d", noEvents)
+	assert.NilError(t, err, "expected 5 events, got %d", noEvents)
 	records := eventSystem.Store.CollectEvents()
-	assert.Equal(t, 3, len(records), "number of events")
-	assert.Equal(t, si.EventRecord_QUEUE, records[1].Type)
-	assert.Equal(t, si.EventRecord_ADD, records[1].EventChangeType)
-	assert.Equal(t, si.EventRecord_QUEUE_APP, records[1].EventChangeDetail)
+	assert.Equal(t, 5, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_QUEUE, records[2].Type)
-	assert.Equal(t, si.EventRecord_REMOVE, records[2].EventChangeType)
+	assert.Equal(t, si.EventRecord_ADD, records[2].EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_APP, records[2].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_QUEUE, records[3].Type)
+	assert.Equal(t, si.EventRecord_REMOVE, records[3].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_APP, records[3].EventChangeDetail)
+	isRemoveApplicationEvent(t, app, records[4])
 
 	newConf := configs.QueueConfig{
 		Parent: false,
@@ -2602,7 +2582,7 @@ func TestQueueEvents(t *testing.T) {
 	}
 	err = queue.ApplyConf(newConf)
 	assert.NilError(t, err)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = pkg_common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3
 	})

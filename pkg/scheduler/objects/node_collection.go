@@ -163,14 +163,12 @@ func (nc *baseNodeCollection) GetNodes() []*Node {
 // Create an ordered node iterator for unreserved nodes based on the sort policy set for this collection.
 // The iterator is nil if there are no unreserved nodes available.
 func (nc *baseNodeCollection) GetNodeIterator() NodeIterator {
-	nc.unreservedIterator.Reset()
 	return nc.unreservedIterator
 }
 
 // Create an ordered node iterator for all nodes based on the sort policy set for this collection.
 // The iterator is nil if there are no nodes available.
 func (nc *baseNodeCollection) GetFullNodeIterator() NodeIterator {
-	nc.fullIterator.Reset()
 	return nc.fullIterator
 }
 

@@ -24,25 +24,19 @@ import (
 
 // NodeIterator iterates over a list of nodes based on the defined policy
 type NodeIterator interface {
-	// Reset the iterator to a clean state
-	Reset()
-
-	// ForEachNode Calls the provided function on each Node object unil it returns false
+	// ForEachNode Calls the provided function on the sorted Node object until it returns false
 	ForEachNode(func(*Node) bool)
 }
 
 type treeIterator struct {
 	accept  func(*Node) bool
 	getTree func() *btree.BTree
-	tree    *btree.BTree
 }
 
-func (ti *treeIterator) Reset() {
-	ti.tree = ti.getTree()
-}
-
+// ForEachNode Calls the provided "f" function on the sorted Node object until it returns false.
+// The accept() function checks if the node should be a candidate or not.
 func (ti *treeIterator) ForEachNode(f func(*Node) bool) {
-	ti.tree.Ascend(func(item btree.Item) bool {
+	ti.getTree().Ascend(func(item btree.Item) bool {
 		node := item.(nodeRef).node
 		if ti.accept(node) {
 			return f(node)
@@ -57,6 +51,5 @@ func NewTreeIterator(accept func(*Node) bool, getTree func() *btree.BTree) *tree
 		getTree: getTree,
 		accept:  accept,
 	}
-	ti.tree = getTree()
 	return ti
 }

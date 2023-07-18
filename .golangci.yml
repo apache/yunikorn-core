@@ -42,14 +42,15 @@ linters-settings:
     lines: 120
     statements: 80
   depguard:
-    list-type: blacklist
-    include-go-root: false
-    packages:
-      - github.com/sirupsen/logrus
-      - github.com/stretchr/testify
-    packages-with-error-messages:
-      github.com/sirupsen/logrus: "logging is standardised via yunikorn logger and zap"
-      github.com/stretchr/testify: "test assertions must use gotest.tools/v3/assert"
+    rules:
+      main:
+        files:
+          - $all
+        deny:
+          - pkg: "github.com/sirupsen/logrus"
+            desc: "logging is standardised via yunikorn logger and zap"
+          - pkg: "github.com/stretchr/testify"
+            desc: "test assertions must use gotest.tools/v3/assert"
 
 # linters to use
 linters:

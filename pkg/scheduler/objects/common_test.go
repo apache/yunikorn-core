@@ -17,6 +17,8 @@
 package objects
 
 import (
+	"github.com/google/btree"
+
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -43,4 +45,19 @@ func newEventSystemMock() *EventSystemMock {
 
 func getTestResource() *resources.Resource {
 	return resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 1})
+}
+
+func getNodeIteratorFn(nodes ...*Node) func() NodeIterator {
+	tree := btree.New(7)
+	for _, node := range nodes {
+		tree.ReplaceOrInsert(nodeRef{
+			node, 1,
+		})
+	}
+
+	return func() NodeIterator {
+		return NewTreeIterator(acceptAll, func() *btree.BTree {
+			return tree
+		})
+	}
 }

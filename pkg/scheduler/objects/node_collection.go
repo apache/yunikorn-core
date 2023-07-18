@@ -21,15 +21,21 @@ package objects
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/google/btree"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
-	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
+
+var acceptUnreserved = func(node *Node) bool {
+	return !node.IsReserved()
+}
+
+var acceptAll = func(node *Node) bool {
+	return true
+}
 
 type NodeCollection interface {
 	AddNode(node *Node) error
@@ -69,6 +75,9 @@ type baseNodeCollection struct {
 	nsp         NodeSortingPolicy   // node sorting policy
 	nodes       map[string]*nodeRef // nodes assigned to this collection
 	sortedNodes *btree.BTree        // nodes sorted by score
+
+	unreservedIterator *treeIterator
+	fullIterator       *treeIterator
 
 	sync.RWMutex
 }
@@ -154,43 +163,13 @@ func (nc *baseNodeCollection) GetNodes() []*Node {
 // Create an ordered node iterator for unreserved nodes based on the sort policy set for this collection.
 // The iterator is nil if there are no unreserved nodes available.
 func (nc *baseNodeCollection) GetNodeIterator() NodeIterator {
-	return nc.getNodeIteratorInternal(func(node *Node) bool {
-		return !node.IsReserved()
-	})
+	return nc.unreservedIterator
 }
 
 // Create an ordered node iterator for all nodes based on the sort policy set for this collection.
 // The iterator is nil if there are no nodes available.
 func (nc *baseNodeCollection) GetFullNodeIterator() NodeIterator {
-	return nc.getNodeIteratorInternal(func(node *Node) bool {
-		return true
-	})
-}
-
-func (nc *baseNodeCollection) getNodeIteratorInternal(allow func(*Node) bool) NodeIterator {
-	sortingStart := time.Now()
-	tree := nc.cloneSortedNodes()
-
-	length := tree.Len()
-	if length == 0 {
-		return nil
-	}
-
-	nodes := make([]*Node, 0, length)
-	tree.Ascend(func(item btree.Item) bool {
-		node := item.(nodeRef).node
-		if allow(node) {
-			nodes = append(nodes, node)
-		}
-		return true
-	})
-	metrics.GetSchedulerMetrics().ObserveNodeSortingLatency(sortingStart)
-
-	if len(nodes) == 0 {
-		return nil
-	}
-
-	return NewDefaultNodeIterator(nodes)
+	return nc.fullIterator
 }
 
 func (nc *baseNodeCollection) cloneSortedNodes() *btree.BTree {
@@ -242,10 +221,18 @@ func (nc *baseNodeCollection) NodeUpdated(node *Node) {
 
 // Create a new collection for the given partition.
 func NewNodeCollection(partition string) NodeCollection {
-	return &baseNodeCollection{
+	bsc := &baseNodeCollection{
 		Partition:   partition,
 		nsp:         NewNodeSortingPolicy(policies.FairSortPolicy.String(), nil),
 		nodes:       make(map[string]*nodeRef),
 		sortedNodes: btree.New(7), // Degree=7 here is experimentally the most efficient for up to around 5k nodes
 	}
+
+	unreservedIterator := NewTreeIterator(acceptUnreserved, bsc.cloneSortedNodes)
+	fullIterator := NewTreeIterator(acceptAll, bsc.cloneSortedNodes)
+
+	bsc.fullIterator = fullIterator
+	bsc.unreservedIterator = unreservedIterator
+
+	return bsc
 }

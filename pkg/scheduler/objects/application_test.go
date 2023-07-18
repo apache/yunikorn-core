@@ -1731,9 +1731,8 @@ func TestCanReplace(t *testing.T) {
 
 func TestTryAllocateNoRequests(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 5})
-	nodes := []*Node{node}
 	nodeMap := map[string]*Node{"node1": node}
-	iterator := func() NodeIterator { return NewDefaultNodeIterator(nodes) }
+	iterator := getNodeIteratorFn(node)
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
@@ -1746,9 +1745,8 @@ func TestTryAllocateNoRequests(t *testing.T) {
 
 func TestTryAllocateFit(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 5})
-	nodes := []*Node{node}
 	nodeMap := map[string]*Node{"node1": node}
-	iterator := func() NodeIterator { return NewDefaultNodeIterator(nodes) }
+	iterator := getNodeIteratorFn(node)
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
@@ -1773,9 +1771,8 @@ func TestTryAllocateFit(t *testing.T) {
 
 func TestTryAllocatePreemptQueue(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 20})
-	nodes := []*Node{node}
 	nodeMap := map[string]*Node{"node1": node}
-	iterator := func() NodeIterator { return NewDefaultNodeIterator(nodes) }
+	iterator := getNodeIteratorFn(node)
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
@@ -1829,9 +1826,8 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 func TestTryAllocatePreemptNode(t *testing.T) {
 	node1 := newNode("node1", map[string]resources.Quantity{"first": 20})
 	node2 := newNode("node2", map[string]resources.Quantity{"first": 20})
-	nodes := []*Node{node1, node2}
 	nodeMap := map[string]*Node{"node1": node1, "node2": node2}
-	iterator := func() NodeIterator { return NewDefaultNodeIterator(nodes) }
+	iterator := getNodeIteratorFn(node1, node2)
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}

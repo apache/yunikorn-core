@@ -1169,25 +1169,21 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	}
 	// we checked all placeholders and asks nothing worked as yet
 	// pick the first fit and try all nodes if that fails give up
+	var allocResult *Allocation
 	if phFit != nil && reqFit != nil {
-		for iterator.HasNext() {
-			node := iterator.Next()
-			if node == nil {
-				log.Log(log.SchedApplication).Warn("Node iterator failed to return a node")
-				return nil
-			}
+		iterator.ForEachNode(func(node *Node) bool {
 			if !node.IsSchedulable() {
 				log.Log(log.SchedApplication).Debug("skipping node for placeholder ask as state is unschedulable",
 					zap.String("allocationKey", reqFit.GetAllocationKey()),
 					zap.String("node", node.NodeID))
-				continue
+				return true
 			}
 			if !node.preAllocateCheck(reqFit.GetAllocatedResource(), reservationKey(nil, sa, reqFit)) {
-				continue
+				return true
 			}
 			// skip the node if conditions can not be satisfied
 			if !node.preAllocateConditions(reqFit) {
-				continue
+				return true
 			}
 			// allocation worked: on a non placeholder node update result and return
 			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), reqFit)
@@ -1206,18 +1202,20 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 					zap.String("applicationID", sa.ApplicationID),
 					zap.Stringer("ask", reqFit),
 					zap.Stringer("placeholder", phFit))
-				return nil
+				return false
 			}
 			_, err := sa.updateAskRepeatInternal(reqFit, -1)
 			if err != nil {
 				log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
 					zap.Error(err))
 			}
-			return alloc
-		}
+
+			allocResult = alloc
+			return false
+		})
 	}
 	// still nothing worked give up and hope the next round works
-	return nil
+	return allocResult
 }
 
 // Try a reserved allocation of an outstanding reservation
@@ -1344,32 +1342,31 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 // Try all the nodes for a reserved request that have not been tried yet.
 // This should never result in a reservation as the ask is already reserved
 func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterator, reservedNode string) *Allocation {
-	for iterator.HasNext() {
-		node := iterator.Next()
-		if node == nil {
-			log.Log(log.SchedApplication).Warn("Node iterator failed to return a node")
-			return nil
-		}
+	var allocResult *Allocation
+	iterator.ForEachNode(func(node *Node) bool {
 		if !node.IsSchedulable() {
 			log.Log(log.SchedApplication).Debug("skipping node for reserved ask as state is unschedulable",
 				zap.String("allocationKey", ask.GetAllocationKey()),
 				zap.String("node", node.NodeID))
-			continue
+			return true
 		}
 		// skip over the node if the resource does not fit the node or this is the reserved node.
 		if !node.FitInNode(ask.GetAllocatedResource()) || node.NodeID == reservedNode {
-			continue
+			return true
 		}
 		alloc := sa.tryNode(node, ask)
 		// allocation worked: update result and return
 		if alloc != nil {
 			alloc.SetReservedNodeID(reservedNode)
 			alloc.SetResult(AllocatedReserved)
-			return alloc
+			allocResult = alloc
+			return false
 		}
-	}
-	// ask does not fit, skip to next ask
-	return nil
+
+		return true
+	})
+
+	return allocResult
 }
 
 // Try all the nodes for a request. The result is an allocation or reservation of a node.
@@ -1381,22 +1378,18 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 	allocKey := ask.GetAllocationKey()
 	reservedAsks := sa.GetAskReservations(allocKey)
 	allowReserve := len(reservedAsks) < int(ask.GetPendingAskRepeat())
-	for iterator.HasNext() {
-		node := iterator.Next()
-		if node == nil {
-			log.Log(log.SchedApplication).Warn("Node iterator failed to return a node")
-			return nil
-		}
+	var allocResult *Allocation
+	iterator.ForEachNode(func(node *Node) bool {
 		// skip the node if the node is not valid for the ask
 		if !node.IsSchedulable() {
 			log.Log(log.SchedApplication).Debug("skipping node for ask as state is unschedulable",
 				zap.String("allocationKey", allocKey),
 				zap.String("node", node.NodeID))
-			continue
+			return true
 		}
 		// skip over the node if the resource does not fit the node at all.
 		if !node.FitInNode(ask.GetAllocatedResource()) {
-			continue
+			return true
 		}
 		tryNodeStart := time.Now()
 		alloc := sa.tryNode(node, ask)
@@ -1412,7 +1405,8 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", allocKey))
 				alloc.SetResult(AllocatedReserved)
-				return alloc
+				allocResult = alloc
+				return false
 			}
 			// we could also have a different node reserved for this ask if it has pick one of
 			// the reserved nodes to unreserve (first one in the list)
@@ -1424,10 +1418,12 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 					zap.String("allocationKey", allocKey))
 				alloc.SetResult(AllocatedReserved)
 				alloc.SetReservedNodeID(nodeID)
-				return alloc
+				allocResult = alloc
+				return false
 			}
 			// nothing reserved just return this as a normal alloc
-			return alloc
+			allocResult = alloc
+			return false
 		}
 		// nothing allocated should we look at a reservation?
 		// TODO make this smarter a hardcoded delay is not the right thing
@@ -1445,7 +1441,13 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 				nodeToReserve = node
 			}
 		}
+		return true
+	})
+
+	if allocResult != nil {
+		return allocResult
 	}
+
 	// we have not allocated yet, check if we should reserve
 	// NOTE: the node should not be reserved as the iterator filters them but we do not lock the nodes
 	if nodeToReserve != nil && !nodeToReserve.IsReserved() {

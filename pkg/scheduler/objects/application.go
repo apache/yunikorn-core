@@ -967,6 +967,14 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 			continue
 		}
 
+		userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.user)
+		if !userHeadroom.FitInMaxUndef(request.GetAllocatedResource()) {
+			log.Log(log.SchedApplication).Warn("User doesn't have required resources to accommodate this request",
+				zap.String("required resource", request.GetAllocatedResource().String()),
+				zap.String("headroom", userHeadroom.String()))
+			return nil
+		}
+
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
 		if !headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
 			// attempt preemption
@@ -1251,6 +1259,14 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			return alloc
 		}
 
+		userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.user)
+		if !userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
+			log.Log(log.SchedApplication).Warn("User doesn't have required resources to accommodate this request",
+				zap.String("required resource", ask.GetAllocatedResource().String()),
+				zap.String("headroom", userHeadroom.String()))
+			continue
+		}
+
 		// check if this fits in the queue's head room
 		if !headRoom.FitInMaxUndef(ask.GetAllocatedResource()) {
 			continue
@@ -1477,6 +1493,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	if !node.preAllocateConditions(ask) {
 		return nil
 	}
+
 	// everything OK really allocate
 	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), ask)
 	if node.AddAllocation(alloc) {

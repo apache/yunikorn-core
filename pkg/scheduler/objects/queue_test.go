@@ -35,7 +35,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 // base test for creating a managed queue
@@ -346,7 +347,7 @@ func TestAddApplication(t *testing.T) {
 	assert.NilError(t, err, "failed to create managed leaf queue")
 	pending := resources.NewResourceFromMap(
 		map[string]resources.Quantity{
-			common.Memory: 10,
+			siCommon.Memory: 10,
 		})
 	app := newApplication(appID1, "default", "root.parent.leaf")
 	app.pending = pending
@@ -380,7 +381,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 	app = newApplication("app-2", "default", "root.leaf-un")
 	leafUn.AddApplication(app)
-	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the Dynamic queue as expected")
+	assert.Equal(t, len(leafUn.applications), 1, "Application was not added to the Dynamic queue as expected")
 	if leafUn.GetMaxResource() != nil {
 		t.Errorf("Max resources should not be set on Dynamic queue got: %s", leafUn.GetMaxResource().String())
 	}
@@ -389,8 +390,13 @@ func TestAddApplicationWithTag(t *testing.T) {
 		map[string]resources.Quantity{
 			"first": 10,
 		})
+	guaranteedRes := resources.NewResourceFromMap(
+		map[string]resources.Quantity{
+			"first": 5,
+		})
 	tags := make(map[string]string)
-	tags[common.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":5}}}"
 	// add apps again now with the tag set
 	app = newApplicationWithTags("app-3", "default", "root.leaf-man", tags)
 	leaf.AddApplication(app)
@@ -398,20 +404,90 @@ func TestAddApplicationWithTag(t *testing.T) {
 	if leaf.GetMaxResource() != nil {
 		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.GetMaxResource().String())
 	}
+	if leaf.GetGuaranteedResource() != nil {
+		t.Errorf("Guaranteed resources should not be set on managed queue got: %s", leaf.GetGuaranteedResource().String())
+	}
+
 	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
-	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
+	assert.Equal(t, len(leafUn.applications), 2, "Application was not added to the Dynamic queue as expected")
 	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
 		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
 	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
 
-	// set to illegal limit (0 value)
-	tags[common.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
-	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
+	// set max to illegal limit (0 value), but guarantee not 0
+	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+
+	app = newApplicationWithTags("app-5", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
-	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the Dynamic queue as expected")
+	assert.Equal(t, len(leafUn.applications), 3, "Application was not added to the Dynamic queue as expected")
 	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
 		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
+
+	// set guaranteed resource to illegal limit (0 value), but max resource not 0
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":100}}}"
+
+	app = newApplicationWithTags("app-6", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
+	assert.Equal(t, len(leafUn.applications), 4, "Application was not added to the Dynamic queue as expected")
+	if !resources.Equals(leafUn.GetMaxResource(), resources.NewResourceFromMap(
+		map[string]resources.Quantity{
+			"first": 100,
+		})) {
+		t.Errorf("Max resources not set as expected: %s got: %v", resources.NewResourceFromMap(
+			map[string]resources.Quantity{
+				"first": 100,
+			}).String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
+
+	// set guaranteed resource tag to "", but max resource not ""
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ""
+	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
+	app = newApplicationWithTags("app-7", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
+	assert.Equal(t, len(leafUn.applications), 5, "Application was not added to the Dynamic queue as expected")
+	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
+		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
+
+	// set both to "" , the max resource and guaranteed resource will not update new value
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ""
+	tags[siCommon.AppTagNamespaceResourceQuota] = ""
+	app = newApplicationWithTags("app-8", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
+	assert.Equal(t, len(leafUn.applications), 6, "Application was not added to the Dynamic queue as expected")
+	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
+		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
+	}
+
+	// set both to 0 , the max resource and guaranteed resource will not update new value
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	app = newApplicationWithTags("app-9", "default", "root.leaf-un", tags)
+	leafUn.AddApplication(app)
+	assert.Equal(t, len(leafUn.applications), 7, "Application was not added to the Dynamic queue as expected")
+	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
+		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
+	}
+	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
+		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
 	}
 }
 
@@ -1803,7 +1879,7 @@ func TestFindQueueByAppID(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue")
 
 	app := newApplication(appID1, "default", "root.parent.leaf")
-	app.pending = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 10})
+	app.pending = resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 10})
 	leaf1.AddApplication(app)
 
 	// we should be able to find the queue from any other given the appID
@@ -1824,9 +1900,9 @@ func TestFindQueueByAppID(t *testing.T) {
 
 // nolint: funlen
 func TestFindEligiblePreemptionVictims(t *testing.T) {
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 100})
-	parentMax := map[string]string{common.Memory: "200"}
-	parentGuar := map[string]string{common.Memory: "100"}
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100})
+	parentMax := map[string]string{siCommon.Memory: "200"}
+	parentGuar := map[string]string{siCommon.Memory: "100"}
 	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
 	ask.pendingAskRepeat = 1
 	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
@@ -1835,7 +1911,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
 	ask3.pendingAskRepeat = 1
 	alloc3 := NewAllocation("alloc-3", nodeID1, instType1, ask3)
-	root, err := createRootQueue(map[string]string{common.Memory: "1000"})
+	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
 	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
 	assert.NilError(t, err, "failed to create queue")
@@ -1950,10 +2026,10 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parent1.priorityPolicy = policies.DefaultPriorityPolicy
 
 	// increasing parent2 guaranteed resources should remove leaf2 victims
-	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 200})
+	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 200})
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
-	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 100})
+	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100})
 }
 
 func victims(snapshot map[string]*QueuePreemptionSnapshot) []*Allocation {
@@ -2484,4 +2560,62 @@ func TestQueue_setAllocatingAccepted(t *testing.T) {
 	}()
 	var q *Queue
 	q.setAllocatingAccepted("")
+}
+
+func TestQueueEvents(t *testing.T) {
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+	queue, err := createRootQueue(nil)
+	queue.Name = "testQueue"
+	assert.NilError(t, err)
+
+	app := newApplication(appID0, "default", "root")
+	queue.AddApplication(app)
+	queue.RemoveApplication(app)
+	noEvents := 0
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		noEvents = eventSystem.Store.CountStoredEvents()
+		return noEvents == 3
+	})
+	assert.NilError(t, err, "expected 2 events, got %d", noEvents)
+	records := eventSystem.Store.CollectEvents()
+	assert.Equal(t, 3, len(records), "number of events")
+	assert.Equal(t, si.EventRecord_QUEUE, records[1].Type)
+	assert.Equal(t, si.EventRecord_ADD, records[1].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_APP, records[1].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_QUEUE, records[2].Type)
+	assert.Equal(t, si.EventRecord_REMOVE, records[2].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_APP, records[2].EventChangeDetail)
+
+	newConf := configs.QueueConfig{
+		Parent: false,
+		Name:   "testQueue",
+		Resources: configs.Resources{
+			Guaranteed: map[string]string{
+				"memory": "1",
+			},
+			Max: map[string]string{
+				"memory": "5",
+			},
+		},
+	}
+	err = queue.ApplyConf(newConf)
+	assert.NilError(t, err)
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		noEvents = eventSystem.Store.CountStoredEvents()
+		return noEvents == 3
+	})
+	assert.NilError(t, err, "expected 3 events, got %d", noEvents)
+	records = eventSystem.Store.CollectEvents()
+	assert.Equal(t, 3, len(records), "number of events")
+	assert.Equal(t, si.EventRecord_QUEUE, records[0].Type)
+	assert.Equal(t, si.EventRecord_SET, records[0].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_TYPE, records[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_QUEUE, records[1].Type)
+	assert.Equal(t, si.EventRecord_SET, records[1].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_MAX, records[1].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_QUEUE, records[2].Type)
+	assert.Equal(t, si.EventRecord_SET, records[2].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_GUARANTEED, records[2].EventChangeDetail)
 }

@@ -329,6 +329,9 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 		}
 		limitConfig := &LimitConfig{maxResources: maxResource, maxApplications: limit.MaxApplications}
 		for _, user := range limit.Users {
+			if user == "" {
+				continue
+			}
 			log.Log(log.SchedUGM).Debug("Processing user limits configuration",
 				zap.String("user", user),
 				zap.String("limit", limit.Limit),
@@ -344,6 +347,9 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			}
 		}
 		for _, group := range limit.Groups {
+			if group == "" {
+				continue
+			}
 			log.Log(log.SchedUGM).Debug("Processing group limits configuration",
 				zap.String("group", group),
 				zap.String("limit", limit.Limit),
@@ -375,54 +381,18 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 }
 
 func (m *Manager) processUserConfig(user string, limitConfig *LimitConfig, queuePath string, userLimits map[string]bool) error {
-	if user == "*" {
-		// traverse all tracked users
-		for u, ut := range m.userTrackers {
-			// Is this user already tracked for the queue path?
-			if ut.IsQueuePathTrackedCompletely(queuePath) {
-				log.Log(log.SchedUGM).Debug("Processing wild card user limits configuration for all existing users",
-					zap.String("user", u),
-					zap.String("queue path", queuePath),
-					zap.Uint64("max application", limitConfig.maxApplications),
-					zap.Any("max resources", limitConfig.maxResources))
-				if err := m.setUserLimits(u, limitConfig, queuePath); err != nil {
-					return err
-				}
-				userLimits[u] = true
-			}
-		}
-	} else if user != "" {
-		if err := m.setUserLimits(user, limitConfig, queuePath); err != nil {
-			return err
-		}
-		userLimits[user] = true
+	if err := m.setUserLimits(user, limitConfig, queuePath); err != nil {
+		return err
 	}
+	userLimits[user] = true
 	return nil
 }
 
 func (m *Manager) processGroupConfig(group string, limitConfig *LimitConfig, queuePath string, groupLimits map[string]bool) error {
-	if group == "*" {
-		// traverse all tracked groups
-		for g, gt := range m.groupTrackers {
-			// Is this group already tracked for the queue path?
-			if gt.IsQueuePathTrackedCompletely(queuePath) {
-				log.Log(log.SchedUGM).Debug("Processing wild card user limits configuration for all existing groups",
-					zap.String("group", g),
-					zap.String("queue path", queuePath),
-					zap.Uint64("max application", limitConfig.maxApplications),
-					zap.Any("max resources", limitConfig.maxResources))
-				if err := m.setGroupLimits(g, limitConfig, queuePath); err != nil {
-					return err
-				}
-				groupLimits[g] = true
-			}
-		}
-	} else if group != "" {
-		if err := m.setGroupLimits(group, limitConfig, queuePath); err != nil {
-			return err
-		}
-		groupLimits[group] = true
+	if err := m.setGroupLimits(group, limitConfig, queuePath); err != nil {
+		return err
 	}
+	groupLimits[group] = true
 	return nil
 }
 
@@ -570,6 +540,31 @@ func (m *Manager) getGroupWildCardLimitsConfig(queuePath string) *LimitConfig {
 		return config
 	}
 	return nil
+}
+
+func (m *Manager) Headroom(queuePath string, user security.UserGroup) *resources.Resource {
+	m.RLock()
+	defer m.RUnlock()
+	var userHeadroom *resources.Resource
+	var groupHeadroom *resources.Resource
+	if m.userTrackers[user.User] != nil {
+		userHeadroom = m.userTrackers[user.User].headroom(queuePath)
+		log.Log(log.SchedUGM).Debug("Calculated headroom for user",
+			zap.String("user", user.User),
+			zap.String("queue path", queuePath),
+			zap.String("user headroom", userHeadroom.String()))
+	}
+	group, err := m.getGroup(user)
+	if err == nil {
+		if m.groupTrackers[group] != nil {
+			groupHeadroom = m.groupTrackers[group].headroom(queuePath)
+			log.Log(log.SchedUGM).Debug("Calculated headroom for group",
+				zap.String("group", group),
+				zap.String("queue path", queuePath),
+				zap.String("group headroom", groupHeadroom.String()))
+		}
+	}
+	return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
 }
 
 // ClearUserTrackers only for tests

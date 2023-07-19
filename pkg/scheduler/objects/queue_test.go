@@ -28,7 +28,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
-	pkg_common "github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
@@ -38,6 +38,8 @@ import (
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
+
+const ZeroResource string = "{\"resources\":{\"first\":{\"value\":0}}}"
 
 // base test for creating a managed queue
 func TestQueueBasics(t *testing.T) {
@@ -419,7 +421,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set max to illegal limit (0 value), but guarantee not 0
-	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceQuota] = ZeroResource
 
 	app = newApplicationWithTags("app-5", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
@@ -432,7 +434,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set guaranteed resource to illegal limit (0 value), but max resource not 0
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ZeroResource
 	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":100}}}"
 
 	app = newApplicationWithTags("app-6", "default", "root.leaf-un", tags)
@@ -478,8 +480,8 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set both to 0 , the max resource and guaranteed resource will not update new value
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
-	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ZeroResource
+	tags[siCommon.AppTagNamespaceResourceQuota] = ZeroResource
 	app = newApplicationWithTags("app-9", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
 	assert.Equal(t, len(leafUn.applications), 7, "Application was not added to the Dynamic queue as expected")
@@ -2553,7 +2555,7 @@ func TestQueueEvents(t *testing.T) {
 	queue.AddApplication(app)
 	queue.RemoveApplication(app)
 	noEvents := 0
-	err = pkg_common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 5
 	})
@@ -2582,7 +2584,7 @@ func TestQueueEvents(t *testing.T) {
 	}
 	err = queue.ApplyConf(newConf)
 	assert.NilError(t, err)
-	err = pkg_common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3
 	})

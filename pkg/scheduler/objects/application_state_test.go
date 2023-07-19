@@ -289,5 +289,4 @@ func TestAppStateTransitionEvents(t *testing.T) {
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_RUNNING, records[3])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILING, records[4])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILED, records[5])
-
 }

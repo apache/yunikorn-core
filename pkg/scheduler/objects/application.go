@@ -157,7 +157,7 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	return appSummary
 }
 
-func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string, disableNewAppEvent ...bool) *Application {
+func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
 		ApplicationID:        siApp.ApplicationID,
 		Partition:            siApp.PartitionName,
@@ -202,14 +202,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
 	app.appEvents.sendNewApplicationEvent()
 	return app
-}
-
-func (sa *Application) SetEnableAppStateEvent(enable bool) {
-	sa.enableAppStateEvent = enable
-}
-
-func (sa *Application) ResetAppEvents() {
-	sa.appEvents = newApplicationEvents(sa, events.GetEventSystem())
 }
 
 func (sa *Application) String() string {

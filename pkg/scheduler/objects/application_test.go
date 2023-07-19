@@ -205,8 +205,8 @@ func TestAppAllocReservation(t *testing.T) {
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	app.SetEnableAppStateEvent(false)
-	app.ResetAppEvents()
+	app.setEnableAppStateEvent(false)
+	app.resetAppEvents()
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -349,8 +349,8 @@ func TestAddAllocAsk(t *testing.T) {
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	app.SetEnableAppStateEvent(false)
-	app.ResetAppEvents()
+	app.setEnableAppStateEvent(false)
+	app.resetAppEvents()
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -1980,8 +1980,8 @@ func TestAskEvents(t *testing.T) {
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	app.SetEnableAppStateEvent(false)
-	app.ResetAppEvents()
+	app.setEnableAppStateEvent(false)
+	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
@@ -2046,8 +2046,8 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	app.SetEnableAppStateEvent(false)
-	app.ResetAppEvents()
+	app.setEnableAppStateEvent(false)
+	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
@@ -2165,8 +2165,8 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	app.SetEnableAppStateEvent(false)
-	app.ResetAppEvents()
+	app.setEnableAppStateEvent(false)
+	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
@@ -2212,8 +2212,8 @@ func TestAppDoesNotFitEvent(t *testing.T) {
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	app.SetEnableAppStateEvent(false)
-	app.ResetAppEvents()
+	app.setEnableAppStateEvent(false)
+	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
@@ -2266,4 +2266,16 @@ func (sa *Application) handleApplicationEventWithInfoLocking(event applicationEv
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.HandleApplicationEventWithInfo(event, info)
+}
+
+func (sa *Application) setEnableAppStateEvent(enable bool) {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.enableAppStateEvent = enable
+}
+
+func (sa *Application) resetAppEvents() {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.appEvents = newApplicationEvents(sa, events.GetEventSystem())
 }

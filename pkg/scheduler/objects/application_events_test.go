@@ -27,28 +27,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func isNewAllocAskEvent(t *testing.T, ask *AllocationAsk, record *si.EventRecord) {
-	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
-	assert.Equal(t, ask.applicationID, record.ObjectID, "incorrect object ID, expected application ID")
-	assert.Equal(t, ask.allocationKey, record.ReferenceID, "incorrect reference ID, expected alloc ask ID")
-	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
-	assert.Equal(t, si.EventRecord_APP_REQUEST, record.EventChangeDetail, "incorrect change detail, expected app")
-}
-
-func isRemoveAskEvent(t *testing.T, record *si.EventRecord) {
-	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
-	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
-	assert.Equal(t, si.EventRecord_REQUEST_TIMEOUT, record.EventChangeDetail)
-}
-
-func isAllocCancelEvent(t *testing.T, ask *AllocationAsk, record *si.EventRecord) {
-	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
-	assert.Equal(t, ask.applicationID, record.ObjectID, "incorrect object ID, expected application ID")
-	assert.Equal(t, ask.allocationKey, record.ReferenceID, "incorrect reference ID, expected alloc ID")
-	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType, "incorrect change type, expected remove")
-	assert.Equal(t, si.EventRecord_REQUEST_CANCEL, record.EventChangeDetail, "incorrect change detail, expected request cancel")
-}
-
 func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecord) {
 	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
 	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
@@ -68,36 +46,6 @@ func isStateChangeEvent(t *testing.T, app *Application, changeDetail si.EventRec
 	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, si.EventRecord_SET, record.EventChangeType, "incorrect change type, expected set")
 	assert.Equal(t, changeDetail, record.EventChangeDetail, "incorrect change detail")
-}
-
-func isNewAllocationEvent(t *testing.T, app *Application, alloc *Allocation, record *si.EventRecord) {
-	assert.Equal(t, si.EventRecord_APP, record.Type)
-	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType)
-	assert.Equal(t, si.EventRecord_APP_ALLOC, record.EventChangeDetail)
-	assert.Equal(t, alloc.GetUUID(), record.ReferenceID)
-	assert.Equal(t, app.ApplicationID, record.ObjectID)
-}
-
-func isRemoveAllocationEvent(t *testing.T, app *Application, alloc *Allocation, eventChangeDetail si.EventRecord_ChangeDetail, record *si.EventRecord) {
-	assert.Equal(t, si.EventRecord_APP, record.Type)
-	assert.Equal(t, si.EventRecord_REMOVE, record.EventChangeType)
-	assert.Equal(t, eventChangeDetail, record.EventChangeDetail)
-	assert.Equal(t, alloc.GetUUID(), record.ReferenceID)
-	assert.Equal(t, app.ApplicationID, record.ObjectID)
-}
-
-func isPlaceholderLargerEvent(t *testing.T, app *Application, alloc *Allocation, message string, record *si.EventRecord) {
-	assert.Equal(t, si.EventRecord_REQUEST, record.Type)
-	assert.Equal(t, si.EventRecord_NONE, record.EventChangeType)
-	assert.Equal(t, app.ApplicationID, record.ReferenceID)
-	assert.Equal(t, alloc.allocationKey, record.ObjectID)
-}
-
-func isAppDoesNotFitEvent(t *testing.T, app *Application, ask *AllocationAsk, message string, record *si.EventRecord) {
-	assert.Equal(t, si.EventRecord_REQUEST, record.Type)
-	assert.Equal(t, si.EventRecord_NONE, record.EventChangeType)
-	assert.Equal(t, app.ApplicationID, record.ReferenceID)
-	assert.Equal(t, ask.GetAllocationKey(), record.ObjectID)
 }
 
 func TestSendAppDoesNotFitEvent(t *testing.T) {

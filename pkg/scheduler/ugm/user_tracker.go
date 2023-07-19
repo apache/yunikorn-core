@@ -21,7 +21,10 @@ package ugm
 import (
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
@@ -34,10 +37,6 @@ type UserTracker struct {
 	// and group tracker object as value.
 	appGroupTrackers map[string]*GroupTracker
 	queueTracker     *QueueTracker // Holds the actual resource usage of queue path where application runs
-	// Group selected by matching the list of groups stored in security.UserGroup against the list of groups [Manager.configuredGroups] configured with limit settings.
-	// Manager.configuredGroups holds group only for which limit has been configured in bottom up queue hierarchical order starting from leaf to root.
-	// First matched group would be picked and stored in this variable
-	matchedGroup string
 
 	sync.RWMutex
 }
@@ -55,7 +54,28 @@ func newUserTracker(user string) *UserTracker {
 func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) bool {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.queueTracker.increaseTrackedResource(queuePath, applicationID, user, usage)
+	increased := ut.queueTracker.increaseTrackedResource(queuePath, applicationID, user, usage)
+	if increased {
+		gt := ut.appGroupTrackers[applicationID]
+		log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
+			zap.String("group", gt.getName()),
+			zap.String("queue path", queuePath),
+			zap.String("application", applicationID),
+			zap.Stringer("resource", usage))
+		increasedGroupUsage := gt.increaseTrackedResource(queuePath, applicationID, usage)
+		if !increasedGroupUsage {
+			_, decreased := ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, false)
+			if !decreased {
+				log.Log(log.SchedUGM).Error("Problem in increasing group resource usage. Hence tried to rollback user tracked usage, but failed to do.",
+					zap.String("queue path", queuePath),
+					zap.String("application", applicationID),
+					zap.String("user", ut.userName),
+					zap.Stringer("usage", usage))
+			}
+		}
+		return increasedGroupUsage
+	}
+	return increased
 }
 
 func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
@@ -70,7 +90,8 @@ func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, 
 func (ut *UserTracker) hasGroupForApp(applicationID string) bool {
 	ut.RLock()
 	defer ut.RUnlock()
-	return ut.appGroupTrackers[applicationID] != nil
+	_, ok := ut.appGroupTrackers[applicationID]
+	return ok
 }
 
 func (ut *UserTracker) setGroupForApp(applicationID string, groupTrack *GroupTracker) {
@@ -79,22 +100,13 @@ func (ut *UserTracker) setGroupForApp(applicationID string, groupTrack *GroupTra
 	ut.appGroupTrackers[applicationID] = groupTrack
 }
 
-func (ut *UserTracker) getGroupForApp(applicationID string) *GroupTracker {
+func (ut *UserTracker) getGroupForApp(applicationID string) string {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.appGroupTrackers[applicationID]
-}
-
-func (ut *UserTracker) getMatchedGroup() string {
-	ut.RLock()
-	defer ut.RUnlock()
-	return ut.matchedGroup
-}
-
-func (ut *UserTracker) setMatchedGroup(group string) {
-	ut.Lock()
-	defer ut.Unlock()
-	ut.matchedGroup = group
+	if ut.appGroupTrackers[applicationID] != nil {
+		return ut.appGroupTrackers[applicationID].groupName
+	}
+	return ""
 }
 
 func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {

@@ -57,14 +57,10 @@ func TestGetGroup(t *testing.T) {
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	usage1, err := resources.NewResourceFromConf(map[string]string{"memory": "5", "vcores": "5"})
-	if err != nil {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
-	}
+	assert.NilError(t, err)
 
 	increased := manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage1, user1)
-	if !increased {
-		t.Errorf("unable to increase tracked resource. queuepath: root.parent.leaf, application id: %s, resource usage: %s, user: %s", TestApp1, usage1.String(), user.User)
-	}
+	assert.Equal(t, increased, true)
 	assert.Equal(t, len(manager.userTrackers), 1)
 	assert.Equal(t, len(manager.groupTrackers), 0)
 
@@ -77,7 +73,8 @@ func TestGetGroup(t *testing.T) {
 
 	// create config with groups as "test_root" for root queue path and "test_parent" for root.parent queue path but no group defined for
 	// "root.parent.leaf" queue path. ensure immediate parent queue path "root.parent" has been used for group matching and picked.
-	// once group has been matched, it doesn't change for other queue paths and should not change because lowest level queue group should be used
+	// Same group would be used even for all queues coming under "root.parent.*" hierarchy.
+	// But for queues under "root.parent1.*" hierarchy (including root.parent1 queue) , "test_root" would be used as there is no group defined for that hierarchical queue path
 	user = security.UserGroup{User: "test1", Groups: []string{"test", "test_root", "test_parent"}}
 	conf = createConfigWithDifferentGroups(user.User, user.Groups[0], "memory", "10", 50, 5)
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
@@ -86,7 +83,9 @@ func TestGetGroup(t *testing.T) {
 	group = manager.ensureGroup(user, "root.parent")
 	assert.Equal(t, group, "test_parent")
 	group = manager.ensureGroup(user, "root")
-	assert.Equal(t, group, "test_parent")
+	assert.Equal(t, group, "test_root")
+	group = manager.ensureGroup(user, "root.parent1.leaf1")
+	assert.Equal(t, group, "test_root")
 
 	// create config with groups as "test_root" for root queue path and "test_parent" for root.parent queue path but no group defined for
 	// "root.parent.leaf" queue path. Passing just "root" as queue path returns "test_root" as searching starts from lowest level queue in entire queue path
@@ -108,41 +107,44 @@ func TestGetGroup(t *testing.T) {
 	// do some activities with different users - user "test1" and "test2" belongs to "test_root" group
 	// ensure user "test1" and "test2" and its group linkage is intact through appGroupTrackers map
 	increased = manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage1, user)
-	if !increased {
-		t.Errorf("unable to increase tracked resource. queuepath: root.parent.leaf, application id: %s, resource usage: %s, user: %s", TestApp1, usage1.String(), user.User)
-	}
+	assert.Equal(t, increased, true)
 	assert.Equal(t, len(manager.userTrackers), 2)
 
 	user2 := security.UserGroup{User: "test2", Groups: []string{"test", "test_root"}}
 	increased = manager.IncreaseTrackedResource("root.parent.leaf", TestApp2, usage1, user2)
-	if !increased {
-		t.Errorf("unable to increase tracked resource. queuepath: root.parent.leaf, application id: %s, resource usage: %s, user: %s", TestApp2, usage1.String(), user2.User)
+	assert.Equal(t, increased, true)
+
+	userGroupTrackersAssertsMap := map[string]string{}
+	userGroupTrackersAssertsMap[user.User] = TestApp1
+	userGroupTrackersAssertsMap[user2.User] = TestApp2
+	for u, a := range userGroupTrackersAssertsMap {
+		ut := manager.getUserTracker(u, false)
+		actualGT := ut.appGroupTrackers[a]
+		expectedGT := manager.getGroupTracker("test_root", false)
+		assert.Equal(t, manager.getGroupTracker("test_root", false) != nil, true)
+		assert.Equal(t, actualGT, expectedGT)
+		assert.Equal(t, actualGT.groupName, "test_root")
 	}
-	assert.Equal(t, len(manager.userTrackers), 3)
-
-	ut := manager.getUserTracker(user.User, false)
-	actualGT := ut.appGroupTrackers[TestApp1]
-	expectedGT := manager.getGroupTracker("test_root", false)
-	assert.Equal(t, manager.getGroupTracker("test_root", false) != nil, true)
-	assert.Equal(t, actualGT, expectedGT)
-	assert.Equal(t, actualGT.groupName, "test_root")
-
-	ut = manager.getUserTracker(user2.User, false)
-	actualGT = ut.appGroupTrackers[TestApp2]
-	expectedGT = manager.getGroupTracker("test_root", false)
-	assert.Equal(t, manager.getGroupTracker("test_root", false) != nil, true)
-	assert.Equal(t, actualGT, expectedGT)
-	assert.Equal(t, actualGT.groupName, "test_root")
 
 	assert.Equal(t, len(manager.userTrackers), 3)
 	assert.Equal(t, len(manager.groupTrackers), 2)
+
+	user3 := security.UserGroup{User: "test3", Groups: []string{"test"}}
+	increased = manager.IncreaseTrackedResource("root.parent.leaf", TestApp2, usage1, user3)
+	assert.Equal(t, increased, true)
+	assert.Equal(t, len(manager.userTrackers), 4)
+	ut := manager.getUserTracker(user3.User, false)
+	actualGT := ut.appGroupTrackers[TestApp2]
+	if actualGT != nil {
+		t.Errorf("group tracker should be nil as there is no group found for user %s", user3.User)
+	}
 
 	// create config without any limit settings for groups and
 	// since earlier group (test_root) limit settings has been cleared, ensure earlier user and group linkage through appGroupTrackers map has been removed
 	// and cleared as necessary
 	conf = createConfigWithDifferentGroups(user2.User, "", "memory", "10", 50, 5)
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
-	assert.Equal(t, len(manager.userTrackers), 3)
+	assert.Equal(t, len(manager.userTrackers), 4)
 	assert.Equal(t, len(manager.groupTrackers), 0)
 
 	ut = manager.getUserTracker(user.User, false)
@@ -367,14 +369,14 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	// total usage of "root.parent" is map[memory:60 vcores:60]
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user)
 	if !increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp2, user1)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp2, user)
 	}
 
 	// user1 should not be able to run app as wild card user '*' setting is map[memory:70 vcores:70] for "root.parent"
 	// and total usage of "root.parent" is map[memory:70 vcores:70]
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp3, usage, user)
 	if increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp3, user1)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp3, user)
 	}
 
 	// configure max resource for group1 * root.parent (map[memory:70 vcores:70]) higher than wild card group * root.parent settings (map[memory:10 vcores:10])
@@ -382,6 +384,8 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	conf = createUpdateConfigWithWildCardUsersAndGroups(user1.User, user1.Groups[0], "*", "*", "10", "10")
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
+	// since group1 quota (map[memory:70 vcores:70]) has reached before, further group increase is not allowed.
+	// Hence, user's tracked usage would be reverted
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
 	if increased {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
@@ -393,17 +397,17 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	// can be allowed to run upto resource usage map[memory:70 vcores:70]
-	for i := 1; i <= 6; i++ {
+	for i := 1; i <= 7; i++ {
 		increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
 		if !increased {
-			t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user)
+			t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
 		}
 	}
 
 	// user2 should not be able to run app as user2 max limit is map[memory:70 vcores:70] and usage so far is map[memory:70 vcores:70]
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
 	if increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
 	}
 }
 

@@ -44,6 +44,9 @@ func newGroupTracker(group string) *GroupTracker {
 }
 
 func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) bool {
+	if gt == nil {
+		return true
+	}
 	gt.Lock()
 	defer gt.Unlock()
 	gt.applications[applicationID] = true
@@ -51,6 +54,9 @@ func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string,
 }
 
 func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
+	if gt == nil {
+		return false, true
+	}
 	gt.Lock()
 	defer gt.Unlock()
 	if removeApp {
@@ -120,4 +126,11 @@ func (gt *GroupTracker) removeApp(applicationID string) {
 	gt.Lock()
 	defer gt.Unlock()
 	delete(gt.applications, applicationID)
+}
+
+func (gt *GroupTracker) getName() string {
+	if gt == nil {
+		return ""
+	}
+	return gt.groupName
 }

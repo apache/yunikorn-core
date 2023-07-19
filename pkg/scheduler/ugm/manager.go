@@ -87,6 +87,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 		return false
 	}
 	userTracker := m.getUserTracker(user.User, true)
+	m.ensureGroupTrackerForApp(queuePath, applicationID, user)
 	log.Log(log.SchedUGM).Debug("Increasing resource usage for user",
 		zap.String("user", user.User),
 		zap.String("queue path", queuePath),
@@ -95,19 +96,6 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 	increased := userTracker.increaseTrackedResource(queuePath, applicationID, usage)
 	if !increased {
 		return increased
-	}
-	group := m.ensureGroupTrackerForApp(queuePath, applicationID, user)
-	if group != "" {
-		groupTracker := m.getGroupTracker(group, true)
-		log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
-			zap.String("group", group),
-			zap.String("queue path", queuePath),
-			zap.String("application", applicationID),
-			zap.Stringer("resource", usage))
-		increased = groupTracker.increaseTrackedResource(queuePath, applicationID, usage)
-		if !increased {
-			return increased
-		}
 	}
 	return true
 }
@@ -268,7 +256,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 		userTracker.setGroupForApp(applicationID, groupTracker)
 		return group
 	} else {
-		return userTracker.getGroupForApp(applicationID).groupName
+		return userTracker.getGroupForApp(applicationID)
 	}
 }
 
@@ -285,20 +273,14 @@ func (m *Manager) ensureGroup(user security.UserGroup, queuePath string) string 
 func (m *Manager) internalEnsureGroup(user security.UserGroup, queuePath string) string {
 	userTracker := m.userTrackers[user.User]
 	if userTracker != nil {
-		// Is there any matched group? If not, then carry out matching user group's against configured limit settings
-		matchedGroup := userTracker.getMatchedGroup()
-		if matchedGroup != "" {
-			return matchedGroup
-		}
 		if configGroups, ok := m.configuredGroups[queuePath]; ok {
 			for _, configGroup := range configGroups {
 				for _, g := range user.Groups {
 					if configGroup == g {
-						log.Log(log.SchedUGM).Debug("Setting user matched group",
+						log.Log(log.SchedUGM).Debug("Found matching group for user",
 							zap.String("user", user.User),
 							zap.String("queue path", queuePath),
 							zap.String("matched group", configGroup))
-						userTracker.setMatchedGroup(configGroup)
 						return configGroup
 					}
 				}
@@ -393,17 +375,6 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 	}
 	if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
 		return err
-	}
-
-	// clear earlier set matched group of user for which limits have been configured earlier and even now.
-	// Matched Group would be set as part of increase calls when user carriers out any activity next time
-	for u := range userLimits {
-		if m.userTrackers[u] != nil {
-			log.Log(log.SchedUGM).Debug("Cleared earlier set matched group for user",
-				zap.String("user", u),
-				zap.String("matched group", m.userTrackers[u].getMatchedGroup()))
-			m.userTrackers[u].setMatchedGroup("")
-		}
 	}
 
 	if len(cur.Queues) > 0 {

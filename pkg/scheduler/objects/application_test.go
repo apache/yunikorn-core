@@ -200,11 +200,13 @@ func TestAppReservation(t *testing.T) {
 
 // test multiple reservations from one allocation
 func TestAppAllocReservation(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	// Create event system after new application to avoid new application event.
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-
-	app := newApplication(appID1, "default", "root.unknown")
+	app.disableStateChangeEvents()
+	app.resetAppEvents()
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -342,11 +344,13 @@ func TestUpdateRepeat(t *testing.T) {
 
 // test pending calculation and ask addition
 func TestAddAllocAsk(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	// Create event system after new application to avoid new application event.
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-
-	app := newApplication(appID1, "default", "root.unknown")
+	app.disableStateChangeEvents()
+	app.resetAppEvents()
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
@@ -1235,9 +1239,6 @@ func TestOnStatusChangeCalled(t *testing.T) {
 
 func TestReplaceAllocation(t *testing.T) {
 	setupUGM()
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
 
 	app := newApplication(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")
@@ -1417,9 +1418,6 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	setupUGM()
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
 
 	originalPhTimeout := defaultPlaceholderTimeout
 	defaultPlaceholderTimeout = 5 * time.Millisecond
@@ -1973,11 +1971,13 @@ func TestMaxAskPriority(t *testing.T) {
 }
 
 func TestAskEvents(t *testing.T) {
+	app := newApplication(appID1, "default", "root.default")
+	// Create event system after new application to avoid new app event.
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-
-	app := newApplication(appID1, "default", "root.default")
+	app.disableStateChangeEvents()
+	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
@@ -2037,11 +2037,13 @@ func TestAskEvents(t *testing.T) {
 }
 
 func TestAllocationEvents(t *testing.T) { //nolint:funlen
+	app := newApplication(appID1, "default", "root.default")
+	// Create event system after new application to avoid new app event.
 	events.CreateAndSetEventSystem()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-
-	app := newApplication(appID1, "default", "root.default")
+	app.disableStateChangeEvents()
+	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
@@ -2147,10 +2149,6 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 }
 
 func TestPlaceholderLargerEvent(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
-
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
@@ -2159,6 +2157,12 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	assert.NilError(t, err, "failed to create resource with error")
 
 	app := newApplication(appID1, "default", "root.default")
+	// Create event system after new application to avoid new application event.
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+	app.disableStateChangeEvents()
+	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
@@ -2192,10 +2196,6 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 }
 
 func TestAppDoesNotFitEvent(t *testing.T) {
-	events.CreateAndSetEventSystem()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
-
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
@@ -2204,6 +2204,12 @@ func TestAppDoesNotFitEvent(t *testing.T) {
 	assert.NilError(t, err, "failed to create resource with error")
 	ask := newAllocationAsk("alloc-0", "app-1", res)
 	app := newApplication(appID1, "default", "root.default")
+	// Create event system after new application to avoid new application event.
+	events.CreateAndSetEventSystem()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+	app.disableStateChangeEvents()
+	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
@@ -2256,4 +2262,16 @@ func (sa *Application) handleApplicationEventWithInfoLocking(event applicationEv
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.HandleApplicationEventWithInfo(event, info)
+}
+
+func (sa *Application) disableStateChangeEvents() {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.sendStateChangeEvents = false
+}
+
+func (sa *Application) resetAppEvents() {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.appEvents = newApplicationEvents(sa, events.GetEventSystem())
 }

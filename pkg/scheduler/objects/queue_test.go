@@ -39,6 +39,8 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+const ZeroResource string = "{\"resources\":{\"first\":{\"value\":0}}}"
+
 // base test for creating a managed queue
 func TestQueueBasics(t *testing.T) {
 	// create the root
@@ -419,7 +421,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set max to illegal limit (0 value), but guarantee not 0
-	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceQuota] = ZeroResource
 
 	app = newApplicationWithTags("app-5", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
@@ -432,7 +434,7 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set guaranteed resource to illegal limit (0 value), but max resource not 0
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ZeroResource
 	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":100}}}"
 
 	app = newApplicationWithTags("app-6", "default", "root.leaf-un", tags)
@@ -478,8 +480,8 @@ func TestAddApplicationWithTag(t *testing.T) {
 	}
 
 	// set both to 0 , the max resource and guaranteed resource will not update new value
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":0}}}"
-	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":0}}}"
+	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ZeroResource
+	tags[siCommon.AppTagNamespaceResourceQuota] = ZeroResource
 	app = newApplicationWithTags("app-9", "default", "root.leaf-un", tags)
 	leafUn.AddApplication(app)
 	assert.Equal(t, len(leafUn.applications), 7, "Application was not added to the Dynamic queue as expected")
@@ -2555,17 +2557,18 @@ func TestQueueEvents(t *testing.T) {
 	noEvents := 0
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 3
+		return noEvents == 5
 	})
-	assert.NilError(t, err, "expected 2 events, got %d", noEvents)
+	assert.NilError(t, err, "expected 5 events, got %d", noEvents)
 	records := eventSystem.Store.CollectEvents()
-	assert.Equal(t, 3, len(records), "number of events")
-	assert.Equal(t, si.EventRecord_QUEUE, records[1].Type)
-	assert.Equal(t, si.EventRecord_ADD, records[1].EventChangeType)
-	assert.Equal(t, si.EventRecord_QUEUE_APP, records[1].EventChangeDetail)
+	assert.Equal(t, 5, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_QUEUE, records[2].Type)
-	assert.Equal(t, si.EventRecord_REMOVE, records[2].EventChangeType)
+	assert.Equal(t, si.EventRecord_ADD, records[2].EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_APP, records[2].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_QUEUE, records[3].Type)
+	assert.Equal(t, si.EventRecord_REMOVE, records[3].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_APP, records[3].EventChangeDetail)
+	isRemoveApplicationEvent(t, app, records[4])
 
 	newConf := configs.QueueConfig{
 		Parent: false,

@@ -104,10 +104,11 @@ type Application struct {
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 	askMaxPriority       int32                       // highest priority value of outstanding asks
 
-	rmEventHandler     handler.EventHandler
-	rmID               string
-	terminatedCallback func(appID string)
-	appEvents          *applicationEvents
+	rmEventHandler        handler.EventHandler
+	rmID                  string
+	terminatedCallback    func(appID string)
+	appEvents             *applicationEvents
+	sendStateChangeEvents bool // whether to send state-change events or not (simplifies testing)
 
 	sync.RWMutex
 }
@@ -158,27 +159,28 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 
 func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
-		ApplicationID:        siApp.ApplicationID,
-		Partition:            siApp.PartitionName,
-		SubmissionTime:       time.Now(),
-		queuePath:            siApp.QueueName,
-		tags:                 siApp.Tags,
-		pending:              resources.NewResource(),
-		allocatedResource:    resources.NewResource(),
-		usedResource:         resources.NewUsedResource(),
-		maxAllocatedResource: resources.NewResource(),
-		allocatedPlaceholder: resources.NewResource(),
-		requests:             make(map[string]*AllocationAsk),
-		reservations:         make(map[string]*reservation),
-		allocations:          make(map[string]*Allocation),
-		stateMachine:         NewAppState(),
-		placeholderAsk:       resources.NewResourceFromProto(siApp.PlaceholderAsk),
-		startTime:            time.Time{},
-		finishedTime:         time.Time{},
-		rejectedMessage:      "",
-		stateLog:             make([]*StateLogEntry, 0),
-		askMaxPriority:       configs.MinPriority,
-		sortedRequests:       sortedRequests{},
+		ApplicationID:         siApp.ApplicationID,
+		Partition:             siApp.PartitionName,
+		SubmissionTime:        time.Now(),
+		queuePath:             siApp.QueueName,
+		tags:                  siApp.Tags,
+		pending:               resources.NewResource(),
+		allocatedResource:     resources.NewResource(),
+		usedResource:          resources.NewUsedResource(),
+		maxAllocatedResource:  resources.NewResource(),
+		allocatedPlaceholder:  resources.NewResource(),
+		requests:              make(map[string]*AllocationAsk),
+		reservations:          make(map[string]*reservation),
+		allocations:           make(map[string]*Allocation),
+		stateMachine:          NewAppState(),
+		placeholderAsk:        resources.NewResourceFromProto(siApp.PlaceholderAsk),
+		startTime:             time.Time{},
+		finishedTime:          time.Time{},
+		rejectedMessage:       "",
+		stateLog:              make([]*StateLogEntry, 0),
+		askMaxPriority:        configs.MinPriority,
+		sortedRequests:        sortedRequests{},
+		sendStateChangeEvents: true,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -198,6 +200,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
 	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
+	app.appEvents.sendNewApplicationEvent()
 	return app
 }
 
@@ -303,6 +306,9 @@ func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, ev
 	// handle the same state transition not nil error (limit of fsm).
 	if err != nil && err.Error() == noTransition {
 		return nil
+	}
+	if event == RejectApplication {
+		sa.appEvents.sendRejectApplicationEvent(eventInfo)
 	}
 	return err
 }

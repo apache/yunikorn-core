@@ -1334,37 +1334,23 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.Equal(t, groupsResourceUsageDao[0].GroupName, "testgroup")
 }
 
-func TestGetEventsByType(t *testing.T) {
+func TestGetEvents(t *testing.T) {
 	appEvent, nodeEvent, queueEvent := addEvents(t)
 
-	// proper filtering
-	checkBatchEventFiltering(t, appEvent, "app", getEventsByType)
-	checkBatchEventFiltering(t, nodeEvent, "node", getEventsByType)
-	checkBatchEventFiltering(t, queueEvent, "queue", getEventsByType)
+	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
+
+	checkSingleEvent(t, appEvent, httprouter.Params{
+		httprouter.Param{Key: "count", Value: "1"},
+	})
+	checkSingleEvent(t, queueEvent, httprouter.Params{
+		httprouter.Param{Key: "fromId", Value: "2"},
+	})
 
 	// illegal requests
-	checkIllegalBatchRequest(t, "type", "xyz", "Illegal event type: xyz")
 	checkIllegalBatchRequest(t, "count", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
 	checkIllegalBatchRequest(t, "count", "-100", "Illegal number of events: -100")
 	checkIllegalBatchRequest(t, "fromId", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
 	checkIllegalBatchRequest(t, "fromId", "-100", "Illegal id: -100")
-
-	// all events
-	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent}, getEventsByType)
-
-	// limiting
-	checkSingleEvent(t, appEvent, httprouter.Params{
-		httprouter.Param{Key: "count", Value: "1"},
-	}, getEventsByType)
-	checkSingleEvent(t, queueEvent, httprouter.Params{
-		httprouter.Param{Key: "fromId", Value: "2"},
-	}, getEventsByType)
-}
-
-func TestGetAllEvents(t *testing.T) {
-	appEvent, nodeEvent, queueEvent := addEvents(t)
-
-	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent}, getAllEvents)
 }
 
 func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
@@ -1416,23 +1402,11 @@ func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
 	return appEvent, nodeEvent, queueEvent
 }
 
-func checkSingleEvent(t *testing.T, event *si.EventRecord, params httprouter.Params, fn http.HandlerFunc) {
+func checkSingleEvent(t *testing.T, event *si.EventRecord, params httprouter.Params) {
 	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
 	assert.NilError(t, err)
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, params))
-	eventDao := getEventRecordDao(t, req, fn)
-	assert.Equal(t, 1, len(eventDao.EventRecords))
-	compareEvents(t, event, eventDao.EventRecords[0])
-}
-
-func checkBatchEventFiltering(t *testing.T, event *si.EventRecord, filterType string, fn http.HandlerFunc) {
-	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
-	assert.NilError(t, err)
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "type", Value: filterType},
-	}))
-	eventDao := getEventRecordDao(t, req, fn)
-
+	eventDao := getEventRecordDao(t, req)
 	assert.Equal(t, 1, len(eventDao.EventRecords))
 	compareEvents(t, event, eventDao.EventRecords[0])
 }
@@ -1444,7 +1418,7 @@ func checkIllegalBatchRequest(t *testing.T, key, value, msg string) {
 		httprouter.Param{Key: key, Value: value},
 	}))
 	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(getEventsByType)
+	handler := http.HandlerFunc(getEvents)
 	handler.ServeHTTP(rr, req)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	jsonBytes := make([]byte, 256)
@@ -1456,10 +1430,10 @@ func checkIllegalBatchRequest(t *testing.T, key, value, msg string) {
 	assert.Assert(t, strings.Contains(errObject.Message, msg))
 }
 
-func checkAllEvents(t *testing.T, events []*si.EventRecord, fn http.HandlerFunc) {
+func checkAllEvents(t *testing.T, events []*si.EventRecord) {
 	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
 	assert.NilError(t, err)
-	eventDao := getEventRecordDao(t, req, fn)
+	eventDao := getEventRecordDao(t, req)
 
 	for i := 0; i < len(events); i++ {
 		compareEvents(t, events[i], eventDao.EventRecords[i])
@@ -1478,9 +1452,10 @@ func compareEvents(t *testing.T, event, eventFromDao *si.EventRecord) {
 	assert.Assert(t, resources.Equals(res0, res1))
 }
 
-func getEventRecordDao(t *testing.T, req *http.Request, fn http.HandlerFunc) dao.EventRecordDAO {
+func getEventRecordDao(t *testing.T, req *http.Request) dao.EventRecordDAO {
 	rr := httptest.NewRecorder()
-	fn.ServeHTTP(rr, req)
+	handler := http.HandlerFunc(getEvents)
+	handler.ServeHTTP(rr, req)
 	jsonBytes := make([]byte, 2048)
 	n, err := rr.Body.Read(jsonBytes)
 	assert.NilError(t, err, "cannot read response body")

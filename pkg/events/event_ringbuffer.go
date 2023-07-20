@@ -66,14 +66,14 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 // identifier is returned which can be used to get the first batch.
 // If the caller does not want to pose limit on the number of events returned, "count" must be set to a high
 // value, e.g. math.MaxUint64.
-func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64) {
+func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64, uint64) {
 	e.RLock()
 	defer e.RUnlock()
 	lowest := e.getLowestId()
 
 	pos, idFound := e.id2pos(id)
 	if !idFound {
-		return nil, lowest
+		return nil, lowest, e.getLastEventID()
 	}
 	// limit count to the capacity
 	count = min(count, e.capacity)
@@ -96,7 +96,7 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventR
 				end:   end,
 			}
 		}
-		return e.getEntriesFromRanges(r1, r2), lowest
+		return e.getEntriesFromRanges(r1, r2), lowest, e.getLastEventID()
 	}
 
 	// no wrapping: either limited by head position or by the count
@@ -104,7 +104,7 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventR
 	return e.getEntriesFromRanges(&eventRange{
 		start: pos,
 		end:   end,
-	}, nil), lowest
+	}, nil), lowest, e.getLastEventID()
 }
 
 // min a utility function to return the smallest value of two unsigned int
@@ -116,9 +116,20 @@ func min(a, b uint64) uint64 {
 	return m
 }
 
-// GetLastEventID returns the value of the unique id counter
+// GetLastEventID returns the value of the unique id counter.
+// If the buffer is empty, it returns 0.
 func (e *eventRingBuffer) GetLastEventID() uint64 {
-	return e.id
+	e.RLock()
+	defer e.RUnlock()
+	return e.getLastEventID()
+}
+
+// unlocked version of GetLastEventID()
+func (e *eventRingBuffer) getLastEventID() uint64 {
+	if e.id == 0 {
+		return 0
+	}
+	return e.id - 1 // e.id is the next ID to be used
 }
 
 // getEntriesFromRanges retrieves the event records based on pre-calculated ranges. We have two

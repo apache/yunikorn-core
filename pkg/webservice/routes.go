@@ -185,14 +185,8 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/events/batch/:type/",
-		getEventsByType,
-	},
-	route{
-		"Scheduler",
-		"GET",
 		"/ws/v1/events/batch/",
-		getAllEvents,
+		getEvents,
 	},
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints

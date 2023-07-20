@@ -46,7 +46,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const PartitionDoesNotExists = "Partition not found"
@@ -58,26 +57,6 @@ const UserNameMissing = "User name is missing"
 const GroupNameMissing = "Group name is missing"
 const ApplicationDoesNotExists = "Application not found"
 const NodeDoesNotExists = "Node not found"
-
-type eventType int
-
-const (
-	appEvents eventType = iota
-	nodeEvents
-	queueEvents
-)
-
-var eventFilters = map[eventType]func(record *si.EventRecord) bool{
-	queueEvents: func(record *si.EventRecord) bool {
-		return record.Type == si.EventRecord_QUEUE
-	},
-	appEvents: func(record *si.EventRecord) bool {
-		return record.Type == si.EventRecord_APP
-	},
-	nodeEvents: func(record *si.EventRecord) bool {
-		return record.Type == si.EventRecord_NODE
-	},
-}
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -892,34 +871,7 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getEventsByType(w http.ResponseWriter, r *http.Request) {
-	vars := httprouter.ParamsFromContext(r.Context())
-	if vars == nil {
-		getEvents(w, r, nil)
-		return
-	}
-	evtType := strings.ToLower(vars.ByName("type"))
-	if evtType == "" {
-		getEvents(w, r, nil)
-		return
-	}
-	switch evtType {
-	case "node":
-		getEvents(w, r, eventFilters[nodeEvents])
-	case "app":
-		getEvents(w, r, eventFilters[appEvents])
-	case "queue":
-		getEvents(w, r, eventFilters[queueEvents])
-	default:
-		buildJSONErrorResponse(w, "Illegal event type: "+evtType, http.StatusBadRequest)
-	}
-}
-
-func getAllEvents(w http.ResponseWriter, r *http.Request) {
-	getEvents(w, r, nil)
-}
-
-func getEvents(w http.ResponseWriter, r *http.Request, filter func(record *si.EventRecord) bool) {
+func getEvents(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	eventSystem := events.GetEventSystem()
 	if eventSystem == nil {
@@ -958,20 +910,10 @@ func getEvents(w http.ResponseWriter, r *http.Request, filter func(record *si.Ev
 		}
 	}
 
-	records, lowestId := eventSystem.GetEventsFromId(fromId, count)
-
-	if filter != nil {
-		var filtered []*si.EventRecord
-		for _, e := range records {
-			if filter(e) {
-				filtered = append(filtered, e)
-			}
-		}
-		records = filtered
-	}
-
+	records, lowestId, highestID := eventSystem.GetEventsFromId(fromId, count)
 	eventDao := dao.EventRecordDAO{
-		StartID:      lowestId,
+		LowestID:     lowestId,
+		HighestID:    highestID,
 		EventRecords: records,
 	}
 	if err := json.NewEncoder(w).Encode(eventDao); err != nil {

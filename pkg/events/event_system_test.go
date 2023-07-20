@@ -19,6 +19,7 @@
 package events
 
 import (
+	"strconv"
 	"testing"
 	"time"
 
@@ -85,4 +86,33 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 	assert.Equal(t, record.ObjectID, "alloc1")
 	assert.Equal(t, record.ReferenceID, "app1")
 	assert.Equal(t, record.Message, "message")
+}
+
+func TestGetEvents(t *testing.T) {
+	CreateAndSetEventSystem()
+	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.Stop()
+
+	for i := 0; i < 10; i++ {
+		event := &si.EventRecord{
+			Type:        si.EventRecord_REQUEST,
+			ObjectID:    "alloc1",
+			ReferenceID: "app1",
+			Message:     strconv.Itoa(i),
+		}
+		eventSystem.AddEvent(event)
+	}
+	err := common.WaitFor(time.Millisecond, time.Second, func() bool {
+		return eventSystem.Store.CountStoredEvents() == 10
+	})
+	assert.NilError(t, err, "the events should have been processed")
+
+	records, lowest, highest := eventSystem.GetEventsFromId(3, 3)
+	assert.Equal(t, uint64(0), lowest)
+	assert.Equal(t, uint64(9), highest)
+	assert.Equal(t, 3, len(records))
+	assert.Equal(t, "3", records[0].Message)
+	assert.Equal(t, "4", records[1].Message)
+	assert.Equal(t, "5", records[2].Message)
 }

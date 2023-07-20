@@ -172,6 +172,13 @@ func TestGetEventsFromId_IdNotFound(t *testing.T) {
 	assert.Equal(t, uint64(49), highest)
 }
 
+func TestGetLastEventID(t *testing.T) {
+	buffer := newEventRingBuffer(20)
+	populate(buffer, 5)
+
+	assert.Equal(t, uint64(4), buffer.GetLastEventID())
+}
+
 func populate(buffer *eventRingBuffer, count int) {
 	for i := 0; i < count; i++ {
 		buffer.Add(&si.EventRecord{

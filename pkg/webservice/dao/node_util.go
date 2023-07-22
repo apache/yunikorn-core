@@ -19,12 +19,12 @@
 package dao
 
 type NodesUtilDAOInfo struct {
-	ResourceType string             `json:"type"`
-	NodesUtil    []*NodeUtilDAOInfo `json:"utilization"`
+	ResourceType string             `json:"type,omitempty"`
+	NodesUtil    []*NodeUtilDAOInfo `json:"utilization,omitempty"`
 }
 
 type NodeUtilDAOInfo struct {
-	BucketName string   `json:"bucketName"`
-	NumOfNodes int64    `json:"numOfNodes"`
-	NodeNames  []string `json:"nodeNames"`
+	BucketName string   `json:"bucketName,omitempty"`
+	NumOfNodes int64    `json:"numOfNodes,omitempty"`
+	NodeNames  []string `json:"nodeNames,omitempty"`
 }

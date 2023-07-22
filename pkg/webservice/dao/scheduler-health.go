@@ -19,15 +19,15 @@
 package dao
 
 type SchedulerHealthDAOInfo struct {
-	Healthy      bool
-	HealthChecks []HealthCheckInfo
+	Healthy      bool              // no omitempty, a false value gives a quick way to understand the result.
+	HealthChecks []HealthCheckInfo `json:",omitempty"`
 }
 
 type HealthCheckInfo struct {
-	Name             string
-	Succeeded        bool
-	Description      string
-	DiagnosisMessage string
+	Name             string `json:",omitempty"`
+	Succeeded        bool   // no omitempty, a false value gives a quick way to understand the result.
+	Description      string `json:",omitempty"`
+	DiagnosisMessage string `json:",omitempty"`
 }
 
 func (s *SchedulerHealthDAOInfo) SetHealthStatus() {

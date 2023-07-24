@@ -69,7 +69,7 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64, uint64) {
 	e.RLock()
 	defer e.RUnlock()
-	lowest := e.getLowestId()
+	lowest := e.getLowestID()
 
 	pos, idFound := e.id2pos(id)
 	if !idFound {
@@ -159,7 +159,7 @@ func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 	var calculatedID uint64 // calculated ID based on index values
 	if pos > e.head {
 		diff := pos - e.head
-		calculatedID = e.getLowestId() + diff
+		calculatedID = e.getLowestID() + diff
 	} else {
 		pId := e.id - 1
 		idAtZero := pId - (pId % e.capacity) // unique id at slice position 0
@@ -184,8 +184,8 @@ func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 	return pos, true
 }
 
-// getLowestId returns the current lowest available id in the buffer.
-func (e *eventRingBuffer) getLowestId() uint64 {
+// getLowestID returns the current lowest available id in the buffer.
+func (e *eventRingBuffer) getLowestID() uint64 {
 	if !e.full {
 		return 0
 	}

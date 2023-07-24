@@ -36,7 +36,7 @@ type EventSystem interface {
 	AddEvent(event *si.EventRecord)
 	StartService()
 	Stop()
-	GetEventsFromId(uint64, uint64) ([]*si.EventRecord, uint64, uint64)
+	GetEventsFromID(uint64, uint64) ([]*si.EventRecord, uint64, uint64)
 }
 
 type EventSystemImpl struct {
@@ -51,7 +51,7 @@ type EventSystemImpl struct {
 	sync.Mutex
 }
 
-func (ec *EventSystemImpl) GetEventsFromId(id, count uint64) ([]*si.EventRecord, uint64, uint64) {
+func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord, uint64, uint64) {
 	return ec.eventBuffer.GetEventsFromID(id, count)
 }
 

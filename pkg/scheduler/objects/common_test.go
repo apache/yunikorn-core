@@ -39,7 +39,7 @@ func (m *EventSystemMock) Reset() {
 	m.events = make([]*si.EventRecord, 0)
 }
 
-func (m *EventSystemMock) GetEventsFromId(uint64, uint64) ([]*si.EventRecord, uint64, uint64) {
+func (m *EventSystemMock) GetEventsFromID(uint64, uint64) ([]*si.EventRecord, uint64, uint64) {
 	return nil, 0, 0
 }
 

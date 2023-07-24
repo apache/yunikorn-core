@@ -880,7 +880,7 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	count := uint64(10000)
-	var fromId uint64
+	var start uint64
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars != nil {
 		if countStr := vars.ByName("count"); countStr != "" {
@@ -896,8 +896,8 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 			count = uint64(c)
 		}
 
-		if fromIdStr := vars.ByName("fromId"); fromIdStr != "" {
-			i, err := strconv.ParseInt(fromIdStr, 10, 64)
+		if startStr := vars.ByName("start"); startStr != "" {
+			i, err := strconv.ParseInt(startStr, 10, 64)
 			if err != nil {
 				buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 				return
@@ -906,13 +906,13 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 				buildJSONErrorResponse(w, fmt.Sprintf("Illegal id: %d", i), http.StatusBadRequest)
 				return
 			}
-			fromId = uint64(i)
+			start = uint64(i)
 		}
 	}
 
-	records, lowestId, highestID := eventSystem.GetEventsFromId(fromId, count)
+	records, lowestID, highestID := eventSystem.GetEventsFromID(start, count)
 	eventDao := dao.EventRecordDAO{
-		LowestID:     lowestId,
+		LowestID:     lowestID,
 		HighestID:    highestID,
 		EventRecords: records,
 	}

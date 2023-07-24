@@ -1343,14 +1343,14 @@ func TestGetEvents(t *testing.T) {
 		httprouter.Param{Key: "count", Value: "1"},
 	})
 	checkSingleEvent(t, queueEvent, httprouter.Params{
-		httprouter.Param{Key: "fromId", Value: "2"},
+		httprouter.Param{Key: "start", Value: "2"},
 	})
 
 	// illegal requests
 	checkIllegalBatchRequest(t, "count", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
 	checkIllegalBatchRequest(t, "count", "-100", "Illegal number of events: -100")
-	checkIllegalBatchRequest(t, "fromId", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
-	checkIllegalBatchRequest(t, "fromId", "-100", "Illegal id: -100")
+	checkIllegalBatchRequest(t, "start", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
+	checkIllegalBatchRequest(t, "start", "-100", "Illegal id: -100")
 }
 
 func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {

@@ -108,7 +108,7 @@ func TestGetEvents(t *testing.T) {
 	})
 	assert.NilError(t, err, "the events should have been processed")
 
-	records, lowest, highest := eventSystem.GetEventsFromId(3, 3)
+	records, lowest, highest := eventSystem.GetEventsFromID(3, 3)
 	assert.Equal(t, uint64(0), lowest)
 	assert.Equal(t, uint64(9), highest)
 	assert.Equal(t, 3, len(records))

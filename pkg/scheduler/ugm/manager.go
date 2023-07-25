@@ -442,6 +442,12 @@ func (m *Manager) processGroupConfig(group string, limitConfig *LimitConfig, que
 
 // clearEarlierSetLimits Clear already configured limits of users and groups for which limits have been configured before but not now
 func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits map[string]bool, queuePath string) error {
+
+	// Clear already configured limits of group for which limits have been configured before but not now
+	for _, gt := range m.groupTrackers {
+		m.clearEarlierSetGroupLimits(gt, queuePath, groupLimits)
+	}
+
 	// Clear already configured limits of user for which limits have been configured before but not now
 	for u, ut := range m.userTrackers {
 		// Is this user already tracked for the queue path?
@@ -457,20 +463,18 @@ func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits 
 							zap.String("group", gt.groupName),
 							zap.String("application id", appID),
 							zap.String("queue path", queuePath))
-						// removing the linkage only happens here by setting it to nil and deleting app id
-						// but group resource usage so far remains as it is because we don't have app id wise resource usage with in group as of now.
-						// YUNIKORN-1858 handles the group resource usage properly
-						// In case of only one (last) application, group tracker would be removed from the manager.
+						// simply remove the linkage between the user and group by setting gt to nil for the given app.
+						// but in case of group, specific app resource usage has to be decremented
 						ut.setGroupForApp(appID, nil)
-						gt.removeApp(appID)
-						if len(gt.getTrackedApplications()) == 0 {
-							log.Log(log.SchedUGM).Debug("Is this app the only running application in group?",
-								zap.String("user", u),
-								zap.String("group", gt.groupName),
-								zap.Int("no. of applications", len(gt.getTrackedApplications())),
-								zap.String("application id", appID),
-								zap.String("queue path", queuePath))
-							delete(m.groupTrackers, g)
+						removeQT, decreased := gt.decreaseTrackedResourceUsage(appID, true)
+						if decreased {
+							if removeQT {
+								log.Log(log.SchedUGM).Debug("Removing group from manager",
+									zap.String("group", gt.groupName),
+									zap.String("queue path", queuePath),
+									zap.String("application", appID))
+								delete(m.groupTrackers, gt.groupName)
+							}
 						}
 					}
 				}
@@ -479,10 +483,6 @@ func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits 
 		m.clearEarlierSetUserLimits(ut, queuePath, userLimits)
 	}
 
-	// Clear already configured limits of group for which limits have been configured before but not now
-	for _, gt := range m.groupTrackers {
-		m.clearEarlierSetGroupLimits(gt, queuePath, groupLimits)
-	}
 	return nil
 }
 

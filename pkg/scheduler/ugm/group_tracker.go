@@ -122,15 +122,21 @@ func (gt *GroupTracker) canBeRemoved() bool {
 	return len(gt.queueTracker.childQueueTrackers) == 0 && len(gt.queueTracker.runningApplications) == 0
 }
 
-func (gt *GroupTracker) removeApp(applicationID string) {
-	gt.Lock()
-	defer gt.Unlock()
-	delete(gt.applications, applicationID)
-}
-
 func (gt *GroupTracker) getName() string {
 	if gt == nil {
 		return ""
 	}
 	return gt.groupName
+}
+
+func (gt *GroupTracker) decreaseTrackedResourceUsage(applicationID string, removeApp bool) (bool, bool) {
+	if gt == nil {
+		return false, true
+	}
+	gt.Lock()
+	defer gt.Unlock()
+	if removeApp {
+		delete(gt.applications, applicationID)
+	}
+	return gt.queueTracker.decreaseTrackedResourceUsage(applicationID)
 }

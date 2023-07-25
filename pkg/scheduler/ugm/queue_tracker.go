@@ -31,7 +31,7 @@ type QueueTracker struct {
 	queueName           string
 	queuePath           string
 	resourceUsage       *resources.Resource
-	runningApplications map[string]bool
+	runningApplications map[string]*resources.Resource
 	maxResources        *resources.Resource
 	maxRunningApps      uint64
 	childQueueTrackers  map[string]*QueueTracker
@@ -51,7 +51,7 @@ func newQueueTracker(queuePath string, queueName string) *QueueTracker {
 		queueName:           queueName,
 		queuePath:           qp,
 		resourceUsage:       resources.NewResource(),
-		runningApplications: make(map[string]bool),
+		runningApplications: make(map[string]*resources.Resource),
 		maxResources:        resources.NewResource(),
 		maxRunningApps:      0,
 		childQueueTrackers:  make(map[string]*QueueTracker),
@@ -78,7 +78,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	finalResourceUsage := qt.resourceUsage.Clone()
 	finalResourceUsage.AddTo(usage)
 	wildCardQuotaExceeded := false
-	existingApp := qt.runningApplications[applicationID]
+	_, existingApp := qt.runningApplications[applicationID]
 
 	// apply user/group specific limit settings set if configured, otherwise use wild card limit settings
 	if qt.maxRunningApps != 0 && !resources.Equals(resources.NewResource(), qt.maxResources) {
@@ -147,7 +147,10 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	}
 
 	qt.resourceUsage.AddTo(usage)
-	qt.runningApplications[applicationID] = true
+	if !existingApp {
+		qt.runningApplications[applicationID] = resources.NewResource()
+	}
+	qt.runningApplications[applicationID].AddTo(usage)
 
 	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
 		zap.Int("tracking type", int(trackType)),
@@ -190,6 +193,9 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	}
 
 	qt.resourceUsage.SubFrom(usage)
+	resUsage := qt.runningApplications[applicationID].Clone()
+	resUsage.SubFrom(usage)
+	qt.runningApplications[applicationID] = resUsage
 	if removeApp {
 		log.Log(log.SchedUGM).Debug("Removed application from running applications",
 			zap.String("application", applicationID),
@@ -362,4 +368,32 @@ func (qt *QueueTracker) UnlinkQT(queuePath string) bool {
 		return true
 	}
 	return false
+}
+
+// decreaseTrackedResourceUsage Collect the app resource usage at the leaf queue level and decrease resource usage
+// using the leaf queue's queue path
+func (qt *QueueTracker) decreaseTrackedResourceUsage(appID string) (bool, bool) {
+	usage, app := qt.runningApplications[appID]
+	queuePath := qt.queuePath
+	childQueueTrackers := qt.childQueueTrackers
+
+	// start traversing from the root and reach upto leaf queue for the given app
+	for app != false {
+		if len(childQueueTrackers) == 0 {
+			app = false
+			break
+		}
+		for _, childQT := range childQueueTrackers {
+			queuePath = childQT.queuePath
+			usage, app = childQT.runningApplications[appID]
+			childQueueTrackers = childQT.childQueueTrackers
+			if app {
+				break
+			}
+		}
+	}
+
+	// once identify the leaf queue, using its queue path decrement resource usage like regular way of decrementing resource usage
+	// so that it decrements the resource usage for every queue in the queue path
+	return qt.decreaseTrackedResource(queuePath, appID, usage, true)
 }

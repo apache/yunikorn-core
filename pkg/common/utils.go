@@ -221,3 +221,51 @@ func Min(x, y uint64) uint64 {
 	}
 	return y
 }
+
+func GetConfigurationBool(configs map[string]string, key string, defaultValue bool) bool {
+	value, ok := configs[key]
+	if !ok {
+		return defaultValue
+	}
+	boolValue, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse configuration value",
+			zap.String("key", key),
+			zap.String("value", value),
+			zap.Error(err))
+		return defaultValue
+	}
+	return boolValue
+}
+
+func GetConfigurationUint(configs map[string]string, key string, defaultValue uint64) uint64 {
+	value, ok := configs[key]
+	if !ok {
+		return defaultValue
+	}
+	uintVal, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse configuration value",
+			zap.String("key", key),
+			zap.String("value", value),
+			zap.Error(err))
+		return defaultValue
+	}
+	return uintVal
+}
+
+func GetConfigurationInt(configs map[string]string, key string, defaultValue int) int {
+	value, ok := configs[key]
+	if !ok {
+		return defaultValue
+	}
+	intVal, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse configuration value",
+			zap.String("key", key),
+			zap.String("value", value),
+			zap.Error(err))
+		return defaultValue
+	}
+	return int(intVal)
+}

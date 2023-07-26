@@ -199,3 +199,41 @@ func newEventRingBuffer(capacity uint64) *eventRingBuffer {
 		events:   make([]*si.EventRecord, capacity),
 	}
 }
+
+// resize the existing ring buffer
+// this method will be called upon configuration reload
+func (e *eventRingBuffer) Resize(newSize uint64) {
+	e.Lock()
+	defer e.Unlock()
+
+	if newSize == e.capacity {
+		return // Nothing to do if the size is the same
+	}
+
+	// Create a new buffer with the desired size
+	newEvents := make([]*si.EventRecord, newSize)
+
+	// Determine the number of events to copy
+	numEventsToCopy := newSize
+	if newSize > e.capacity {
+		numEventsToCopy = e.capacity
+	}
+
+	// Copy existing events to the new buffer:
+	// We determine the range of elements to copy based on the relative positions of the head and tail in the circular buffer.
+	// If the tail is ahead of the head (wrap-around scenario), we copy in two steps to ensure the correct order.
+	startIndex := e.head
+	endIndex := (e.head + numEventsToCopy - 1) % e.capacity
+	if endIndex >= startIndex {
+		copy(newEvents, e.events[startIndex:endIndex+1])
+	} else {
+		copy(newEvents, e.events[startIndex:])
+		copy(newEvents[e.capacity-startIndex:], e.events[:endIndex+1])
+	}
+
+	// Update the buffer's state
+	e.capacity = newSize
+	e.events = newEvents
+	e.head = numEventsToCopy % newSize
+	e.full = e.capacity == e.head
+}

@@ -20,14 +20,13 @@ package events
 
 import (
 	"fmt"
-	"strconv"
 	"sync"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 // need to change for testing
@@ -44,16 +43,17 @@ type EventSystem interface {
 }
 
 type EventSystemImpl struct {
-	Store       *EventStore // storing eventChannel
-	publisher   *EventPublisher
-	eventBuffer *eventRingBuffer
-	channel     chan *si.EventRecord // channelling input eventChannel
-	stop        chan bool            // whether the service is stopped
-	stopped     bool
+	eventSystemId string
+	Store         *EventStore // storing eventChannel
+	publisher     *EventPublisher
+	eventBuffer   *eventRingBuffer
+	channel       chan *si.EventRecord // channelling input eventChannel
+	stop          chan bool            // whether the service is stopped
+	stopped       bool
 
-	trackingEnabled bool
-	requestCapacity int
-	bufferCapacity  int
+	trackingEnabled    bool
+	requestCapacity    int
+	ringBufferCapacity uint64
 
 	sync.RWMutex
 }
@@ -78,10 +78,10 @@ func (ec *EventSystemImpl) GetRequestCapacity() int {
 	return ec.requestCapacity
 }
 
-func (ec *EventSystemImpl) GetBufferCapacity() int {
+func (ec *EventSystemImpl) GetRingBufferCapacity() uint64 {
 	ec.RLock()
 	defer ec.RUnlock()
-	return ec.bufferCapacity
+	return ec.ringBufferCapacity
 }
 
 func CreateAndSetEventSystem() {
@@ -105,78 +105,6 @@ func (ec *EventSystemImpl) StartService() {
 	ec.StartServiceWithPublisher(true)
 }
 
-func getConfigurationBool(key string, defaultValue bool) bool {
-	value, ok := configs.GetConfigMap()[key]
-	if !ok {
-		return defaultValue
-	}
-	boolValue, err := strconv.ParseBool(value)
-	if err != nil {
-		log.Log(log.Events).Warn("Failed to parse configuration value",
-			zap.String("key", key),
-			zap.String("value", value),
-			zap.Error(err))
-		return defaultValue
-	}
-	return boolValue
-}
-
-func getConfigurationInt(key string, defaultValue int) int {
-	value, ok := configs.GetConfigMap()[key]
-	if !ok {
-		return defaultValue
-	}
-	intVal, err := strconv.ParseInt(value, 10, 32)
-	if err != nil {
-		log.Log(log.Events).Warn("Failed to parse configuration value",
-			zap.String("key", key),
-			zap.String("value", value),
-			zap.Error(err))
-		return defaultValue
-	}
-	return int(intVal)
-}
-
-func (ec *EventSystemImpl) readIsTrackingEnabled() bool {
-	return getConfigurationBool(configs.CMEventTrackingEnabled, configs.DefaultEventTrackingEnabled)
-}
-
-func (ec *EventSystemImpl) readRequestCapacity() int {
-	return getConfigurationInt(configs.CMEventRequestCapacity, configs.DefaultEventRequestCapacity)
-}
-
-func (ec *EventSystemImpl) readBufferCapacity() int {
-	return getConfigurationInt(configs.CMEventRingBufferCapacity, configs.DefaultEventBufferCapacity)
-}
-
-func (ec *EventSystemImpl) isRestartNeeded() bool {
-	ec.Lock()
-	defer ec.Unlock()
-
-	trackingEnabled := ec.readIsTrackingEnabled()
-	requestCapacity := ec.readRequestCapacity()
-	bufferCapacity := ec.readBufferCapacity()
-
-	if trackingEnabled != ec.trackingEnabled ||
-		requestCapacity != ec.requestCapacity ||
-		bufferCapacity != ec.bufferCapacity {
-		return true
-	}
-
-	return false
-}
-
-func (ec *EventSystemImpl) Restart() {
-	ec.Stop()
-	ec.StartServiceWithPublisher(true)
-}
-
-func (ec *EventSystemImpl) reloadConfig() {
-	if ec.isRestartNeeded() {
-		ec.Restart()
-	}
-}
-
 func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 	ec.Lock()
 	defer ec.Unlock()
@@ -186,7 +114,7 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 	})
 
 	ec.trackingEnabled = ec.readIsTrackingEnabled()
-	ec.bufferCapacity = ec.readBufferCapacity()
+	ec.ringBufferCapacity = ec.readRingBufferCapacity()
 	ec.requestCapacity = ec.readRequestCapacity()
 
 	go func() {
@@ -238,5 +166,42 @@ func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	default:
 		log.Log(log.Events).Debug("could not add Event to channel")
 		metrics.GetEventMetrics().IncEventsNotChanneled()
+	}
+}
+
+func (ec *EventSystemImpl) readIsTrackingEnabled() bool {
+	return common.GetConfigurationBool(configs.GetConfigMap(), configs.CMEventTrackingEnabled, configs.DefaultEventTrackingEnabled)
+}
+
+func (ec *EventSystemImpl) readRequestCapacity() int {
+	return common.GetConfigurationInt(configs.GetConfigMap(), configs.CMEventRequestCapacity, configs.DefaultEventRequestCapacity)
+}
+
+func (ec *EventSystemImpl) readRingBufferCapacity() uint64 {
+	return common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRingBufferCapacity, configs.DefaultEventRingBufferCapacity)
+}
+
+func (ec *EventSystemImpl) isRestartNeeded() bool {
+	ec.Lock()
+	defer ec.Unlock()
+
+	return ec.readIsTrackingEnabled() != ec.trackingEnabled
+
+}
+
+func (ec *EventSystemImpl) Restart() {
+	ec.Stop()
+	ec.StartServiceWithPublisher(true)
+}
+
+func (ec *EventSystemImpl) reloadConfig() {
+	ec.requestCapacity = ec.readRequestCapacity()
+	newRingBufferCapacity := ec.readRingBufferCapacity()
+
+	// resize the ring buffer with new capacity
+	ec.eventBuffer.Resize(newRingBufferCapacity)
+
+	if ec.isRestartNeeded() {
+		ec.Restart()
 	}
 }

@@ -41,7 +41,7 @@ const (
 	DefaultHealthCheckInterval     = 30 * time.Second
 	DefaultEventTrackingEnabled    = true
 	DefaultEventRequestCapacity    = 1000
-	DefaultEventBufferCapacity     = 100000
+	DefaultEventRingBufferCapacity = 100000
 	DefaultPartitionName           = "default"
 	DefaultPlacementRuleName       = "tag"
 	DefaultPlacementRuleValue      = "namespace"

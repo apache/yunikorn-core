@@ -129,20 +129,25 @@ func TestConfigUpdate(t *testing.T) {
 	defer eventSystem.Stop()
 
 	assert.Assert(t, eventSystem.IsEventTrackingEnabled(), "Event tracking should be enabled by default")
-	assert.Assert(t, eventSystem.GetBufferCapacity() == configs.DefaultEventBufferCapacity, "Invalid event buffer capacity")
+	assert.Assert(t, eventSystem.GetRingBufferCapacity() == configs.DefaultEventRingBufferCapacity, "Invalid event buffer capacity")
 	assert.Assert(t, eventSystem.GetRequestCapacity() == configs.DefaultEventRequestCapacity, "Invalid request capacity")
+	assert.Assert(t, eventSystem.eventBuffer.capacity == configs.DefaultEventRingBufferCapacity, "Event buffer capacity mismatch")
 
 	// update config and wait for refresh
+	var newRingBufferCapacity uint64 = 123
+	newRequestCapacity := 555
+
 	configs.SetConfigMap(
 		map[string]string{configs.CMEventTrackingEnabled: "false",
-			configs.CMEventRingBufferCapacity: "123",
-			configs.CMEventRequestCapacity:    "555",
+			configs.CMEventRingBufferCapacity: strconv.FormatUint(newRingBufferCapacity, 10),
+			configs.CMEventRequestCapacity:    strconv.Itoa(int(newRequestCapacity)),
 		})
 	err := common.WaitForCondition(func() bool {
 		return eventSystem.IsEventTrackingEnabled() == false
 	}, 10*time.Millisecond, 5*time.Second)
 	assert.NilError(t, err, "timed out waiting for config refresh")
 
-	assert.Assert(t, eventSystem.GetBufferCapacity() == 123, "Invalid event buffer capacity")
-	assert.Assert(t, eventSystem.GetRequestCapacity() == 555, "Invalid request capacity")
+	assert.Assert(t, eventSystem.GetRingBufferCapacity() == newRingBufferCapacity, "Invalid event buffer capacity")
+	assert.Assert(t, eventSystem.GetRequestCapacity() == newRequestCapacity, "Invalid request capacity")
+	assert.Assert(t, eventSystem.eventBuffer.capacity == newRingBufferCapacity, "Event buffer not resized")
 }

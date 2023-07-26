@@ -262,9 +262,17 @@ func (cc *ClusterContext) processNodes(request *si.NodeRequest) {
 			if nodeInfo == nil {
 				continue
 			}
+			create := false
+			schedulable := false
 			switch nodeInfo.Action {
 			case si.NodeInfo_CREATE:
-				err := cc.addNode(nodeInfo)
+				create = true
+				schedulable = true
+			case si.NodeInfo_CREATE_DRAIN:
+				create = true
+			}
+			if create {
+				err := cc.addNode(nodeInfo, schedulable)
 				if err == nil {
 					acceptedNodes = append(acceptedNodes, &si.AcceptedNode{
 						NodeID: nodeInfo.NodeID,
@@ -275,7 +283,7 @@ func (cc *ClusterContext) processNodes(request *si.NodeRequest) {
 						Reason: err.Error(),
 					})
 				}
-			default:
+			} else {
 				cc.updateNode(nodeInfo)
 			}
 		}
@@ -602,11 +610,9 @@ func (cc *ClusterContext) removePartition(partitionName string) {
 
 // addNode adds a new node to the cluster enforcing just one unlimited node in the cluster.
 // nil nodeInfo objects must be filtered out before calling this function
-func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo) error {
+func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error {
 	sn := objects.NewNode(nodeInfo)
-	if !sn.IsReady() {
-		metrics.GetSchedulerMetrics().IncUnhealthyNodes()
-	}
+	sn.SetSchedulable(schedulable)
 
 	partition := cc.GetPartition(sn.Partition)
 	if partition == nil {
@@ -630,9 +636,17 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo) error {
 			zap.Error(err))
 		return wrapped
 	}
+
+	if !sn.IsReady() {
+		metrics.GetSchedulerMetrics().IncUnhealthyNodes()
+	}
+	if !sn.IsSchedulable() {
+		metrics.GetSchedulerMetrics().IncDrainingNodes()
+	}
 	log.Log(log.SchedContext).Info("successfully added node",
 		zap.String("nodeID", sn.NodeID),
-		zap.String("partition", sn.Partition))
+		zap.String("partition", sn.Partition),
+		zap.Bool("schedulable", sn.IsSchedulable()))
 	return nil
 }
 

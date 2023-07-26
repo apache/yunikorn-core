@@ -128,6 +128,7 @@ type CoreSchedulerMetrics interface {
 	SetActiveNodes(value int)
 	IncDrainingNodes()
 	DecDrainingNodes()
+	GetDrainingNodes() (int, error)
 	IncUnhealthyNodes()
 	DecUnhealthyNodes()
 	IncTotalDecommissionedNodes()

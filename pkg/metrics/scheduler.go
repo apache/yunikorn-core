@@ -396,6 +396,15 @@ func (m *SchedulerMetrics) DecDrainingNodes() {
 	m.node.With(prometheus.Labels{"state": "draining"}).Dec()
 }
 
+func (m *SchedulerMetrics) GetDrainingNodes() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.node.With(prometheus.Labels{"state": "draining"}).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
 func (m *SchedulerMetrics) IncTotalDecommissionedNodes() {
 	m.node.With(prometheus.Labels{"state": "decommissioned"}).Inc()
 }

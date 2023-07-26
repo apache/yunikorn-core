@@ -55,6 +55,9 @@ func TestStoreAndRetrieve(t *testing.T) {
 // allowed maximum, those that couldn't fit will be omitted
 func TestStoreWithLimitedSize(t *testing.T) {
 	defaultEventStoreSize = 3
+	defer func() {
+		defaultEventStoreSize = 1000
+	}()
 
 	store := newEventStore()
 	for i := 0; i < 5; i++ {

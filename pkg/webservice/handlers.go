@@ -37,6 +37,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
@@ -866,6 +867,56 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	var result = groupTracker.GetGroupResourceUsageDAOInfo()
 	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getEvents(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	eventSystem := events.GetEventSystem()
+	if eventSystem == nil {
+		buildJSONErrorResponse(w, "Event system is disabled", http.StatusBadRequest)
+		return
+	}
+
+	count := uint64(10000)
+	var start uint64
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars != nil {
+		if countStr := vars.ByName("count"); countStr != "" {
+			c, err := strconv.ParseInt(countStr, 10, 64)
+			if err != nil {
+				buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if c <= 0 {
+				buildJSONErrorResponse(w, fmt.Sprintf("Illegal number of events: %d", c), http.StatusBadRequest)
+				return
+			}
+			count = uint64(c)
+		}
+
+		if startStr := vars.ByName("start"); startStr != "" {
+			i, err := strconv.ParseInt(startStr, 10, 64)
+			if err != nil {
+				buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if i < 0 {
+				buildJSONErrorResponse(w, fmt.Sprintf("Illegal id: %d", i), http.StatusBadRequest)
+				return
+			}
+			start = uint64(i)
+		}
+	}
+
+	records, lowestID, highestID := eventSystem.GetEventsFromID(start, count)
+	eventDao := dao.EventRecordDAO{
+		LowestID:     lowestID,
+		HighestID:    highestID,
+		EventRecords: records,
+	}
+	if err := json.NewEncoder(w).Encode(eventDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

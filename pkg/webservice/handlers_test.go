@@ -27,9 +27,9 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
-
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"gopkg.in/yaml.v3"
 	"gotest.tools/v3/assert"
@@ -38,6 +38,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -1331,6 +1332,137 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	// Assert existing groups
 	assert.Equal(t, len(groupsResourceUsageDao), 1)
 	assert.Equal(t, groupsResourceUsageDao[0].GroupName, "testgroup")
+}
+
+func TestGetEvents(t *testing.T) {
+	appEvent, nodeEvent, queueEvent := addEvents(t)
+
+	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
+
+	checkSingleEvent(t, appEvent, httprouter.Params{
+		httprouter.Param{Key: "count", Value: "1"},
+	})
+	checkSingleEvent(t, queueEvent, httprouter.Params{
+		httprouter.Param{Key: "start", Value: "2"},
+	})
+
+	// illegal requests
+	checkIllegalBatchRequest(t, "count", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
+	checkIllegalBatchRequest(t, "count", "-100", "Illegal number of events: -100")
+	checkIllegalBatchRequest(t, "start", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
+	checkIllegalBatchRequest(t, "start", "-100", "Illegal id: -100")
+}
+
+func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
+	events.CreateAndSetEventSystem()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+	protoRes := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"cpu": 1,
+	}).ToProto()
+
+	appEvent = &si.EventRecord{
+		Type:              si.EventRecord_APP,
+		TimestampNano:     100,
+		Message:           "app event",
+		EventChangeType:   si.EventRecord_ADD,
+		EventChangeDetail: si.EventRecord_APP_ALLOC,
+		ObjectID:          "app",
+		ReferenceID:       "alloc",
+		Resource:          protoRes,
+	}
+	ev.AddEvent(appEvent)
+	nodeEvent = &si.EventRecord{
+		Type:              si.EventRecord_NODE,
+		TimestampNano:     101,
+		Message:           "node event",
+		EventChangeType:   si.EventRecord_ADD,
+		EventChangeDetail: si.EventRecord_APP_ALLOC,
+		ObjectID:          "node",
+		ReferenceID:       "alloc",
+		Resource:          protoRes,
+	}
+	ev.AddEvent(nodeEvent)
+	queueEvent = &si.EventRecord{
+		Type:              si.EventRecord_QUEUE,
+		TimestampNano:     102,
+		Message:           "queue event",
+		EventChangeType:   si.EventRecord_REMOVE,
+		EventChangeDetail: si.EventRecord_QUEUE_APP,
+		ObjectID:          "root.default",
+		ReferenceID:       "app",
+	}
+	ev.AddEvent(queueEvent)
+	noEvents := 0
+	err := common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		noEvents = ev.Store.CountStoredEvents()
+		return noEvents == 3
+	})
+	assert.NilError(t, err, "wanted 3 events, got %d", noEvents)
+	return appEvent, nodeEvent, queueEvent
+}
+
+func checkSingleEvent(t *testing.T, event *si.EventRecord, params httprouter.Params) {
+	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
+	assert.NilError(t, err)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, params))
+	eventDao := getEventRecordDao(t, req)
+	assert.Equal(t, 1, len(eventDao.EventRecords))
+	compareEvents(t, event, eventDao.EventRecords[0])
+}
+
+func checkIllegalBatchRequest(t *testing.T, key, value, msg string) {
+	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
+	assert.NilError(t, err)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: key, Value: value},
+	}))
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(getEvents)
+	handler.ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	jsonBytes := make([]byte, 256)
+	n, err := rr.Body.Read(jsonBytes)
+	assert.NilError(t, err, "cannot read response body")
+	var errObject dao.YAPIError
+	err = json.Unmarshal(jsonBytes[:n], &errObject)
+	assert.NilError(t, err, "cannot unmarshal events dao")
+	assert.Assert(t, strings.Contains(errObject.Message, msg))
+}
+
+func checkAllEvents(t *testing.T, events []*si.EventRecord) {
+	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
+	assert.NilError(t, err)
+	eventDao := getEventRecordDao(t, req)
+
+	for i := 0; i < len(events); i++ {
+		compareEvents(t, events[i], eventDao.EventRecords[i])
+	}
+}
+
+func compareEvents(t *testing.T, event, eventFromDao *si.EventRecord) {
+	assert.Equal(t, event.TimestampNano, eventFromDao.TimestampNano)
+	assert.Equal(t, event.EventChangeType, eventFromDao.EventChangeType)
+	assert.Equal(t, event.EventChangeDetail, eventFromDao.EventChangeDetail)
+	assert.Equal(t, event.ObjectID, eventFromDao.ObjectID)
+	assert.Equal(t, event.ReferenceID, eventFromDao.ReferenceID)
+	assert.Equal(t, event.Message, eventFromDao.Message)
+	res0 := resources.NewResourceFromProto(event.Resource)
+	res1 := resources.NewResourceFromProto(eventFromDao.Resource)
+	assert.Assert(t, resources.Equals(res0, res1))
+}
+
+func getEventRecordDao(t *testing.T, req *http.Request) dao.EventRecordDAO {
+	rr := httptest.NewRecorder()
+	handler := http.HandlerFunc(getEvents)
+	handler.ServeHTTP(rr, req)
+	jsonBytes := make([]byte, 2048)
+	n, err := rr.Body.Read(jsonBytes)
+	assert.NilError(t, err, "cannot read response body")
+	var eventDao dao.EventRecordDAO
+	err = json.Unmarshal(jsonBytes[:n], &eventDao)
+	assert.NilError(t, err, "cannot unmarshal events dao")
+	return eventDao
 }
 
 func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {

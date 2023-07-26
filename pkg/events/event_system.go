@@ -28,6 +28,7 @@ import (
 
 // need to change for testing
 var defaultEventChannelSize = 100000
+var defaultRingBufferSize uint64 = 100000
 
 var ev EventSystem
 
@@ -35,17 +36,23 @@ type EventSystem interface {
 	AddEvent(event *si.EventRecord)
 	StartService()
 	Stop()
+	GetEventsFromID(uint64, uint64) ([]*si.EventRecord, uint64, uint64)
 }
 
 type EventSystemImpl struct {
-	Store     *EventStore // storing eventChannel
-	publisher *EventPublisher
+	Store       *EventStore // storing eventChannel
+	publisher   *EventPublisher
+	eventBuffer *eventRingBuffer
 
 	channel chan *si.EventRecord // channelling input eventChannel
-	stop    chan bool            // whether the service is stop
+	stop    chan bool            // whether the service is stopped
 	stopped bool
 
 	sync.Mutex
+}
+
+func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord, uint64, uint64) {
+	return ec.eventBuffer.GetEventsFromID(id, count)
 }
 
 func GetEventSystem() EventSystem {
@@ -55,11 +62,12 @@ func GetEventSystem() EventSystem {
 func CreateAndSetEventSystem() {
 	store := newEventStore()
 	ev = &EventSystemImpl{
-		Store:     store,
-		channel:   make(chan *si.EventRecord, defaultEventChannelSize),
-		stop:      make(chan bool),
-		stopped:   false,
-		publisher: CreateShimPublisher(store),
+		Store:       store,
+		channel:     make(chan *si.EventRecord, defaultEventChannelSize),
+		stop:        make(chan bool),
+		stopped:     false,
+		publisher:   CreateShimPublisher(store),
+		eventBuffer: newEventRingBuffer(defaultRingBufferSize),
 	}
 }
 
@@ -79,6 +87,7 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 				}
 				if event != nil {
 					ec.Store.Store(event)
+					ec.eventBuffer.Add(event)
 					metrics.GetEventMetrics().IncEventsProcessed()
 				}
 			}

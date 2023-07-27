@@ -42,12 +42,6 @@ const (
 	DefaultEventTrackingEnabled    = true
 	DefaultEventRequestCapacity    = 1000
 	DefaultEventRingBufferCapacity = 100000
-	DefaultPartitionName           = "default"
-	DefaultPlacementRuleName       = "tag"
-	DefaultPlacementRuleValue      = "namespace"
-	DefaultPlacementRuleCreateFlag = true
-	DefaultQueueName               = "root"
-	DefaultQueueSubmitAcl          = "*"
 )
 
 var ConfigContext *SchedulerConfigContext

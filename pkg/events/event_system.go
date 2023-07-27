@@ -47,9 +47,10 @@ type EventSystemImpl struct {
 	Store         *EventStore // storing eventChannel
 	publisher     *EventPublisher
 	eventBuffer   *eventRingBuffer
-	channel       chan *si.EventRecord // channelling input eventChannel
-	stop          chan bool            // whether the service is stopped
-	stopped       bool
+
+	channel chan *si.EventRecord // channelling input eventChannel
+	stop    chan bool            // whether the service is stopped
+	stopped bool
 
 	trackingEnabled    bool
 	requestCapacity    int
@@ -184,9 +185,7 @@ func (ec *EventSystemImpl) readRingBufferCapacity() uint64 {
 func (ec *EventSystemImpl) isRestartNeeded() bool {
 	ec.Lock()
 	defer ec.Unlock()
-
 	return ec.readIsTrackingEnabled() != ec.trackingEnabled
-
 }
 
 func (ec *EventSystemImpl) Restart() {

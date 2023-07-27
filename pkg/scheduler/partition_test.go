@@ -2991,6 +2991,10 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	// plugin to let the pre check fail on node-1 only, means we cannot replace the placeholder
 	plugin := newFakePredicatePlugin(false, map[string]int{nodeID1: -1})
 	plugins.RegisterSchedulerPlugin(plugin)
+	defer func() {
+		passPlugin := newFakePredicatePlugin(false, nil)
+		plugins.RegisterSchedulerPlugin(passPlugin)
+	}()
 	var tgRes, res *resources.Resource
 	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
@@ -3499,4 +3503,98 @@ func TestUserHeadroom(t *testing.T) {
 	if alloc != nil {
 		t.Fatal("allocation should not happen on other nodes as well")
 	}
+}
+
+func TestPlaceholderAllocationTracking(t *testing.T) {
+	setupUGM()
+	partition := createQueuesNodes(t)
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "1", "vcores": "1"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// add the app with placeholder request
+	app := newApplication(appID1, "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	// add two asks for a placeholder and allocate
+	ask1 := newAllocationAskTG(phID, appID1, taskGroup, res, true)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "failed to add placeholder ask to app")
+	ask2 := newAllocationAskTG(phID2, appID1, taskGroup, res, true)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "could not add ask")
+	assert.Equal(t, 0, partition.getPhAllocationCount())
+
+	// allocate first placeholder
+	alloc := partition.tryAllocate()
+	ph1uuid := alloc.GetUUID()
+	assert.Assert(t, alloc != nil, "placeholder ask should have been allocated")
+	assert.Equal(t, 1, partition.getPhAllocationCount())
+	// allocate second placeholder
+	alloc = partition.tryAllocate()
+	ph2uuid := alloc.GetUUID()
+	assert.Assert(t, alloc != nil, "placeholder ask should have been allocated")
+	assert.Equal(t, 2, partition.getPhAllocationCount())
+
+	// add & allocate real asks
+	ask3 := newAllocationAskTG(allocID, appID1, taskGroup, res, false)
+	err = app.AddAllocationAsk(ask3)
+	assert.NilError(t, err, "failed to add ask to app")
+	alloc = partition.tryPlaceholderAllocate()
+	assert.Assert(t, alloc != nil, "ask should have been allocated")
+	partition.removeAllocation(&si.AllocationRelease{
+		UUID:            ph1uuid,
+		ApplicationID:   appID1,
+		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+	})
+	assert.Equal(t, 1, partition.getPhAllocationCount())
+	ask4 := newAllocationAskTG(allocID2, appID1, taskGroup, res, false)
+	err = app.AddAllocationAsk(ask4)
+	assert.NilError(t, err, "failed to add ask to app")
+	alloc = partition.tryPlaceholderAllocate()
+	assert.Assert(t, alloc != nil, "ask should have been allocated")
+	partition.removeAllocation(&si.AllocationRelease{
+		UUID:            ph2uuid,
+		ApplicationID:   appID1,
+		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+	})
+	assert.Equal(t, 0, partition.getPhAllocationCount())
+}
+
+func TestReservationTracking(t *testing.T) {
+	setupUGM()
+	partition := createQueuesNodes(t)
+
+	app := newApplication(appID1, "default", "root.parent.sub-leaf")
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app to partition")
+	ask1 := newAllocationAsk(allocID, appID1, res)
+	ask1.SetRequiredNode(nodeID1)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "failed to add ask")
+	ask2 := newAllocationAsk(allocID2, appID1, res)
+	ask2.SetRequiredNode(nodeID1)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask")
+
+	alloc := partition.tryAllocate() // ask1 occupies node1
+	uuid := alloc.GetUUID()
+	assert.Equal(t, objects.Allocated, alloc.GetResult())
+	assert.Equal(t, "alloc-1", alloc.GetAllocationKey())
+	assert.Equal(t, 0, partition.getReservationCount())
+	alloc = partition.tryAllocate() // ask2 gets reserved
+	assert.Assert(t, alloc == nil)
+	assert.Equal(t, 1, partition.getReservationCount())
+
+	partition.removeAllocation(&si.AllocationRelease{
+		UUID:            uuid,
+		ApplicationID:   appID1,
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	}) // terminate ask1
+	alloc = partition.tryReservedAllocate() // allocate reservation
+	assert.Equal(t, 0, partition.getReservationCount())
+	assert.Equal(t, "alloc-2", alloc.GetAllocationKey())
 }

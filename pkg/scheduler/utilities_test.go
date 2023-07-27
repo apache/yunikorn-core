@@ -47,9 +47,11 @@ const (
 	rmID            = "testRM"
 	taskGroup       = "tg-1"
 	phID            = "ph-1"
+	phID2           = "ph-2"
 	allocID         = "alloc-1"
 	allocID2        = "alloc-2"
 	allocID3        = "alloc-3"
+	allocID4        = "alloc-4"
 	maxresources    = "maxresources"
 	maxapplications = "maxapplications"
 )

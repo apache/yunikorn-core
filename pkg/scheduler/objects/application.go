@@ -24,7 +24,6 @@ import (
 	"math"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -104,7 +103,7 @@ type Application struct {
 	stateLog             []*StateLogEntry            // state log for this application
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 	askMaxPriority       int32                       // highest priority value of outstanding asks
-	hasPlaceholderAlloc  atomic.Bool                 // Whether there is at least one allocated placeholder (has to be atomic.Bool due to queue/app lock ordering)
+	hasPlaceholderAlloc  bool                        // Whether there is at least one allocated placeholder
 
 	rmEventHandler        handler.EventHandler
 	rmID                  string
@@ -1640,7 +1639,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 					zap.Error(err))
 			}
 		}
-		sa.hasPlaceholderAlloc.Store(true)
+		sa.hasPlaceholderAlloc = true
 	} else {
 		// skip the state change if this is the first replacement allocation as we have done that change
 		// already when the last placeholder was allocated
@@ -1715,17 +1714,6 @@ func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	if sa.placeholderData != nil {
 		sa.placeholderData[ph.GetTaskGroup()].Replaced++
 	}
-
-	// check if we have active placeholder allocation left
-	hasReplaceablePlaceholder := false
-	for _, phData := range sa.placeholderData {
-		if phData.Count > (phData.Replaced + phData.TimedOut) {
-			hasReplaceablePlaceholder = true
-			break
-		}
-	}
-	sa.hasPlaceholderAlloc.Store(hasReplaceablePlaceholder)
-
 	return ph
 }
 
@@ -1765,6 +1753,7 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
+			sa.hasPlaceholderAlloc = false
 			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() || sa.hasZeroAllocations() {
 				removeApp = true
 				event = CompleteApplication
@@ -2028,7 +2017,9 @@ func (sa *Application) LogAppSummary(rmID string) {
 }
 
 func (sa *Application) HasPlaceholderAllocation() bool {
-	return sa.hasPlaceholderAlloc.Load()
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.hasPlaceholderAlloc
 }
 
 // test only

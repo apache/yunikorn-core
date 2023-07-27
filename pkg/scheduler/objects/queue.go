@@ -814,22 +814,6 @@ func (sq *Queue) GetCopyOfApps() map[string]*Application {
 	return appsCopy
 }
 
-// GetCopyOfAppsWithPlaceholderAllocation gets a shallow copy of all non-completed apps which have at least one placeholder allocation
-func (sq *Queue) GetCopyOfAppsWithPlaceholderAllocation() map[string]*Application {
-	sq.RLock()
-	defer sq.RUnlock()
-	var appsCopy map[string]*Application
-	for appID, app := range sq.applications {
-		if app.HasPlaceholderAllocation() {
-			if appsCopy == nil {
-				appsCopy = make(map[string]*Application)
-			}
-			appsCopy[appID] = app
-		}
-	}
-	return appsCopy
-}
-
 // GetCopyOfChildren return a shallow copy of the child queue map.
 // This is used by the partition manager to find all queues to clean however we can not
 // guarantee that there is no new child added while we clean up since there is no overall
@@ -1107,13 +1091,15 @@ func (sq *Queue) sortApplications(filterApps, withPlaceholdersOnly bool) []*Appl
 		return nil
 	}
 
-	var apps map[string]*Application
+	apps := sq.GetCopyOfApps()
 	if withPlaceholdersOnly {
-		apps = sq.GetCopyOfAppsWithPlaceholderAllocation()
-	} else {
-		apps = sq.GetCopyOfApps()
+		for key, app := range apps {
+			if !app.HasPlaceholderAllocation() {
+				delete(apps, key)
+			}
+		}
 	}
-	if apps == nil {
+	if len(apps) == 0 {
 		return nil
 	}
 

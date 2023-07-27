@@ -698,7 +698,6 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	app2.queue = leaf
 	leaf.AddApplication(app2)
 
-	assert.Equal(t, 0, len(leaf.GetCopyOfAppsWithPlaceholderAllocation()))
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	alloc := newAllocation(appID1, "uuid-0", "node-0", "root.leaf", res)
@@ -707,7 +706,6 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	app1.AddAllocation(alloc)
 	err = app1.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
 	assert.NilError(t, err, "could not add ask")
-	assert.Equal(t, 1, len(leaf.GetCopyOfAppsWithPlaceholderAllocation()))
 	phApps := leaf.sortApplications(true, true)
 	assert.Equal(t, 1, len(phApps))
 	phApps = leaf.sortApplications(false, true)
@@ -719,7 +717,6 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	app2.AddAllocation(alloc2)
 	err = app2.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
 	assert.NilError(t, err, "could not add ask")
-	assert.Equal(t, 2, len(leaf.GetCopyOfAppsWithPlaceholderAllocation()))
 	phApps = leaf.sortApplications(true, true)
 	assert.Equal(t, 2, len(phApps))
 	phApps = leaf.sortApplications(false, true)

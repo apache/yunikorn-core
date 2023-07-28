@@ -1624,6 +1624,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		// If we would start it when we just try to allocate, that is something very unstable, and we don't really have any
 		// impact on what is happening until this point
 		if resources.IsZero(sa.allocatedPlaceholder) {
+			sa.hasPlaceholderAlloc = true
 			sa.initPlaceholderTimer()
 		}
 		// User resource usage needs to be updated even during resource allocation happen for ph's itself even though state change would happen only after all ph allocation completes.
@@ -1639,7 +1640,6 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 					zap.Error(err))
 			}
 		}
-		sa.hasPlaceholderAlloc = true
 	} else {
 		// skip the state change if this is the first replacement allocation as we have done that change
 		// already when the last placeholder was allocated

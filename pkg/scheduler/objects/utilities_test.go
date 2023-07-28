@@ -264,7 +264,7 @@ func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expecte
 	userResource := ugm.GetUserResources(userGroup)
 	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
 	assert.Equal(t, resources.Equals(userResource, expected), true)
-	assert.Equal(t, resources.Equals(groupResource, expected), true)
+	assert.Equal(t, resources.Equals(groupResource, nil), true)
 }
 
 func assertUserResourcesAndGroupResources(t *testing.T, userGroup security.UserGroup, expectedUserResources *resources.Resource, expectedGroupResources *resources.Resource, i int) {

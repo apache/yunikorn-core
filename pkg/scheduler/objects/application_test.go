@@ -1604,34 +1604,34 @@ func TestIncAndDecUserResourceUsageInSameGroup(t *testing.T) {
 
 	// Increase testuser
 	app.incUserResourceUsage(res)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), res, res, 0)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), nil, res, 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), res, nil, 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), nil, nil, 0)
 
 	// Increase both testuser and testuser2 with the same group testgroup
 	app.incUserResourceUsage(res)
 	app2.incUserResourceUsage(resources.Multiply(res, 2))
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), resources.Multiply(res, 2), resources.Multiply(res, 4), 0)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), resources.Multiply(res, 2), resources.Multiply(res, 4), 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), resources.Multiply(res, 2), nil, 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), resources.Multiply(res, 2), nil, 0)
 
 	// Increase nil
 	app.decUserResourceUsage(nil, false)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), resources.Multiply(res, 2), resources.Multiply(res, 4), 0)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), resources.Multiply(res, 2), resources.Multiply(res, 4), 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), resources.Multiply(res, 2), nil, 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), resources.Multiply(res, 2), nil, 0)
 
 	// Decrease testuser
 	app.decUserResourceUsage(res, false)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), res, resources.Multiply(res, 3), 0)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), resources.Multiply(res, 2), resources.Multiply(res, 3), 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), res, nil, 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), resources.Multiply(res, 2), nil, 0)
 
 	// Decrease testuser2
 	app2.decUserResourceUsage(res, false)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), res, resources.Multiply(res, 2), 0)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), res, resources.Multiply(res, 2), 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), res, nil, 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser2", testgroups), res, nil, 0)
 
 	// Decrease testuser and testuser2 to 0
 	app.decUserResourceUsage(res, false)
 	app2.decUserResourceUsage(res, false)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), 0)
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), nil, 0)
 }
 
 func TestGetAllRequests(t *testing.T) {

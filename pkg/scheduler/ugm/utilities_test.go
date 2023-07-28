@@ -50,3 +50,17 @@ func TestGetChildQueuePath(t *testing.T) {
 	assert.Equal(t, childPath, "")
 	assert.Equal(t, immediateChildName, "")
 }
+
+func TestGetParentQueuePath(t *testing.T) {
+	parentPath, immediateParentName := getParentQueuePath("root.parent.leaf")
+	assert.Equal(t, parentPath, "root.parent")
+	assert.Equal(t, immediateParentName, "parent")
+
+	parentPath, immediateParentName = getParentQueuePath("parent.leaf")
+	assert.Equal(t, parentPath, "parent")
+	assert.Equal(t, immediateParentName, "parent")
+
+	parentPath, immediateParentName = getParentQueuePath("leaf")
+	assert.Equal(t, parentPath, "")
+	assert.Equal(t, immediateParentName, "")
+}

@@ -103,6 +103,7 @@ type Application struct {
 	stateLog             []*StateLogEntry            // state log for this application
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 	askMaxPriority       int32                       // highest priority value of outstanding asks
+	hasPlaceholderAlloc  bool                        // Whether there is at least one allocated placeholder
 
 	rmEventHandler        handler.EventHandler
 	rmID                  string
@@ -1623,6 +1624,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		// If we would start it when we just try to allocate, that is something very unstable, and we don't really have any
 		// impact on what is happening until this point
 		if resources.IsZero(sa.allocatedPlaceholder) {
+			sa.hasPlaceholderAlloc = true
 			sa.initPlaceholderTimer()
 		}
 		// User resource usage needs to be updated even during resource allocation happen for ph's itself even though state change would happen only after all ph allocation completes.
@@ -1751,6 +1753,7 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
+			sa.hasPlaceholderAlloc = false
 			if (sa.IsCompleting() && sa.stateTimer == nil) || sa.IsFailing() || sa.IsResuming() || sa.hasZeroAllocations() {
 				removeApp = true
 				event = CompleteApplication
@@ -2011,6 +2014,12 @@ func (sa *Application) LogAppSummary(rmID string) {
 	appSummary := sa.GetApplicationSummary(rmID)
 	appSummary.DoLogging()
 	appSummary.ResourceUsage = nil
+}
+
+func (sa *Application) HasPlaceholderAllocation() bool {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.hasPlaceholderAlloc
 }
 
 // test only

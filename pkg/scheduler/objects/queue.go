@@ -1085,10 +1085,24 @@ func (sq *Queue) IsPrioritySortEnabled() bool {
 // Applications are sorted using the sorting type of the queue.
 // Only applications with a pending resource request are considered.
 // Lock free call all locks are taken when needed in called functions
-func (sq *Queue) sortApplications(filterApps bool) []*Application {
+// If withPlaceholdersOnly is true, then only applications with at least one placeholder allocation are considered.
+func (sq *Queue) sortApplications(filterApps, withPlaceholdersOnly bool) []*Application {
 	if !sq.IsLeafQueue() {
 		return nil
 	}
+
+	apps := sq.GetCopyOfApps()
+	if withPlaceholdersOnly {
+		for key, app := range apps {
+			if !app.HasPlaceholderAllocation() {
+				delete(apps, key)
+			}
+		}
+	}
+	if len(apps) == 0 {
+		return nil
+	}
+
 	// sort applications based on the sorting policy
 	// some apps might be filtered out based on the policy specific conditions.
 	// currently, only the stateAware policy does the filtering (based on app state).
@@ -1099,7 +1113,7 @@ func (sq *Queue) sortApplications(filterApps bool) []*Application {
 		// this is to skip the app filtering in the StateAware policy sorting
 		queueSortType = policies.FifoSortPolicy
 	}
-	return sortApplications(sq.GetCopyOfApps(), queueSortType, sq.IsPrioritySortEnabled(), sq.GetGuaranteedResource())
+	return sortApplications(apps, queueSortType, sq.IsPrioritySortEnabled(), sq.GetGuaranteedResource())
 }
 
 // sortQueues returns a sorted shallow copy of the queues for this parent queue.
@@ -1282,7 +1296,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 		preemptAttemptsRemaining := maxPreemptionsPerQueue
 
 		// process the apps (filters out app without pending requests)
-		for _, app := range sq.sortApplications(true) {
+		for _, app := range sq.sortApplications(true, false) {
 			if app.IsAccepted() && !sq.canRunApp(app.ApplicationID) {
 				continue
 			}
@@ -1321,7 +1335,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
-		for _, app := range sq.sortApplications(true) {
+		for _, app := range sq.sortApplications(true, true) {
 			alloc := app.tryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				log.Log(log.SchedQueue).Debug("allocation found on queue",
@@ -1351,7 +1365,7 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 		// e.g. StateAware filters apps by state in order to schedule app one by one.
 		// we calculate all the requests that can fit into the queue's headroom,
 		// all these requests are qualified to trigger the up scaling.
-		for _, app := range sq.sortApplications(false) {
+		for _, app := range sq.sortApplications(false, false) {
 			app.getOutstandingRequests(headRoom, total)
 		}
 	} else {

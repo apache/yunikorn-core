@@ -1326,6 +1326,53 @@ func TestReplaceAllocation(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 }
 
+func TestReplaceAllocationTracking(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root.a")
+	app.queue = queue
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+	ph1 := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
+	ph2 := newPlaceholderAlloc(appID1, "uuid-2", nodeID1, "root.a", res)
+	ph3 := newPlaceholderAlloc(appID1, "uuid-3", nodeID1, "root.a", res)
+	app.AddAllocation(ph1)
+	assert.NilError(t, err, "could not add ask")
+	app.addPlaceholderDataWithLocking(ph1.GetAsk())
+	assert.Equal(t, true, app.HasPlaceholderAllocation())
+	app.AddAllocation(ph2)
+	assert.NilError(t, err, "could not add ask")
+	app.addPlaceholderDataWithLocking(ph2.GetAsk())
+	app.AddAllocation(ph3)
+	assert.NilError(t, err, "could not add ask")
+	app.addPlaceholderDataWithLocking(ph3.GetAsk())
+
+	// replace placeholders
+	realAlloc1 := newAllocation(appID1, "uuid-100", nodeID1, "root.a", res)
+	realAlloc1.SetResult(Replaced)
+	ph1.AddRelease(realAlloc1)
+	alloc := app.ReplaceAllocation("uuid-1")
+	app.RemoveAllocation("uuid-1", si.TerminationType_PLACEHOLDER_REPLACED)
+	assert.Equal(t, "uuid-1", alloc.uuid)
+	assert.Equal(t, true, app.HasPlaceholderAllocation())
+	realAlloc2 := newAllocation(appID1, "uuid-200", nodeID1, "root.a", res)
+	realAlloc2.SetResult(Replaced)
+	ph2.AddRelease(realAlloc2)
+	alloc = app.ReplaceAllocation("uuid-2")
+	app.RemoveAllocation("uuid-2", si.TerminationType_PLACEHOLDER_REPLACED)
+	assert.Equal(t, "uuid-2", alloc.uuid)
+	assert.Equal(t, true, app.HasPlaceholderAllocation())
+	realAlloc3 := newAllocation(appID1, "uuid-300", nodeID1, "root.a", res)
+	realAlloc3.SetResult(Replaced)
+	ph3.AddRelease(realAlloc3)
+	alloc = app.ReplaceAllocation("uuid-3")
+	app.RemoveAllocation("uuid-3", si.TerminationType_PLACEHOLDER_REPLACED)
+	assert.Equal(t, "uuid-3", alloc.uuid)
+	assert.Equal(t, false, app.HasPlaceholderAllocation())
+}
+
 func TestTimeoutPlaceholderSoftStyle(t *testing.T) {
 	runTimeoutPlaceholderTest(t, Resuming.String(), Soft)
 }

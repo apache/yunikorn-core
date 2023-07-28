@@ -595,21 +595,21 @@ func TestSortApplications(t *testing.T) {
 	// empty parent queue
 	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue: %v")
-	if apps := parent.sortApplications(true); apps != nil {
+	if apps := parent.sortApplications(true, false); apps != nil {
 		t.Errorf("parent queue should not return sorted apps: %v", apps)
 	}
 
 	// empty leaf queue
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
-	if len(leaf.sortApplications(true)) != 0 {
+	if len(leaf.sortApplications(true, false)) != 0 {
 		t.Errorf("empty queue should return no app from sort: %v", leaf)
 	}
 	// new app does not have pending res, does not get returned
 	app := newApplication(appID1, "default", leaf.QueuePath)
 	app.queue = leaf
 	leaf.AddApplication(app)
-	if len(leaf.sortApplications(true)) != 0 {
+	if len(leaf.sortApplications(true, false)) != 0 {
 		t.Errorf("app without ask should not be in sorted apps: %v", app)
 	}
 	var res *resources.Resource
@@ -618,13 +618,13 @@ func TestSortApplications(t *testing.T) {
 	// add an ask app must be returned
 	err = app.AddAllocationAsk(newAllocationAsk("alloc-1", appID1, res))
 	assert.NilError(t, err, "failed to add allocation ask")
-	sortedApp := leaf.sortApplications(true)
+	sortedApp := leaf.sortApplications(true, false)
 	if len(sortedApp) != 1 || sortedApp[0].ApplicationID != appID1 {
 		t.Errorf("sorted application is missing expected app: %v", sortedApp)
 	}
 	// set 0 repeat
 	_, err = app.UpdateAskRepeat("alloc-1", -1)
-	if err != nil || len(leaf.sortApplications(true)) != 0 {
+	if err != nil || len(leaf.sortApplications(true, false)) != 0 {
 		t.Errorf("app with ask but 0 pending resources should not be in sorted apps: %v (err = %v)", app, err)
 	}
 }
@@ -649,9 +649,9 @@ func TestSortApplicationsWithoutFiltering(t *testing.T) {
 	leaf.AddApplication(app2)
 
 	// both apps have no pending resource, they will be excluded by the sorting result
-	apps := leaf.sortApplications(true)
+	apps := leaf.sortApplications(true, false)
 	assertAppListLength(t, apps, []string{}, "sort with the filter")
-	apps = leaf.sortApplications(false)
+	apps = leaf.sortApplications(false, false)
 	assertAppListLength(t, apps, []string{}, "sort without the filter")
 
 	// add pending ask to app1
@@ -663,9 +663,9 @@ func TestSortApplicationsWithoutFiltering(t *testing.T) {
 	assert.NilError(t, err, "failed to add allocation ask")
 
 	// the sorting result will return app1
-	apps = leaf.sortApplications(true)
+	apps = leaf.sortApplications(true, false)
 	assertAppListLength(t, apps, []string{appID1}, "sort with the filter")
-	apps = leaf.sortApplications(false)
+	apps = leaf.sortApplications(false, false)
 	assertAppListLength(t, apps, []string{appID1}, "sort without the filter")
 
 	// add pending ask to app2
@@ -679,10 +679,48 @@ func TestSortApplicationsWithoutFiltering(t *testing.T) {
 	// according to the state aware policy, if we sort with the filter
 	// only 1 app will be returning in the result; if sort without the filter
 	// it should return the both 2 apps
-	apps = leaf.sortApplications(true)
+	apps = leaf.sortApplications(true, false)
 	assertAppListLength(t, apps, []string{appID1}, "sort with the filter")
-	apps = leaf.sortApplications(false)
+	apps = leaf.sortApplications(false, false)
 	assertAppListLength(t, apps, []string{appID1, appID2}, "sort without the filter")
+}
+
+func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	app1 := newApplication(appID1, "default", leaf.QueuePath)
+	app1.queue = leaf
+	leaf.AddApplication(app1)
+	app2 := newApplication(appID2, "default", leaf.QueuePath)
+	app2.queue = leaf
+	leaf.AddApplication(app2)
+
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+	alloc := newAllocation(appID1, "uuid-0", "node-0", "root.leaf", res)
+	alloc.placeholder = true
+	// adding a placeholder allocation & pending request to "app1"
+	app1.AddAllocation(alloc)
+	err = app1.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
+	assert.NilError(t, err, "could not add ask")
+	phApps := leaf.sortApplications(true, true)
+	assert.Equal(t, 1, len(phApps))
+	phApps = leaf.sortApplications(false, true)
+	assert.Equal(t, 1, len(phApps))
+
+	// adding a placeholder allocation & pending request to "app2"
+	alloc2 := newAllocation(appID2, "uuid-1", "node-1", "root.leaf", res)
+	alloc2.placeholder = true
+	app2.AddAllocation(alloc2)
+	err = app2.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
+	assert.NilError(t, err, "could not add ask")
+	phApps = leaf.sortApplications(true, true)
+	assert.Equal(t, 2, len(phApps))
+	phApps = leaf.sortApplications(false, true)
+	assert.Equal(t, 2, len(phApps))
 }
 
 // This test must not test the sorter that is underlying.

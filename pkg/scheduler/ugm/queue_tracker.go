@@ -378,9 +378,8 @@ func (qt *QueueTracker) decreaseTrackedResourceUsage(appID string) (bool, bool) 
 	childQueueTrackers := qt.childQueueTrackers
 
 	// start traversing from the root and reach upto leaf queue for the given app
-	for app != false {
+	for app {
 		if len(childQueueTrackers) == 0 {
-			app = false
 			break
 		}
 		for _, childQT := range childQueueTrackers {

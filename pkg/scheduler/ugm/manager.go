@@ -442,7 +442,6 @@ func (m *Manager) processGroupConfig(group string, limitConfig *LimitConfig, que
 
 // clearEarlierSetLimits Clear already configured limits of users and groups for which limits have been configured before but not now
 func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits map[string]bool, queuePath string) error {
-
 	// Clear already configured limits of group for which limits have been configured before but not now
 	for _, gt := range m.groupTrackers {
 		m.clearEarlierSetGroupLimits(gt, queuePath, groupLimits)

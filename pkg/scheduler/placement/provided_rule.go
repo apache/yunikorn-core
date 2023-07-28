@@ -24,6 +24,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -55,9 +56,10 @@ func (pr *providedRule) initialise(conf configs.PlacementRule) error {
 func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// since this is the provided rule we must have a queue in the info already
 	queueName := app.GetQueuePath()
-	if queueName == "" {
+	if queueName == "" || common.IsRecoveryQueue(queueName) {
 		return "", nil
 	}
+
 	// before anything run the filter
 	if !pr.filter.allowUser(app.GetUser()) {
 		log.Log(log.Config).Debug("Provided rule filtered",

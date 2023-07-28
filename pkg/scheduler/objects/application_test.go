@@ -1195,6 +1195,23 @@ func TestGetTag(t *testing.T) {
 	assert.Equal(t, tag, "test value", "expected tag value")
 }
 
+func TestIsCreateForced(t *testing.T) {
+	app := newApplicationWithTags(appID1, "default", "root.a", nil)
+	assert.Check(t, !app.IsCreateForced(), "found forced app but tags nil")
+	tags := make(map[string]string)
+	app = newApplicationWithTags(appID1, "default", "root.a", tags)
+	assert.Check(t, !app.IsCreateForced(), "found forced app but tags empty")
+	tags[siCommon.AppTagCreateForce] = "false"
+	app = newApplicationWithTags(appID1, "default", "root.a", tags)
+	assert.Check(t, !app.IsCreateForced(), "found forced app but forced tag was false")
+	tags[siCommon.AppTagCreateForce] = "unknown"
+	app = newApplicationWithTags(appID1, "default", "root.a", tags)
+	assert.Check(t, !app.IsCreateForced(), "found forced app but forced tag was invalid")
+	tags[siCommon.AppTagCreateForce] = "true"
+	app = newApplicationWithTags(appID1, "default", "root.a", tags)
+	assert.Check(t, app.IsCreateForced(), "found unforced app but forced tag was set")
+}
+
 func TestOnStatusChangeCalled(t *testing.T) {
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
 	assert.Equal(t, New.String(), app.CurrentState(), "new app not in New state")

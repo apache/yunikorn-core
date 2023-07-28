@@ -198,13 +198,13 @@ func TestConvertUGI(t *testing.T) {
 		User:   "",
 		Groups: nil,
 	}
-	ug, err := testCache.ConvertUGI(ugi)
+	ug, err := testCache.ConvertUGI(ugi, false)
 	if err == nil {
 		t.Errorf("empty user convert should have failed and did not: %v", ug)
 	}
 	// try known user without groups
 	ugi.User = "testuser1"
-	ug, err = testCache.ConvertUGI(ugi)
+	ug, err = testCache.ConvertUGI(ugi, false)
 	if err != nil {
 		t.Errorf("known user, no groups, convert should not have failed: %v", err)
 	}
@@ -213,15 +213,21 @@ func TestConvertUGI(t *testing.T) {
 	}
 	// try unknown user without groups
 	ugi.User = "unknown"
-	ug, err = testCache.ConvertUGI(ugi)
+	ug, err = testCache.ConvertUGI(ugi, false)
 	if err == nil {
 		t.Errorf("unknown user, no groups, convert should have failed: %v", ug)
+	}
+	// try empty user when forced
+	ugi.User = ""
+	ug, err = testCache.ConvertUGI(ugi, true)
+	if err != nil {
+		t.Errorf("empty user but forced, convert should not have failed: %v", err)
 	}
 	// try unknown user with groups
 	ugi.User = "unknown2"
 	group := "passedin"
 	ugi.Groups = []string{group}
-	ug, err = testCache.ConvertUGI(ugi)
+	ug, err = testCache.ConvertUGI(ugi, false)
 	if err != nil {
 		t.Errorf("unknown user with groups, convert should not have failed: %v", err)
 	}

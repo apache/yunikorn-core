@@ -23,6 +23,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 )
@@ -116,6 +117,14 @@ partitions:
 	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule did fail with qualified queue '%s', error %v", queue, err)
+	}
+
+	// tag queue references recovery
+	tags = map[string]string{"label1": common.RecoveryQueueFull}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = tr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err != nil {
+		t.Errorf("tag rule failed with explicit recovery queue: queue '%s', error %v", queue, err)
 	}
 
 	// trying to place in a child using a parent

@@ -70,20 +70,20 @@ type StateLogEntry struct {
 }
 
 type Application struct {
-	ApplicationID  string
-	Partition      string
-	SubmissionTime time.Time
+	ApplicationID  string            // application ID
+	Partition      string            // partition Name
+	SubmissionTime time.Time         // time application was submitted
+	tags           map[string]string // application tags used in scheduling
 
-	// Private fields need protection
+	// Private mutable fields need protection
 	queuePath         string
 	queue             *Queue                    // queue the application is running in
 	pending           *resources.Resource       // pending resources from asks for the app
 	reservations      map[string]*reservation   // a map of reservations
 	requests          map[string]*AllocationAsk // a map of asks
-	sortedRequests    sortedRequests
-	user              security.UserGroup  // owner of the application
-	tags              map[string]string   // application tags used in scheduling
-	allocatedResource *resources.Resource // total allocated resources
+	sortedRequests    sortedRequests            // list of requests pre-sorted
+	user              security.UserGroup        // owner of the application
+	allocatedResource *resources.Resource       // total allocated resources
 
 	usedResource *resources.UsedResource // keep track of resource usage of the application
 
@@ -1874,9 +1874,6 @@ func (sa *Application) GetUser() security.UserGroup {
 // Get a tag from the application
 // Note: tags are not case sensitive
 func (sa *Application) GetTag(tag string) string {
-	sa.RLock()
-	defer sa.RUnlock()
-
 	tagVal := ""
 	for key, val := range sa.tags {
 		if strings.EqualFold(key, tag) {
@@ -1885,6 +1882,10 @@ func (sa *Application) GetTag(tag string) string {
 		}
 	}
 	return tagVal
+}
+
+func (sa *Application) IsCreateForced() bool {
+	return common.IsAppCreationForced(sa.tags)
 }
 
 func (sa *Application) SetTerminatedCallback(callback func(appID string)) {

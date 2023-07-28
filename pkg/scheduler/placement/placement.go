@@ -25,32 +25,26 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
 type AppPlacementManager struct {
-	name        string
-	rules       []rule
-	initialised bool
-	queueFn     func(string) *objects.Queue
+	rules   []rule
+	queueFn func(string) *objects.Queue
 
 	sync.RWMutex
 }
 
 func NewPlacementManager(rules []configs.PlacementRule, queueFunc func(string) *objects.Queue) *AppPlacementManager {
-	m := &AppPlacementManager{}
-	if queueFunc == nil {
-		log.Log(log.Config).Info("Placement manager created without queue function: not active")
-		return m
+	m := &AppPlacementManager{
+		queueFn: queueFunc,
 	}
-	m.queueFn = queueFunc
-	if len(rules) > 0 {
-		if err := m.initialise(rules); err != nil {
-			log.Log(log.Config).Info("Placement manager created without rules: not active",
-				zap.Error(err))
-		}
+	if err := m.initialise(rules); err != nil {
+		log.Log(log.Config).Error("Placement manager created without rules: not active", zap.Error(err))
 	}
 	return m
 }
@@ -58,30 +52,12 @@ func NewPlacementManager(rules []configs.PlacementRule, queueFunc func(string) *
 // Update the rules for an active placement manager
 // Note that this will only be called when the manager is created earlier and the config is updated.
 func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
-	if len(rules) > 0 {
-		log.Log(log.Config).Info("Building new rule list for placement manager")
-		if err := m.initialise(rules); err != nil {
-			log.Log(log.Config).Info("Placement manager rules not reloaded",
-				zap.Error(err))
-			return err
-		}
-	}
-	// if there are no rules in the config we should turn off the placement manager
-	if len(rules) == 0 && m.initialised {
-		m.Lock()
-		defer m.Unlock()
-		log.Log(log.Config).Info("Placement manager rules removed on config reload")
-		m.initialised = false
-		m.rules = make([]rule, 0)
+	log.Log(log.Config).Info("Building new rule list for placement manager")
+	if err := m.initialise(rules); err != nil {
+		log.Log(log.Config).Info("Placement manager rules not reloaded", zap.Error(err))
+		return err
 	}
 	return nil
-}
-
-// Return the state of the placement manager
-func (m *AppPlacementManager) IsInitialised() bool {
-	m.RLock()
-	defer m.RUnlock()
-	return m.initialised
 }
 
 // Initialise the rules from a parsed config.
@@ -94,14 +70,10 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 	}
 	m.Lock()
 	defer m.Unlock()
-	if m.queueFn == nil {
-		return fmt.Errorf("placement manager queue function nil")
-	}
 
 	log.Log(log.Config).Info("Activated rule set in placement manager")
 	m.rules = tempRules
 	// all done manager is initialised
-	m.initialised = true
 	for rule := range m.rules {
 		log.Log(log.Config).Debug("rule set",
 			zap.Int("ruleNumber", rule),
@@ -114,9 +86,13 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 // If the rule set is correct and can be used the new set is returned.
 // If any error is encountered a nil array is returned and the error set
 func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule, error) {
-	// catch an empty list
+	// empty list should result in a single "provided" rule
 	if len(rules) == 0 {
-		return nil, fmt.Errorf("placement manager rule list request is empty")
+		log.Log(log.Config).Info("Placement manager configured without rules: using implicit provided rule")
+		rules = []configs.PlacementRule{{
+			Name:   types.Provided,
+			Create: false,
+		}}
 	}
 	// build temp list from new config
 	var newRules []rule
@@ -134,9 +110,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	// Placement manager not initialised cannot place application, just return
 	m.RLock()
 	defer m.RUnlock()
-	if !m.initialised {
-		return nil
-	}
+
 	var queueName string
 	var err error
 	for _, checkRule := range m.rules {
@@ -204,6 +178,13 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 		zap.String("queueName", queueName))
 	// no more rules to check no queueName found reject placement
 	if queueName == "" {
+		// check if app creation is forced; this will determine whether we allow a non-existing recovery queue to be created
+		if app.IsCreateForced() {
+			log.Log(log.Config).Info("Placing application in recovery queue",
+				zap.String("application", app.ApplicationID))
+			app.SetQueuePath(common.RecoveryQueueFull)
+			return nil
+		}
 		app.SetQueuePath("")
 		return fmt.Errorf("application rejected: no placement rule matched")
 	}

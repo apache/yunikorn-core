@@ -161,6 +161,18 @@ func TestAllowPreemptOther(t *testing.T) {
 	assert.Check(t, !IsAllowPreemptOther(&si.PreemptionPolicy{AllowPreemptOther: false}), "Preempt other should not be allowed if policy does not allow")
 }
 
+func TestIsAppCreationForced(t *testing.T) {
+	assert.Check(t, !IsAppCreationForced(nil), "nil tags should not result in forced app creation")
+	tags := make(map[string]string)
+	assert.Check(t, !IsAppCreationForced(tags), "empty tags should not result in forced app creation")
+	tags[common.AppTagCreateForce] = "false"
+	assert.Check(t, !IsAppCreationForced(tags), "false creation tag should not result in forced app creation")
+	tags[common.AppTagCreateForce] = "invalid"
+	assert.Check(t, !IsAppCreationForced(tags), "invalid creation tag should not result in forced app creation")
+	tags[common.AppTagCreateForce] = "true"
+	assert.Check(t, IsAppCreationForced(tags), "creation tag should result in forced app creation")
+}
+
 func TestConvertSITimeoutWithAdjustment(t *testing.T) {
 	created := time.Now().Unix() - 600
 	defaultTimeout := 15 * time.Minute

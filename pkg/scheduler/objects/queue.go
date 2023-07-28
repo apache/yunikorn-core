@@ -20,6 +20,7 @@ package objects
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
@@ -38,7 +40,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 var (
@@ -145,16 +147,32 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	return sq, nil
 }
 
+// NewRecoveryQueue creates a recovery queue if it does not exist. The recovery queue
+// is a dynamic queue, but has an invalid name so that it cannot be directly referenced.
+func NewRecoveryQueue(parent *Queue) (*Queue, error) {
+	if parent == nil {
+		return nil, errors.New("recovery queue cannot be created with nil parent")
+	}
+	if parent.GetQueuePath() != configs.RootQueue {
+		return nil, fmt.Errorf("recovery queue cannot be created with non-root parent: %s", parent.GetQueuePath())
+	}
+	return newDynamicQueueInternal(common.RecoveryQueue, true, parent, false)
+}
+
 // NewDynamicQueue creates a new queue to be added to the system based on the placement rules
 // A dynamically added queue can never be the root queue so parent must be set
 // lock free as it cannot be referenced yet
 func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
+	return newDynamicQueueInternal(name, leaf, parent, true)
+}
+
+func newDynamicQueueInternal(name string, leaf bool, parent *Queue, validateName bool) (*Queue, error) {
 	// fail without a parent
 	if parent == nil {
 		return nil, fmt.Errorf("dynamic queue can not be added without parent: %s", name)
 	}
 	// name might not be checked do it here
-	if !configs.QueueNameRegExp.MatchString(name) {
+	if validateName && !configs.QueueNameRegExp.MatchString(name) {
 		return nil, fmt.Errorf("invalid queue name '%s', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters", name)
 	}
 	sq := newBlankQueue()
@@ -445,6 +463,12 @@ func (sq *Queue) UpdateQueueProperties() {
 				zap.String("value", value))
 		}
 	}
+
+	if common.IsRecoveryQueue(sq.QueuePath) {
+		// special-case recovery queue to always be FIFO. this ensures that any applications added will be
+		// accepted, even if the app uses gang scheduling
+		sq.sortType = policies.FifoSortPolicy
+	}
 }
 
 // GetQueuePath returns the fully qualified path of this queue.
@@ -680,9 +704,9 @@ func (sq *Queue) AddApplication(app *Application) {
 	sq.queueEvents.sendNewApplicationEvent(appID)
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
-	quota := app.GetTag(common.AppTagNamespaceResourceQuota)
+	quota := app.GetTag(siCommon.AppTagNamespaceResourceQuota)
 	// get the tag with the guaranteed resource
-	guaranteed := app.GetTag(common.AppTagNamespaceResourceGuaranteed)
+	guaranteed := app.GetTag(siCommon.AppTagNamespaceResourceGuaranteed)
 	if quota == "" && guaranteed == "" {
 		return
 	}

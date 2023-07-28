@@ -422,6 +422,10 @@ func newPlacementPartition() (*PartitionContext, error) {
 }
 
 func newApplication(appID, partition, queueName string) *objects.Application {
+	return newApplicationTags(appID, partition, queueName, nil)
+}
+
+func newApplicationTags(appID, partition, queueName string, tags map[string]string) *objects.Application {
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{"testgroup"},
@@ -430,6 +434,7 @@ func newApplication(appID, partition, queueName string) *objects.Application {
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partition,
+		Tags:          tags,
 	}
 	return objects.NewApplication(siApp, user, nil, rmID)
 }

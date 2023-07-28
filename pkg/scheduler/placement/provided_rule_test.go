@@ -23,6 +23,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 )
@@ -84,6 +85,13 @@ partitions:
 	}
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "root.unknown" || err != nil {
+		t.Errorf("provided rule placed app in incorrect queue '%s', error %v", queue, err)
+	}
+
+	// trying to place in the recovery queue
+	appInfo = newApplication("app1", "default", common.RecoveryQueueFull, user, tags, nil, "")
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', error %v", queue, err)
 	}
 

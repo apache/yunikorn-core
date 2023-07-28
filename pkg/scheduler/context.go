@@ -524,7 +524,7 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 		}
 		// convert and resolve the user: cache can be set per partition
 		// need to do this before we create the application
-		ugi, err := partition.convertUGI(app.Ugi)
+		ugi, err := partition.convertUGI(app.Ugi, common.IsAppCreationForced(app.Tags))
 		if err != nil {
 			rejectedApps = append(rejectedApps, &si.RejectedApplication{
 				ApplicationID: app.ApplicationID,

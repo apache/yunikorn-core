@@ -24,6 +24,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -60,7 +61,7 @@ func (tr *tagRule) initialise(conf configs.PlacementRule) error {
 func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// if the tag is not present we can skipp all other processing
 	tagVal := app.GetTag(tr.tagName)
-	if tagVal == "" {
+	if tagVal == "" || common.IsRecoveryQueue(tagVal) {
 		return "", nil
 	}
 	// before anything run the filter

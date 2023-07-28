@@ -157,22 +157,13 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {
 		return fmt.Errorf("partition cannot be created without root queue")
 	}
-
-	if pc.placementManager.IsInitialised() {
-		log.Log(log.SchedPartition).Info("Updating placement manager rules on config reload")
-		err := pc.placementManager.UpdateRules(conf.PlacementRules)
-		if err != nil {
-			log.Log(log.SchedPartition).Info("New placement rules not activated, config reload failed", zap.Error(err))
-			return err
-		}
-		pc.rules = &conf.PlacementRules
-	} else {
-		log.Log(log.SchedPartition).Info("Creating new placement manager on config reload")
-		pc.rules = &conf.PlacementRules
-		// We need to pass in the locked version of the GetQueue function.
-		// Placing an application will not have a lock on the partition context.
-		pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
+	log.Log(log.SchedPartition).Info("Updating placement manager rules on config reload")
+	err := pc.placementManager.UpdateRules(conf.PlacementRules)
+	if err != nil {
+		log.Log(log.SchedPartition).Info("New placement rules not activated, config reload failed", zap.Error(err))
+		return err
 	}
+	pc.rules = &conf.PlacementRules
 	pc.updateNodeSortingPolicy(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
@@ -308,38 +299,41 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	}
 
 	// Put app under the queue
-	queueName := app.GetQueuePath()
 	pm := pc.getPlacementManager()
-	if pm.IsInitialised() {
-		err := pm.PlaceApplication(app)
-		if err != nil {
-			return fmt.Errorf("failed to place application %s: %v", appID, err)
-		}
-		queueName = app.GetQueuePath()
-		if queueName == "" {
-			return fmt.Errorf("application rejected by placement rules: %s", appID)
-		}
+	err := pm.PlaceApplication(app)
+	if err != nil {
+		return fmt.Errorf("failed to place application %s: %v", appID, err)
 	}
+	queueName := app.GetQueuePath()
+	if queueName == "" {
+		return fmt.Errorf("application rejected by placement rules: %s", appID)
+	}
+
 	// lock the partition and make the last change: we need to do this before creating the queues.
 	// queue cleanup might otherwise remove the queue again before we can add the application
 	pc.Lock()
 	defer pc.Unlock()
 	// we have a queue name either from placement or direct, get the queue
 	queue := pc.getQueueInternal(queueName)
+
+	// create the queue if necessary
 	if queue == nil {
-		// queue must exist if not using placement rules
-		if !pm.IsInitialised() {
-			return fmt.Errorf("application '%s' rejected, cannot create queue '%s' without placement rules", appID, queueName)
-		}
-		// with placement rules the hierarchy might not exist so try and create it
 		var err error
-		queue, err = pc.createQueue(queueName, app.GetUser())
-		if err != nil {
-			return fmt.Errorf("failed to create rule based queue %s for application %s", queueName, appID)
+		if common.IsRecoveryQueue(queueName) {
+			queue, err = pc.createRecoveryQueue()
+			if err != nil {
+				return fmt.Errorf("failed to create recovery queue %s for application %s", common.RecoveryQueueFull, appID)
+			}
+		} else {
+			queue, err = pc.createQueue(queueName, app.GetUser())
+			if err != nil {
+				return fmt.Errorf("failed to create rule based queue %s for application %s", queueName, appID)
+			}
 		}
 	}
-	// check the queue: is a leaf queue with submit access
-	if !queue.IsLeafQueue() || !queue.CheckSubmitAccess(app.GetUser()) {
+
+	// check the queue: is a leaf queue
+	if !queue.IsLeafQueue() {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
@@ -484,6 +478,11 @@ func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	PartitionQueueDAOInfo = pc.root.GetPartitionQueueDAOInfo()
 	PartitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
 	return PartitionQueueDAOInfo
+}
+
+// Create the recovery queue.
+func (pc *PartitionContext) createRecoveryQueue() (*objects.Queue, error) {
+	return objects.NewRecoveryQueue(pc.root)
 }
 
 // Create a queue with full hierarchy. This is called when a new queue is created from a placement rule.
@@ -1186,10 +1185,10 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 	return nil
 }
 
-func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation) (security.UserGroup, error) {
+func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation, forced bool) (security.UserGroup, error) {
 	pc.RLock()
 	defer pc.RUnlock()
-	return pc.userGroupCache.ConvertUGI(ugi)
+	return pc.userGroupCache.ConvertUGI(ugi, forced)
 }
 
 // calculate overall nodes resource usage and returns a map as the result,

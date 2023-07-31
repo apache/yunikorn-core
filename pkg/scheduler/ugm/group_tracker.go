@@ -21,6 +21,7 @@ package ugm
 import (
 	"sync"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -93,7 +94,7 @@ func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDA
 	for app := range gt.applications {
 		groupResourceUsage.Applications = append(groupResourceUsage.Applications, app)
 	}
-	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo("")
+	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo(common.Empty)
 	return groupResourceUsage
 }
 
@@ -130,7 +131,7 @@ func (gt *GroupTracker) removeApp(applicationID string) {
 
 func (gt *GroupTracker) getName() string {
 	if gt == nil {
-		return ""
+		return common.Empty
 	}
 	return gt.groupName
 }

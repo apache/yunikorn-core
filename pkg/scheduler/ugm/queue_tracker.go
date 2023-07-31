@@ -21,6 +21,7 @@ package ugm
 import (
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
@@ -38,13 +39,13 @@ type QueueTracker struct {
 }
 
 func newRootQueueTracker() *QueueTracker {
-	qt := newQueueTracker("", configs.RootQueue)
+	qt := newQueueTracker(common.Empty, configs.RootQueue)
 	return qt
 }
 
 func newQueueTracker(queuePath string, queueName string) *QueueTracker {
 	qp := queueName
-	if queuePath != "" {
+	if queuePath != common.Empty {
 		qp = queuePath + "." + queueName
 	}
 	queueTracker := &QueueTracker{
@@ -136,7 +137,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	}
 
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != "" {
+	if childQueuePath != common.Empty {
 		if qt.childQueueTrackers[immediateChildQueueName] == nil {
 			qt.childQueueTrackers[immediateChildQueueName] = newQueueTracker(qt.queuePath, immediateChildQueueName)
 		}
@@ -170,7 +171,7 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != "" {
+	if childQueuePath != common.Empty {
 		if qt.childQueueTrackers[immediateChildQueueName] == nil {
 			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
 				zap.String("child queueTracker name", immediateChildQueueName))
@@ -217,8 +218,8 @@ func (qt *QueueTracker) getChildQueueTracker(queuePath string) *QueueTracker {
 	var childQueuePath, immediateChildQueueName string
 	childQueuePath, immediateChildQueueName = getChildQueuePath(queuePath)
 	childQueueTracker := qt
-	if childQueuePath != "" {
-		for childQueuePath != "" {
+	if childQueuePath != common.Empty {
+		for childQueuePath != common.Empty {
 			if childQueueTracker != nil {
 				if len(childQueueTracker.childQueueTrackers) == 0 || childQueueTracker.childQueueTrackers[immediateChildQueueName] == nil {
 					newChildQt := newQueueTracker(qt.queuePath, immediateChildQueueName)
@@ -248,7 +249,7 @@ func (qt *QueueTracker) headroom(queuePath string) *resources.Resource {
 	log.Log(log.SchedUGM).Debug("Calculating headroom",
 		zap.String("queue path", queuePath))
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != "" {
+	if childQueuePath != common.Empty {
 		if qt.childQueueTrackers[immediateChildQueueName] != nil {
 			headroom := qt.childQueueTrackers[immediateChildQueueName].headroom(childQueuePath)
 			if headroom != nil {
@@ -279,7 +280,7 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.Res
 		return &dao.ResourceUsageDAOInfo{}
 	}
 	fullQueuePath := parentQueuePath + "." + qt.queueName
-	if parentQueuePath == "" {
+	if parentQueuePath == common.Empty {
 		fullQueuePath = qt.queueName
 	}
 	usage := &dao.ResourceUsageDAOInfo{
@@ -305,7 +306,7 @@ func (qt *QueueTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
 		return true
 	}
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if immediateChildQueueName != "" {
+	if immediateChildQueueName != common.Empty {
 		if childUt, ok := qt.childQueueTrackers[immediateChildQueueName]; ok {
 			return childUt.IsQueuePathTrackedCompletely(childQueuePath)
 		}
@@ -319,7 +320,7 @@ func (qt *QueueTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
 // the leaf and its parent queue using UnlinkQT method. Otherwise, we should leave as it is.
 func (qt *QueueTracker) IsUnlinkRequired(queuePath string) bool {
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if immediateChildQueueName != "" {
+	if immediateChildQueueName != common.Empty {
 		if childUt, ok := qt.childQueueTrackers[immediateChildQueueName]; ok {
 			return childUt.IsUnlinkRequired(childQueuePath)
 		}
@@ -344,13 +345,13 @@ func (qt *QueueTracker) UnlinkQT(queuePath string) bool {
 		zap.Int("no. of child queue trackers", len(qt.childQueueTrackers)))
 	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
 
-	if childQueuePath == "" && len(qt.childQueueTrackers) > 0 {
+	if childQueuePath == common.Empty && len(qt.childQueueTrackers) > 0 {
 		for qName := range qt.childQueueTrackers {
 			qt.UnlinkQT(qt.queueName + configs.DOT + qName)
 		}
 	}
 
-	if childQueuePath != "" {
+	if childQueuePath != common.Empty {
 		if qt.childQueueTrackers[immediateChildQueueName] != nil {
 			unlink := qt.childQueueTrackers[immediateChildQueueName].UnlinkQT(childQueuePath)
 			if unlink {

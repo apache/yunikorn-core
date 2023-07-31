@@ -78,7 +78,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage))
-	if queuePath == "" || applicationID == "" || usage == nil || user.User == "" {
+	if queuePath == common.Empty || applicationID == common.Empty || usage == nil || user.User == common.Empty {
 		log.Log(log.SchedUGM).Debug("Mandatory parameters are missing to increase the resource usage",
 			zap.String("user", user.User),
 			zap.String("queue path", queuePath),
@@ -110,7 +110,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
-	if queuePath == "" || applicationID == "" || usage == nil || user.User == "" {
+	if queuePath == common.Empty || applicationID == common.Empty || usage == nil || user.User == common.Empty {
 		log.Log(log.SchedUGM).Debug("Mandatory parameters are missing to decrease the resource usage",
 			zap.String("user", user.User),
 			zap.String("queue path", queuePath),
@@ -235,7 +235,19 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 	if !userTracker.hasGroupForApp(applicationID) {
 		var groupTracker *GroupTracker
 		group := m.internalEnsureGroup(user, queuePath)
-		if group != "" {
+
+		// Use wild card group (if configured) for users doesn't have any matching group
+		if group == common.Empty {
+			parentQueuePath := queuePath
+			for parentQueuePath != common.Empty {
+				parentQueuePath, _ = getParentQueuePath(parentQueuePath)
+				if _, ok := m.groupWildCardLimitsConfig[parentQueuePath]; ok {
+					group = common.Wildcard
+					break
+				}
+			}
+		}
+		if group != common.Empty {
 			if m.groupTrackers[group] == nil {
 				log.Log(log.SchedUGM).Debug("Group tracker doesn't exists. Creating group tracker",
 					zap.String("application", applicationID),
@@ -256,7 +268,13 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 		userTracker.setGroupForApp(applicationID, groupTracker)
 		return group
 	} else {
-		return userTracker.getGroupForApp(applicationID)
+		currentGroup := userTracker.getGroupForApp(applicationID)
+		group := m.internalEnsureGroup(user, queuePath)
+		if group != common.Empty && currentGroup != group {
+			userTracker.setGroupForApp(applicationID, m.internalGetGroupTracker(group, true))
+			return group
+		}
+		return currentGroup
 	}
 }
 
@@ -287,12 +305,12 @@ func (m *Manager) internalEnsureGroup(user security.UserGroup, queuePath string)
 			}
 		}
 		parentQueuePath, _ := getParentQueuePath(queuePath)
-		if parentQueuePath != "" {
+		if parentQueuePath != common.Empty {
 			qt := userTracker.queueTracker.getChildQueueTracker(parentQueuePath)
 			return m.internalEnsureGroup(user, qt.queuePath)
 		}
 	}
-	return ""
+	return common.Empty
 }
 
 func (m *Manager) isUserRemovable(ut *UserTracker) bool {
@@ -336,7 +354,7 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 		}
 		limitConfig := &LimitConfig{maxResources: maxResource, maxApplications: limit.MaxApplications}
 		for _, user := range limit.Users {
-			if user == "" {
+			if user == common.Empty {
 				continue
 			}
 			log.Log(log.SchedUGM).Debug("Processing user limits configuration",
@@ -354,7 +372,7 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			}
 		}
 		for _, group := range limit.Groups {
-			if group == "" {
+			if group == common.Empty {
 				continue
 			}
 			log.Log(log.SchedUGM).Debug("Processing group limits configuration",
@@ -363,14 +381,14 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 				zap.String("queue path", queuePath),
 				zap.Uint64("max application", limit.MaxApplications),
 				zap.Any("max resources", limit.MaxResources))
-			if group == common.Wildcard {
-				m.groupWildCardLimitsConfig[queuePath] = limitConfig
-				continue
-			}
 			if err := m.processGroupConfig(group, limitConfig, queuePath, groupLimits); err != nil {
 				return err
 			}
-			m.configuredGroups[queuePath] = append(m.configuredGroups[queuePath], group)
+			if group == common.Wildcard {
+				m.groupWildCardLimitsConfig[queuePath] = limitConfig
+			} else {
+				m.configuredGroups[queuePath] = append(m.configuredGroups[queuePath], group)
+			}
 		}
 	}
 	if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
@@ -561,6 +579,10 @@ func (m *Manager) getUserTracker(user string, createIfNotPresent bool) *UserTrac
 func (m *Manager) getGroupTracker(group string, createIfNotPresent bool) *GroupTracker {
 	m.Lock()
 	defer m.Unlock()
+	return m.internalGetGroupTracker(group, createIfNotPresent)
+}
+
+func (m *Manager) internalGetGroupTracker(group string, createIfNotPresent bool) *GroupTracker {
 	if gt, ok := m.groupTrackers[group]; ok {
 		return gt
 	}
@@ -605,7 +627,7 @@ func (m *Manager) Headroom(queuePath string, user security.UserGroup) *resources
 			zap.String("user headroom", userHeadroom.String()))
 	}
 	group := m.internalEnsureGroup(user, queuePath)
-	if group != "" {
+	if group != common.Empty {
 		if m.groupTrackers[group] != nil {
 			groupHeadroom = m.groupTrackers[group].headroom(queuePath)
 			log.Log(log.SchedUGM).Debug("Calculated headroom for group",

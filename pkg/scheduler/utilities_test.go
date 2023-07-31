@@ -426,6 +426,10 @@ func newApplication(appID, partition, queueName string) *objects.Application {
 		User:   "testuser",
 		Groups: []string{"testgroup"},
 	}
+	return newApplicationWithUser(appID, partition, queueName, user)
+}
+
+func newApplicationWithUser(appID, partition, queueName string, user security.UserGroup) *objects.Application {
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,

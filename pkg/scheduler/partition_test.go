@@ -3527,6 +3527,26 @@ func TestUserHeadroom(t *testing.T) {
 	if alloc != nil {
 		t.Fatal("allocation should not happen on other nodes as well")
 	}
+	partition.removeApplication("app-5")
+
+	app6 := newApplicationWithUser("app-6", "default", "root.parent.sub-leaf", security.UserGroup{
+		User:   "testuser1",
+		Groups: []string{"testgroup1"},
+	})
+	res, err = resources.NewResourceFromConf(map[string]string{"memory": "3", "vcores": "3"})
+	assert.NilError(t, err, "failed to create resource")
+
+	err = partition.AddApplication(app6)
+	assert.NilError(t, err, "failed to add app-6 to partition")
+	err = app6.AddAllocationAsk(newAllocationAsk(allocID, "app-6", res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-6")
+
+	// app 6 would be allocated as headroom is nil because no limits configured for 'testuser1' user an
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result is not the expected allocated")
 }
 
 func TestPlaceholderAllocationTracking(t *testing.T) {

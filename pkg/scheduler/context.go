@@ -747,11 +747,15 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 }
 
 // Process an ask and allocation update request.
+// - Add new allocations for the application(s).
 // - Add new asks and remove released asks for the application(s).
 // - Release allocations for the application(s).
 // Lock free call, all updates occur on the underlying application which is locked or via events.
 func (cc *ClusterContext) handleRMUpdateAllocationEvent(event *rmevent.RMUpdateAllocationEvent) {
 	request := event.Request
+	if len(request.Allocations) != 0 {
+		cc.processAllocations(request)
+	}
 	if len(request.Asks) != 0 {
 		cc.processAsks(request)
 	}
@@ -762,6 +766,54 @@ func (cc *ClusterContext) handleRMUpdateAllocationEvent(event *rmevent.RMUpdateA
 		if len(request.Releases.AllocationsToRelease) > 0 {
 			cc.processAllocationReleases(request.Releases.AllocationsToRelease, request.RmID)
 		}
+	}
+}
+
+func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
+	// Send rejected allocations back to RM
+	rejectedAllocs := make([]*si.RejectedAllocation, 0)
+
+	// Send to scheduler
+	for _, siAlloc := range request.Allocations {
+		// try to get partition
+		partition := cc.GetPartition(siAlloc.PartitionName)
+		if partition == nil {
+			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", siAlloc.PartitionName, siAlloc.ApplicationID, siAlloc.AllocationKey)
+			log.Log(log.SchedContext).Error("Invalid allocation add requested by shim, partition not found",
+				zap.String("partition", siAlloc.PartitionName),
+				zap.String("nodeID", siAlloc.NodeID),
+				zap.String("applicationID", siAlloc.ApplicationID),
+				zap.String("allocationKey", siAlloc.AllocationKey))
+			rejectedAllocs = append(rejectedAllocs, &si.RejectedAllocation{
+				AllocationKey: siAlloc.AllocationKey,
+				ApplicationID: siAlloc.ApplicationID,
+				Reason:        msg,
+			})
+			continue
+		}
+
+		alloc := objects.NewAllocationFromSI(siAlloc)
+		if err := partition.addAllocation(alloc); err != nil {
+			rejectedAllocs = append(rejectedAllocs, &si.RejectedAllocation{
+				AllocationKey: siAlloc.AllocationKey,
+				ApplicationID: siAlloc.ApplicationID,
+				Reason:        err.Error(),
+			})
+			log.Log(log.SchedContext).Error("Invalid allocation add requested by shim",
+				zap.String("partition", siAlloc.PartitionName),
+				zap.String("nodeID", siAlloc.NodeID),
+				zap.String("applicationID", siAlloc.ApplicationID),
+				zap.String("allocationKey", siAlloc.AllocationKey),
+				zap.Error(err))
+		}
+	}
+
+	// Reject allocs returned to RM proxy for the apps and partitions not found
+	if len(rejectedAllocs) > 0 {
+		cc.rmEventHandler.HandleEvent(&rmevent.RMRejectedAllocationEvent{
+			RmID:                request.RmID,
+			RejectedAllocations: rejectedAllocs,
+		})
 	}
 }
 

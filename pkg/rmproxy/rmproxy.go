@@ -179,7 +179,7 @@ func (rmp *RMProxy) processRMReleaseAllocationAskEvent(event *rmevent.RMReleaseA
 	rmp.triggerUpdateAllocation(event.RmID, response)
 }
 
-func (rmp *RMProxy) processUpdatePartitionConfigsEvent(event *rmevent.RMRejectedAllocationAskEvent) {
+func (rmp *RMProxy) processRMRejectedAllocationAskEvent(event *rmevent.RMRejectedAllocationAskEvent) {
 	rmp.RLock()
 	defer rmp.RUnlock()
 	if len(event.RejectedAllocationAsks) == 0 {
@@ -190,6 +190,19 @@ func (rmp *RMProxy) processUpdatePartitionConfigsEvent(event *rmevent.RMRejected
 	}
 	rmp.triggerUpdateAllocation(event.RmID, response)
 	metrics.GetSchedulerMetrics().AddRejectedContainers(len(event.RejectedAllocationAsks))
+}
+
+func (rmp *RMProxy) processRMRejectedAllocationEvent(event *rmevent.RMRejectedAllocationEvent) {
+	rmp.RLock()
+	defer rmp.RUnlock()
+	if len(event.RejectedAllocations) == 0 {
+		return
+	}
+	response := &si.AllocationResponse{
+		RejectedAllocations: event.RejectedAllocations,
+	}
+	rmp.triggerUpdateAllocation(event.RmID, response)
+	metrics.GetSchedulerMetrics().AddRejectedContainers(len(event.RejectedAllocations))
 }
 
 func (rmp *RMProxy) processRMNodeUpdateEvent(event *rmevent.RMNodeUpdateEvent) {
@@ -224,7 +237,9 @@ func (rmp *RMProxy) handleRMEvents() {
 		case *rmevent.RMReleaseAllocationEvent:
 			rmp.processRMReleaseAllocationEvent(v)
 		case *rmevent.RMRejectedAllocationAskEvent:
-			rmp.processUpdatePartitionConfigsEvent(v)
+			rmp.processRMRejectedAllocationAskEvent(v)
+		case *rmevent.RMRejectedAllocationEvent:
+			rmp.processRMRejectedAllocationEvent(v)
 		case *rmevent.RMNodeUpdateEvent:
 			rmp.processRMNodeUpdateEvent(v)
 		case *rmevent.RMReleaseAllocationAskEvent:
@@ -294,6 +309,13 @@ func (rmp *RMProxy) UpdateAllocation(request *si.AllocationRequest) error {
 		return fmt.Errorf("received AllocationRequest, but RmID=\"%s\" not registered", request.RmID)
 	}
 	go func() {
+		// Update allocations
+		if len(request.Allocations) > 0 {
+			for _, alloc := range request.Allocations {
+				alloc.PartitionName = common.GetNormalizedPartitionName(alloc.PartitionName, request.RmID)
+			}
+		}
+
 		// Update asks
 		if len(request.Asks) > 0 {
 			for _, ask := range request.Asks {

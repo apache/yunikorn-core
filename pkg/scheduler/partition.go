@@ -1167,6 +1167,7 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 
 	metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 	node.AddAllocation(alloc)
+	alloc.SetInstanceType(node.GetInstanceType())
 	app.RecoverAllocationAsk(alloc.GetAsk())
 	app.AddAllocation(alloc)
 

@@ -268,13 +268,11 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath string, applicationID strin
 		userTracker.setGroupForApp(applicationID, groupTracker)
 		return group
 	} else {
-		currentGroup := userTracker.getGroupForApp(applicationID)
-		group := m.internalEnsureGroup(user, queuePath)
-		if group != common.Empty && currentGroup != group {
-			userTracker.setGroupForApp(applicationID, m.internalGetGroupTracker(group, true))
-			return group
-		}
-		return currentGroup
+		// In case of any group changes (for example, earlier parent queue or wild card group used for the app
+		// group mapping. Now, new config has group limits in leaf queue itself) for specific user because of recent config change,
+		// there won't be effect to existing app group mapping. Already mapped group only would be used for the whole application lifecycle.
+		// Config change would be used only for new applications.
+		return userTracker.getGroupForApp(applicationID)
 	}
 }
 
@@ -579,10 +577,6 @@ func (m *Manager) getUserTracker(user string, createIfNotPresent bool) *UserTrac
 func (m *Manager) getGroupTracker(group string, createIfNotPresent bool) *GroupTracker {
 	m.Lock()
 	defer m.Unlock()
-	return m.internalGetGroupTracker(group, createIfNotPresent)
-}
-
-func (m *Manager) internalGetGroupTracker(group string, createIfNotPresent bool) *GroupTracker {
 	if gt, ok := m.groupTrackers[group]; ok {
 		return gt
 	}

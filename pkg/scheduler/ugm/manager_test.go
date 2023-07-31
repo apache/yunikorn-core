@@ -429,9 +429,15 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	conf = createUpdateConfigWithWildCardUsersAndGroups(user4.User, user4.Groups[0], "", "*", "10", "10")
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
-	// can be allowed to run upto resource usage map[memory:70 vcores:70]
+	// Since app is TestApp1, gt of "*" would be used as it is already mapped. group4 won't be used
+	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user4)
+	if increased {
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
+	}
+
+	// Now group4 would be used as user4 is running TestApp2 for the first time. So can be allowed to run upto resource usage map[memory:70 vcores:70]
 	for i := 1; i <= 7; i++ {
-		increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user4)
+		increased = manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user4)
 		if !increased {
 			t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
 		}

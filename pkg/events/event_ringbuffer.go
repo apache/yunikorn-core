@@ -63,7 +63,7 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 		e.full = e.head == e.capacity-1
 	} else {
 		// lowest event id updates when new event added to a full buffer
-		log.Log(log.Events).Debug("event buffer full. Oldest event will be truncated",
+		log.Log(log.Events).Debug("event buffer full, oldest event will be lost",
 			zap.String("id", strconv.FormatUint(e.lowestId, 10)))
 		e.lowestId++
 	}

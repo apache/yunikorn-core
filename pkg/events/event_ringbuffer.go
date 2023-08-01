@@ -22,9 +22,10 @@ import (
 	"strconv"
 	"sync"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/zap"
 )
 
 type eventRange struct {
@@ -247,28 +248,32 @@ func (e *eventRingBuffer) Resize(newSize uint64) {
 
 	// Calculate the index from where to start copying (the oldest event)
 	startIndex := (e.head + e.capacity - numEventsToCopy) % e.capacity
+	endIndex := (startIndex + numEventsToCopy - 1) % e.capacity
 
 	prevLowestId := e.getLowestID()
 	e.updateLowestId(initialSize, newSize)
 	newLowestId := e.getLowestID()
 
 	if prevLowestId != newLowestId {
-		log.Log(log.Events).Info("event buffer resized. Some of the old events truncated",
+		log.Log(log.Events).Info("event buffer resized, some events were lost",
 			zap.String("previous lowest event id", strconv.FormatUint(prevLowestId, 10)),
 			zap.String("new lowest event id", strconv.FormatUint(newLowestId, 10)))
 	}
 
 	// Copy existing events to the new buffer
-	var i uint64
-	for i = uint64(0); i < numEventsToCopy; i++ {
-		eventIndex := (startIndex + i) % e.capacity
-		newEvents[i] = e.events[eventIndex]
+	// We determine the range of elements to copy based on the relative positions of the head and tail in the circular buffer.
+	// If the tail is ahead of the head (wrap-around scenario), we copy in two steps to ensure the correct order.
+	if endIndex >= startIndex {
+		copy(newEvents, e.events[startIndex:endIndex+1])
+	} else {
+		copy(newEvents, e.events[startIndex:])
+		copy(newEvents[e.capacity-startIndex:], e.events[:endIndex+1])
 	}
 
 	// Update the buffer's state
 	e.capacity = newSize
 	e.events = newEvents
-	e.head = i % newSize
+	e.head = numEventsToCopy % newSize
 
 	// Update e.full based on whether the buffer is full after resizing
 	e.full = numEventsToCopy == e.capacity

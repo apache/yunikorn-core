@@ -488,6 +488,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.GetAllocatedResource().String())
 	}
 	sn.reservations[appReservation.getKey()] = appReservation
+	sn.nodeEvents.sendReservedEvent(ask.GetAllocatedResource(), ask.GetAllocationKey())
 	// reservation added successfully
 	return nil
 }
@@ -509,6 +510,7 @@ func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
 	}
 	if _, ok := sn.reservations[resKey]; ok {
 		delete(sn.reservations, resKey)
+		sn.nodeEvents.sendUnreservedEvent(ask.GetAllocatedResource(), ask.GetAllocationKey())
 		return 1, nil
 	}
 	// reservation was not found

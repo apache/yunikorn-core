@@ -253,3 +253,57 @@ func TestNodeSchedulableChangedEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE_SCHEDULABLE, event.EventChangeDetail)
 	assert.Equal(t, 0, len(event.Resource.Resources))
 }
+
+func TestNodeReservationEvent(t *testing.T) {
+	resource := getTestResource()
+	node := &Node{
+		NodeID:      nodeID1,
+		schedulable: true,
+	}
+
+	// not enabled
+	ne := newNodeEvents(node, nil)
+	ne.sendNodeSchedulableChangedEvent(false)
+
+	// enabled
+	mock := newEventSystemMock()
+	ne = newNodeEvents(node, mock)
+	ne.sendReservedEvent(resource, "alloc-0")
+	assert.Equal(t, 1, len(mock.events), "event was not generated")
+	event := mock.events[0]
+	assert.Equal(t, nodeID1, event.ObjectID)
+	assert.Equal(t, "alloc-0", event.ReferenceID)
+	assert.Equal(t, common.Empty, event.Message)
+	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
+	assert.Equal(t, 1, len(event.Resource.Resources))
+	protoRes := resources.NewResourceFromProto(event.Resource)
+	assert.DeepEqual(t, protoRes, resource)
+}
+
+func TestNodeUnreservationEvent(t *testing.T) {
+	resource := getTestResource()
+	node := &Node{
+		NodeID:      nodeID1,
+		schedulable: true,
+	}
+
+	// not enabled
+	ne := newNodeEvents(node, nil)
+	ne.sendNodeSchedulableChangedEvent(false)
+
+	// enabled
+	mock := newEventSystemMock()
+	ne = newNodeEvents(node, mock)
+	ne.sendUnreservedEvent(resource, "alloc-0")
+	assert.Equal(t, 1, len(mock.events), "event was not generated")
+	event := mock.events[0]
+	assert.Equal(t, nodeID1, event.ObjectID)
+	assert.Equal(t, "alloc-0", event.ReferenceID)
+	assert.Equal(t, common.Empty, event.Message)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
+	assert.Equal(t, 1, len(event.Resource.Resources))
+	protoRes := resources.NewResourceFromProto(event.Resource)
+	assert.DeepEqual(t, protoRes, resource)
+}

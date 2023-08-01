@@ -727,4 +727,23 @@ func TestNodeEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_SCHEDULABLE, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10})
+	ask := newAllocationAsk(aKey, appID1, res)
+	app := newApplication(appID1, "default", "root.unknown")
+	err := node.Reserve(app, ask)
+	assert.NilError(t, err, "could not reserve")
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	_, err = node.unReserve(app, ask)
+	assert.NilError(t, err, "could not unreserve")
+	event = mockEvents.events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
 }

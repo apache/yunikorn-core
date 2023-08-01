@@ -125,6 +125,26 @@ func (n *nodeEvents) sendNodeOccupiedResourceChangedEvent() {
 	n.eventSystem.AddEvent(event)
 }
 
+func (n *nodeEvents) sendReservedEvent(res *resources.Resource, askID string) {
+	if !n.enabled {
+		return
+	}
+
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, askID, si.EventRecord_ADD,
+		si.EventRecord_NODE_RESERVATION, res)
+	n.eventSystem.AddEvent(event)
+}
+
+func (n *nodeEvents) sendUnreservedEvent(res *resources.Resource, askID string) {
+	if !n.enabled {
+		return
+	}
+
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, askID, si.EventRecord_REMOVE,
+		si.EventRecord_NODE_RESERVATION, res)
+	n.eventSystem.AddEvent(event)
+}
+
 func newNodeEvents(node *Node, evt events.EventSystem) *nodeEvents {
 	return &nodeEvents{
 		eventSystem: evt,

@@ -37,16 +37,16 @@ const (
 var stateDump sync.Mutex // ensures only one state dump can be handled at a time
 
 type AggregatedStateInfo struct {
-	Timestamp        int64
-	Partitions       []*dao.PartitionInfo
-	Applications     []*dao.ApplicationDAOInfo
-	AppHistory       []*dao.ApplicationHistoryDAOInfo
-	Nodes            []*dao.NodesDAOInfo
-	ClusterInfo      []*dao.ClusterDAOInfo
-	ContainerHistory []*dao.ContainerHistoryDAOInfo
-	Queues           []dao.PartitionQueueDAOInfo
-	RMDiagnostics    map[string]interface{}
-	LogLevel         string
+	Timestamp        int64                            `json:"timestamp,omitempty"`
+	Partitions       []*dao.PartitionInfo             `json:"partitions,omitempty"`
+	Applications     []*dao.ApplicationDAOInfo        `json:"applications,omitempty"`
+	AppHistory       []*dao.ApplicationHistoryDAOInfo `json:"appHistory,omitempty"`
+	Nodes            []*dao.NodesDAOInfo              `json:"nodes,omitempty"`
+	ClusterInfo      []*dao.ClusterDAOInfo            `json:"clusterInfo,omitempty"`
+	ContainerHistory []*dao.ContainerHistoryDAOInfo   `json:"containerHistory,omitempty"`
+	Queues           []dao.PartitionQueueDAOInfo      `json:"queues,omitempty"`
+	RMDiagnostics    map[string]interface{}           `json:"rmDiagnostics,omitempty"`
+	LogLevel         string                           `json:"logLevel,omitempty"`
 }
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {

@@ -19,6 +19,6 @@
 package dao
 
 type ContainerHistoryDAOInfo struct {
-	Timestamp       int64  `json:"timestamp"`
-	TotalContainers string `json:"totalContainers"`
+	Timestamp       int64  `json:"timestamp,omitempty"`
+	TotalContainers string `json:"totalContainers,omitempty"`
 }

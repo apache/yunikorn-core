@@ -19,40 +19,40 @@
 package dao
 
 type ApplicationsDAOInfo struct {
-	Applications []ApplicationDAOInfo `json:"applications"`
+	Applications []ApplicationDAOInfo `json:"applications,omitempty"`
 }
 
 type ApplicationDAOInfo struct {
-	ApplicationID      string                  `json:"applicationID"`
-	UsedResource       map[string]int64        `json:"usedResource"`
-	MaxUsedResource    map[string]int64        `json:"maxUsedResource"`
-	PendingResource    map[string]int64        `json:"pendingResource"`
-	Partition          string                  `json:"partition"`
-	QueueName          string                  `json:"queueName"`
-	SubmissionTime     int64                   `json:"submissionTime"`
-	FinishedTime       *int64                  `json:"finishedTime"`
-	Requests           []*AllocationAskDAOInfo `json:"requests"`
-	Allocations        []*AllocationDAOInfo    `json:"allocations"`
-	State              string                  `json:"applicationState"`
-	User               string                  `json:"user"`
-	Groups             []string                `json:"groups"`
-	RejectedMessage    string                  `json:"rejectedMessage"`
-	StateLog           []*StateDAOInfo         `json:"stateLog"`
-	PlaceholderData    []*PlaceholderDAOInfo   `json:"placeholderData"`
-	HasReserved        bool                    `json:"hasReserved"`
-	Reservations       []string                `json:"reservations"`
-	MaxRequestPriority int32                   `json:"maxRequestPriority"`
+	ApplicationID      string                  `json:"applicationID"` // no omitempty, application id should not be empty
+	UsedResource       map[string]int64        `json:"usedResource,omitempty"`
+	MaxUsedResource    map[string]int64        `json:"maxUsedResource,omitempty"`
+	PendingResource    map[string]int64        `json:"pendingResource,omitempty"`
+	Partition          string                  `json:"partition"` // no omitempty, partition should not be empty
+	QueueName          string                  `json:"queueName"` // no omitempty, queue name should not be empty
+	SubmissionTime     int64                   `json:"submissionTime,omitempty"`
+	FinishedTime       *int64                  `json:"finishedTime,omitempty"`
+	Requests           []*AllocationAskDAOInfo `json:"requests,omitempty"`
+	Allocations        []*AllocationDAOInfo    `json:"allocations,omitempty"`
+	State              string                  `json:"applicationState,omitempty"`
+	User               string                  `json:"user,omitempty"`
+	Groups             []string                `json:"groups,omitempty"`
+	RejectedMessage    string                  `json:"rejectedMessage,omitempty"`
+	StateLog           []*StateDAOInfo         `json:"stateLog,omitempty"`
+	PlaceholderData    []*PlaceholderDAOInfo   `json:"placeholderData,omitempty"`
+	HasReserved        bool                    `json:"hasReserved,omitempty"`
+	Reservations       []string                `json:"reservations,omitempty"`
+	MaxRequestPriority int32                   `json:"maxRequestPriority,omitempty"`
 }
 
 type StateDAOInfo struct {
-	Time             int64  `json:"time"`
-	ApplicationState string `json:"applicationState"`
+	Time             int64  `json:"time,omitempty"`
+	ApplicationState string `json:"applicationState,omitempty"`
 }
 
 type PlaceholderDAOInfo struct {
-	TaskGroupName string           `json:"taskGroupName"`
-	Count         int64            `json:"count"`
-	MinResource   map[string]int64 `json:"minResource"`
-	Replaced      int64            `json:"replaced"`
-	TimedOut      int64            `json:"timedout"`
+	TaskGroupName string           `json:"taskGroupName,omitempty"`
+	Count         int64            `json:"count,omitempty"`
+	MinResource   map[string]int64 `json:"minResource,omitempty"`
+	Replaced      int64            `json:"replaced,omitempty"`
+	TimedOut      int64            `json:"timedout,omitempty"`
 }

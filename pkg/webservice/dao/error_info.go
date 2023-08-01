@@ -19,9 +19,9 @@
 package dao
 
 type YAPIError struct {
-	StatusCode  int    `json:"status_code"`
-	Message     string `json:"message"`
-	Description string `json:"description"`
+	StatusCode  int    `json:"status_code"` // no omitempty, status code should not be 0
+	Message     string `json:"message,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 func NewYAPIError(err error, statusCode int, message string) *YAPIError {

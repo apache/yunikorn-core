@@ -19,25 +19,25 @@
 package dao
 
 type AllocationAskLogDAOInfo struct {
-	Message        string `json:"message"`
-	LastOccurrence int64  `json:"lastOccurrence"`
-	Count          int32  `json:"count"`
+	Message        string `json:"message,omitempty"`
+	LastOccurrence int64  `json:"lastOccurrence,omitempty"`
+	Count          int32  `json:"count,omitempty"`
 }
 
 type AllocationAskDAOInfo struct {
-	AllocationKey       string                     `json:"allocationKey"`
-	AllocationTags      map[string]string          `json:"allocationTags"`
-	RequestTime         int64                      `json:"requestTime"`
-	ResourcePerAlloc    map[string]int64           `json:"resource"`
-	PendingCount        int32                      `json:"pendingCount"`
-	Priority            string                     `json:"priority"`
-	RequiredNodeID      string                     `json:"requiredNodeId"`
-	ApplicationID       string                     `json:"applicationId"`
-	Partition           string                     `json:"partition"`
-	Placeholder         bool                       `json:"placeholder"`
-	PlaceholderTimeout  int64                      `json:"placeholderTimeout"`
-	TaskGroupName       string                     `json:"taskGroupName"`
-	AllocationLog       []*AllocationAskLogDAOInfo `json:"allocationLog"`
-	TriggeredPreemption bool                       `json:"triggeredPreemption"`
-	Originator          bool                       `json:"originator"`
+	AllocationKey       string                     `json:"allocationKey"` // no omitempty, allocation key should not be empty
+	AllocationTags      map[string]string          `json:"allocationTags,omitempty"`
+	RequestTime         int64                      `json:"requestTime,omitempty"`
+	ResourcePerAlloc    map[string]int64           `json:"resource,omitempty"`
+	PendingCount        int32                      `json:"pendingCount,omitempty"`
+	Priority            string                     `json:"priority,omitempty"`
+	RequiredNodeID      string                     `json:"requiredNodeId,omitempty"`
+	ApplicationID       string                     `json:"applicationId,omitempty"`
+	Partition           string                     `json:"partition,omitempty"`
+	Placeholder         bool                       `json:"placeholder,omitempty"`
+	PlaceholderTimeout  int64                      `json:"placeholderTimeout,omitempty"`
+	TaskGroupName       string                     `json:"taskGroupName,omitempty"`
+	AllocationLog       []*AllocationAskLogDAOInfo `json:"allocationLog,omitempty"`
+	TriggeredPreemption bool                       `json:"triggeredPreemption,omitempty"`
+	Originator          bool                       `json:"originator,omitempty"`
 }

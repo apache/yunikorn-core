@@ -598,6 +598,45 @@ func TestUserGroupHeadroom(t *testing.T) {
 	assert.Equal(t, resources.Equals(headroom, resources.Sub(usage1, usage)), true)
 }
 
+func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
+	setupUGM()
+	// Queue setup:
+	// root->parent
+	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
+	conf := createConfigWithoutLimits()
+	conf.Queues[0].Queues[0].Limits = []configs.Limit{
+		{
+			Limit:           "parent queue limit for a specific group",
+			Groups:          user.Groups,
+			MaxResources:    map[string]string{"memory": "100"},
+			MaxApplications: 2,
+		},
+	}
+	manager := GetUserManager()
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+	usage, err := resources.NewResourceFromConf(map[string]string{"memory": "50"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+	}
+
+	increased := manager.IncreaseTrackedResource("root.parent", TestApp1, usage, user)
+	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath root.parent, app "+TestApp1+", res "+usage.String())
+
+	groupTracker := m.getGroupTracker(user.Groups[0], false)
+	assert.Equal(t, groupTracker != nil, true)
+	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], true)
+	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, usage), true)
+
+	decreased := manager.DecreaseTrackedResource("root.parent", TestApp1, usage, user, true)
+	assert.Equal(t, decreased, true, "unable to decrease tracked resource: queuepath root.parent, app "+TestApp1+", res "+usage.String())
+
+	groupTracker = m.getGroupTracker(user.Groups[0], false)
+	assert.Equal(t, groupTracker != nil, true)
+	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], false)
+	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, resources.Zero), true)
+}
+
 func createUpdateConfigWithWildCardUsersAndGroups(user string, group string, wildUser string, wildGroup string, memory string, vcores string) configs.PartitionConfig {
 	conf := configs.PartitionConfig{
 		Name: "test",

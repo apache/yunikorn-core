@@ -126,6 +126,9 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 			zap.String("user", user.User))
 		return false
 	}
+	group := userTracker.getGroupForApp(applicationID)
+	groupTracker := m.getGroupTracker(group, false)
+
 	log.Log(log.SchedUGM).Debug("Decreasing resource usage for user",
 		zap.String("user", user.User),
 		zap.String("queue path", queuePath),
@@ -145,8 +148,6 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		delete(m.userTrackers, user.User)
 	}
 
-	group := m.ensureGroup(user, queuePath)
-	groupTracker := m.getGroupTracker(group, false)
 	if groupTracker != nil {
 		log.Log(log.SchedUGM).Debug("Decreasing resource usage for group",
 			zap.String("group", group),

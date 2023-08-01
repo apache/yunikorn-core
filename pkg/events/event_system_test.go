@@ -143,7 +143,7 @@ func TestConfigUpdate(t *testing.T) {
 			configs.CMEventRequestCapacity:    strconv.Itoa(int(newRequestCapacity)),
 		})
 	err := common.WaitForCondition(func() bool {
-		return eventSystem.IsEventTrackingEnabled() == false
+		return !eventSystem.IsEventTrackingEnabled()
 	}, 10*time.Millisecond, 5*time.Second)
 	assert.NilError(t, err, "timed out waiting for config refresh")
 

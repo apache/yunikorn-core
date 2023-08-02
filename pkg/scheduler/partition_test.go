@@ -1107,6 +1107,36 @@ func TestRemoveAppAllocs(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), resources.Zero)
 }
 
+func TestRemoveAllPlaceholderAllocs(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	setupNode(t, nodeID1, partition, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000000}))
+
+	// add a new app that will just sit around to make sure we remove the right one
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+	phAsk1 := newAllocationAskTG(phID, appID1, taskGroup, res, true)
+	phAlloc1 := objects.NewAllocation("tg-alloc-1-uuid", nodeID1, instType1, phAsk1)
+	err = partition.addAllocation(phAlloc1)
+	assert.NilError(t, err, "could not add allocation to partition")
+	phAsk2 := newAllocationAskTG(phID2, appID1, taskGroup, res, true)
+	phAlloc2 := objects.NewAllocation("tg-alloc-2-uuid", nodeID1, instType1, phAsk2)
+	err = partition.addAllocation(phAlloc2)
+	assert.NilError(t, err, "could not add allocation to partition")
+	partition.removeAllocation(&si.AllocationRelease{
+		PartitionName:   "default",
+		ApplicationID:   appID1,
+		UUID:            "",
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	})
+	assert.Equal(t, 0, partition.getPhAllocationCount())
+}
+
 // Dynamic queue creation based on the name from the rules
 func TestCreateQueue(t *testing.T) {
 	partition, err := newBasePartition()

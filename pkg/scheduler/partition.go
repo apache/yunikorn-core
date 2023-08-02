@@ -569,9 +569,6 @@ func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*o
 				metrics.GetSchedulerMetrics().IncFailedNodes()
 				return err
 			}
-			if alloc.IsPlaceholder() {
-				pc.incPhAllocationCount()
-			}
 		}
 	}
 	return nil
@@ -775,6 +772,9 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 		// remove preempted resources
 		if alloc.IsPreempted() {
 			app.GetQueue().DecPreemptingResource(alloc.GetAllocatedResource())
+		}
+		if alloc.IsPlaceholder() {
+			pc.decPhAllocationCount(1)
 		}
 
 		// the allocation is removed so add it to the list that we return

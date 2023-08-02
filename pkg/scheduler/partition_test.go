@@ -376,6 +376,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1 expected 1 got: %v", allocated)
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
 	assertLimits(t, getTestUserGroup(), appRes)
+	assert.Equal(t, 1, partition.getPhAllocationCount(), "number of active placeholders")
 
 	// fake an ask that is used
 	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, 1, false)
@@ -403,6 +404,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node removal should not have confirmed allocation")
 	assert.Equal(t, phID, released[0].GetUUID(), "uuid returned by release not the same as the placeholder")
+	assert.Equal(t, 0, partition.getPhAllocationCount(), "number of active placeholders")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 0, len(allocs), "expected no allocations for the app")
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), appRes), "app should have updated pending resources")

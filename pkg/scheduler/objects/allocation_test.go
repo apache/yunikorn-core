@@ -58,6 +58,9 @@ func TestNewAlloc(t *testing.T) {
 	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
 	assert.Assert(t, !alloc.IsPlaceholder(), "ask should not have been a placeholder")
 	assert.Equal(t, time.Now().Round(time.Second), alloc.GetCreateTime().Round(time.Second))
+	assert.Equal(t, alloc.GetInstanceType(), "itype1", "Instance type not set as expected")
+	alloc.SetInstanceType("itype2")
+	assert.Equal(t, alloc.GetInstanceType(), "itype2", "Instance type not set as expected")
 	allocStr := alloc.String()
 	expected := "applicationID=app-1, uuid=test-uuid, allocationKey=ask-1, Node=node-1, result=Allocated"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
@@ -82,7 +85,7 @@ func TestNewReservedAlloc(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := newReservedAllocation(Reserved, "node-1", "instType1", ask)
+	alloc := newReservedAllocation(Reserved, "node-1", ask)
 	if alloc == nil {
 		t.Fatal("NewReservedAllocation create failed while it should not")
 	}

@@ -874,6 +874,7 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 			zap.String("appID", appID))
 		return nil
 	}
+	alloc.SetInstanceType(node.GetInstanceType())
 	// reservation
 	if alloc.GetResult() == objects.Reserved {
 		pc.reserve(app, node, alloc.GetAsk())

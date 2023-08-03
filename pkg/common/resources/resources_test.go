@@ -1504,25 +1504,37 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 			used:     partialResource,
 			expected: NewResourceFromMap(map[string]Quantity{"memory": 50}),
 		},
-		"positive overflow": {
-			capacity: NewResourceFromMap(map[string]Quantity{"memory": 10}),
+		"positive limit": {
+			capacity: NewResourceFromMap(map[string]Quantity{"memory": 1}),
 			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
-			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt32}),
 		},
 		"negative overflow": {
 			capacity: NewResourceFromMap(map[string]Quantity{"memory": 10}),
 			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
-			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": 0}),
 		},
 		"zero resource, non zero used": {
 			capacity: zeroResource,
 			used:     usageSet,
-			expected: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64, "vcores": math.MinInt64}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": 100, "vcores": 100}),
+		},
+		"min used": {
+			capacity: NewResourceFromMap(map[string]Quantity{"memory": math.MinInt64}),
+			used:     NewResourceFromMap(map[string]Quantity{"memory": 10}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": 100}),
+		},
+		"max used": {
+			capacity: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
+			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": 100}),
 		},
 	}
-	for _, test := range tests {
-		absCapacity := CalculateAbsUsedCapacity(test.capacity, test.used)
-		assert.DeepEqual(t, test.expected, absCapacity)
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			absCapacity := CalculateAbsUsedCapacity(test.capacity, test.used)
+			assert.Assert(t, Equals(test.expected, absCapacity), name)
+		})
 	}
 }
 

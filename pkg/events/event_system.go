@@ -19,8 +19,12 @@
 package events
 
 import (
+	"fmt"
 	"sync"
+	"time"
 
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -40,15 +44,20 @@ type EventSystem interface {
 }
 
 type EventSystemImpl struct {
-	Store       *EventStore // storing eventChannel
-	publisher   *EventPublisher
-	eventBuffer *eventRingBuffer
+	eventSystemId string
+	Store         *EventStore // storing eventChannel
+	publisher     *EventPublisher
+	eventBuffer   *eventRingBuffer
 
 	channel chan *si.EventRecord // channelling input eventChannel
 	stop    chan bool            // whether the service is stopped
 	stopped bool
 
-	sync.Mutex
+	trackingEnabled    bool
+	requestCapacity    int
+	ringBufferCapacity uint64
+
+	sync.RWMutex
 }
 
 func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord, uint64, uint64) {
@@ -59,15 +68,34 @@ func GetEventSystem() EventSystem {
 	return ev
 }
 
+func (ec *EventSystemImpl) IsEventTrackingEnabled() bool {
+	ec.RLock()
+	defer ec.RUnlock()
+	return ec.trackingEnabled
+}
+
+func (ec *EventSystemImpl) GetRequestCapacity() int {
+	ec.RLock()
+	defer ec.RUnlock()
+	return ec.requestCapacity
+}
+
+func (ec *EventSystemImpl) GetRingBufferCapacity() uint64 {
+	ec.RLock()
+	defer ec.RUnlock()
+	return ec.ringBufferCapacity
+}
+
 func CreateAndSetEventSystem() {
 	store := newEventStore()
 	ev = &EventSystemImpl{
-		Store:       store,
-		channel:     make(chan *si.EventRecord, defaultEventChannelSize),
-		stop:        make(chan bool),
-		stopped:     false,
-		publisher:   CreateShimPublisher(store),
-		eventBuffer: newEventRingBuffer(defaultRingBufferSize),
+		Store:         store,
+		channel:       make(chan *si.EventRecord, defaultEventChannelSize),
+		stop:          make(chan bool),
+		stopped:       false,
+		publisher:     CreateShimPublisher(store),
+		eventBuffer:   newEventRingBuffer(defaultRingBufferSize),
+		eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
 	}
 }
 
@@ -76,6 +104,17 @@ func (ec *EventSystemImpl) StartService() {
 }
 
 func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
+	ec.Lock()
+	defer ec.Unlock()
+
+	configs.AddConfigMapCallback(ec.eventSystemId, func() {
+		go ec.reloadConfig()
+	})
+
+	ec.trackingEnabled = ec.readIsTrackingEnabled()
+	ec.ringBufferCapacity = ec.readRingBufferCapacity()
+	ec.requestCapacity = ec.readRequestCapacity()
+
 	go func() {
 		for {
 			select {
@@ -102,6 +141,8 @@ func (ec *EventSystemImpl) Stop() {
 	ec.Lock()
 	defer ec.Unlock()
 
+	configs.RemoveConfigMapCallback(ec.eventSystemId)
+
 	if ec.stopped {
 		return
 	}
@@ -123,5 +164,40 @@ func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	default:
 		log.Log(log.Events).Debug("could not add Event to channel")
 		metrics.GetEventMetrics().IncEventsNotChanneled()
+	}
+}
+
+func (ec *EventSystemImpl) readIsTrackingEnabled() bool {
+	return common.GetConfigurationBool(configs.GetConfigMap(), configs.CMEventTrackingEnabled, configs.DefaultEventTrackingEnabled)
+}
+
+func (ec *EventSystemImpl) readRequestCapacity() int {
+	return common.GetConfigurationInt(configs.GetConfigMap(), configs.CMEventRequestCapacity, configs.DefaultEventRequestCapacity)
+}
+
+func (ec *EventSystemImpl) readRingBufferCapacity() uint64 {
+	return common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRingBufferCapacity, configs.DefaultEventRingBufferCapacity)
+}
+
+func (ec *EventSystemImpl) isRestartNeeded() bool {
+	ec.Lock()
+	defer ec.Unlock()
+	return ec.readIsTrackingEnabled() != ec.trackingEnabled
+}
+
+func (ec *EventSystemImpl) Restart() {
+	ec.Stop()
+	ec.StartServiceWithPublisher(true)
+}
+
+func (ec *EventSystemImpl) reloadConfig() {
+	ec.requestCapacity = ec.readRequestCapacity()
+	newRingBufferCapacity := ec.readRingBufferCapacity()
+
+	// resize the ring buffer with new capacity
+	ec.eventBuffer.Resize(newRingBufferCapacity)
+
+	if ec.isRestartNeeded() {
+		ec.Restart()
 	}
 }

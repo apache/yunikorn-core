@@ -26,6 +26,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -115,4 +116,39 @@ func TestGetEvents(t *testing.T) {
 	assert.Equal(t, "3", records[0].Message)
 	assert.Equal(t, "4", records[1].Message)
 	assert.Equal(t, "5", records[2].Message)
+}
+
+func TestConfigUpdate(t *testing.T) {
+	configs.SetConfigMap(map[string]string{})
+	defer configs.SetConfigMap(map[string]string{})
+
+	CreateAndSetEventSystem()
+	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
+	eventSystem.StartService()
+	defer eventSystem.Stop()
+
+	assert.Assert(t, eventSystem.IsEventTrackingEnabled())
+	assert.Assert(t, eventSystem.GetRingBufferCapacity() == configs.DefaultEventRingBufferCapacity)
+	assert.Assert(t, eventSystem.GetRequestCapacity() == configs.DefaultEventRequestCapacity)
+	assert.Assert(t, eventSystem.eventBuffer.capacity == configs.DefaultEventRingBufferCapacity)
+	assert.Assert(t, !eventSystem.publisher.stop.Load())
+
+	// update config and wait for refresh
+	var newRingBufferCapacity uint64 = 123
+	newRequestCapacity := 555
+
+	configs.SetConfigMap(
+		map[string]string{configs.CMEventTrackingEnabled: "false",
+			configs.CMEventRingBufferCapacity: strconv.FormatUint(newRingBufferCapacity, 10),
+			configs.CMEventRequestCapacity:    strconv.Itoa(int(newRequestCapacity)),
+		})
+	err := common.WaitForCondition(func() bool {
+		return !eventSystem.IsEventTrackingEnabled()
+	}, 10*time.Millisecond, 5*time.Second)
+	assert.NilError(t, err, "timed out waiting for config refresh")
+
+	assert.Assert(t, eventSystem.GetRingBufferCapacity() == newRingBufferCapacity)
+	assert.Assert(t, eventSystem.GetRequestCapacity() == newRequestCapacity)
+	assert.Assert(t, eventSystem.eventBuffer.capacity == newRingBufferCapacity)
+	assert.Assert(t, eventSystem.publisher.stop.Load())
 }

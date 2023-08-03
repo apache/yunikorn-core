@@ -19,8 +19,12 @@
 package events
 
 import (
+	"strconv"
 	"sync"
 
+	"go.uber.org/zap"
+
+	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -39,10 +43,11 @@ type eventRange struct {
 // Retrieving the records can be achieved with GetEventsFromID and GetRecentEntries.
 type eventRingBuffer struct {
 	events   []*si.EventRecord
-	capacity uint64 // capacity of the buffer, never changes
+	capacity uint64 // capacity of the buffer
 	head     uint64 // position of the next element (no tail since we don't remove elements)
-	full     bool   // indicates whether the buffer if full - once it is, it stays full
+	full     bool   // indicates whether the buffer if full - once it is, it stays full unless buffer is resized
 	id       uint64 // unique id of an event record
+	lowestId uint64 // lowest id of an event record available in the buffer at any given time
 
 	sync.RWMutex
 }
@@ -56,6 +61,11 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.events[e.head] = event
 	if !e.full {
 		e.full = e.head == e.capacity-1
+	} else {
+		// lowest event id updates when new event added to a full buffer
+		log.Log(log.Events).Debug("event buffer full, oldest event will be lost",
+			zap.String("id", strconv.FormatUint(e.lowestId, 10)))
+		e.lowestId++
 	}
 	e.head = (e.head + 1) % e.capacity
 	e.id++
@@ -186,11 +196,7 @@ func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 
 // getLowestID returns the current lowest available id in the buffer.
 func (e *eventRingBuffer) getLowestID() uint64 {
-	if !e.full {
-		return 0
-	}
-
-	return e.id - e.capacity
+	return e.lowestId
 }
 
 func newEventRingBuffer(capacity uint64) *eventRingBuffer {
@@ -198,4 +204,77 @@ func newEventRingBuffer(capacity uint64) *eventRingBuffer {
 		capacity: capacity,
 		events:   make([]*si.EventRecord, capacity),
 	}
+}
+
+// called from Resize(), This functuin updates the lowest event id available in the buffer
+func (e *eventRingBuffer) updateLowestId(beginSize, endSize uint64) {
+	// if buffer size is increasing, lowestId stays the same
+	if beginSize < endSize {
+		return
+	}
+
+	// bufferSize is shrinking
+	// if number of events is < newSize no change
+	if (e.id - e.getLowestID()) <= endSize {
+		return
+	}
+
+	// number of events > newSize => get last 'newSize' events
+	e.lowestId = e.id - endSize
+}
+
+// resize the existing ring buffer
+// this method will be called upon configuration reload
+func (e *eventRingBuffer) Resize(newSize uint64) {
+	e.Lock()
+	defer e.Unlock()
+
+	if newSize == e.capacity {
+		return // Nothing to do if the size is the same
+	}
+
+	initialSize := e.capacity
+
+	// Create a new buffer with the desired size
+	newEvents := make([]*si.EventRecord, newSize)
+
+	// Determine the number of events to copy
+	var numEventsToCopy uint64
+	if e.id-e.getLowestID() > newSize {
+		numEventsToCopy = newSize
+	} else {
+		numEventsToCopy = e.id - e.getLowestID()
+	}
+
+	// Calculate the index from where to start copying (the oldest event)
+	startIndex := (e.head + e.capacity - numEventsToCopy) % e.capacity
+	endIndex := (startIndex + numEventsToCopy - 1) % e.capacity
+
+	prevLowestId := e.getLowestID()
+	e.updateLowestId(initialSize, newSize)
+	newLowestId := e.getLowestID()
+
+	if prevLowestId != newLowestId {
+		log.Log(log.Events).Info("event buffer resized, some events were lost",
+			zap.String("previous lowest event id", strconv.FormatUint(prevLowestId, 10)),
+			zap.String("new lowest event id", strconv.FormatUint(newLowestId, 10)))
+	}
+
+	// Copy existing events to the new buffer
+	// We determine the range of elements to copy based on the relative positions of the head and tail in the circular buffer.
+	// If the tail is ahead of the head (wrap-around scenario), we copy in two steps to ensure the correct order.
+	if endIndex >= startIndex {
+		copy(newEvents, e.events[startIndex:endIndex+1])
+	} else {
+		copy(newEvents, e.events[startIndex:])
+		copy(newEvents[e.capacity-startIndex:], e.events[:endIndex+1])
+	}
+
+	// Update the buffer's state
+	e.capacity = newSize
+	e.events = newEvents
+	e.head = numEventsToCopy % newSize
+
+	// Update e.full based on whether the buffer is full after resizing
+	e.full = numEventsToCopy == e.capacity
 }

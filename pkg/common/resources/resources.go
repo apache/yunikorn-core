@@ -936,6 +936,12 @@ func IsZero(zero *Resource) bool {
 	return true
 }
 
+// CalculateAbsUsedCapacity returns absolute used as a percentage, a positive integer value, for each defined resource
+// named in the capacity comparing usage to the capacity.
+// If usage is 0 or below 0, absolute used is always 0
+// if capacity is 0 or below 0, absolute used is always 100
+// if used is larger than capacity a value larger than 100 can be returned. The percentage value returned is capped at
+// math.MaxInt32 (resolved value 2147483647)
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 	absResource := NewResource()
 	if capacity == nil || used == nil {
@@ -943,29 +949,36 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 		return absResource
 	}
 	missingResources := &strings.Builder{}
-	for resourceName, availableResource := range capacity.Resources {
+	for resourceName, capResource := range capacity.Resources {
 		var absResValue int64
-		if usedResource, ok := used.Resources[resourceName]; ok {
-			if availableResource < usedResource {
-				log.Log(log.Resources).Warn("Higher usage than max capacity",
-					zap.String("resource", resourceName),
-					zap.Int64("capacity", int64(availableResource)),
-					zap.Int64("usage", int64(usedResource)))
-			}
-			div := float64(usedResource) * 100 / float64(availableResource)
-			absResValue = int64(div)
-			if ((usedResource >= 0) == (availableResource > 0)) == (absResValue < 0) || (div > math.MaxInt64) || (div < math.MinInt64) {
-				log.Log(log.Resources).Warn("Absolute resource value result wrapped or overflow",
-					zap.String("resource", resourceName),
-					zap.Int64("capacity", int64(availableResource)),
-					zap.Int64("usage", int64(usedResource)))
-			}
-		} else {
+		usedResource, ok := used.Resources[resourceName]
+		// track this for troubleshooting only
+		if !ok {
 			if missingResources.Len() != 0 {
 				missingResources.WriteString(", ")
 			}
 			missingResources.WriteString(resourceName)
 			continue
+		}
+		switch {
+		// used is 0 or below nothing is used -> 0%
+		// below 0 should never happen
+		case usedResource <= 0:
+			absResValue = 0
+		// capacity is 0 or below any usage is full -> 100% (prevents divide by 0)
+		// below 0 should never happen
+		case capResource <= 0:
+			absResValue = 100
+		// calculate percentage: never wraps, could overflow int64 due to percentage conversion ONLY
+		default:
+			div := (float64(usedResource) / float64(capResource)) * 100
+			// we really do not want to show a percentage value that is larger than a 32-bit integer.
+			// even that is already really large and could easily lead to UI render issues.
+			if div > float64(math.MaxInt32) {
+				absResValue = math.MaxInt32
+			} else {
+				absResValue = int64(div)
+			}
 		}
 		absResource.Resources[resourceName] = Quantity(absResValue)
 	}

@@ -23,7 +23,7 @@ ifeq ($(GO),)
 GO := go
 endif
 
-GO_VERSION := $(shell "$(GO)" version | awk '{print substr($$3, 3, 10)}')
+GO_VERSION := $(shell "$(GO)" version | awk '{print substr($$3, 3, 4)}')
 MOD_VERSION := $(shell cat .go_version) 
 
 GM := $(word 1,$(subst ., ,$(GO_VERSION)))

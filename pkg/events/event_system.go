@@ -21,6 +21,7 @@ package events
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -88,17 +89,13 @@ func (ec *EventSystemImpl) GetRingBufferCapacity() uint64 {
 func CreateAndSetEventSystem() {
 	store := newEventStore()
 	ev = &EventSystemImpl{
-		Store:       store,
-		channel:     make(chan *si.EventRecord, defaultEventChannelSize),
-		stop:        make(chan bool),
-		stopped:     false,
-		publisher:   CreateShimPublisher(store),
-		eventBuffer: newEventRingBuffer(defaultRingBufferSize),
-	}
-
-	if eventSystemImpl, ok := ev.(*EventSystemImpl); ok {
-		eventSystemImpl.eventSystemId = fmt.Sprintf("event-system-%p", eventSystemImpl)
-		ev = eventSystemImpl
+		Store:         store,
+		channel:       make(chan *si.EventRecord, defaultEventChannelSize),
+		stop:          make(chan bool),
+		stopped:       false,
+		publisher:     CreateShimPublisher(store),
+		eventBuffer:   newEventRingBuffer(defaultRingBufferSize),
+		eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
 	}
 }
 

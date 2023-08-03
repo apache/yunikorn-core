@@ -119,7 +119,6 @@ func TestGetEvents(t *testing.T) {
 }
 
 func TestConfigUpdate(t *testing.T) {
-	configs.SetConfigMap(map[string]string{configs.CMEventTrackingEnabled: "true"})
 	configs.SetConfigMap(map[string]string{})
 	defer configs.SetConfigMap(map[string]string{})
 
@@ -128,10 +127,11 @@ func TestConfigUpdate(t *testing.T) {
 	eventSystem.StartService()
 	defer eventSystem.Stop()
 
-	assert.Assert(t, eventSystem.IsEventTrackingEnabled(), "Event tracking should be enabled by default")
-	assert.Assert(t, eventSystem.GetRingBufferCapacity() == configs.DefaultEventRingBufferCapacity, "Invalid event buffer capacity")
-	assert.Assert(t, eventSystem.GetRequestCapacity() == configs.DefaultEventRequestCapacity, "Invalid request capacity")
-	assert.Assert(t, eventSystem.eventBuffer.capacity == configs.DefaultEventRingBufferCapacity, "Event buffer capacity mismatch")
+	assert.Assert(t, eventSystem.IsEventTrackingEnabled())
+	assert.Assert(t, eventSystem.GetRingBufferCapacity() == configs.DefaultEventRingBufferCapacity)
+	assert.Assert(t, eventSystem.GetRequestCapacity() == configs.DefaultEventRequestCapacity)
+	assert.Assert(t, eventSystem.eventBuffer.capacity == configs.DefaultEventRingBufferCapacity)
+	assert.Assert(t, !eventSystem.publisher.stop.Load())
 
 	// update config and wait for refresh
 	var newRingBufferCapacity uint64 = 123
@@ -147,7 +147,8 @@ func TestConfigUpdate(t *testing.T) {
 	}, 10*time.Millisecond, 5*time.Second)
 	assert.NilError(t, err, "timed out waiting for config refresh")
 
-	assert.Assert(t, eventSystem.GetRingBufferCapacity() == newRingBufferCapacity, "Invalid event buffer capacity")
-	assert.Assert(t, eventSystem.GetRequestCapacity() == newRequestCapacity, "Invalid request capacity")
-	assert.Assert(t, eventSystem.eventBuffer.capacity == newRingBufferCapacity, "Event buffer not resized")
+	assert.Assert(t, eventSystem.GetRingBufferCapacity() == newRingBufferCapacity)
+	assert.Assert(t, eventSystem.GetRequestCapacity() == newRequestCapacity)
+	assert.Assert(t, eventSystem.eventBuffer.capacity == newRingBufferCapacity)
+	assert.Assert(t, eventSystem.publisher.stop.Load())
 }

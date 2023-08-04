@@ -24,7 +24,8 @@ import (
 )
 
 type EventSystemMock struct {
-	events []*si.EventRecord
+	events  []*si.EventRecord
+	enabled bool
 }
 
 func (m *EventSystemMock) AddEvent(event *si.EventRecord) {
@@ -44,11 +45,14 @@ func (m *EventSystemMock) GetEventsFromID(uint64, uint64) ([]*si.EventRecord, ui
 }
 
 func (m *EventSystemMock) IsEventTrackingEnabled() bool {
-	return true
+	return m.enabled
 }
 
 func newEventSystemMock() *EventSystemMock {
-	return &EventSystemMock{events: make([]*si.EventRecord, 0)}
+	return &EventSystemMock{events: make([]*si.EventRecord, 0), enabled: true}
+}
+func newEventSystemMockDisabled() *EventSystemMock {
+	return &EventSystemMock{events: make([]*si.EventRecord, 0), enabled: false}
 }
 
 func getTestResource() *resources.Resource {

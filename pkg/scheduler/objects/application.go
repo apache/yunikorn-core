@@ -1643,7 +1643,9 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 	} else {
 		// skip the state change if this is the first replacement allocation as we have done that change
 		// already when the last placeholder was allocated
-		if info.GetResult() != Replaced || !resources.IsZero(sa.allocatedResource) {
+		// special case COMPLETING: gang with only one placeholder moves to COMPLETING and causes orphaned
+		// allocations
+		if info.GetResult() != Replaced || !resources.IsZero(sa.allocatedResource) || sa.IsCompleting() {
 			// progress the state based on where we are, we should never fail in this case
 			// keep track of a failure in log.
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {

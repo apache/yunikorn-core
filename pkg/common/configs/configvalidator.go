@@ -128,7 +128,7 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 		}
 		sumG.AddTo(childG)
 	}
-	if !resources.IsZero(curG) && !resources.FitIn(curG, sumG) {
+	if !curG.FitInMaxUndef(sumG) {
 		return nil, fmt.Errorf("guaranteed resource of parent %s is smaller than sum of guaranteed resources %s of the children for queue %s", curG.String(), sumG.String(), cur.Name)
 	}
 	if !curM.FitInMaxUndef(sumG) {

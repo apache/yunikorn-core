@@ -30,15 +30,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-// the EventSystem should be nil by default, until not set by CreateAndSetEventSystem()
-func TestGetEventSystem(t *testing.T) {
-	eventSystem := GetEventSystem()
-	assert.Assert(t, eventSystem == nil, "the eventSystem should be nil by default")
-	CreateAndSetEventSystem()
-	eventSystem = GetEventSystem()
-	assert.Assert(t, eventSystem != nil, "the eventSystem should not be nil")
-}
-
 // StartService() and Stop() must not cause panic
 func TestSimpleStartAndStop(t *testing.T) {
 	CreateAndSetEventSystem()
@@ -128,9 +119,9 @@ func TestConfigUpdate(t *testing.T) {
 	defer eventSystem.Stop()
 
 	assert.Assert(t, eventSystem.IsEventTrackingEnabled())
-	assert.Assert(t, eventSystem.GetRingBufferCapacity() == configs.DefaultEventRingBufferCapacity)
-	assert.Assert(t, eventSystem.GetRequestCapacity() == configs.DefaultEventRequestCapacity)
-	assert.Assert(t, eventSystem.eventBuffer.capacity == configs.DefaultEventRingBufferCapacity)
+	assert.Equal(t, eventSystem.GetRingBufferCapacity(), uint64(configs.DefaultEventRingBufferCapacity))
+	assert.Equal(t, eventSystem.GetRequestCapacity(), configs.DefaultEventRequestCapacity)
+	assert.Equal(t, eventSystem.eventBuffer.capacity, uint64(configs.DefaultEventRingBufferCapacity))
 	assert.Assert(t, !eventSystem.publisher.stop.Load())
 
 	// update config and wait for refresh
@@ -147,8 +138,8 @@ func TestConfigUpdate(t *testing.T) {
 	}, 10*time.Millisecond, 5*time.Second)
 	assert.NilError(t, err, "timed out waiting for config refresh")
 
-	assert.Assert(t, eventSystem.GetRingBufferCapacity() == newRingBufferCapacity)
-	assert.Assert(t, eventSystem.GetRequestCapacity() == newRequestCapacity)
-	assert.Assert(t, eventSystem.eventBuffer.capacity == newRingBufferCapacity)
+	assert.Equal(t, eventSystem.GetRingBufferCapacity(), newRingBufferCapacity)
+	assert.Equal(t, eventSystem.GetRequestCapacity(), newRequestCapacity)
+	assert.Equal(t, eventSystem.eventBuffer.capacity, newRingBufferCapacity)
 	assert.Assert(t, eventSystem.publisher.stop.Load())
 }

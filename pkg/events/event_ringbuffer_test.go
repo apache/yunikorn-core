@@ -231,7 +231,6 @@ func TestResize(t *testing.T) {
 	ringBuffer = newEventRingBuffer(10)
 	populate(ringBuffer, 10)
 	lastEventIdBeforeResize = ringBuffer.GetLastEventID()
-
 	ringBuffer.Resize(6)
 	assert.Equal(t, uint64(6), ringBuffer.capacity)
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
@@ -244,7 +243,6 @@ func TestResize(t *testing.T) {
 	populate(ringBuffer, 15)
 	assert.Equal(t, true, ringBuffer.head < ringBuffer.capacity)
 	lastEventIdBeforeResize = ringBuffer.GetLastEventID()
-
 	ringBuffer.Resize(8)
 	assert.Equal(t, uint64(8), ringBuffer.capacity)
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
@@ -256,10 +254,8 @@ func TestResize(t *testing.T) {
 	ringBuffer = newEventRingBuffer(10)
 	populate(ringBuffer, 9)
 	assert.Equal(t, false, ringBuffer.full)
-
 	ringBuffer.Resize(2)
 	assert.Equal(t, true, ringBuffer.full)
-
 	ringBuffer.Resize(6)
 	assert.Equal(t, false, ringBuffer.full)
 

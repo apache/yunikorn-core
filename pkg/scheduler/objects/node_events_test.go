@@ -36,26 +36,18 @@ func TestNewNodeEvents(t *testing.T) {
 	// not enabled
 	ne := newNodeEvents(node, nil)
 	assert.Assert(t, ne.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !ne.enabled, "event system should be disabled")
 
 	// enabled
 	ne = newNodeEvents(node, newEventSystemMock())
 	assert.Assert(t, ne.eventSystem != nil, "event system should not be nil")
-	assert.Assert(t, ne.enabled, "event system should be enabled")
 }
 
 func TestSendNodeAddedEvent(t *testing.T) {
 	node := &Node{
 		NodeID: nodeID1,
 	}
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendNodeAddedEvent()
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendNodeAddedEvent()
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
@@ -71,14 +63,8 @@ func TestSendNodeRemovedEvent(t *testing.T) {
 	node := &Node{
 		NodeID: nodeID1,
 	}
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendNodeRemovedEvent()
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendNodeRemovedEvent()
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
@@ -95,14 +81,8 @@ func TestSendAllocationAddedEvent(t *testing.T) {
 		NodeID: nodeID1,
 	}
 	resource := getTestResource()
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendAllocationAddedEvent("alloc-0", resource)
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendAllocationAddedEvent("alloc-0", resource)
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
@@ -121,14 +101,8 @@ func TestSendAllocationRemovedEvent(t *testing.T) {
 		NodeID: nodeID1,
 	}
 	resource := getTestResource()
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendAllocationRemovedEvent("alloc-0", resource)
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendAllocationRemovedEvent("alloc-0", resource)
 	event := mock.events[0]
 	assert.Equal(t, nodeID1, event.ObjectID)
@@ -145,14 +119,8 @@ func TestSendNodeReadyChangedEvent(t *testing.T) {
 	node := &Node{
 		NodeID: nodeID1,
 	}
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendNodeReadyChangedEvent(true)
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendNodeReadyChangedEvent(true)
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	assert.Equal(t, "ready: true", mock.events[0].Message)
@@ -171,14 +139,8 @@ func TestSendOccupiedResourceChangedEvent(t *testing.T) {
 		NodeID:           nodeID1,
 		occupiedResource: resource,
 	}
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendNodeOccupiedResourceChangedEvent()
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendNodeOccupiedResourceChangedEvent()
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
@@ -198,14 +160,8 @@ func TestSendCapacityChangedEvent(t *testing.T) {
 		NodeID:        nodeID1,
 		totalResource: resource,
 	}
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendNodeCapacityChangedEvent()
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendNodeCapacityChangedEvent()
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
@@ -224,14 +180,8 @@ func TestNodeSchedulableChangedEvent(t *testing.T) {
 		NodeID:      nodeID1,
 		schedulable: true,
 	}
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendNodeSchedulableChangedEvent(false)
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendNodeSchedulableChangedEvent(false)
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
@@ -260,14 +210,8 @@ func TestNodeReservationEvent(t *testing.T) {
 		NodeID:      nodeID1,
 		schedulable: true,
 	}
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendNodeSchedulableChangedEvent(false)
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendReservedEvent(resource, "alloc-0")
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]
@@ -287,14 +231,8 @@ func TestNodeUnreservationEvent(t *testing.T) {
 		NodeID:      nodeID1,
 		schedulable: true,
 	}
-
-	// not enabled
-	ne := newNodeEvents(node, nil)
-	ne.sendNodeSchedulableChangedEvent(false)
-
-	// enabled
 	mock := newEventSystemMock()
-	ne = newNodeEvents(node, mock)
+	ne := newNodeEvents(node, mock)
 	ne.sendUnreservedEvent(resource, "alloc-0")
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	event := mock.events[0]

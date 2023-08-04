@@ -52,18 +52,8 @@ func TestSendAppDoesNotFitEvent(t *testing.T) {
 	app := &Application{
 		queuePath: "root.test",
 	}
-
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendAppDoesNotFitEvent(&AllocationAsk{})
-
-	// enabled
 	mock := newEventSystemMock()
-	evt = newApplicationEvents(app, mock)
-	assert.Assert(t, evt.eventSystem != nil, "event system should not be nil")
-	assert.Assert(t, evt.enabled, "event system should be enabled")
+	evt := newApplicationEvents(app, mock)
 	evt.sendAppDoesNotFitEvent(&AllocationAsk{
 		applicationID: appID0,
 		allocationKey: aKey,
@@ -75,18 +65,8 @@ func TestSendPlaceholderLargerEvent(t *testing.T) {
 	app := &Application{
 		queuePath: "root.test",
 	}
-
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendPlaceholderLargerEvent(&Allocation{}, &AllocationAsk{})
-
-	// enabled
 	mock := newEventSystemMock()
-	evt = newApplicationEvents(app, mock)
-	assert.Assert(t, evt.eventSystem != nil, "event system should not be nil")
-	assert.Assert(t, evt.enabled, "event system should be enabled")
+	evt := newApplicationEvents(app, mock)
 	evt.sendPlaceholderLargerEvent(&Allocation{
 		allocationKey: aKey,
 	}, &AllocationAsk{
@@ -101,18 +81,9 @@ func TestSendNewAllocationEvent(t *testing.T) {
 		ApplicationID: appID0,
 		queuePath:     "root.test",
 	}
-
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendNewAllocationEvent(&Allocation{})
-
-	// enabled
 	mock := newEventSystemMock()
-	evt = newApplicationEvents(app, mock)
+	evt := newApplicationEvents(app, mock)
 	assert.Assert(t, evt.eventSystem != nil, "event system should not be nil")
-	assert.Assert(t, evt.enabled, "event system should be enabled")
 	evt.sendNewAllocationEvent(&Allocation{
 		applicationID: appID0,
 		allocationKey: aKey,
@@ -132,18 +103,9 @@ func TestSendNewAskEvent(t *testing.T) {
 		ApplicationID: appID0,
 		queuePath:     "root.test",
 	}
-
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendNewAskEvent(&AllocationAsk{})
-
-	// enabled
 	mock := newEventSystemMock()
-	evt = newApplicationEvents(app, mock)
+	evt := newApplicationEvents(app, mock)
 	assert.Assert(t, evt.eventSystem != nil, "event system should not be nil")
-	assert.Assert(t, evt.enabled, "event system should be enabled")
 	evt.sendNewAskEvent(&AllocationAsk{
 		applicationID: appID0,
 		allocationKey: aKey,
@@ -162,7 +124,6 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 		ApplicationID: appID0,
 		queuePath:     "root.test",
 	}
-
 	testCases := []struct {
 		name                 string
 		eventSystemMock      *EventSystemMock
@@ -175,12 +136,6 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 		expectedObjectID     string
 		expectedReferenceID  string
 	}{
-		{
-			name:            "disabled event system",
-			eventSystemMock: nil,
-			terminationType: si.TerminationType_UNKNOWN_TERMINATION_TYPE,
-			allocation:      &Allocation{},
-		},
 		{
 			name:                 "remove allocation cause of node removal",
 			eventSystemMock:      newEventSystemMock(),
@@ -247,12 +202,10 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 			if testCase.eventSystemMock == nil {
 				evt := newApplicationEvents(app, nil)
 				assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-				assert.Assert(t, !evt.enabled, "event system should be disabled")
 				evt.sendRemoveAllocationEvent(testCase.allocation, testCase.terminationType)
 			} else {
 				evt := newApplicationEvents(app, testCase.eventSystemMock)
 				assert.Assert(t, evt.eventSystem != nil, "event system should not be nil")
-				assert.Assert(t, evt.enabled, "event system should be enabled")
 				evt.sendRemoveAllocationEvent(testCase.allocation, testCase.terminationType)
 				assert.Equal(t, testCase.expectedEventCnt, len(testCase.eventSystemMock.events), "event was not generated")
 				assert.Equal(t, testCase.expectedType, testCase.eventSystemMock.events[0].Type, "event type is not expected")
@@ -274,17 +227,8 @@ func TestSendRemoveAskEvent(t *testing.T) {
 	ask := &AllocationAsk{
 		applicationID: appID0,
 		allocationKey: aKey}
-
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendRemoveAskEvent(ask, si.EventRecord_REQUEST_CANCEL)
-
-	// enabled
 	mockEvents := newEventSystemMock()
 	appEvents := newApplicationEvents(app, mockEvents)
-
 	appEvents.sendRemoveAskEvent(ask, si.EventRecord_REQUEST_CANCEL)
 	event := mockEvents.events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)
@@ -310,16 +254,8 @@ func TestSendNewApplicationEvent(t *testing.T) {
 		ApplicationID: appID0,
 		queuePath:     "root.test",
 	}
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendNewApplicationEvent()
-
-	// enabled
 	mockEvents := newEventSystemMock()
 	appEvents := newApplicationEvents(app, mockEvents)
-
 	appEvents.sendNewApplicationEvent()
 	event := mockEvents.events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)
@@ -335,16 +271,8 @@ func TestSendRemoveApplicationEvent(t *testing.T) {
 		ApplicationID: appID0,
 		queuePath:     "root.test",
 	}
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendRemoveApplicationEvent()
-
-	// enabled
 	mockEvents := newEventSystemMock()
 	appEvents := newApplicationEvents(app, mockEvents)
-
 	appEvents.sendRemoveApplicationEvent()
 	event := mockEvents.events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)
@@ -360,16 +288,8 @@ func TestSendRejectApplicationEvent(t *testing.T) {
 		ApplicationID: appID0,
 		queuePath:     "root.test",
 	}
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendRejectApplicationEvent("ResourceReservationTimeout")
-
-	// enabled
 	mockEvents := newEventSystemMock()
 	appEvents := newApplicationEvents(app, mockEvents)
-
 	appEvents.sendRejectApplicationEvent("ResourceReservationTimeout")
 	event := mockEvents.events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)
@@ -386,16 +306,8 @@ func TestSendStateChangeEvent(t *testing.T) {
 		queuePath:             "root.test",
 		sendStateChangeEvents: true,
 	}
-	// not enabled
-	evt := newApplicationEvents(app, nil)
-	assert.Assert(t, evt.eventSystem == nil, "event system should be nil")
-	assert.Assert(t, !evt.enabled, "event system should be disabled")
-	evt.sendStateChangeEvent(si.EventRecord_APP_RUNNING)
-
-	// enabled
 	mockEvents := newEventSystemMock()
 	appEvents := newApplicationEvents(app, mockEvents)
-
 	appEvents.sendStateChangeEvent(si.EventRecord_APP_RUNNING)
 	event := mockEvents.events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)

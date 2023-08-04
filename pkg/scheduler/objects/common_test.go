@@ -43,6 +43,10 @@ func (m *EventSystemMock) GetEventsFromID(uint64, uint64) ([]*si.EventRecord, ui
 	return nil, 0, 0
 }
 
+func (m *EventSystemMock) IsEventTrackingEnabled() bool {
+	return true
+}
+
 func newEventSystemMock() *EventSystemMock {
 	return &EventSystemMock{events: make([]*si.EventRecord, 0)}
 }

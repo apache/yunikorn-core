@@ -28,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -174,7 +175,7 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 		schedulable:       true,
 		reservations:      make(map[string]*reservation),
 	}
-	sn.nodeEvents = newNodeEvents(sn, nil)
+	sn.nodeEvents = newNodeEvents(sn, events.GetEventSystem())
 	return sn
 }
 

@@ -36,7 +36,6 @@ type startupOptions struct {
 	manualScheduleFlag bool
 	startWebAppFlag    bool
 	metricsHistorySize int
-	eventSystemEnabled bool
 }
 
 func StartAllServices() *ServiceContext {
@@ -46,7 +45,6 @@ func StartAllServices() *ServiceContext {
 			manualScheduleFlag: false,
 			startWebAppFlag:    true,
 			metricsHistorySize: 1440,
-			eventSystemEnabled: false,
 		})
 }
 
@@ -63,16 +61,12 @@ func StartAllServicesWithManualScheduler() *ServiceContext {
 			manualScheduleFlag: true,
 			startWebAppFlag:    false,
 			metricsHistorySize: 0,
-			eventSystemEnabled: false,
 		})
 }
 
 func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
-	if opts.eventSystemEnabled {
-		log.Log(log.Entrypoint).Info("creating and starting event system")
-		events.CreateAndSetEventSystem()
-		events.GetEventSystem().StartService()
-	}
+	log.Log(log.Entrypoint).Info("Starting event system")
+	events.GetEventSystem().StartService()
 
 	sched := scheduler.NewScheduler()
 	proxy := rmproxy.NewRMProxy()

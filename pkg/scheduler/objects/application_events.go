@@ -27,51 +27,46 @@ import (
 )
 
 type applicationEvents struct {
-	enabled     bool
 	eventSystem events.EventSystem
 	app         *Application
 }
 
 func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk) {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	message := fmt.Sprintf("Application %s does not fit into %s queue", request.GetApplicationID(), evt.app.queuePath)
 	event := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
 func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request *AllocationAsk) {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource().String(), ph.GetAllocatedResource().String(), ph.GetAllocationKey())
 	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
 func (evt *applicationEvents) sendNewAllocationEvent(alloc *Allocation) {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
 func (evt *applicationEvents) sendNewAskEvent(request *AllocationAsk) {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, request.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_REQUEST, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
 func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, terminationType si.TerminationType) {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
 
@@ -94,16 +89,15 @@ func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, termi
 }
 
 func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, detail si.EventRecord_ChangeDetail) {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_REMOVE, detail, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
 func (evt *applicationEvents) sendNewApplicationEvent() {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
 	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
@@ -111,7 +105,7 @@ func (evt *applicationEvents) sendNewApplicationEvent() {
 }
 
 func (evt *applicationEvents) sendRemoveApplicationEvent() {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
 	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
@@ -119,7 +113,7 @@ func (evt *applicationEvents) sendRemoveApplicationEvent() {
 }
 
 func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
-	if !evt.enabled {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
 	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.allocatedResource)
@@ -127,7 +121,7 @@ func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
 }
 
 func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_ChangeDetail) {
-	if !evt.enabled || !evt.app.sendStateChangeEvents {
+	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.app.sendStateChangeEvents {
 		return
 	}
 	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource)
@@ -137,7 +131,6 @@ func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_C
 func newApplicationEvents(app *Application, evt events.EventSystem) *applicationEvents {
 	return &applicationEvents{
 		eventSystem: evt,
-		enabled:     evt != nil,
 		app:         app,
 	}
 }

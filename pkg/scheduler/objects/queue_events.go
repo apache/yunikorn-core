@@ -25,16 +25,14 @@ import (
 )
 
 type queueEvents struct {
-	enabled     bool
 	eventSystem events.EventSystem
 	queue       *Queue
 }
 
 func (q *queueEvents) sendNewQueueEvent() {
-	if !q.enabled {
+	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	detail := si.EventRecord_QUEUE_DYNAMIC
 	if q.queue.IsManaged() {
 		detail = si.EventRecord_DETAILS_NONE
@@ -45,70 +43,62 @@ func (q *queueEvents) sendNewQueueEvent() {
 }
 
 func (q *queueEvents) sendNewApplicationEvent(appID string) {
-	if !q.enabled {
+	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, appID, si.EventRecord_ADD,
 		si.EventRecord_QUEUE_APP, nil)
 	q.eventSystem.AddEvent(event)
 }
 
 func (q *queueEvents) sendRemoveQueueEvent() {
-	if !q.enabled {
+	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	detail := si.EventRecord_QUEUE_DYNAMIC
 	if q.queue.IsManaged() {
 		detail = si.EventRecord_DETAILS_NONE
 	}
-
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_REMOVE,
 		detail, nil)
 	q.eventSystem.AddEvent(event)
 }
 
 func (q *queueEvents) sendRemoveApplicationEvent(appID string) {
-	if !q.enabled {
+	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, appID, si.EventRecord_REMOVE,
 		si.EventRecord_QUEUE_APP, nil)
 	q.eventSystem.AddEvent(event)
 }
 
 func (q *queueEvents) sendMaxResourceChangedEvent() {
-	if !q.enabled {
+	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_SET,
 		si.EventRecord_QUEUE_MAX, q.queue.maxResource)
 	q.eventSystem.AddEvent(event)
 }
 
 func (q *queueEvents) sendGuaranteedResourceChangedEvent() {
-	if !q.enabled {
+	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_SET,
 		si.EventRecord_QUEUE_GUARANTEED, q.queue.guaranteedResource)
 	q.eventSystem.AddEvent(event)
 }
 
 func (q *queueEvents) sendTypeChangedEvent() {
-	if !q.enabled {
+	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-
 	message := "leaf queue: false"
 	if q.queue.isLeaf {
 		message = "leaf queue: true"
 	}
-
 	event := events.CreateQueueEventRecord(q.queue.QueuePath, message, common.Empty, si.EventRecord_SET,
 		si.EventRecord_QUEUE_TYPE, nil)
 	q.eventSystem.AddEvent(event)
@@ -117,7 +107,6 @@ func (q *queueEvents) sendTypeChangedEvent() {
 func newQueueEvents(queue *Queue, evt events.EventSystem) *queueEvents {
 	return &queueEvents{
 		eventSystem: evt,
-		enabled:     evt != nil,
 		queue:       queue,
 	}
 }

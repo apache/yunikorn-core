@@ -31,6 +31,10 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+const (
+	testKey = "testKey"
+)
+
 func TestGetNormalizedPartitionName(t *testing.T) {
 	tests := []struct {
 		partitionName string
@@ -256,4 +260,124 @@ func TestMin(t *testing.T) {
 	assert.DeepEqual(t, Min(uint64(2), uint64(1)), uint64(1))
 	assert.Check(t, Min(uint64(2), uint64(1)) == uint64(1), true)
 	assert.Check(t, Min(uint64(2), uint64(1)) == 1, false)
+}
+
+func TestGetConfigurationBool(t *testing.T) {
+	testCases := []struct {
+		name          string
+		configs       map[string]string
+		defaultValue  bool
+		expectedValue bool
+	}{
+		{
+			name:          "configs is nil",
+			configs:       nil,
+			defaultValue:  true,
+			expectedValue: true,
+		},
+		{
+			name:          "key not exist",
+			configs:       map[string]string{},
+			defaultValue:  true,
+			expectedValue: true,
+		},
+		{
+			name:          "key exist, value is not bool",
+			configs:       map[string]string{testKey: "xyz"},
+			defaultValue:  true,
+			expectedValue: true,
+		},
+		{
+			name:          "key exist, value is different from default value",
+			configs:       map[string]string{testKey: "false"},
+			defaultValue:  true,
+			expectedValue: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedValue, GetConfigurationBool(tc.configs, testKey, tc.defaultValue))
+		})
+	}
+}
+
+func TestGetConfigurationUint(t *testing.T) {
+	testCases := []struct {
+		name          string
+		configs       map[string]string
+		defaultValue  uint64
+		expectedValue uint64
+	}{
+		{
+			name:          "configs is nil",
+			configs:       nil,
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key not exist",
+			configs:       map[string]string{},
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key exist, value is not uint64",
+			configs:       map[string]string{testKey: "-1000"},
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key exist, value is different from default value",
+			configs:       map[string]string{testKey: "1"},
+			defaultValue:  100,
+			expectedValue: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedValue, GetConfigurationUint(tc.configs, testKey, tc.defaultValue))
+		})
+	}
+}
+
+func TestGetConfigurationInt(t *testing.T) {
+	testCases := []struct {
+		name          string
+		configs       map[string]string
+		defaultValue  int
+		expectedValue int
+	}{
+		{
+			name:          "configs is nil",
+			configs:       nil,
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key not exist",
+			configs:       map[string]string{},
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key exist, value is not int",
+			configs:       map[string]string{testKey: "xyz"},
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key exist, value is different from default value",
+			configs:       map[string]string{testKey: "-1"},
+			defaultValue:  100,
+			expectedValue: -1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedValue, GetConfigurationInt(tc.configs, testKey, tc.defaultValue))
+		})
+	}
 }

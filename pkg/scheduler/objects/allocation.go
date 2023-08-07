@@ -57,7 +57,6 @@ type Allocation struct {
 	taskGroupName     string // task group this allocation belongs to
 	placeholder       bool   // is this a placeholder allocation
 	nodeID            string
-	instType          string
 	uuid              string
 	priority          int32
 	tags              map[string]string
@@ -73,6 +72,7 @@ type Allocation struct {
 	result                AllocationResult
 	releases              []*Allocation
 	preempted             bool
+	instType              string
 
 	sync.RWMutex
 }
@@ -103,8 +103,8 @@ func NewAllocation(uuid, nodeID string, instType string, ask *AllocationAsk) *Al
 	}
 }
 
-func newReservedAllocation(result AllocationResult, nodeID string, instType string, ask *AllocationAsk) *Allocation {
-	alloc := NewAllocation("", nodeID, instType, ask)
+func newReservedAllocation(result AllocationResult, nodeID string, ask *AllocationAsk) *Allocation {
+	alloc := NewAllocation("", nodeID, "", ask)
 	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(result)
 	return alloc
@@ -270,8 +270,17 @@ func (a *Allocation) GetNodeID() string {
 	return a.nodeID
 }
 
+// SetInstanceType sets node instance type for this allocation
+func (a *Allocation) SetInstanceType(instType string) {
+	a.Lock()
+	defer a.Unlock()
+	a.instType = instType
+}
+
 // GetInstanceType return the type of the instance used by this allocation
 func (a *Allocation) GetInstanceType() string {
+	a.RLock()
+	defer a.RUnlock()
 	return a.instType
 }
 

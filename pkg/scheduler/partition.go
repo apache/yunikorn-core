@@ -62,6 +62,8 @@ type PartitionContext struct {
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
 	allocations            int                             // Number of allocations on the partition
+	reservations           int                             // number of reservations
+	placeholderAllocations int                             // number of placeholder allocations
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -771,6 +773,9 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 		if alloc.IsPreempted() {
 			app.GetQueue().DecPreemptingResource(alloc.GetAllocatedResource())
 		}
+		if alloc.IsPlaceholder() {
+			pc.decPhAllocationCount(1)
+		}
 
 		// the allocation is removed so add it to the list that we return
 		released = append(released, alloc)
@@ -810,6 +815,9 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
+	if pc.getReservationCount() == 0 {
+		return nil
+	}
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		// nothing to do just return
 		return nil
@@ -825,6 +833,9 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 // Try process placeholder for the partition
 // Lock free call this all locks are taken when needed in called functions
 func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
+	if pc.getPhAllocationCount() == 0 {
+		return nil
+	}
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		// nothing to do just return
 		return nil
@@ -891,6 +902,9 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 
 	// track the number of allocations
 	pc.updateAllocationCount(1)
+	if alloc.IsPlaceholder() {
+		pc.incPhAllocationCount()
+	}
 
 	log.Log(log.SchedPartition).Info("scheduler allocation processed",
 		zap.String("appID", alloc.GetApplicationID()),
@@ -923,6 +937,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 
 	// add the reservation to the queue list
 	app.GetQueue().Reserve(appID)
+	pc.incReservationCount()
 
 	log.Log(log.SchedPartition).Info("allocation ask is reserved",
 		zap.String("appID", appID),
@@ -945,6 +960,7 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 	// remove the reservation of the queue
 	appID := app.ApplicationID
 	app.GetQueue().UnReserve(appID, num)
+	pc.decReservationCount(num)
 
 	log.Log(log.SchedPartition).Info("allocation ask is unreserved",
 		zap.String("appID", appID),
@@ -1155,6 +1171,9 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 
 	// track the number of allocations
 	pc.updateAllocationCount(1)
+	if alloc.IsPlaceholder() {
+		pc.incPhAllocationCount()
+	}
 
 	log.Log(log.SchedPartition).Info("recovered allocation",
 		zap.String("partitionName", pc.Name),
@@ -1239,6 +1258,13 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		log.Log(log.SchedPartition).Info("remove all allocations",
 			zap.String("appID", appID))
 		released = append(released, app.RemoveAllAllocations()...)
+		total := 0
+		for _, r := range released {
+			if r.IsPlaceholder() {
+				total++
+			}
+		}
+		pc.decPhAllocationCount(total)
 	} else {
 		// if we have an uuid the termination type is important
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
@@ -1247,6 +1273,9 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("allocationId", uuid))
 			if alloc := app.ReplaceAllocation(uuid); alloc != nil {
 				released = append(released, alloc)
+				if alloc.IsPlaceholder() {
+					pc.decPhAllocationCount(1)
+				}
 			}
 		} else {
 			log.Log(log.SchedPartition).Info("removing allocation from application",
@@ -1439,4 +1468,40 @@ func (pc *PartitionContext) AddRejectedApplication(rejectedApplication *objects.
 		pc.rejectedApplications = make(map[string]*objects.Application)
 	}
 	pc.rejectedApplications[rejectedApplication.ApplicationID] = rejectedApplication
+}
+
+func (pc *PartitionContext) incPhAllocationCount() {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.placeholderAllocations++
+}
+
+func (pc *PartitionContext) decPhAllocationCount(num int) {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.placeholderAllocations -= num
+}
+
+func (pc *PartitionContext) getPhAllocationCount() int {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.placeholderAllocations
+}
+
+func (pc *PartitionContext) incReservationCount() {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.reservations++
+}
+
+func (pc *PartitionContext) decReservationCount(num int) {
+	pc.Lock()
+	defer pc.Unlock()
+	pc.reservations -= num
+}
+
+func (pc *PartitionContext) getReservationCount() int {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.reservations
 }

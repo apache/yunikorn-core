@@ -23,6 +23,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
@@ -66,11 +67,10 @@ func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, 
 		if !increasedGroupUsage {
 			_, decreased := ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, false)
 			if !decreased {
-				log.Log(log.SchedUGM).Error("Problem in increasing group resource usage. Hence tried to rollback user tracked usage, but failed to do.",
+				log.Log(log.SchedUGM).Error("User resource usage rollback has failed",
 					zap.String("queue path", queuePath),
 					zap.String("application", applicationID),
-					zap.String("user", ut.userName),
-					zap.Stringer("usage", usage))
+					zap.String("user", ut.userName))
 			}
 		}
 		return increasedGroupUsage
@@ -106,7 +106,7 @@ func (ut *UserTracker) getGroupForApp(applicationID string) string {
 	if ut.appGroupTrackers[applicationID] != nil {
 		return ut.appGroupTrackers[applicationID].groupName
 	}
-	return ""
+	return common.Empty
 }
 
 func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
@@ -139,7 +139,7 @@ func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOIn
 			userResourceUsage.Groups[app] = gt.groupName
 		}
 	}
-	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo("")
+	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo(common.Empty)
 	return userResourceUsage
 }
 

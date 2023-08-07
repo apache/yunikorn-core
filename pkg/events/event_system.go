@@ -34,12 +34,14 @@ import (
 var defaultEventChannelSize = 100000
 var defaultRingBufferSize uint64 = 100000
 
+var once sync.Once
 var ev EventSystem
 
 type EventSystem interface {
 	AddEvent(event *si.EventRecord)
 	StartService()
 	Stop()
+	IsEventTrackingEnabled() bool
 	GetEventsFromID(uint64, uint64) ([]*si.EventRecord, uint64, uint64)
 }
 
@@ -65,6 +67,18 @@ func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord,
 }
 
 func GetEventSystem() EventSystem {
+	once.Do(func() {
+		store := newEventStore()
+		ev = &EventSystemImpl{
+			Store:         store,
+			channel:       make(chan *si.EventRecord, defaultEventChannelSize),
+			stop:          make(chan bool),
+			stopped:       false,
+			publisher:     CreateShimPublisher(store),
+			eventBuffer:   newEventRingBuffer(defaultRingBufferSize),
+			eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
+		}
+	})
 	return ev
 }
 

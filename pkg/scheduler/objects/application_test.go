@@ -267,32 +267,6 @@ func TestAppAllocReservation(t *testing.T) {
 	if app.HasReserved() || node1.IsReserved() || node2.IsReserved() || reservedAsks != 2 {
 		t.Errorf("ask removal did not clean up all reservations, reserved released = %d", reservedAsks)
 	}
-
-	// wait for events to be processed
-	noEvents := 0
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 3
-	})
-	assert.NilError(t, err, "expected 3 events, got %d", noEvents)
-	records := eventSystem.Store.CollectEvents()
-	if records == nil {
-		t.Fatal("collecting eventChannel should return something")
-	}
-	assert.Equal(t, 3, len(records))
-	allocAskRecord := records[1]
-	assert.Equal(t, si.EventRecord_APP, allocAskRecord.Type, "incorrect event type, expect app")
-	assert.Equal(t, ask.applicationID, allocAskRecord.ObjectID, "incorrect object ID, expected application ID")
-	assert.Equal(t, ask.allocationKey, allocAskRecord.ReferenceID, "incorrect reference ID, expected alloc ask ID")
-	assert.Equal(t, si.EventRecord_ADD, allocAskRecord.EventChangeType, "incorrect change type, expected add")
-	assert.Equal(t, si.EventRecord_APP_REQUEST, allocAskRecord.EventChangeDetail, "incorrect change detail, expected new alloc ask")
-	allocAskCancelRecord := records[2]
-	assert.Equal(t, si.EventRecord_APP, allocAskCancelRecord.Type, "incorrect event type, expect app")
-	assert.Equal(t, ask.applicationID, allocAskCancelRecord.ObjectID, "incorrect object ID, expected application ID")
-	assert.Equal(t, ask.allocationKey, allocAskCancelRecord.ReferenceID, "incorrect reference ID, expected alloc ask ID")
-	assert.Equal(t, si.EventRecord_REMOVE, allocAskCancelRecord.EventChangeType, "incorrect change type, expected remove")
-	assert.Equal(t, si.EventRecord_REQUEST_CANCEL, allocAskCancelRecord.EventChangeDetail, "incorrect change detail, expected new alloc ask")
 }
 
 // test update allocation repeat

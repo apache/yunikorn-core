@@ -156,25 +156,25 @@ func NewRecoveryQueue(parent *Queue) (*Queue, error) {
 	if parent.GetQueuePath() != configs.RootQueue {
 		return nil, fmt.Errorf("recovery queue cannot be created with non-root parent: %s", parent.GetQueuePath())
 	}
-	return newDynamicQueueInternal(common.RecoveryQueue, true, parent, false)
+	return newDynamicQueueInternal(common.RecoveryQueue, true, parent)
 }
 
 // NewDynamicQueue creates a new queue to be added to the system based on the placement rules
 // A dynamically added queue can never be the root queue so parent must be set
 // lock free as it cannot be referenced yet
 func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
-	return newDynamicQueueInternal(name, leaf, parent, true)
-}
-
-func newDynamicQueueInternal(name string, leaf bool, parent *Queue, validateName bool) (*Queue, error) {
 	// fail without a parent
 	if parent == nil {
 		return nil, fmt.Errorf("dynamic queue can not be added without parent: %s", name)
 	}
 	// name might not be checked do it here
-	if validateName && !configs.QueueNameRegExp.MatchString(name) {
+	if !configs.QueueNameRegExp.MatchString(name) {
 		return nil, fmt.Errorf("invalid queue name '%s', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters", name)
 	}
+	return newDynamicQueueInternal(name, leaf, parent)
+}
+
+func newDynamicQueueInternal(name string, leaf bool, parent *Queue) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(name)
 	sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name

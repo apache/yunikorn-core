@@ -103,6 +103,9 @@ func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule,
 		}
 		newRules = append(newRules, buildRule)
 	}
+	// ensure the recovery rule is always present
+	newRules = append(newRules, &recoveryRule{})
+
 	return newRules, nil
 }
 

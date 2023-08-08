@@ -32,20 +32,21 @@ import (
 func TestManagerNew(t *testing.T) {
 	// basic info without rules, manager should not init
 	man := NewPlacementManager(nil, queueFunc)
-	assert.Equal(t, 1, len(man.rules), "wrong rule count for empty placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty placement manager")
 	assert.Equal(t, types.Provided, man.rules[0].getName(), "wrong name for implicit provided rule")
+	assert.Equal(t, types.Recovery, man.rules[1].getName(), "wrong name for implicit recovery rule")
 }
 
 func TestManagerInit(t *testing.T) {
 	// basic info without rules, manager should implicitly init
 	man := NewPlacementManager(nil, queueFunc)
-	assert.Equal(t, 1, len(man.rules), "wrong rule count for nil placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
 
 	// try to init with empty list should do the same
 	var rules []configs.PlacementRule
 	err := man.initialise(rules)
 	assert.NilError(t, err, "Failed to initialize empty placement rules")
-	assert.Equal(t, 1, len(man.rules), "wrong rule count for empty placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty placement manager")
 
 	rules = []configs.PlacementRule{
 		{Name: "unknown"},
@@ -66,12 +67,12 @@ func TestManagerInit(t *testing.T) {
 	rules = []configs.PlacementRule{}
 	err = man.initialise(rules)
 	assert.NilError(t, err, "Failed to re-initialize empty placement rules")
-	assert.Equal(t, 1, len(man.rules), "wrong rule count for newly empty placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for newly empty placement manager")
 
 	// check if we handle a nil list
 	err = man.initialise(nil)
 	assert.NilError(t, err, "Failed to re-initialize nil placement rules")
-	assert.Equal(t, 1, len(man.rules), "wrong rule count for nil placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
 }
 
 func TestManagerUpdate(t *testing.T) {
@@ -88,12 +89,12 @@ func TestManagerUpdate(t *testing.T) {
 	rules = []configs.PlacementRule{}
 	err = man.UpdateRules(rules)
 	assert.NilError(t, err, "Failed to re-initialize empty placement rules")
-	assert.Equal(t, 1, len(man.rules), "wrong rule count for newly empty placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for newly empty placement manager")
 
 	// check if we handle a nil list
 	err = man.UpdateRules(nil)
 	assert.NilError(t, err, "Failed to re-initialize nil placement rules")
-	assert.Equal(t, 1, len(man.rules), "wrong rule count for nil placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
 }
 
 func TestManagerBuildRule(t *testing.T) {
@@ -106,8 +107,8 @@ func TestManagerBuildRule(t *testing.T) {
 	if err != nil {
 		t.Errorf("test rule build should not have failed, err: %v", err)
 	}
-	if len(ruleObjs) != 1 {
-		t.Errorf("test rule build should have created 1 rule found: %d", len(ruleObjs))
+	if len(ruleObjs) != 2 {
+		t.Errorf("test rule build should have created 2 rules found: %d", len(ruleObjs))
 	}
 
 	// rule with a parent rule should only be 1 rule in the list
@@ -119,8 +120,8 @@ func TestManagerBuildRule(t *testing.T) {
 		},
 	}
 	ruleObjs, err = man.buildRules(rules)
-	if err != nil || len(ruleObjs) != 1 {
-		t.Errorf("test rule build should not have failed and created 1 top level rule, err: %v, rules: %v", err, ruleObjs)
+	if err != nil || len(ruleObjs) != 2 {
+		t.Errorf("test rule build should not have failed and created 2 top level rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
 		parent := ruleObjs[0].getParent()
 		if parent == nil || parent.getName() != "test" {
@@ -134,9 +135,9 @@ func TestManagerBuildRule(t *testing.T) {
 		{Name: "test"},
 	}
 	ruleObjs, err = man.buildRules(rules)
-	if err != nil || len(ruleObjs) != 2 {
-		t.Errorf("rule build should not have failed and created 2 rule, err: %v, rules: %v", err, ruleObjs)
-	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" {
+	if err != nil || len(ruleObjs) != 3 {
+		t.Errorf("rule build should not have failed and created 3 rules, err: %v, rules: %v", err, ruleObjs)
+	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" || ruleObjs[2].getName() != "recovery" {
 		t.Errorf("rule build order is not preserved: %v", ruleObjs)
 	}
 }

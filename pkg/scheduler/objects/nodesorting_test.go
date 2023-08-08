@@ -171,11 +171,11 @@ func TestSortPolicyWeighting(t *testing.T) {
 
 	// add allocations
 	res1 := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 500, "memory": 12000})
-	alloc1 := newAllocation("test-app-1", uuid.NewString(), "test1", "root.default", res1)
+	alloc1 := newAllocation("test-app-1", uuid.NewString(), "test1", res1)
 	node1.AddAllocation(alloc1)
 
 	res2 := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1500, "memory": 4000})
-	alloc2 := newAllocation("test-app-1", uuid.NewString(), "test2", "root.default", res2)
+	alloc2 := newAllocation("test-app-1", uuid.NewString(), "test2", res2)
 	node2.AddAllocation(alloc2)
 
 	// node1 w/ fair: 25% vcore, 75% memory => ((.25 * 4) + (.75 * 1)) / 5 = 0.35
@@ -262,7 +262,7 @@ func TestSortPolicy(t *testing.T) {
 
 	// add allocation to second node
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000, "memory": 2000})
-	alloc := newAllocation("test-app-1", uuid.NewString(), "test2", "root.default", half)
+	alloc := newAllocation("test-app-1", uuid.NewString(), "test2", half)
 	node2.AddAllocation(alloc)
 
 	// node2 should now be first as it is the highest-loaded

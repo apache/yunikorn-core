@@ -700,7 +700,7 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
-	alloc := newAllocation(appID1, "uuid-0", "node-0", "root.leaf", res)
+	alloc := newAllocation(appID1, "uuid-0", "node-0", res)
 	alloc.placeholder = true
 	// adding a placeholder allocation & pending request to "app1"
 	app1.AddAllocation(alloc)
@@ -712,7 +712,7 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	assert.Equal(t, 1, len(phApps))
 
 	// adding a placeholder allocation & pending request to "app2"
-	alloc2 := newAllocation(appID2, "uuid-1", "node-1", "root.leaf", res)
+	alloc2 := newAllocation(appID2, "uuid-1", "node-1", res)
 	alloc2.placeholder = true
 	app2.AddAllocation(alloc2)
 	err = app2.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))

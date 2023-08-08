@@ -839,7 +839,7 @@ func TestAllocations(t *testing.T) {
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
-	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	app.AddAllocation(alloc)
 	if !resources.Equals(app.allocatedResource, res) {
 		t.Errorf("allocated resources is not updated correctly: %v", app.allocatedResource)
@@ -850,10 +850,10 @@ func TestAllocations(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 
 	// add more allocations to test the removals
-	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	alloc = newAllocation(appID1, "uuid-2", nodeID1, res)
 	app.AddAllocation(alloc)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
-	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
+	alloc = newAllocation(appID1, "uuid-3", nodeID1, res)
 	app.AddAllocation(alloc)
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 3)
@@ -896,7 +896,7 @@ func TestGangAllocChange(t *testing.T) {
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
-	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	alloc.placeholder = true
 	app.AddAllocation(alloc)
 	assert.Assert(t, resources.Equals(app.allocatedPlaceholder, res), "allocated placeholders resources is not updated correctly: %s", app.allocatedPlaceholder.String())
@@ -905,7 +905,7 @@ func TestGangAllocChange(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
 	// add second placeholder this should trigger state update
-	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	alloc = newAllocation(appID1, "uuid-2", nodeID1, res)
 	alloc.placeholder = true
 	app.AddAllocation(alloc)
 	assert.Assert(t, resources.Equals(app.allocatedPlaceholder, totalPH), "allocated placeholders resources is not updated correctly: %s", app.allocatedPlaceholder.String())
@@ -914,7 +914,7 @@ func TestGangAllocChange(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
 	// add a real alloc this should NOT trigger state update
-	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
+	alloc = newAllocation(appID1, "uuid-3", nodeID1, res)
 	alloc.SetResult(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 3)
@@ -922,7 +922,7 @@ func TestGangAllocChange(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 3))
 
 	// add a second real alloc this should trigger state update
-	alloc = newAllocation(appID1, "uuid-4", nodeID1, "root.a", res)
+	alloc = newAllocation(appID1, "uuid-4", nodeID1, res)
 	alloc.SetResult(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 4)
@@ -943,7 +943,7 @@ func TestAllocChange(t *testing.T) {
 	resMap := map[string]string{"first": "2"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
-	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	// adding a normal allocation should change the state
 	app.AddAllocation(alloc)
 	assert.Assert(t, resources.Equals(app.allocatedResource, res), "allocated resources is not updated correctly: %s", app.allocatedResource.String())
@@ -952,7 +952,7 @@ func TestAllocChange(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
 	// add a second real alloc this should trigger state update
-	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	alloc = newAllocation(appID1, "uuid-2", nodeID1, res)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 2)
 	assert.Assert(t, app.IsRunning(), "app should have changed to running` state")
@@ -1080,7 +1080,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
-	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	app.AddAllocation(alloc)
 	if !resources.Equals(app.allocatedResource, res) {
 		t.Errorf("allocated resources is not updated correctly: %v", app.allocatedResource)
@@ -1100,7 +1100,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 	assertResourceUsage(t, appSummary, 0, 0)
 
 	// add more allocations to test the removals
-	alloc = newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	alloc = newAllocation(appID1, "uuid-2", nodeID1, res)
 	app.AddAllocation(alloc)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
@@ -1116,7 +1116,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 	appSummary.DoLogging()
 	assertResourceUsage(t, appSummary, 300, 30)
 
-	alloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
+	alloc = newAllocation(appID1, "uuid-3", nodeID1, res)
 	app.AddAllocation(alloc)
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 2)
@@ -1227,7 +1227,7 @@ func TestReplaceAllocation(t *testing.T) {
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
-	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
+	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, res)
 	// add the placeholder to the app
 	app.AddAllocation(ph)
 	// add PlaceholderData
@@ -1257,7 +1257,7 @@ func TestReplaceAllocation(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
 	// set the real one to replace the placeholder
-	realAlloc := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	realAlloc := newAllocation(appID1, "uuid-2", nodeID1, res)
 	realAlloc.SetResult(Replaced)
 	ph.AddRelease(realAlloc)
 	alloc = app.ReplaceAllocation("uuid-1")
@@ -1279,10 +1279,10 @@ func TestReplaceAllocation(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
 	// set multiple real allocations to replace the placeholder
-	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, "root.a", res)
+	realAlloc = newAllocation(appID1, "uuid-3", nodeID1, res)
 	realAlloc.SetResult(Replaced)
 	ph.AddRelease(realAlloc)
-	realAllocNoAdd := newAllocation(appID1, "not-added", nodeID1, "root.a", res)
+	realAllocNoAdd := newAllocation(appID1, "not-added", nodeID1, res)
 	realAllocNoAdd.SetResult(Replaced)
 	ph.AddRelease(realAlloc)
 	alloc = app.ReplaceAllocation("uuid-1")
@@ -1309,9 +1309,9 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
-	ph1 := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
-	ph2 := newPlaceholderAlloc(appID1, "uuid-2", nodeID1, "root.a", res)
-	ph3 := newPlaceholderAlloc(appID1, "uuid-3", nodeID1, "root.a", res)
+	ph1 := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, res)
+	ph2 := newPlaceholderAlloc(appID1, "uuid-2", nodeID1, res)
+	ph3 := newPlaceholderAlloc(appID1, "uuid-3", nodeID1, res)
 	app.AddAllocation(ph1)
 	assert.NilError(t, err, "could not add ask")
 	app.addPlaceholderDataWithLocking(ph1.GetAsk())
@@ -1324,21 +1324,21 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	app.addPlaceholderDataWithLocking(ph3.GetAsk())
 
 	// replace placeholders
-	realAlloc1 := newAllocation(appID1, "uuid-100", nodeID1, "root.a", res)
+	realAlloc1 := newAllocation(appID1, "uuid-100", nodeID1, res)
 	realAlloc1.SetResult(Replaced)
 	ph1.AddRelease(realAlloc1)
 	alloc := app.ReplaceAllocation("uuid-1")
 	app.RemoveAllocation("uuid-1", si.TerminationType_PLACEHOLDER_REPLACED)
 	assert.Equal(t, "uuid-1", alloc.uuid)
 	assert.Equal(t, true, app.HasPlaceholderAllocation())
-	realAlloc2 := newAllocation(appID1, "uuid-200", nodeID1, "root.a", res)
+	realAlloc2 := newAllocation(appID1, "uuid-200", nodeID1, res)
 	realAlloc2.SetResult(Replaced)
 	ph2.AddRelease(realAlloc2)
 	alloc = app.ReplaceAllocation("uuid-2")
 	app.RemoveAllocation("uuid-2", si.TerminationType_PLACEHOLDER_REPLACED)
 	assert.Equal(t, "uuid-2", alloc.uuid)
 	assert.Equal(t, true, app.HasPlaceholderAllocation())
-	realAlloc3 := newAllocation(appID1, "uuid-300", nodeID1, "root.a", res)
+	realAlloc3 := newAllocation(appID1, "uuid-300", nodeID1, res)
 	realAlloc3.SetResult(Replaced)
 	ph3.AddRelease(realAlloc3)
 	alloc = app.ReplaceAllocation("uuid-3")
@@ -1390,12 +1390,12 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	// add the placeholder to the app
-	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, "root.a", res)
+	ph := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, res)
 	app.AddAllocation(ph)
 	assertUserGroupResource(t, getTestUserGroup(), res)
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	// add a second one to check the filter
-	ph = newPlaceholderAlloc(appID1, "uuid-2", nodeID1, "root.a", res)
+	ph = newPlaceholderAlloc(appID1, "uuid-2", nodeID1, res)
 	app.AddAllocation(ph)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
@@ -1452,7 +1452,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "Unexpected error when creating resource from map")
 	// add the placeholders to the app: one released, one still available.
-	ph := newPlaceholderAlloc(appID1, "released", nodeID1, "root.a", res)
+	ph := newPlaceholderAlloc(appID1, "released", nodeID1, res)
 	ph.SetReleased(true)
 	app.AddAllocation(ph)
 	// add PlaceholderData
@@ -1466,13 +1466,13 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
-	ph = newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
+	ph = newPlaceholderAlloc(appID1, "waiting", nodeID1, res)
 	app.AddAllocation(ph)
 	app.addPlaceholderDataWithLocking(ph.GetAsk())
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
-	alloc := newAllocation(appID1, "real", nodeID1, "root.a", res)
+	alloc := newAllocation(appID1, "real", nodeID1, res)
 	app.AddAllocation(alloc)
 	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
@@ -1515,12 +1515,12 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "Unexpected error when creating resource from map")
 	// add the placeholder to the app
-	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
+	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, res)
 	app.AddAllocation(ph)
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 	// add a real allocation as well
-	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	app.AddAllocation(alloc)
 	// move on to running
 	app.SetState(Running.String())
@@ -1562,12 +1562,12 @@ func TestAppTimersAfterAppRemoval(t *testing.T) {
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "Unexpected error when creating resource from map")
 	// add the placeholder to the app
-	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, "root.a", res)
+	ph := newPlaceholderAlloc(appID1, "waiting", nodeID1, res)
 	app.AddAllocation(ph)
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 	// add a real allocation as well
-	alloc := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
+	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	app.AddAllocation(alloc)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 	// move on to running
@@ -2072,8 +2072,8 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
-	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", res)
-	alloc2 := newAllocation(appID1, "uuid-2", nodeID1, "root.a", res)
+	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, res)
+	alloc2 := newAllocation(appID1, "uuid-2", nodeID1, res)
 
 	// add + remove
 	app.AddAllocation(alloc1)
@@ -2188,7 +2188,7 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 	// smallerRes < res in the same task group, so delta will be -50 memory
-	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, "root.a", smallerRes)
+	alloc1 := newAllocation(appID1, "uuid-1", nodeID1, smallerRes)
 	alloc1.placeholder = true
 	alloc1.taskGroupName = "testGroup"
 	app.AddAllocation(alloc1)

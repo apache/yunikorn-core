@@ -1151,7 +1151,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one at this point
 			if node != nil && node.preReserveConditions(request) {
-				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), request)
+				alloc := NewAllocation(common.GetNewUUID(), node.NodeID, request)
 				// double link to make it easier to find
 				// alloc (the real one) releases points to the placeholder in the releases list
 				alloc.SetRelease(ph)
@@ -1193,7 +1193,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				return true
 			}
 			// allocation worked: on a non placeholder node update result and return
-			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), reqFit)
+			alloc := NewAllocation(common.GetNewUUID(), node.NodeID, reqFit)
 			// double link to make it easier to find
 			// alloc (the real one) releases points to the placeholder in the releases list
 			alloc.SetRelease(phFit)
@@ -1490,7 +1490,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	}
 
 	// everything OK really allocate
-	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, node.GetInstanceType(), ask)
+	alloc := NewAllocation(common.GetNewUUID(), node.NodeID, ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
 			log.Log(log.SchedApplication).Warn("queue update failed unexpectedly",

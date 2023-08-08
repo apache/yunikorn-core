@@ -625,7 +625,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 		return err
 	}
 
-	existingAllocations := cc.convertAllocations(sn, nodeInfo.ExistingAllocations)
+	existingAllocations := cc.convertAllocations(nodeInfo.ExistingAllocations)
 	err := partition.AddNode(sn, existingAllocations)
 	sn.SendNodeAddedEvent()
 	if err != nil {
@@ -844,11 +844,10 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 }
 
 // Convert the si allocation to a proposal to add to the node
-func (cc *ClusterContext) convertAllocations(node *objects.Node, allocations []*si.Allocation) []*objects.Allocation {
-	instType := node.GetInstanceType()
+func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*objects.Allocation {
 	convert := make([]*objects.Allocation, len(allocations))
 	for current, allocation := range allocations {
-		convert[current] = objects.NewAllocationFromSI(allocation, instType)
+		convert[current] = objects.NewAllocationFromSI(allocation)
 	}
 
 	return convert

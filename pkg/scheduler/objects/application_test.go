@@ -688,7 +688,7 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
 	ask.placeholder = true
-	allocInfo := NewAllocation("uuid-1", nodeID1, instType1, ask)
+	allocInfo := NewAllocation("uuid-1", nodeID1, ask)
 	app.AddAllocation(allocInfo)
 	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted")
@@ -739,7 +739,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
 	// add an alloc
 	uuid := "uuid-1"
-	allocInfo := NewAllocation(uuid, nodeID1, instType1, ask)
+	allocInfo := NewAllocation(uuid, nodeID1, ask)
 	app.AddAllocation(allocInfo)
 	// app should be starting
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
@@ -803,7 +803,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
 	// add an alloc based on the placeholder ask
 	uuid := "uuid-1"
-	allocInfo := NewAllocation(uuid, nodeID1, instType1, ask)
+	allocInfo := NewAllocation(uuid, nodeID1, ask)
 	app.AddAllocation(allocInfo)
 	// app should be in the same state as it was before as it is a placeholder allocation
 	assert.Assert(t, app.IsAccepted(), "Application did not return accepted state after alloc: %s", app.CurrentState())
@@ -1062,7 +1062,7 @@ func TestCompleted(t *testing.T) {
 }
 
 func assertResourceUsage(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64, vcoresSecconds int64) {
-	detailedResource := appSummary.ResourceUsage.UsedResourceMap["itype-1"]
+	detailedResource := appSummary.ResourceUsage.UsedResourceMap[instType1]
 	assert.Equal(t, memorySeconds, detailedResource["memory"])
 	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
 }
@@ -1081,6 +1081,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
 	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
+	alloc.SetInstanceType(instType1)
 	app.AddAllocation(alloc)
 	if !resources.Equals(app.allocatedResource, res) {
 		t.Errorf("allocated resources is not updated correctly: %v", app.allocatedResource)
@@ -1101,6 +1102,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 
 	// add more allocations to test the removals
 	alloc = newAllocation(appID1, "uuid-2", nodeID1, res)
+	alloc.SetInstanceType(instType1)
 	app.AddAllocation(alloc)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
@@ -1117,6 +1119,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 	assertResourceUsage(t, appSummary, 300, 30)
 
 	alloc = newAllocation(appID1, "uuid-3", nodeID1, res)
+	alloc.SetInstanceType(instType1)
 	app.AddAllocation(alloc)
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, len(allocs), 2)

@@ -163,7 +163,7 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 			for id := 0; id < len(nodesInfo); id++ {
 				node := newNode(nodesInfo[id].nodeID, map[string]resources.Quantity{"vcore": resources.Quantity(defaultCapicity[0]), "memory": resources.Quantity(defaultCapicity[1])})
 				res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(nodesInfo[id].allocatedVcore), "memory": resources.Quantity(nodesInfo[id].allocatedMem)})
-				alloc := newAllocation(fmt.Sprintf("test-app-%d", id+1), uuid.NewString(), fmt.Sprintf("test-%d", id+1), "root.default", res)
+				alloc := newAllocation(fmt.Sprintf("test-app-%d", id+1), uuid.NewString(), fmt.Sprintf("test-%d", id+1), res)
 				if ok := node.AddAllocation(alloc); !ok {
 					t.Error("Allocation error happen in node.")
 				}
@@ -229,7 +229,7 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 			for id := 1; id < len(nodeNames)+1; id++ {
 				node := newNode(nodeNames[id-1], map[string]resources.Quantity{"vcore": resources.Quantity(6)})
 				res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(id)})
-				alloc := newAllocation(fmt.Sprintf("test-app-%d", id+1), uuid.NewString(), fmt.Sprintf("test-%d", id), "root.default", res)
+				alloc := newAllocation(fmt.Sprintf("test-app-%d", id+1), uuid.NewString(), fmt.Sprintf("test-%d", id), res)
 				node.AddAllocation(alloc)
 
 				if err := nc.AddNode(node); err != nil {
@@ -298,7 +298,7 @@ func TestGetFullNodeIterator(t *testing.T) {
 			}
 		} else {
 			res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)})
-			alloc := newAllocation(fmt.Sprintf("test-app-%d", i), uuid.NewString(), fmt.Sprintf("test-%d", i), "root.default", res)
+			alloc := newAllocation(fmt.Sprintf("test-app-%d", i), uuid.NewString(), fmt.Sprintf("test-%d", i), res)
 			if ok := node.AddAllocation(alloc); !ok {
 				t.Error("Allocation error in node.")
 			}
@@ -347,7 +347,7 @@ func TestGetNodeIterator(t *testing.T) {
 					}
 				} else {
 					res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)})
-					alloc := newAllocation(fmt.Sprintf("test-app-%d", i), uuid.NewString(), fmt.Sprintf("test-%d", i), "root.default", res)
+					alloc := newAllocation(fmt.Sprintf("test-app-%d", i), uuid.NewString(), fmt.Sprintf("test-%d", i), res)
 					if ok := node.AddAllocation(alloc); !ok {
 						t.Error("Allocation error happen in node.")
 					}

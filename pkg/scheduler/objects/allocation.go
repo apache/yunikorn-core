@@ -77,7 +77,7 @@ type Allocation struct {
 	sync.RWMutex
 }
 
-func NewAllocation(uuid, nodeID string, instType string, ask *AllocationAsk) *Allocation {
+func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 	var createTime time.Time
 	if ask.GetTag(siCommon.CreationTime) == "" {
 		createTime = time.Now()
@@ -91,7 +91,6 @@ func NewAllocation(uuid, nodeID string, instType string, ask *AllocationAsk) *Al
 		createTime:        createTime,
 		bindTime:          time.Now(),
 		nodeID:            nodeID,
-		instType:          instType,
 		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		uuid:              uuid,
 		tags:              ask.GetTagsClone(),
@@ -104,7 +103,7 @@ func NewAllocation(uuid, nodeID string, instType string, ask *AllocationAsk) *Al
 }
 
 func newReservedAllocation(result AllocationResult, nodeID string, ask *AllocationAsk) *Allocation {
-	alloc := NewAllocation("", nodeID, "", ask)
+	alloc := NewAllocation("", nodeID, ask)
 	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(result)
 	return alloc
@@ -113,7 +112,7 @@ func newReservedAllocation(result AllocationResult, nodeID string, ask *Allocati
 // Create a new Allocation from a node recovered allocation.
 // Also creates an AllocationAsk to maintain backward compatible behaviour
 // This returns a nil Allocation on nil input or errors
-func NewAllocationFromSI(alloc *si.Allocation, instType string) *Allocation {
+func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	if alloc == nil {
 		return nil
 	}
@@ -146,7 +145,7 @@ func NewAllocationFromSI(alloc *si.Allocation, instType string) *Allocation {
 		createTime:        time.Unix(creationTime, 0),
 		allocLog:          make(map[string]*AllocationLogEntry),
 	}
-	return NewAllocation(alloc.UUID, alloc.NodeID, instType, ask)
+	return NewAllocation(alloc.UUID, alloc.NodeID, ask)
 }
 
 // Convert the Allocation into a SI object. This is a limited set of values that gets copied into the SI.

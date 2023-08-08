@@ -107,8 +107,8 @@ func TestCheckPreemptionQueueGuarantees(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
-	app1.AddAllocation(NewAllocation("alloc1", "node1", "instType1", ask1))
-	app1.AddAllocation(NewAllocation("alloc2", "node1", "instType1", ask2))
+	app1.AddAllocation(NewAllocation("alloc1", "node1", ask1))
+	app1.AddAllocation(NewAllocation("alloc2", "node1", ask2))
 	assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
 	assert.NilError(t, childQ1.IncAllocatedResource(ask2.GetAllocatedResource(), false))
 	app2 := newApplication(appID2, "default", "root.parent.child2")
@@ -148,10 +148,10 @@ func TestTryPreemption(t *testing.T) {
 	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
 	ask2.createTime = time.Now()
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
-	alloc1 := NewAllocation("alloc1", "node1", "instType1", ask1)
+	alloc1 := NewAllocation("alloc1", "node1", ask1)
 	app1.AddAllocation(alloc1)
 	assert.Check(t, node.AddAllocation(alloc1), "node alloc1 failed")
-	alloc2 := NewAllocation("alloc2", "node1", "instType1", ask2)
+	alloc2 := NewAllocation("alloc2", "node1", ask2)
 	assert.Check(t, node.AddAllocation(alloc2), "node alloc2 failed")
 	node.AddAllocation(alloc2)
 	assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
@@ -240,7 +240,7 @@ func allocForScore(originator bool, allowPreemptSelf bool) *Allocation {
 	ask := NewAllocationAsk("alloc1", appID1, resources.NewResource())
 	ask.originator = originator
 	ask.allowPreemptSelf = allowPreemptSelf
-	return NewAllocation("alloc1", nodeID1, instType1, ask)
+	return NewAllocation("alloc1", nodeID1, ask)
 }
 
 type mockPreemption struct {

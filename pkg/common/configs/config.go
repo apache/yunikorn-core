@@ -21,7 +21,9 @@ package configs
 import (
 	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"go.uber.org/zap"
@@ -168,7 +170,7 @@ func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	decoder := yaml.NewDecoder(bytes.NewReader(content))
 	decoder.KnownFields(true) // Enable strict unmarshaling behavior
 	err := decoder.Decode(conf)
-	if err != nil {
+	if err != nil && !errors.Is(err, io.EOF) { // empty content may have EOF error, skip it
 		log.Log(log.Config).Error("failed to parse queue configuration",
 			zap.Error(err))
 		return nil, err

@@ -1686,6 +1686,7 @@ partitions:
 		{"Valid config", validConf, false},
 		{"Invalid checksum", invalidConf, true},
 		{"Mixed space", mixedSpacesConf, false},
+		{"Empty config", "", false},
 	}
 
 	for _, tc := range testCases {

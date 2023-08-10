@@ -102,10 +102,17 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 	}
 }
 
-func newReservedAllocation(result AllocationResult, nodeID string, ask *AllocationAsk) *Allocation {
+func newReservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation("", nodeID, ask)
 	alloc.SetBindTime(time.Time{})
-	alloc.SetResult(result)
+	alloc.SetResult(Reserved)
+	return alloc
+}
+
+func newUnreservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
+	alloc := NewAllocation("", nodeID, ask)
+	alloc.SetBindTime(time.Time{})
+	alloc.SetResult(Unreserved)
 	return alloc
 }
 

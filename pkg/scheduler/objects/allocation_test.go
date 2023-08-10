@@ -85,7 +85,7 @@ func TestNewReservedAlloc(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := newReservedAllocation(Reserved, "node-1", ask)
+	alloc := newReservedAllocation("node-1", ask)
 	if alloc == nil {
 		t.Fatal("NewReservedAllocation create failed while it should not")
 	}
@@ -94,6 +94,22 @@ func TestNewReservedAlloc(t *testing.T) {
 	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
 	allocStr := alloc.String()
 	expected := "applicationID=app-1, uuid=N/A, allocationKey=ask-1, Node=node-1, result=Reserved"
+	assert.Equal(t, allocStr, expected, "Strings should have been equal")
+}
+
+func TestNewUnreservedAlloc(t *testing.T) {
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "Resource creation failed")
+	ask := newAllocationAsk("ask-1", "app-1", res)
+	alloc := newUnreservedAllocation("node-1", ask)
+	if alloc == nil {
+		t.Fatal("NewReservedAllocation create failed while it should not")
+	}
+	assert.Equal(t, alloc.GetResult(), Unreserved, "NewReservedAlloc should have Reserved result")
+	assert.Equal(t, alloc.GetUUID(), "", "NewReservedAlloc should not have uuid")
+	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
+	allocStr := alloc.String()
+	expected := "applicationID=app-1, uuid=N/A, allocationKey=ask-1, Node=node-1, result=Unreserved"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
 }
 

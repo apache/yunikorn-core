@@ -571,7 +571,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 			zap.String("allocationKey", p.ask.GetAllocationKey()),
 			zap.String("nodeID", nodeID),
 			zap.Int("victimCount", len(victims)))
-		return newReservedAllocation(Reserved, nodeID, p.ask), true
+		return newReservedAllocation(nodeID, p.ask), true
 	}
 
 	// can't reserve as queue is still too full, but scheduling should succeed after preemption occurs

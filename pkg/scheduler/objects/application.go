@@ -1023,7 +1023,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 					zap.Stringer("AllocationResult", alloc.GetResult()))
 				return alloc
 			}
-			return newReservedAllocation(Reserved, node.NodeID, request)
+			return newReservedAllocation(node.NodeID, request)
 		}
 
 		iterator := nodeIterator()
@@ -1246,7 +1246,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				unreserveAsk = ask
 			}
 			// remove the reservation as this should not be reserved
-			alloc := newReservedAllocation(Unreserved, reserve.nodeID, unreserveAsk)
+			alloc := newUnreservedAllocation(reserve.nodeID, unreserveAsk)
 			return alloc
 		}
 
@@ -1469,7 +1469,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			return nil
 		}
 		// return reservation allocation and mark it as a reservation
-		alloc := newReservedAllocation(Reserved, nodeToReserve.NodeID, ask)
+		alloc := newReservedAllocation(nodeToReserve.NodeID, ask)
 		return alloc
 	}
 	// ask does not fit, skip to next ask

@@ -41,19 +41,15 @@ type mockScheduler struct {
 // MultiStepSchedule(int) to allocate.
 // Auto scheduling does not give control over the scheduling steps and should only
 // be used in specific use case testing.
-func (m *mockScheduler) Init(config string, autoSchedule bool) error {
+func (m *mockScheduler) Init(config string, autoSchedule bool, withWebapp bool) error {
 	m.rmID = "rm:123"
 	m.partitionName = common.GetNormalizedPartitionName("default", m.rmID)
 
 	BuildInfoMap := make(map[string]string)
 	BuildInfoMap["k"] = "v"
 
-	// Start all tests
-	if autoSchedule {
-		m.serviceContext = entrypoint.StartAllServices()
-	} else {
-		m.serviceContext = entrypoint.StartAllServicesWithManualScheduler()
-	}
+	m.serviceContext = entrypoint.StartAllServicesWithParams(!autoSchedule, withWebapp)
+
 	m.proxy = m.serviceContext.RMProxy
 	m.scheduler = m.serviceContext.Scheduler
 

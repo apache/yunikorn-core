@@ -1352,7 +1352,7 @@ func TestGetEvents(t *testing.T) {
 }
 
 func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
-	events.CreateAndSetEventSystem()
+	events.Init()
 	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	ev.StartServiceWithPublisher(false)
 	protoRes := resources.NewResourceFromMap(map[string]resources.Quantity{

@@ -68,16 +68,7 @@ func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord,
 
 func GetEventSystem() EventSystem {
 	once.Do(func() {
-		store := newEventStore()
-		ev = &EventSystemImpl{
-			Store:         store,
-			channel:       make(chan *si.EventRecord, defaultEventChannelSize),
-			stop:          make(chan bool),
-			stopped:       false,
-			publisher:     CreateShimPublisher(store),
-			eventBuffer:   newEventRingBuffer(defaultRingBufferSize),
-			eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
-		}
+		Init()
 	})
 	return ev
 }
@@ -100,7 +91,8 @@ func (ec *EventSystemImpl) GetRingBufferCapacity() uint64 {
 	return ec.ringBufferCapacity
 }
 
-func CreateAndSetEventSystem() {
+// VisibleForTesting
+func Init() {
 	store := newEventStore()
 	ev = &EventSystemImpl{
 		Store:         store,

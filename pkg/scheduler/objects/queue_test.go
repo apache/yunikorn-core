@@ -2582,7 +2582,7 @@ func TestQueue_setAllocatingAccepted(t *testing.T) {
 }
 
 func TestQueueEvents(t *testing.T) {
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	queue, err := createRootQueue(nil)

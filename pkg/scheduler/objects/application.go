@@ -950,6 +950,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 	if sa.sortedRequests == nil {
 		return nil
 	}
+	// calculate the users' headroom, includes group check which requires the applicationID
+	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
 		if request.GetPendingAskRepeat() == 0 {
@@ -959,13 +961,11 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 		if sa.canReplace(request) {
 			continue
 		}
-
-		userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.user)
+		// check if this fits in the users' headroom first, if that fits check the queues' headroom
+		// NOTE: preemption most likely will not help in this case. The chance that preemption helps is mall
+		// as the preempted allocation must be for the same user in a different queue in the hierarchy...
 		if !userHeadroom.FitInMaxUndef(request.GetAllocatedResource()) {
-			log.Log(log.SchedApplication).Warn("User doesn't have required resources to accommodate this request",
-				zap.String("required resource", request.GetAllocatedResource().String()),
-				zap.String("headroom", userHeadroom.String()))
-			return nil
+			continue
 		}
 
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
@@ -1229,6 +1229,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
+	// calculate the users' headroom, includes group check which requires the applicationID
+	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
+
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
 		ask := sa.requests[reserve.askKey]
@@ -1249,16 +1252,12 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			alloc := newReservedAllocation(Unreserved, reserve.nodeID, unreserveAsk)
 			return alloc
 		}
-
-		userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.user)
+		// check if this fits in the users' headroom first, if that fits check the queues' headroom
 		if !userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
-			log.Log(log.SchedApplication).Warn("User doesn't have required resources to accommodate this request",
-				zap.String("required resource", ask.GetAllocatedResource().String()),
-				zap.String("headroom", userHeadroom.String()))
 			continue
 		}
 
-		// check if this fits in the queue's head room
+		// check if this fits in the queue's headroom
 		if !headRoom.FitInMaxUndef(ask.GetAllocatedResource()) {
 			continue
 		}

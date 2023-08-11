@@ -202,7 +202,7 @@ func TestAppReservation(t *testing.T) {
 func TestAppAllocReservation(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	// Create event system after new application to avoid new application event.
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
@@ -320,7 +320,7 @@ func TestUpdateRepeat(t *testing.T) {
 func TestAddAllocAsk(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	// Create event system after new application to avoid new application event.
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
@@ -1997,7 +1997,7 @@ func TestMaxAskPriority(t *testing.T) {
 func TestAskEvents(t *testing.T) {
 	app := newApplication(appID1, "default", "root.default")
 	// Create event system after new application to avoid new app event.
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
@@ -2063,7 +2063,7 @@ func TestAskEvents(t *testing.T) {
 func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	app := newApplication(appID1, "default", "root.default")
 	// Create event system after new application to avoid new app event.
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
@@ -2182,7 +2182,7 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 
 	app := newApplication(appID1, "default", "root.default")
 	// Create event system after new application to avoid new application event.
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
@@ -2229,7 +2229,7 @@ func TestAppDoesNotFitEvent(t *testing.T) {
 	ask := newAllocationAsk("alloc-0", "app-1", res)
 	app := newApplication(appID1, "default", "root.default")
 	// Create event system after new application to avoid new application event.
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()

@@ -32,7 +32,7 @@ import (
 
 // StartService() and Stop() must not cause panic
 func TestSimpleStartAndStop(t *testing.T) {
-	CreateAndSetEventSystem()
+	Init()
 	eventSystem := GetEventSystem()
 	// adding event to stopped eventSystem does not cause panic
 	eventSystem.AddEvent(nil)
@@ -48,7 +48,7 @@ func TestSimpleStartAndStop(t *testing.T) {
 // if an EventRecord is added to the EventSystem, the same record
 // should be retrieved from the EventStore
 func TestSingleEventStoredCorrectly(t *testing.T) {
-	CreateAndSetEventSystem()
+	Init()
 	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
 	// don't run publisher, because it can collect the event while we're waiting
 	eventSystem.StartServiceWithPublisher(false)
@@ -81,7 +81,7 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 }
 
 func TestGetEvents(t *testing.T) {
-	CreateAndSetEventSystem()
+	Init()
 	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()
@@ -113,7 +113,7 @@ func TestConfigUpdate(t *testing.T) {
 	configs.SetConfigMap(map[string]string{})
 	defer configs.SetConfigMap(map[string]string{})
 
-	CreateAndSetEventSystem()
+	Init()
 	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
 	eventSystem.StartService()
 	defer eventSystem.Stop()

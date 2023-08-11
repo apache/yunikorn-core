@@ -240,7 +240,7 @@ func TestFailedStateTransition(t *testing.T) {
 }
 
 func TestAppStateTransitionEvents(t *testing.T) {
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	// Accept only from new

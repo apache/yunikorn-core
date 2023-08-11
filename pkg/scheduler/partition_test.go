@@ -3396,7 +3396,7 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 }
 
 func TestNewQueueEvents(t *testing.T) {
-	events.CreateAndSetEventSystem()
+	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 

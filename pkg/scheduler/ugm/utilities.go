@@ -21,6 +21,7 @@ package ugm
 import (
 	"strings"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 )
 
@@ -37,15 +38,12 @@ func getChildQueuePath(queuePath string) (string, string) {
 	return childQueuePath, childQueuePath[:idx]
 }
 
-func getParentQueuePath(queuePath string) (string, string) {
+// getParentPath return the path of the parent queue and an empty string if this queue is
+// the root queue.
+func getParentPath(queuePath string) string {
 	idx := strings.LastIndex(queuePath, configs.DOT)
 	if idx == -1 {
-		return "", ""
+		return common.Empty
 	}
-	parentQueuePath := queuePath[:idx]
-	idx = strings.LastIndex(parentQueuePath, configs.DOT)
-	if idx == -1 {
-		return parentQueuePath, parentQueuePath
-	}
-	return parentQueuePath, parentQueuePath[idx+1:]
+	return queuePath[:idx]
 }

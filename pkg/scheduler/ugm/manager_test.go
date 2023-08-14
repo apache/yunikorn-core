@@ -118,10 +118,10 @@ func TestGetGroup(t *testing.T) {
 	userGroupTrackersAssertsMap[user.User] = TestApp1
 	userGroupTrackersAssertsMap[user2.User] = TestApp2
 	for u, a := range userGroupTrackersAssertsMap {
-		ut := manager.getUserTracker(u, false)
+		ut := manager.GetUserTracker(u)
 		actualGT := ut.appGroupTrackers[a]
-		expectedGT := manager.getGroupTracker("test_root", false)
-		assert.Equal(t, manager.getGroupTracker("test_root", false) != nil, true)
+		expectedGT := manager.GetGroupTracker("test_root")
+		assert.Equal(t, manager.GetGroupTracker("test_root") != nil, true)
 		assert.Equal(t, actualGT, expectedGT)
 		assert.Equal(t, actualGT.groupName, "test_root")
 	}
@@ -133,7 +133,7 @@ func TestGetGroup(t *testing.T) {
 	increased = manager.IncreaseTrackedResource("root.parent.leaf", TestApp2, usage1, user3)
 	assert.Equal(t, increased, true)
 	assert.Equal(t, len(manager.userTrackers), 4)
-	ut := manager.getUserTracker(user3.User, false)
+	ut := manager.GetUserTracker(user3.User)
 	actualGT := ut.appGroupTrackers[TestApp2]
 	if actualGT != nil {
 		t.Errorf("group tracker should be nil as there is no group found for user %s", user3.User)
@@ -147,9 +147,9 @@ func TestGetGroup(t *testing.T) {
 	assert.Equal(t, len(manager.userTrackers), 4)
 	assert.Equal(t, len(manager.groupTrackers), 0)
 
-	ut = manager.getUserTracker(user.User, false)
+	ut = manager.GetUserTracker(user.User)
 	assert.Equal(t, ut.appGroupTrackers[TestApp1] == nil, true)
-	assert.Equal(t, manager.getGroupTracker("test_root", false) == nil, true)
+	assert.Equal(t, manager.GetGroupTracker("test_root") == nil, true)
 }
 
 func TestAddRemoveUserAndGroups(t *testing.T) {
@@ -608,13 +608,13 @@ func TestUserGroupHeadroom(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
 	}
 	assertMaxLimits(t, user, expectedResource, 5)
-	headroom := manager.Headroom("root.parent.leaf", user)
+	headroom := manager.Headroom("root.parent.leaf", TestApp1, user)
 	assert.Equal(t, resources.Equals(headroom, usage), true)
 
 	increased := manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage, user)
 	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePath1+", app "+TestApp1+", res "+usage.String())
 
-	headroom = manager.Headroom("root.parent.leaf", user)
+	headroom = manager.Headroom("root.parent.leaf", TestApp1, user)
 	assert.Equal(t, manager.GetUserTracker(user.User) != nil, true)
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) != nil, true)
 	assert.Equal(t, resources.Equals(headroom, resources.Multiply(usage, 0)), true)
@@ -631,7 +631,7 @@ func TestUserGroupHeadroom(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
 	}
 	// ensure group headroom returned when there is no limit settings configured for user
-	headroom = manager.Headroom("root.parent", user)
+	headroom = manager.Headroom("root.parent", TestApp1, user)
 	assert.Equal(t, resources.Equals(headroom, resources.Sub(usage1, usage)), true)
 }
 
@@ -660,7 +660,7 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 	increased := manager.IncreaseTrackedResource("root.parent", TestApp1, usage, user)
 	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath root.parent, app "+TestApp1+", res "+usage.String())
 
-	groupTracker := m.getGroupTracker(user.Groups[0], false)
+	groupTracker := m.GetGroupTracker(user.Groups[0])
 	assert.Equal(t, groupTracker != nil, true)
 	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], true)
 	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, usage), true)
@@ -668,7 +668,7 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 	decreased := manager.DecreaseTrackedResource("root.parent", TestApp1, usage, user, true)
 	assert.Equal(t, decreased, true, "unable to decrease tracked resource: queuepath root.parent, app "+TestApp1+", res "+usage.String())
 
-	groupTracker = m.getGroupTracker(user.Groups[0], false)
+	groupTracker = m.GetGroupTracker(user.Groups[0])
 	assert.Equal(t, groupTracker != nil, true)
 	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], false)
 	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, resources.Zero), true)

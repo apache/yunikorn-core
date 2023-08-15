@@ -162,6 +162,11 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
+				if event.Src == Starting.String() {
+					app.queue.decRunningApps()
+					metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
+					metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
+				}
 				app.setStateTimer(completingTimeout, app.stateMachine.Current(), CompleteApplication)
 				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_COMPLETING)
 			},

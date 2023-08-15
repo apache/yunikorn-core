@@ -19,11 +19,13 @@
 package ugm
 
 import (
+	"strings"
 	"sync"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
@@ -124,7 +126,7 @@ func (ut *UserTracker) setLimits(queuePath string, resource *resources.Resource,
 func (ut *UserTracker) headroom(queuePath string) *resources.Resource {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.queueTracker.headroom(queuePath)
+	return ut.queueTracker.headroom(strings.Split(queuePath, configs.DOT))
 }
 
 func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {

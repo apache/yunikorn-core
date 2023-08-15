@@ -19,10 +19,12 @@
 package ugm
 
 import (
+	"strings"
 	"testing"
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
@@ -251,62 +253,66 @@ func TestQTQuotaEnforcement(t *testing.T) {
 }
 
 func TestHeadroom(t *testing.T) {
-	leafQT := newQueueTracker("root.parent", "leaf")
+	var nilResource *resources.Resource
+	path := "root.parent.leaf"
+	hierarchy := strings.Split(path, configs.DOT)
 
-	leafMaxRes, err := resources.NewResourceFromConf(map[string]string{"mem": "60M", "vcore": "60"})
-	if err != nil {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, leafMaxRes)
-	}
+	// nothing exists make sure the hierarchy gets created
+	root := newRootQueueTracker()
+	parent := root.getChildQueueTracker("root.parent")
+	assert.Assert(t, parent != nil, "parent queue tracker should have been created")
+	leaf := root.getChildQueueTracker(path)
+	assert.Assert(t, leaf != nil, "leaf queue tracker should have been created")
 
-	parentQT := newQueueTracker("root", "parent")
-	parentMaxRes := leafMaxRes.Clone()
-	resources.Multiply(parentMaxRes, 2)
+	// auto created trackers no max resource set
+	headroom := root.headroom(hierarchy)
+	assert.Equal(t, headroom, nilResource, "auto create: expected nil resource")
 
-	rootQT := newQueueTracker("", "root")
-
-	parentQT.childQueueTrackers["leaf"] = leafQT
-	rootQT.childQueueTrackers["parent"] = parentQT
-
-	// Not even a single queue has been configured with max resource
-	headroom := rootQT.headroom("root.parent.leaf")
-	assert.Equal(t, resources.Equals(headroom, nil), true)
-
-	leafQT.maxResources = leafMaxRes
-	parentQT.maxResources = parentMaxRes
+	// prep resources to set as usage and max
+	usage, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
+	assert.NilError(t, err, "usage: new resource create returned error")
+	double := resources.Multiply(usage, 2)
+	leaf.maxResources = double
+	parent.maxResources = resources.Multiply(double, 2)
 
 	// headroom should be equal to max cap of leaf queue as there is no usage so far
-	headroom = rootQT.headroom("root.parent.leaf")
-	assert.Equal(t, resources.Equals(headroom, leafMaxRes), true)
-
-	leafResUsage, err := resources.NewResourceFromConf(map[string]string{"mem": "30M", "vcore": "30"})
-	if err != nil {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, leafResUsage)
-	}
-	leafQT.resourceUsage = leafResUsage
+	headroom = root.headroom(hierarchy)
+	assert.Assert(t, resources.Equals(headroom, double), "headroom not leaf max")
 
 	// headroom should be equal to sub(max cap of leaf queue - resource usage) as there is some usage
-	headroom = rootQT.headroom("root.parent.leaf")
-	assert.Equal(t, resources.Equals(headroom, leafResUsage), true)
+	leaf.resourceUsage = usage
+	headroom = root.headroom(hierarchy)
+	assert.Assert(t, resources.Equals(headroom, usage), "headroom should be same as usage")
 
-	leafQT.maxResources = resources.Multiply(leafMaxRes, 2)
-	parentQT.maxResources = leafMaxRes
+	// headroom should be equal to min headroom of parent and leaf: parent has none so zero
+	parent.maxResources = double
+	parent.resourceUsage = double
+	headroom = root.headroom(hierarchy)
+	assert.Assert(t, resources.IsZero(headroom), "leaf check: parent should have no headroom")
 
-	// headroom should be equal to min (leaf max resources, parent resources)
-	headroom = rootQT.headroom("root.parent.leaf")
-	assert.Equal(t, resources.Equals(headroom, leafMaxRes), true)
+	headroom = root.headroom(hierarchy[:2])
+	assert.Assert(t, resources.IsZero(headroom), "parent check: parent should have no headroom")
 
-	parentQT.maxResources = resources.NewResource()
+	// reset usage for the parent
+	parent.resourceUsage = resources.NewResource()
+	// set a different type in the parent max and check it is in the headroom
+	var single, other *resources.Resource
+	single, err = resources.NewResourceFromConf(map[string]string{"gpu": "1"})
+	assert.NilError(t, err, "single: new resource create returned error")
+	parent.maxResources = single
+	single, err = resources.NewResourceFromConf(map[string]string{"gpu": "1"})
+	assert.NilError(t, err, "single: new resource create returned error")
+	combined := resources.Add(usage, single)
+	headroom = root.headroom(hierarchy)
+	assert.Assert(t, resources.Equals(headroom, combined), "headroom should be same as combined")
 
-	// headroom should be equal to sub(max cap of leaf queue - resource usage) as there is some usage in leaf and max res of both root and parent is nil
-	headroom = rootQT.headroom("root.parent.leaf")
-	assert.Equal(t, resources.Equals(headroom, resources.Add(leafMaxRes, leafResUsage)), true)
-
-	rootQT.maxResources = leafMaxRes
-
-	// headroom should be equal to min ( (sub(max cap of leaf queue - resource usage), root resources) as there is some usage in leaf
-	// and max res of parent is nil
-	headroom = rootQT.headroom("root.parent.leaf")
-	assert.Equal(t, resources.Equals(headroom, leafMaxRes), true)
+	// this "other" resource should be completely ignored as it has no limit
+	other, err = resources.NewResourceFromConf(map[string]string{"unknown": "100"})
+	assert.NilError(t, err, "single: new resource create returned error")
+	parent.resourceUsage = other
+	root.resourceUsage = other
+	headroom = root.headroom(hierarchy)
+	assert.Assert(t, resources.Equals(headroom, combined), "headroom should be same as combined")
 }
 
 func getQTResource(qt *QueueTracker) map[string]*resources.Resource {

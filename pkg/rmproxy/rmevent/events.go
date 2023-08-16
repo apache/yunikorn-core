@@ -86,6 +86,11 @@ type RMRejectedAllocationAskEvent struct {
 	RejectedAllocationAsks []*si.RejectedAllocationAsk
 }
 
+type RMRejectedAllocationEvent struct {
+	RmID                string
+	RejectedAllocations []*si.RejectedAllocation
+}
+
 type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease

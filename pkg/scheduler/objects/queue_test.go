@@ -2639,3 +2639,38 @@ func TestQueueEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_SET, records[2].EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_GUARANTEED, records[2].EventChangeDetail)
 }
+
+func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	// single leaf under root
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	app := newApplication(appID1, "default", "root.leaf")
+	app.SetQueue(leaf)
+	leaf.AddApplication(app)
+
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	ask := newAllocationAsk("ask-1", appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask")
+
+	alloc := NewAllocation("alloc-1", nodeID1, ask)
+	app.AddAllocation(alloc)
+	assert.Equal(t, app.CurrentState(), Starting.String(), "app state should be starting")
+	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
+
+	_, err = app.updateAskRepeatInternal(ask, -1)
+	assert.NilError(t, err, "failed to decrease pending resources")
+
+	app.RemoveAllocation(alloc.GetUUID(), si.TerminationType_STOPPED_BY_RM)
+	assert.Equal(t, app.CurrentState(), Completing.String(), "app state should be completing")
+	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
+}

@@ -818,6 +818,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Equal(t, phID, released[0].GetUUID(), "uuid returned by release not the same as the placeholder")
 	assert.Equal(t, allocID, confirmed[0].GetUUID(), "uuid returned by confirmed not the same as the real allocation")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
+	assert.Assert(t, !app.IsCompleting(), "app should not be COMPLETING after confirming allocation")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 1, len(allocs), "expected one allocation for the app (real)")
 	assert.Equal(t, allocID, allocs[0].GetUUID(), "uuid for the app is not the same as the real allocation")
@@ -2801,6 +2802,7 @@ func TestPlaceholderBiggerThanReal(t *testing.T) {
 	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "real allocation should be registered on the partition")
 	assert.Assert(t, resources.Equals(smallRes, app.GetQueue().GetAllocatedResource()), "real size should be allocated on queue")
 	assert.Assert(t, resources.Equals(smallRes, node.GetAllocatedResource()), "real size should be allocated on node")
+	assert.Assert(t, !app.IsCompleting(), "application with allocation should not be in COMPLETING state")
 	assertLimits(t, getTestUserGroup(), smallRes)
 }
 
@@ -3055,9 +3057,7 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	assert.Assert(t, alloc.IsPlaceholder(), "placeholder alloc should return a placeholder allocation")
 	assert.Equal(t, alloc.GetResult(), objects.Allocated, "placeholder alloc should return an allocated result")
 	assert.Equal(t, alloc.GetNodeID(), nodeID1, "should be allocated on node-1")
-	if !resources.Equals(app.GetPlaceholderResource(), res) {
-		t.Fatalf("placeholder allocation not updated as expected: got %s, expected %s", app.GetPlaceholderResource(), res)
-	}
+	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), res), "placeholder allocation not updated as expected: got %s, expected %s", app.GetPlaceholderResource(), res)
 	assertLimits(t, getTestUserGroup(), res)
 
 	// add 2nd node to allow allocation
@@ -3077,17 +3077,12 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	// allocation must be added as it is on a different node
 	assert.Equal(t, alloc.GetNodeID(), nodeID2, "should be allocated on node-2")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resources should be zero")
-	if !resources.Equals(node.GetAllocatedResource(), res) {
-		t.Fatalf("node-1 allocation not updated as expected: got %s, expected %s", node.GetAllocatedResource(), res)
-	}
-	if !resources.Equals(node2.GetAllocatedResource(), res) {
-		t.Fatalf("node-2 allocation not updated as expected: got %s, expected %s", node2.GetAllocatedResource(), res)
-	}
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), res), "node-1 allocation not updated as expected: got %s, expected %s", node.GetAllocatedResource(), res)
+	assert.Assert(t, resources.Equals(node2.GetAllocatedResource(), res), "node-2 allocation not updated as expected: got %s, expected %s", node2.GetAllocatedResource(), res)
+
 	phUUID := alloc.GetFirstRelease().GetUUID()
 	// placeholder is not released until confirmed by the shim
-	if !resources.Equals(app.GetPlaceholderResource(), res) {
-		t.Fatalf("placeholder allocation not updated as expected: got %s, expected %s", app.GetPlaceholderResource(), resources.Multiply(res, 2))
-	}
+	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), res), "placeholder allocation not updated as expected: got %s, expected %s", app.GetPlaceholderResource(), resources.Multiply(res, 2))
 	assertLimits(t, getTestUserGroup(), res)
 
 	// release placeholder: do what the context would do after the shim processing
@@ -3105,13 +3100,10 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	}
 	assert.Equal(t, confirmed.GetUUID(), alloc.GetUUID(), "confirmed allocation has unexpected uuid")
 	assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "placeholder resources should be zero")
-	if !resources.Equals(app.GetAllocatedResource(), res) {
-		t.Fatalf("allocations not updated as expected: got %s, expected %s", app.GetAllocatedResource(), res)
-	}
+	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "allocations not updated as expected: got %s, expected %s", app.GetAllocatedResource(), res)
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "node-1 allocated resources should be zero")
-	if !resources.Equals(node2.GetAllocatedResource(), res) {
-		t.Fatalf("node-2 allocations not set as expected: got %s, expected %s", node2.GetAllocatedResource(), res)
-	}
+	assert.Assert(t, resources.Equals(node2.GetAllocatedResource(), res), "node-2 allocations not set as expected: got %s, expected %s", node2.GetAllocatedResource(), res)
+	assert.Assert(t, !app.IsCompleting(), "application with allocation should not be in COMPLETING state")
 	assertLimits(t, getTestUserGroup(), res)
 }
 

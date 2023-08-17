@@ -24,7 +24,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -53,11 +52,11 @@ func (pr *providedRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
+func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error) {
 	// since this is the provided rule we must have a queue in the info already
 	queueName := app.GetQueuePath()
-	if queueName == "" || common.IsRecoveryQueue(queueName) {
-		return "", nil
+	if queueName == "" {
+		return "", true, nil
 	}
 
 	// before anything run the filter
@@ -65,22 +64,23 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 		log.Log(log.Config).Debug("Provided rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()))
-		return "", nil
+		return "", true, nil
 	}
 	var parentName string
+	var aclCheck = true
 	var err error
 	// if we have a fully qualified queue passed in do not run the parent rule
 	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
 		// run the parent rule if set
 		if pr.parent != nil {
-			parentName, err = pr.parent.placeApplication(app, queueFn)
+			parentName, aclCheck, err = pr.parent.placeApplication(app, queueFn)
 			// failed parent rule, fail this rule
 			if err != nil {
-				return "", err
+				return "", aclCheck, err
 			}
 			// rule did not return a parent: this could be filter or create flag related
 			if parentName == "" {
-				return "", nil
+				return "", aclCheck, nil
 			}
 			// check if this is a parent queue and qualify it
 			if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
@@ -89,7 +89,7 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 			// if the parent queue exists it cannot be a leaf
 			parentQueue := queueFn(parentName)
 			if parentQueue != nil && parentQueue.IsLeafQueue() {
-				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+				return "", aclCheck, fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 			}
 		}
 		// the parent is set from the rule otherwise set it to the root
@@ -106,10 +106,10 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 	queue := queueFn(queueName)
 	// if we cannot create the queue must exist
 	if !pr.create && queue == nil {
-		return "", nil
+		return "", aclCheck, nil
 	}
 	log.Log(log.Config).Info("Provided rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, nil
+	return queueName, aclCheck, nil
 }

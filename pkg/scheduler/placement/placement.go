@@ -115,12 +115,13 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	defer m.RUnlock()
 
 	var queueName string
+	var aclCheck bool
 	var err error
 	for _, checkRule := range m.rules {
 		log.Log(log.Config).Debug("Executing rule for placing application",
 			zap.String("ruleName", checkRule.getName()),
 			zap.String("application", app.ApplicationID))
-		queueName, err = checkRule.placeApplication(app, m.queueFn)
+		queueName, aclCheck, err = checkRule.placeApplication(app, m.queueFn)
 		if err != nil {
 			log.Log(log.Config).Error("rule execution failed",
 				zap.String("ruleName", checkRule.getName()),
@@ -141,7 +142,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 					queue = m.queueFn(current)
 				}
 				// Check if the user is allowed to submit to this queueName, if not next rule
-				if !queue.CheckSubmitAccess(app.GetUser()) {
+				if aclCheck && !queue.CheckSubmitAccess(app.GetUser()) {
 					log.Log(log.Config).Debug("Submit access denied on queue",
 						zap.String("queueName", queue.GetQueuePath()),
 						zap.String("ruleName", checkRule.getName()),
@@ -162,7 +163,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 					continue
 				}
 				// Check if the user is allowed to submit to this queueName, if not next rule
-				if !queue.CheckSubmitAccess(app.GetUser()) {
+				if aclCheck && !queue.CheckSubmitAccess(app.GetUser()) {
 					log.Log(log.Config).Debug("Submit access denied on queue",
 						zap.String("queueName", queueName),
 						zap.String("ruleName", checkRule.getName()),

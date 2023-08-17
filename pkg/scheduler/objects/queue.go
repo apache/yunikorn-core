@@ -156,7 +156,14 @@ func NewRecoveryQueue(parent *Queue) (*Queue, error) {
 	if parent.GetQueuePath() != configs.RootQueue {
 		return nil, fmt.Errorf("recovery queue cannot be created with non-root parent: %s", parent.GetQueuePath())
 	}
-	return newDynamicQueueInternal(common.RecoveryQueue, true, parent)
+	queue, err := newDynamicQueueInternal(common.RecoveryQueue, true, parent)
+	if err == nil {
+		queue.Lock()
+		defer queue.Unlock()
+		queue.submitACL = security.ACL{}
+		queue.sortType = policies.FifoSortPolicy
+	}
+	return queue, err
 }
 
 // NewDynamicQueue creates a new queue to be added to the system based on the placement rules
@@ -402,12 +409,15 @@ func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 func (sq *Queue) UpdateQueueProperties() {
 	sq.Lock()
 	defer sq.Unlock()
-
+	if common.IsRecoveryQueue(sq.QueuePath) {
+		// recovery queue properties should never be updated
+		sq.sortType = policies.FifoSortPolicy
+		return
+	}
 	if !sq.isLeaf {
 		// set the sorting type for parent queues
 		sq.sortType = policies.FairSortPolicy
 	}
-
 	// walk over all properties and process
 	var err error
 	for key, value := range sq.properties {
@@ -462,12 +472,6 @@ func (sq *Queue) UpdateQueueProperties() {
 				zap.String("key", key),
 				zap.String("value", value))
 		}
-	}
-
-	if common.IsRecoveryQueue(sq.QueuePath) {
-		// special-case recovery queue to always be FIFO. this ensures that any applications added will be
-		// accepted, even if the app uses gang scheduling
-		sq.sortType = policies.FifoSortPolicy
 	}
 }
 
@@ -559,6 +563,10 @@ func (sq *Queue) GetPreemptionDelay() time.Duration {
 // The check is performed recursively: i.e. access to the parent allows access to this queue.
 // This will check both submitACL and adminACL.
 func (sq *Queue) CheckSubmitAccess(user security.UserGroup) bool {
+	if common.IsRecoveryQueue(sq.QueuePath) {
+		// recovery queue can never pass ACL checks
+		return false
+	}
 	sq.RLock()
 	allow := sq.submitACL.CheckAccess(user) || sq.adminACL.CheckAccess(user)
 	sq.RUnlock()

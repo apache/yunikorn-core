@@ -44,15 +44,15 @@ func (rr *recoveryRule) initialise(conf configs.PlacementRule) error {
 	return nil
 }
 
-func (rr *recoveryRule) placeApplication(app *objects.Application, _ func(string) *objects.Queue) (string, error) {
+func (rr *recoveryRule) placeApplication(app *objects.Application, _ func(string) *objects.Queue) (string, bool, error) {
 	// only forced applications should resolve to the recovery queue
 	if !app.IsCreateForced() {
-		return "", nil
+		return "", false, nil
 	}
 
 	queueName := common.RecoveryQueueFull
 	log.Log(log.Config).Info("Recovery rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, nil
+	return queueName, false, nil
 }

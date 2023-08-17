@@ -59,30 +59,34 @@ partitions:
 		t.Errorf("user rule create failed, err %v", err)
 	}
 	var queue string
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	var aclCheck bool
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.testchild" || err != nil {
 		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 	// trying to place in a parent queue should fail on queue create not in the rule
 	user = security.UserGroup{
 		User:   "testparent",
 		Groups: []string{},
 	}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("user rule failed with parent queue '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	user = security.UserGroup{
 		User:   "test.user",
 		Groups: []string{},
 	}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue == "" || err != nil {
 		t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// user queue that exists directly in hierarchy
 	conf = configs.PlacementRule{
@@ -101,10 +105,11 @@ partitions:
 	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// user queue that does not exists
 	user = security.UserGroup{
@@ -121,10 +126,11 @@ partitions:
 	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "root.unknown" || err != nil {
 		t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 }
 
 func TestUserRuleParent(t *testing.T) {
@@ -154,10 +160,12 @@ func TestUserRuleParent(t *testing.T) {
 
 	appInfo := newApplication("app1", "default", "unknown", user, tags, nil, "")
 	var queue string
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	var aclCheck bool
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a non creatable parent
 	conf = configs.PlacementRule{
@@ -175,10 +183,11 @@ func TestUserRuleParent(t *testing.T) {
 	}
 
 	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a creatable parent
 	conf = configs.PlacementRule{
@@ -194,10 +203,11 @@ func TestUserRuleParent(t *testing.T) {
 	if err != nil || ur == nil {
 		t.Errorf("user rule create failed with queue name, err %v", err)
 	}
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a parent which is defined as a leaf
 	conf = configs.PlacementRule{
@@ -214,8 +224,9 @@ func TestUserRuleParent(t *testing.T) {
 	}
 
 	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 }

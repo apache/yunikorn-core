@@ -61,31 +61,36 @@ func TestPlaceApp(t *testing.T) {
 	}
 	nr, err := newRule(conf)
 	assert.NilError(t, err, "unexpected rule initialisation error")
+	var aclCheck bool
 	// place application that should fail
-	_, err = nr.placeApplication(nil, nil)
+	_, aclCheck, err = nr.placeApplication(nil, nil)
 	if err == nil {
 		t.Error("test rule place application did not fail as expected")
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 	var queue string
 	// place application that should not fail and return "test"
-	queue, err = nr.placeApplication(&objects.Application{}, nil)
+	queue, aclCheck, err = nr.placeApplication(&objects.Application{}, nil)
 	if err != nil || queue != "test" {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 	// place application that should not fail and return the queue in the object
 	app := &objects.Application{}
 	app.SetQueuePath("passedin")
-	queue, err = nr.placeApplication(app, nil)
+	queue, aclCheck, err = nr.placeApplication(app, nil)
 	if err != nil || queue != "passedin" {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 	// place application that should not fail and return the queue in the object
 	app = &objects.Application{}
 	app.SetQueuePath("user.name")
-	queue, err = nr.placeApplication(app, nil)
+	queue, aclCheck, err = nr.placeApplication(app, nil)
 	if err != nil || queue != "user_dot_name" {
 		t.Errorf("test rule place application did not fail, err: %v, ", err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 }
 
 func TestReplaceDot(t *testing.T) {

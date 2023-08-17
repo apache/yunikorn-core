@@ -49,27 +49,28 @@ func (ur *userRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (ur *userRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
+func (ur *userRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error) {
 	// before anything run the filter
 	userName := app.GetUser().User
 	if !ur.filter.allowUser(app.GetUser()) {
 		log.Log(log.Config).Debug("User rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()))
-		return "", nil
+		return "", true, nil
 	}
 	var parentName string
+	var aclCheck = true
 	var err error
 	// run the parent rule if set
 	if ur.parent != nil {
-		parentName, err = ur.parent.placeApplication(app, queueFn)
+		parentName, aclCheck, err = ur.parent.placeApplication(app, queueFn)
 		// failed parent rule, fail this rule
 		if err != nil {
-			return "", err
+			return "", aclCheck, err
 		}
 		// rule did not match: this could be filter or create flag related
 		if parentName == "" {
-			return "", nil
+			return "", aclCheck, nil
 		}
 		// check if this is a parent queue and qualify it
 		if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
@@ -78,7 +79,7 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 		// if the parent queue exists it cannot be a leaf
 		parentQueue := queueFn(parentName)
 		if parentQueue != nil && parentQueue.IsLeafQueue() {
-			return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+			return "", aclCheck, fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 		}
 	}
 	// the parent is set from the rule otherwise set it to the root
@@ -93,10 +94,10 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 	queue := queueFn(queueName)
 	// if we cannot create the queue it must exist, rule does not match otherwise
 	if !ur.create && queue == nil {
-		return "", nil
+		return "", aclCheck, nil
 	}
 	log.Log(log.Config).Info("User rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, nil
+	return queueName, aclCheck, nil
 }

@@ -138,7 +138,7 @@ func (gt *GroupTracker) decreaseAllTrackedResourceUsage(queuePath string) map[st
 	defer gt.Unlock()
 	applications := gt.queueTracker.decreaseTrackedResourceUsageDownwards(queuePath)
 	removedApplications := make(map[string]string)
-	for app, _ := range applications {
+	for app := range applications {
 		if u, ok := gt.applications[app]; ok {
 			removedApplications[app] = u
 		}

@@ -110,7 +110,6 @@ func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule,
 }
 
 func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
-	// Placement manager not initialised cannot place application, just return
 	m.RLock()
 	defer m.RUnlock()
 

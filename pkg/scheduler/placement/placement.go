@@ -25,7 +25,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -181,13 +180,6 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 		zap.String("queueName", queueName))
 	// no more rules to check no queueName found reject placement
 	if queueName == "" {
-		// check if app creation is forced; this will determine whether we allow a non-existing recovery queue to be created
-		if app.IsCreateForced() {
-			log.Log(log.Config).Info("Placing application in recovery queue",
-				zap.String("application", app.ApplicationID))
-			app.SetQueuePath(common.RecoveryQueueFull)
-			return nil
-		}
 		app.SetQueuePath("")
 		return fmt.Errorf("application rejected: no placement rule matched")
 	}

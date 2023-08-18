@@ -167,3 +167,9 @@ func (ut *UserTracker) canBeRemoved() bool {
 	defer ut.RUnlock()
 	return len(ut.queueTracker.childQueueTrackers) == 0 && len(ut.queueTracker.runningApplications) == 0
 }
+
+func (ut *UserTracker) canRunApp(queuePath, applicationID string) bool {
+	ut.Lock()
+	defer ut.Unlock()
+	return ut.queueTracker.canRunApp(queuePath, applicationID, user)
+}

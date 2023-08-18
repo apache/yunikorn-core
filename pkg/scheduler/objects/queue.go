@@ -37,6 +37,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
@@ -1297,7 +1298,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true, false) {
-			if app.IsAccepted() && !sq.canRunApp(app.ApplicationID) {
+			if app.IsAccepted() && (!sq.canRunApp(app.ApplicationID) || !ugm.GetUserManager().CanRunApp(sq.QueuePath, app.ApplicationID, app.user)) {
 				continue
 			}
 			alloc := app.tryAllocate(headRoom, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)

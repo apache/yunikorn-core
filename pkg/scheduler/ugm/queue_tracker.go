@@ -400,3 +400,55 @@ func (qt *QueueTracker) decreaseTrackedResourceUsageUpwards(queuePath string) {
 		qt.runningApplications = make(map[string]bool)
 	}
 }
+
+func (qt *QueueTracker) canRunApp(queuePath string, applicationID string, trackType trackingType) bool {
+	log.Log(log.SchedUGM).Debug("Checking can run app",
+		zap.Int("tracking type", int(trackType)),
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID))
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if childQueuePath != common.Empty {
+		if qt.childQueueTrackers[immediateChildQueueName] != nil {
+			allowed := qt.childQueueTrackers[immediateChildQueueName].canRunApp(childQueuePath, applicationID, trackType)
+			if !allowed {
+				return false
+			}
+		}
+	}
+
+	var running int
+	if existingApp := qt.runningApplications[applicationID]; existingApp {
+		return true
+	} else {
+		running = len(qt.runningApplications) + 1
+	}
+
+	// apply user/group specific limit settings set if configured, otherwise use wild card limit settings
+	if qt.maxRunningApps != 0 && running > int(qt.maxRunningApps) {
+		log.Log(log.SchedUGM).Warn("can't run app as allowing new application to run would exceed configured max applications limit of specific user/group",
+			zap.Int("tracking type", int(trackType)),
+			zap.String("queue path", queuePath),
+			zap.Int("current running applications", len(qt.runningApplications)),
+			zap.Uint64("max running applications", qt.maxRunningApps))
+		return false
+	}
+
+	// Try wild card settings
+	if qt.maxRunningApps == 0 {
+		var config *LimitConfig
+		if trackType == user {
+			config = m.getUserWildCardLimitsConfig(qt.queuePath)
+		} else if trackType == group {
+			config = m.getGroupWildCardLimitsConfig(qt.queuePath)
+		}
+		if config != nil && config.maxApplications != 0 && running > int(config.maxApplications) {
+			log.Log(log.SchedUGM).Warn("can't run app as allowing new application to run would exceed configured max applications limit of wildcard user/group",
+				zap.Int("tracking type", int(trackType)),
+				zap.String("queue path", queuePath),
+				zap.Int("current running applications", len(qt.runningApplications)),
+				zap.Uint64("max running applications", config.maxApplications))
+			return false
+		}
+	}
+	return true
+}

@@ -681,6 +681,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 
 	log.Log(log.SchedApplication).Info("ask added successfully to application",
 		zap.String("appID", sa.ApplicationID),
+		zap.String("appID", sa.user.User),
 		zap.String("ask", ask.GetAllocationKey()),
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))

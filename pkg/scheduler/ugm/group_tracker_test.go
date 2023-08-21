@@ -40,7 +40,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
@@ -49,7 +49,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
+	result = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage2)
 	}
@@ -58,7 +58,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = groupTracker.increaseTrackedResource(queuePath3, TestApp3, usage3)
+	result = groupTracker.increaseTrackedResource(queuePath3, TestApp3, usage3, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath3, TestApp3, usage3)
 	}
@@ -67,7 +67,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = groupTracker.increaseTrackedResource(queuePath4, TestApp4, usage4)
+	result = groupTracker.increaseTrackedResource(queuePath4, TestApp4, usage4, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath4, TestApp4, usage4)
 	}
@@ -92,7 +92,7 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
@@ -102,7 +102,7 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
+	result = groupTracker.increaseTrackedResource(queuePath2, TestApp2, usage2, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage2)
 	}
@@ -172,7 +172,7 @@ func TestGTSetMaxLimits(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
 
-	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	result := groupTracker.increaseTrackedResource(queuePath1, TestApp1, usage1, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
@@ -180,11 +180,11 @@ func TestGTSetMaxLimits(t *testing.T) {
 	groupTracker.setLimits(queuePath1, resources.Multiply(usage1, 5), 5)
 	groupTracker.setLimits("root.parent", resources.Multiply(usage1, 10), 10)
 
-	result = groupTracker.increaseTrackedResource(queuePath1, TestApp2, usage1)
+	result = groupTracker.increaseTrackedResource(queuePath1, TestApp2, usage1, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp2, usage1)
 	}
-	result = groupTracker.increaseTrackedResource(queuePath1, TestApp3, usage1)
+	result = groupTracker.increaseTrackedResource(queuePath1, TestApp3, usage1, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp2, usage1)
 	}

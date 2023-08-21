@@ -408,46 +408,20 @@ func (m *Manager) processGroupConfig(group string, limitConfig *LimitConfig, que
 
 // clearEarlierSetLimits Clear already configured limits of users and groups for which limits have been configured before but not now
 func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits map[string]bool, queuePath string) error {
-	// Clear already configured limits of user for which limits have been configured before but not now
-	for u, ut := range m.userTrackers {
-		// Is this user already tracked for the queue path?
-		if ut.IsQueuePathTrackedCompletely(queuePath) {
-			// Traverse all the group trackers linked to user through different applications and remove the linkage
-			for appID, gt := range ut.appGroupTrackers {
-				if gt != nil {
-					g := gt.groupName
-					// Is there any limit config set for group in the current configuration? If not, then remove the linkage by setting it to nil
-					if ok := groupLimits[g]; !ok {
-						log.Log(log.SchedUGM).Debug("Removed the linkage between user and group through applications",
-							zap.String("user", u),
-							zap.String("group", gt.groupName),
-							zap.String("application id", appID),
-							zap.String("queue path", queuePath))
-						// removing the linkage only happens here by setting it to nil and deleting app id
-						// but group resource usage so far remains as it is because we don't have app id wise resource usage with in group as of now.
-						// YUNIKORN-1858 handles the group resource usage properly
-						// In case of only one (last) application, group tracker would be removed from the manager.
-						ut.setGroupForApp(appID, nil)
-						gt.removeApp(appID)
-						if len(gt.getTrackedApplications()) == 0 {
-							log.Log(log.SchedUGM).Debug("Is this app the only running application in group?",
-								zap.String("user", u),
-								zap.String("group", gt.groupName),
-								zap.Int("no. of applications", len(gt.getTrackedApplications())),
-								zap.String("application id", appID),
-								zap.String("queue path", queuePath))
-							delete(m.groupTrackers, g)
-						}
-					}
-				}
-			}
-		}
-		m.clearEarlierSetUserLimits(ut, queuePath, userLimits)
-	}
-
 	// Clear already configured limits of group for which limits have been configured before but not now
 	for _, gt := range m.groupTrackers {
-		m.clearEarlierSetGroupLimits(gt, queuePath, groupLimits)
+		appUsersMap := m.clearEarlierSetGroupLimits(gt, queuePath, groupLimits)
+		if len(appUsersMap) > 0 {
+			for app, user := range appUsersMap {
+				ut := m.userTrackers[user]
+				ut.setGroupForApp(app, nil)
+			}
+		}
+	}
+
+	// Clear already configured limits of user for which limits have been configured before but not now
+	for _, ut := range m.userTrackers {
+		m.clearEarlierSetUserLimits(ut, queuePath, userLimits)
 	}
 	return nil
 }
@@ -480,7 +454,8 @@ func (m *Manager) clearEarlierSetUserLimits(ut *UserTracker, queuePath string, u
 	}
 }
 
-func (m *Manager) clearEarlierSetGroupLimits(gt *GroupTracker, queuePath string, groupLimits map[string]bool) {
+func (m *Manager) clearEarlierSetGroupLimits(gt *GroupTracker, queuePath string, groupLimits map[string]bool) map[string]string {
+	appUsersMap := make(map[string]string)
 	// Is this group already tracked for the queue path?
 	if gt.IsQueuePathTrackedCompletely(queuePath) {
 		g := gt.groupName
@@ -489,6 +464,7 @@ func (m *Manager) clearEarlierSetGroupLimits(gt *GroupTracker, queuePath string,
 			log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for group",
 				zap.String("group", g),
 				zap.String("queue path", queuePath))
+			appUsersMap = gt.decreaseAllTrackedResourceUsage(queuePath)
 			// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
 			if gt.IsUnlinkRequired(queuePath) {
 				gt.UnlinkQT(queuePath)
@@ -506,6 +482,7 @@ func (m *Manager) clearEarlierSetGroupLimits(gt *GroupTracker, queuePath string,
 			}
 		}
 	}
+	return appUsersMap
 }
 
 func (m *Manager) setUserLimits(user string, limitConfig *LimitConfig, queuePath string) error {

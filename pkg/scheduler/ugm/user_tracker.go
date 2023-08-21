@@ -63,7 +63,7 @@ func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, 
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
 			zap.Stringer("resource", usage))
-		increasedGroupUsage := gt.increaseTrackedResource(queuePath, applicationID, usage)
+		increasedGroupUsage := gt.increaseTrackedResource(queuePath, applicationID, usage, ut.userName)
 		if !increasedGroupUsage {
 			_, decreased := ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, false)
 			if !decreased {

@@ -27,9 +27,9 @@ import (
 )
 
 type GroupTracker struct {
-	groupName    string          // Name of the group for which usage is being tracked upon
-	applications map[string]bool // Hold applications currently run by all users belong to this group
-	queueTracker *QueueTracker   // Holds the actual resource usage of queue path where application run
+	groupName    string            // Name of the group for which usage is being tracked upon
+	applications map[string]string // Hold applications currently run by all users belong to this group
+	queueTracker *QueueTracker     // Holds the actual resource usage of queue path where application run
 
 	sync.RWMutex
 }
@@ -38,19 +38,19 @@ func newGroupTracker(group string) *GroupTracker {
 	queueTracker := newRootQueueTracker()
 	groupTracker := &GroupTracker{
 		groupName:    group,
-		applications: make(map[string]bool),
+		applications: make(map[string]string),
 		queueTracker: queueTracker,
 	}
 	return groupTracker
 }
 
-func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) bool {
+func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user string) bool {
 	if gt == nil {
 		return true
 	}
 	gt.Lock()
 	defer gt.Unlock()
-	gt.applications[applicationID] = true
+	gt.applications[applicationID] = user
 	return gt.queueTracker.increaseTrackedResource(queuePath, applicationID, group, usage)
 }
 
@@ -66,7 +66,7 @@ func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string,
 	return gt.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 }
 
-func (gt *GroupTracker) getTrackedApplications() map[string]bool {
+func (gt *GroupTracker) getTrackedApplications() map[string]string {
 	gt.RLock()
 	defer gt.RUnlock()
 	return gt.applications
@@ -123,15 +123,25 @@ func (gt *GroupTracker) canBeRemoved() bool {
 	return len(gt.queueTracker.childQueueTrackers) == 0 && len(gt.queueTracker.runningApplications) == 0
 }
 
-func (gt *GroupTracker) removeApp(applicationID string) {
-	gt.Lock()
-	defer gt.Unlock()
-	delete(gt.applications, applicationID)
-}
-
 func (gt *GroupTracker) getName() string {
 	if gt == nil {
 		return common.Empty
 	}
 	return gt.groupName
+}
+
+func (gt *GroupTracker) decreaseAllTrackedResourceUsage(queuePath string) map[string]string {
+	if gt == nil {
+		return nil
+	}
+	gt.Lock()
+	defer gt.Unlock()
+	applications := gt.queueTracker.decreaseTrackedResourceUsageDownwards(queuePath)
+	removedApplications := make(map[string]string)
+	for app := range applications {
+		if u, ok := gt.applications[app]; ok {
+			removedApplications[app] = u
+		}
+	}
+	return removedApplications
 }

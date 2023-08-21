@@ -88,7 +88,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 			zap.String("queue path", queuePath),
 			zap.Bool("existing app", existingApp),
 			zap.Uint64("max running apps", qt.maxRunningApps),
-			zap.String("max resources", qt.maxResources.String()))
+			zap.Stringer("max resources", qt.maxResources))
 		if (!existingApp && len(qt.runningApplications)+1 > int(qt.maxRunningApps)) ||
 			resources.StrictlyGreaterThan(finalResourceUsage, qt.maxResources) {
 			log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit of specific user/group",
@@ -97,8 +97,8 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 				zap.Bool("existing app", existingApp),
 				zap.Int("current running applications", len(qt.runningApplications)),
 				zap.Uint64("max running applications", qt.maxRunningApps),
-				zap.String("current resource usage", qt.resourceUsage.String()),
-				zap.String("max resource usage", qt.maxResources.String()))
+				zap.Stringer("current resource usage", qt.resourceUsage),
+				zap.Stringer("max resource usage", qt.maxResources))
 			return false
 		}
 	}
@@ -118,7 +118,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 				zap.String("queue path", queuePath),
 				zap.Bool("existing app", existingApp),
 				zap.Uint64("wild card max running apps", config.maxApplications),
-				zap.String("wild card max resources", config.maxResources.String()),
+				zap.Stringer("wild card max resources", config.maxResources),
 				zap.Bool("wild card quota exceeded", wildCardQuotaExceeded))
 			wildCardQuotaExceeded = (config.maxApplications != 0 && !existingApp && len(qt.runningApplications)+1 > int(config.maxApplications)) ||
 				(!resources.Equals(resources.NewResource(), config.maxResources) && resources.StrictlyGreaterThan(finalResourceUsage, config.maxResources))
@@ -129,8 +129,8 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 					zap.Bool("existing app", existingApp),
 					zap.Int("current running applications", len(qt.runningApplications)),
 					zap.Uint64("max running applications", config.maxApplications),
-					zap.String("current resource usage", qt.resourceUsage.String()),
-					zap.String("max resource usage", config.maxResources.String()))
+					zap.Stringer("current resource usage", qt.resourceUsage),
+					zap.Stringer("max resource usage", config.maxResources))
 				return false
 			}
 		}
@@ -158,7 +158,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 		zap.Bool("existing app", existingApp),
 		zap.Stringer("resource", usage),
 		zap.Uint64("max running applications", qt.maxRunningApps),
-		zap.String("max resource usage", qt.maxResources.String()),
+		zap.Stringer("max resource usage", qt.maxResources),
 		zap.Stringer("total resource after increasing", qt.resourceUsage),
 		zap.Int("total applications after increasing", len(qt.runningApplications)))
 	return true
@@ -239,7 +239,7 @@ func (qt *QueueTracker) setLimit(queuePath string, maxResource *resources.Resour
 	log.Log(log.SchedUGM).Debug("Setting limits",
 		zap.String("queue path", queuePath),
 		zap.Uint64("max applications", maxApps),
-		zap.String("max resources", maxResource.String()))
+		zap.Stringer("max resources", maxResource))
 	childQueueTracker := qt.getChildQueueTracker(queuePath)
 	childQueueTracker.maxRunningApps = maxApps
 	childQueueTracker.maxResources = maxResource
@@ -268,8 +268,8 @@ func (qt *QueueTracker) headroom(queuePath string) *resources.Resource {
 		log.Log(log.SchedUGM).Debug("Calculated headroom",
 			zap.String("queue path", queuePath),
 			zap.String("queue", qt.queueName),
-			zap.String("max resource", qt.maxResources.String()),
-			zap.String("headroom", headroom.String()))
+			zap.Stringer("max resource", qt.maxResources),
+			zap.Stringer("headroom", headroom))
 		return headroom
 	}
 	return nil
@@ -363,4 +363,40 @@ func (qt *QueueTracker) UnlinkQT(queuePath string) bool {
 		return true
 	}
 	return false
+}
+
+// decreaseTrackedResourceUsageDownwards queuePath either could be parent or leaf queue path. If it is parent queue path, then traverse upto the end leaf
+// recursively for all child queues, reset resourceUsage and runningApplications to the default value.
+// Once downward traversal has been completed, traverse downwards using decreaseTrackedResourceUsageUpwards
+func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(queuePath string) map[string]bool {
+	childQueueTracker := qt.getChildQueueTracker(queuePath)
+	childQueueTrackers := childQueueTracker.childQueueTrackers
+	removedApplications := make(map[string]bool)
+	for _, childQT := range childQueueTrackers {
+		if len(childQT.runningApplications) > 0 && childQT.resourceUsage != resources.NewResource() {
+			removedApplications = childQT.runningApplications
+			childQT.resourceUsage = resources.NewResource()
+			childQT.runningApplications = make(map[string]bool)
+			childQT.decreaseTrackedResourceUsageDownwards(childQT.queuePath)
+		}
+	}
+	qt.decreaseTrackedResourceUsageUpwards(queuePath)
+	return removedApplications
+}
+
+// decreaseTrackedResourceUsageUpwards Traverse upwards all the way upto the root starting from last queue in queuePath,
+// reset resourceUsage and runningApplications to the default value.
+func (qt *QueueTracker) decreaseTrackedResourceUsageUpwards(queuePath string) {
+	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
+	if childQueuePath != common.Empty {
+		if qt.childQueueTrackers[immediateChildQueueName] == nil {
+			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
+				zap.String("child queueTracker name", immediateChildQueueName))
+		}
+		qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResourceUsageUpwards(childQueuePath)
+	}
+	if len(qt.runningApplications) > 0 && qt.resourceUsage != resources.NewResource() {
+		qt.resourceUsage = resources.NewResource()
+		qt.runningApplications = make(map[string]bool)
+	}
 }

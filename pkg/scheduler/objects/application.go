@@ -21,6 +21,7 @@ package objects
 import (
 	"context"
 	"fmt"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"math"
 	"strings"
 	"sync"
@@ -921,6 +922,18 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, tota
 		if request.GetPendingAskRepeat() == 0 {
 			continue
 		}
+		if request.GetSkipAutoScaling() {
+			// these asks are skipped auto-scaling, because they are already exceeding the queue limit
+			if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
+				updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
+					ApplicartionID: request.GetApplicationID(),
+					AllocationKey:  request.GetAllocationKey(),
+					State:          si.UpdateContainerSchedulingStateRequest_SKIPPED,
+					Reason:         "request is exceeding the queue limit",
+				})
+			}
+			continue
+		}
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
 			// if headroom is still enough for the resources
@@ -962,6 +975,11 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 		if sa.canReplace(request) {
 			continue
 		}
+
+		// Init the request for auto-scaling, because when a request is skipped autoscaling due to exceeding the queue limit
+		// we should look back this request if it already can be allocated without exceeding the queue limit
+		request.updateSkipAutoScaling(false)
+
 		// check if this fits in the users' headroom first, if that fits check the queues' headroom
 		// NOTE: preemption most likely will not help in this case. The chance that preemption helps is mall
 		// as the preempted allocation must be for the same user in a different queue in the hierarchy...
@@ -982,8 +1000,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 					}
 				}
 			}
-
 			sa.appEvents.sendAppDoesNotFitEvent(request)
+			request.updateSkipAutoScaling(true)
 			continue
 		}
 
@@ -1497,6 +1515,9 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(alloc.GetUUID())
+
+			// Here the node check pass, but it exceeds the queue limit, so we need to skip auto-scaling
+			ask.updateSkipAutoScaling(true)
 			return nil
 		}
 		// mark this ask as allocated by lowering the repeat

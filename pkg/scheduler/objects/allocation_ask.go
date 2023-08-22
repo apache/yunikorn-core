@@ -54,6 +54,7 @@ type AllocationAsk struct {
 	allocLog            map[string]*AllocationLogEntry
 	preemptionTriggered bool
 	preemptCheckTime    time.Time
+	skipAutoScaling     bool // skip auto-scaling for this ask when it exceeds the queue quota
 
 	sync.RWMutex
 }
@@ -93,6 +94,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		allowPreemptOther: common.IsAllowPreemptOther(ask.PreemptionPolicy),
 		originator:        ask.Originator,
 		allocLog:          make(map[string]*AllocationLogEntry),
+		skipAutoScaling:   false,
 	}
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
@@ -139,6 +141,20 @@ func (aa *AllocationAsk) updatePendingAskRepeat(delta int32) bool {
 		return true
 	}
 	return false
+}
+
+// updateSkipAutoScaling is used to update the skip auto-scaling flag for this ask
+func (aa *AllocationAsk) updateSkipAutoScaling(skip bool) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.skipAutoScaling = skip
+}
+
+// GetSkipAutoScaling returns the skip auto-scaling flag for this ask
+func (aa *AllocationAsk) GetSkipAutoScaling() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.skipAutoScaling
 }
 
 // GetPendingAskRepeat gets the number of repeat asks remaining

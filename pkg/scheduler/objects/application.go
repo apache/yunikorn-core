@@ -21,7 +21,6 @@ package objects
 import (
 	"context"
 	"fmt"
-	"github.com/apache/yunikorn-core/pkg/plugins"
 	"math"
 	"strings"
 	"sync"
@@ -38,6 +37,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"

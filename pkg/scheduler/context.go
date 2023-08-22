@@ -324,26 +324,6 @@ func (cc *ClusterContext) removePartitionsByRMID(event *rmevent.RMPartitionsRemo
 	}
 }
 
-// Locked version of the configuration update called from the webservice
-// NOTE: this call assumes one RM which is registered and uses that RM for the updates
-func (cc *ClusterContext) UpdateSchedulerConfig(conf *configs.SchedulerConfig) error {
-	cc.Lock()
-	defer cc.Unlock()
-	// hack around the missing rmID
-	for _, pi := range cc.partitions {
-		rmID := pi.RmID
-		log.Log(log.SchedContext).Debug("Assuming one RM on config update call from webservice",
-			zap.String("rmID", rmID))
-		if err := cc.updateSchedulerConfig(conf, rmID); err != nil {
-			return err
-		}
-		// update global scheduler configs
-		configs.ConfigContext.Set(cc.policyGroup, conf)
-		return nil
-	}
-	return fmt.Errorf("RM has no active partitions, make sure it is registered")
-}
-
 // Locked version of the configuration update called outside of event system.
 // Updates the current config via the config loader.
 // Used in test only, normal updates use the internal call

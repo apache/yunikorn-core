@@ -584,6 +584,35 @@ func (m *Manager) Headroom(queuePath, applicationID string, user security.UserGr
 	return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
 }
 
+// CanRunApp checks the maxApplications for this specific application that runs as the user and group.
+func (m *Manager) CanRunApp(queuePath, applicationID string, user security.UserGroup) bool {
+	userTracker := m.getUserTracker(user.User)
+	userCanRunApp := userTracker.canRunApp(queuePath, applicationID)
+	log.Log(log.SchedUGM).Debug("Check whether user can run app",
+		zap.String("user", user.User),
+		zap.String("queue path", queuePath),
+		zap.Bool("can run app", userCanRunApp))
+	// make sure the user has a groupTracker for this application, if not yet there add it
+	if !userTracker.hasGroupForApp(applicationID) {
+		m.ensureGroupTrackerForApp(queuePath, applicationID, user)
+	}
+	// check if this application now has group tracking, if not we're done
+	appGroup := userTracker.getGroupForApp(applicationID)
+	if appGroup == common.Empty {
+		return userCanRunApp
+	}
+	groupTracker := m.GetGroupTracker(appGroup)
+	if groupTracker == nil {
+		return userCanRunApp
+	}
+	groupCanRunApp := groupTracker.canRunApp(queuePath, applicationID)
+	log.Log(log.SchedUGM).Debug("Check whether group can run app",
+		zap.String("group", appGroup),
+		zap.String("queue path", queuePath),
+		zap.Bool("can run app", groupCanRunApp))
+	return userCanRunApp && groupCanRunApp
+}
+
 // ClearUserTrackers only for tests
 func (m *Manager) ClearUserTrackers() {
 	m.Lock()

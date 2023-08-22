@@ -145,3 +145,9 @@ func (gt *GroupTracker) decreaseAllTrackedResourceUsage(queuePath string) map[st
 	}
 	return removedApplications
 }
+
+func (gt *GroupTracker) canRunApp(queuePath, applicationID string) bool {
+	gt.Lock()
+	defer gt.Unlock()
+	return gt.queueTracker.canRunApp(queuePath, applicationID, group)
+}

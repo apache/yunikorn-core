@@ -19,6 +19,7 @@
 package ugm
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -672,6 +673,133 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 	assert.Equal(t, groupTracker != nil, true)
 	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], false)
 	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, resources.Zero), true)
+}
+
+//nolint:funlen
+func TestCanRunApp(t *testing.T) {
+	testCases := []struct {
+		name   string
+		limits []configs.Limit
+	}{
+		{
+			name: "specific user limit",
+			limits: []configs.Limit{
+				{
+					Limit:           "specific user limit",
+					Users:           []string{"user1"},
+					MaxApplications: 1,
+				},
+			},
+		},
+		{
+			name: "specific group limit",
+			limits: []configs.Limit{
+				{
+					Limit:           "specific group limit",
+					Groups:          []string{"group1"},
+					MaxApplications: 1,
+				},
+			},
+		},
+		{
+			name: "wildcard user limit",
+			limits: []configs.Limit{
+				{
+					Limit:           "wildcard user limit",
+					Users:           []string{"*"},
+					MaxApplications: 1,
+				},
+			},
+		},
+		{
+			name: "wildcard group limit",
+			limits: []configs.Limit{
+				{
+					Limit:           "specific group limit",
+					Groups:          []string{"nonexistent-group"},
+					MaxApplications: 100,
+				},
+				{
+					Limit:           "wildcard group limit",
+					Groups:          []string{"*"},
+					MaxApplications: 1,
+				},
+			},
+		},
+		{
+			name: "specific user lower than specific group limit",
+			limits: []configs.Limit{
+				{
+					Limit:           "specific user limit",
+					Users:           []string{"user1"},
+					MaxApplications: 1,
+				},
+				{
+					Limit:           "specific group limit",
+					Groups:          []string{"group1"},
+					MaxApplications: 100,
+				},
+			},
+		},
+		{
+			name: "specific group lower than specific user limit",
+			limits: []configs.Limit{
+				{
+					Limit:           "specific user limit",
+					Users:           []string{"user1"},
+					MaxApplications: 100,
+				},
+				{
+					Limit:           "specific group limit",
+					Groups:          []string{"group1"},
+					MaxApplications: 1,
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUGM()
+			// Queue setup:
+			// root->default
+			conf := configs.PartitionConfig{
+				Name: "default",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:      "default",
+								Parent:    false,
+								SubmitACL: "*",
+								Limits:    tc.limits,
+							},
+						},
+					},
+				},
+			}
+			manager := GetUserManager()
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
+			usage, err := resources.NewResourceFromConf(map[string]string{"memory": "50"})
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+			}
+
+			canRunApp := manager.CanRunApp("root.default", TestApp1, user)
+			assert.Equal(t, canRunApp, true, fmt.Sprintf("user %s should be able to run app %s", user.User, TestApp1))
+
+			increased := manager.IncreaseTrackedResource("root.default", TestApp1, usage, user)
+			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath root.parent, app "+TestApp1+", res "+usage.String())
+
+			canRunApp = manager.CanRunApp("root.default", TestApp2, user)
+			assert.Equal(t, canRunApp, false, fmt.Sprintf("user %s shouldn't be able to run app %s", user.User, TestApp2))
+		})
+	}
 }
 
 func createUpdateConfigWithWildCardUsersAndGroups(user string, group string, wildUser string, wildGroup string, memory string, vcores string) configs.PartitionConfig {

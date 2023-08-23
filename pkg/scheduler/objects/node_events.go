@@ -34,7 +34,7 @@ func (n *nodeEvents) sendNodeAddedEvent() {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, common.Empty, si.EventRecord_ADD,
+	event := events.CreateNodeEventRecord(n.node.NodeID, "Node added to the scheduler", common.Empty, si.EventRecord_ADD,
 		si.EventRecord_DETAILS_NONE, n.node.GetCapacity())
 	n.eventSystem.AddEvent(event)
 }
@@ -43,7 +43,7 @@ func (n *nodeEvents) sendNodeRemovedEvent() {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, common.Empty, si.EventRecord_REMOVE,
+	event := events.CreateNodeEventRecord(n.node.NodeID, "Node removed from the scheduler", common.Empty, si.EventRecord_REMOVE,
 		si.EventRecord_NODE_DECOMISSION, nil)
 	n.eventSystem.AddEvent(event)
 }

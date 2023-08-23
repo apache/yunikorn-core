@@ -171,7 +171,7 @@ func verifyNodeAddedEvents(t *testing.T, events []*si.EventRecord) {
 	assert.Equal(t, si.EventRecord_NODE_SCHEDULABLE, events[0].EventChangeDetail)
 
 	assert.Equal(t, "node-1:1234", events[1].ObjectID)
-	assert.Equal(t, "", events[1].Message)
+	assert.Equal(t, "Node added to the scheduler", events[1].Message)
 	assert.Equal(t, "", events[1].ReferenceID)
 	assert.Equal(t, si.EventRecord_NODE, events[1].Type)
 	assert.Equal(t, si.EventRecord_ADD, events[1].EventChangeType)

@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
@@ -143,22 +144,38 @@ func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOIn
 	return userResourceUsage
 }
 
-func (ut *UserTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
-	ut.RLock()
-	defer ut.RUnlock()
-	return ut.queueTracker.IsQueuePathTrackedCompletely(queuePath)
+func (ut *UserTracker) ClearEarlierSetLimits(prefixPath string, wildcardLimits map[string]*LimitConfig, pathLimits map[string]bool) {
+	ut.Lock()
+	defer ut.Unlock()
+	ut.internalClearEarlierSetLimits("", ut.queueTracker, wildcardLimits, pathLimits)
 }
 
-func (ut *UserTracker) IsUnlinkRequired(queuePath string) bool {
-	ut.RLock()
-	defer ut.RUnlock()
-	return ut.queueTracker.IsUnlinkRequired(queuePath)
-}
+func (ut *UserTracker) internalClearEarlierSetLimits(prefixPath string, queueTracker *QueueTracker, wildcardLimits map[string]*LimitConfig, pathLimits map[string]bool) bool {
+	queuePath := prefixPath + configs.DOT + queueTracker.queueName
+	if prefixPath == common.Empty {
+		queuePath = queueTracker.queueName
+	}
 
-func (ut *UserTracker) UnlinkQT(queuePath string) bool {
-	ut.RLock()
-	defer ut.RUnlock()
-	return ut.queueTracker.UnlinkQT(queuePath)
+	allLeafQueueRemoved := true
+	for _, childQt := range queueTracker.childQueueTrackers {
+		if ut.internalClearEarlierSetLimits(queuePath, childQt, wildcardLimits, pathLimits) {
+			delete(queueTracker.childQueueTrackers, childQt.queueName)
+		} else {
+			allLeafQueueRemoved = false
+		}
+	}
+
+	currentPathHasLimits := wildcardLimits[queuePath] != nil || pathLimits[queuePath]
+	if allLeafQueueRemoved && !currentPathHasLimits && len(queueTracker.runningApplications) == 0 {
+		// only remove the queue tracker if there is no child queues, limits, and running apps
+		return true
+	} else if !pathLimits[queuePath] {
+		// only remove limit on queue tracker if there is no specific limit for it.
+		// so we can get the correct resource usage for the user.
+		queueTracker.maxRunningApps = 0
+		queueTracker.maxResources = resources.NewResource()
+	}
+	return false
 }
 
 // canBeRemoved Does "root" queue has any child queue trackers? Is there any running applications in "root" qt?

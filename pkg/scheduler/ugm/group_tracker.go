@@ -22,6 +22,7 @@ import (
 	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -98,22 +99,48 @@ func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDA
 	return groupResourceUsage
 }
 
-func (gt *GroupTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
-	gt.RLock()
-	defer gt.RUnlock()
-	return gt.queueTracker.IsQueuePathTrackedCompletely(queuePath)
+func (gt *GroupTracker) ClearEarlierSetLimits(prefixPath string, wildcardLimits map[string]*LimitConfig, pathLimits map[string]bool, removedApp map[string]bool) {
+	gt.Lock()
+	defer gt.Unlock()
+	gt.internalClearEarlierSetLimits(prefixPath, gt.queueTracker, wildcardLimits, pathLimits, removedApp)
 }
 
-func (gt *GroupTracker) IsUnlinkRequired(queuePath string) bool {
-	gt.RLock()
-	defer gt.RUnlock()
-	return gt.queueTracker.IsUnlinkRequired(queuePath)
-}
+func (gt *GroupTracker) internalClearEarlierSetLimits(prefixPath string, queueTracker *QueueTracker, wildcardLimits map[string]*LimitConfig, pathLimits map[string]bool, removedApp map[string]bool) bool {
+	queuePath := prefixPath + configs.DOT + queueTracker.queueName
+	if prefixPath == common.Empty {
+		queuePath = queueTracker.queueName
+	}
 
-func (gt *GroupTracker) UnlinkQT(queuePath string) bool {
-	gt.RLock()
-	defer gt.RUnlock()
-	return gt.queueTracker.UnlinkQT(queuePath)
+	allLeafQueueRemoved := true
+	for _, childQt := range queueTracker.childQueueTrackers {
+		if gt.internalClearEarlierSetLimits(queuePath, childQt, wildcardLimits, pathLimits, removedApp) {
+			delete(queueTracker.childQueueTrackers, childQt.queueName)
+		} else {
+			allLeafQueueRemoved = false
+		}
+	}
+
+	currentPathHasLimits := wildcardLimits[queuePath] != nil || pathLimits[queuePath]
+	if allLeafQueueRemoved && !currentPathHasLimits {
+		for app := range queueTracker.runningApplications {
+			removedApp[app] = true
+		}
+		queueTracker.runningApplications = make(map[string]bool)
+		queueTracker.resourceUsage = resources.NewResource()
+		return true
+	} else {
+		// if we don't remove current tracker, we have to keep applications in current tracker
+		for app := range queueTracker.runningApplications {
+			delete(removedApp, app)
+		}
+	}
+
+	// if only have wildcard limits, then clear the limits
+	if wildcardLimits[queuePath] != nil && !pathLimits[queuePath] {
+		queueTracker.maxRunningApps = 0
+		queueTracker.maxResources = resources.NewResource()
+	}
+	return false
 }
 
 // canBeRemoved Does "root" queue has any child queue trackers? Is there any running applications in "root" qt?
@@ -128,22 +155,6 @@ func (gt *GroupTracker) getName() string {
 		return common.Empty
 	}
 	return gt.groupName
-}
-
-func (gt *GroupTracker) decreaseAllTrackedResourceUsage(queuePath string) map[string]string {
-	if gt == nil {
-		return nil
-	}
-	gt.Lock()
-	defer gt.Unlock()
-	applications := gt.queueTracker.decreaseTrackedResourceUsageDownwards(queuePath)
-	removedApplications := make(map[string]string)
-	for app := range applications {
-		if u, ok := gt.applications[app]; ok {
-			removedApplications[app] = u
-		}
-	}
-	return removedApplications
 }
 
 func (gt *GroupTracker) canRunApp(queuePath, applicationID string) bool {

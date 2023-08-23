@@ -48,6 +48,17 @@ func StartAllServices() *ServiceContext {
 		})
 }
 
+// VisibleForTesting
+func StartAllServicesWithParams(manualSchedule, withWebapp bool) *ServiceContext {
+	log.Log(log.Entrypoint).Info("ServiceContext start all services")
+	return startAllServicesWithParameters(
+		startupOptions{
+			manualScheduleFlag: manualSchedule,
+			startWebAppFlag:    withWebapp,
+			metricsHistorySize: 1440,
+		})
+}
+
 func StartAllServicesWithLogger(logger *zap.Logger, zapConfigs *zap.Config) *ServiceContext {
 	log.InitializeLogger(logger, zapConfigs)
 	return StartAllServices()

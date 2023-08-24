@@ -2013,6 +2013,9 @@ func (sa *Application) CleanupUsedResource() {
 }
 
 func (sa *Application) LogAppSummary(rmID string) {
+	if sa.startTime.IsZero() {
+		return
+	}
 	appSummary := sa.GetApplicationSummary(rmID)
 	appSummary.DoLogging()
 	appSummary.ResourceUsage = nil

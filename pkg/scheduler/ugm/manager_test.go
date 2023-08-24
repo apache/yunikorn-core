@@ -30,6 +30,26 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 )
 
+const (
+	queuePathParent = "root.parent"
+	queuePathLeaf   = "root.parent.leaf"
+)
+
+var (
+	largeResource = map[string]string{
+		"memory": "100",
+		"vcores": "100",
+	}
+	mediumResource = map[string]string{
+		"memory": "50",
+		"vcores": "50",
+	}
+	tinyResource = map[string]string{
+		"memory": "25",
+		"vcores": "25",
+	}
+)
+
 func TestUserManagerOnceInitialization(t *testing.T) {
 	manager := GetUserManager()
 	assert.Equal(t, manager, manager)
@@ -799,6 +819,278 @@ func TestCanRunApp(t *testing.T) {
 			canRunApp = manager.CanRunApp("root.default", TestApp2, user)
 			assert.Equal(t, canRunApp, false, fmt.Sprintf("user %s shouldn't be able to run app %s", user.User, TestApp2))
 		})
+	}
+}
+
+func TestSeparateUserGroupHeadroom(t *testing.T) {
+	testCases := []struct {
+		name string
+		user security.UserGroup
+		conf configs.PartitionConfig
+	}{
+		{
+			name: "headroom with only user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, mediumResource, 2),
+			}),
+		},
+		{
+			name: "headroom with only group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"group1"}, mediumResource, 2),
+			}),
+		},
+		{
+			name: "headroom with user limit lower than group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, mediumResource, 2),
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+			}),
+		},
+		{
+			name: "headroom with group limit lower than user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit(nil, []string{"group1"}, mediumResource, 2),
+			}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUGM()
+
+			manager := GetUserManager()
+			assert.NilError(t, manager.UpdateConfig(tc.conf.Queues[0], "root"))
+
+			usage, err := resources.NewResourceFromConf(tinyResource)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+			}
+
+			increased := manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
+			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp1+", res "+usage.String())
+
+			headroom := manager.Headroom(queuePathParent, TestApp1, tc.user)
+			expectedHeadroom, err := resources.NewResourceFromConf(tinyResource)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+			}
+
+			assert.Equal(t, resources.Equals(headroom, expectedHeadroom), true)
+		})
+	}
+}
+
+func TestUserGroupLimit(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name string
+		user security.UserGroup
+		conf configs.PartitionConfig
+	}{
+		// unmixed user and group limit
+		{
+			name: "maxresources with a specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, mediumResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with a specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 1),
+			}),
+		},
+		{
+			name: "maxresources with a specific user limit and a wildcard user limit for a not specific user",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit([]string{"*"}, nil, mediumResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with a specific user limit and a wildcard user limit for a not specific user",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit([]string{"*"}, nil, largeResource, 1),
+			}),
+		},
+		{
+			name: "maxresources with a specific user limit and a wildcard user limit for a specific user",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, mediumResource, 2),
+				createLimit([]string{"*"}, nil, largeResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with a specific user limit and a wildcard user limit for a specific user",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 1),
+				createLimit([]string{"*"}, nil, largeResource, 2),
+			}),
+		},
+		{
+			name: "maxresources with a wildcard user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"*"}, mediumResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with a wildcard user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"*"}, largeResource, 1),
+			}),
+		},
+		{
+			name: "maxresources with a specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"group1"}, mediumResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with a specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 1),
+			}),
+		},
+		{
+			name: "maxresources with a specific group limit and a wildcard group limit for a not specific group user",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+				createLimit(nil, []string{"*"}, mediumResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with a specific group limit and a wildcard group limit for a not specific group user",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+				createLimit(nil, []string{"*"}, largeResource, 1),
+			}),
+		},
+		{
+			name: "maxresources with a specific group limit and a wildcard group limit for a specific group user",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"group1"}, mediumResource, 2),
+				createLimit(nil, []string{"*"}, largeResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with a specific group limit and a wildcard group limit for a specific group user",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 1),
+				createLimit(nil, []string{"*"}, largeResource, 2),
+			}),
+		},
+		// mixed user and group limit
+		{
+			name: "maxresources with user limit lower than group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, mediumResource, 2),
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with user limit lower than group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 1),
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+			}),
+		},
+		{
+			name: "maxresources with gorup limit lower than user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit(nil, []string{"group1"}, mediumResource, 2),
+			}),
+		},
+		{
+			name: "maxapplications with group limit lower than user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			conf: createConfigWithLimits([]configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit(nil, []string{"group1"}, largeResource, 1),
+			}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// clear tracked resource
+			setupUGM()
+
+			manager := GetUserManager()
+			assert.NilError(t, manager.UpdateConfig(tc.conf.Queues[0], "root"))
+
+			usage, err := resources.NewResourceFromConf(mediumResource)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+			}
+
+			increased := manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
+			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp1+", res "+usage.String())
+			userTracker := manager.GetUserTracker(tc.user.User)
+			assert.Equal(t, userTracker != nil, true, fmt.Sprintf("can't get user tracker: %s", tc.user.User))
+			assert.Equal(t, resources.Equals(userTracker.queueTracker.resourceUsage, usage), true, "user tracker resource usage is not expected at root level")
+			assert.Equal(t, userTracker.queueTracker.runningApplications[TestApp1], true, fmt.Sprintf("%s is not in runningApplications for user tracker %s at root level", TestApp1, tc.user.User))
+			assert.Equal(t, userTracker.queueTracker.childQueueTrackers["parent"] != nil, true, fmt.Sprintf("can't get root.parent queue tracker in user tracker: %s", tc.user.User))
+			assert.Equal(t, resources.Equals(userTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, usage), true, "user tracker resource usage is not expected at root.parent level")
+			assert.Equal(t, userTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], true, fmt.Sprintf("%s is not in runningApplications for user tracker %s at root.parent level", TestApp1, tc.user.User))
+
+			increased = manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
+			assert.Equal(t, increased, false, "should not increase tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
+		})
+	}
+}
+
+func createLimit(users, groups []string, maxResources map[string]string, maxApps uint64) configs.Limit {
+	return configs.Limit{
+		Users:           users,
+		Groups:          groups,
+		MaxResources:    maxResources,
+		MaxApplications: maxApps,
+	}
+}
+
+func createConfigWithLimits(limits []configs.Limit) configs.PartitionConfig {
+	return configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "parent",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues:    nil,
+						Limits:    limits,
+					},
+				},
+			},
+		},
 	}
 }
 

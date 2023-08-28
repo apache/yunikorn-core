@@ -1337,18 +1337,34 @@ func TestGetEvents(t *testing.T) {
 
 	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
 
-	checkSingleEvent(t, appEvent, httprouter.Params{
-		httprouter.Param{Key: "count", Value: "1"},
-	})
-	checkSingleEvent(t, queueEvent, httprouter.Params{
-		httprouter.Param{Key: "start", Value: "2"},
-	})
+	checkSingleEvent(t, appEvent, "count=1")
+	checkSingleEvent(t, queueEvent, "start=2")
 
 	// illegal requests
-	checkIllegalBatchRequest(t, "count", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
-	checkIllegalBatchRequest(t, "count", "-100", "Illegal number of events: -100")
-	checkIllegalBatchRequest(t, "start", "xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
-	checkIllegalBatchRequest(t, "start", "-100", "Illegal id: -100")
+	checkIllegalBatchRequest(t, "count=xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
+	checkIllegalBatchRequest(t, "count=-100", "Illegal number of events: -100")
+	checkIllegalBatchRequest(t, "start=xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
+	checkIllegalBatchRequest(t, "start=-100", "Illegal id: -100")
+}
+
+func TestGetEventsWhenTrackingDisabled(t *testing.T) {
+	original := configs.GetConfigMap()
+	defer func() {
+		ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+		ev.Stop()
+		configs.SetConfigMap(original)
+	}()
+	configMap := map[string]string{
+		configs.CMEventTrackingEnabled: "false",
+	}
+	configs.SetConfigMap(configMap)
+	events.Init()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+
+	req, err := http.NewRequest("GET", "/ws/v1/events/batch", strings.NewReader(""))
+	assert.NilError(t, err)
+	readIllegalRequest(t, req, "Event tracking is disabled")
 }
 
 func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
@@ -1400,21 +1416,21 @@ func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
 	return appEvent, nodeEvent, queueEvent
 }
 
-func checkSingleEvent(t *testing.T, event *si.EventRecord, params httprouter.Params) {
-	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
+func checkSingleEvent(t *testing.T, event *si.EventRecord, query string) {
+	req, err := http.NewRequest("GET", "/ws/v1/events/batch?"+query, strings.NewReader(""))
 	assert.NilError(t, err)
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, params))
 	eventDao := getEventRecordDao(t, req)
 	assert.Equal(t, 1, len(eventDao.EventRecords))
 	compareEvents(t, event, eventDao.EventRecords[0])
 }
 
-func checkIllegalBatchRequest(t *testing.T, key, value, msg string) {
-	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
+func checkIllegalBatchRequest(t *testing.T, query, msg string) {
+	req, err := http.NewRequest("GET", "/ws/v1/events/batch?"+query, strings.NewReader(""))
 	assert.NilError(t, err)
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: key, Value: value},
-	}))
+	readIllegalRequest(t, req, msg)
+}
+
+func readIllegalRequest(t *testing.T, req *http.Request, errMsg string) {
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(getEvents)
 	handler.ServeHTTP(rr, req)
@@ -1425,7 +1441,7 @@ func checkIllegalBatchRequest(t *testing.T, key, value, msg string) {
 	var errObject dao.YAPIError
 	err = json.Unmarshal(jsonBytes[:n], &errObject)
 	assert.NilError(t, err, "cannot unmarshal events dao")
-	assert.Assert(t, strings.Contains(errObject.Message, msg))
+	assert.Assert(t, strings.Contains(errObject.Message, errMsg))
 }
 
 func checkAllEvents(t *testing.T, events []*si.EventRecord) {

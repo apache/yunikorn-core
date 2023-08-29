@@ -681,6 +681,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 
 	log.Log(log.SchedApplication).Info("ask added successfully to application",
 		zap.String("appID", sa.ApplicationID),
+		zap.String("appID", sa.user.User),
 		zap.String("ask", ask.GetAllocationKey()),
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))
@@ -1642,7 +1643,9 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 	} else {
 		// skip the state change if this is the first replacement allocation as we have done that change
 		// already when the last placeholder was allocated
-		if info.GetResult() != Replaced || !resources.IsZero(sa.allocatedResource) {
+		// special case COMPLETING: gang with only one placeholder moves to COMPLETING and causes orphaned
+		// allocations
+		if info.GetResult() != Replaced || !resources.IsZero(sa.allocatedResource) || sa.IsCompleting() {
 			// progress the state based on where we are, we should never fail in this case
 			// keep track of a failure in log.
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
@@ -2010,6 +2013,9 @@ func (sa *Application) CleanupUsedResource() {
 }
 
 func (sa *Application) LogAppSummary(rmID string) {
+	if sa.startTime.IsZero() {
+		return
+	}
 	appSummary := sa.GetApplicationSummary(rmID)
 	appSummary.DoLogging()
 	appSummary.ResourceUsage = nil

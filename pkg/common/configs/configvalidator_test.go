@@ -23,6 +23,8 @@ import (
 	"testing"
 
 	"gotest.tools/v3/assert"
+
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
 func TestCheckResourceConfigurationsForQueue(t *testing.T) {
@@ -731,6 +733,563 @@ func TestServiceAccountGroupName(t *testing.T) {
 			}
 
 			assert.ErrorContains(t, checkPlacementFilter(filter), "invalid rule filter group list")
+		})
+	}
+}
+
+func TestCheckLimitResource(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name     string
+		config   QueueConfig
+		hasError bool
+	}{
+		{
+			name: "leaf queue user group maxresoruces are within parent queue user group maxresources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:        "user-limit",
+						Users:        []string{"test-user"},
+						MaxResources: map[string]string{"memory": "100"},
+					},
+					{
+						Limit:        "group-limit",
+						Groups:       []string{"test-group"},
+						MaxResources: map[string]string{"memory": "100"},
+					},
+				},
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: []Limit{
+							{
+								Limit:        "user-limit",
+								Users:        []string{"test-user"},
+								MaxResources: map[string]string{"memory": "50"},
+							},
+							{
+								Limit:        "group-limit",
+								Groups:       []string{"test-group"},
+								MaxResources: map[string]string{"memory": "50"},
+							},
+						},
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: []Limit{
+									{
+										Limit:        "user-limit",
+										Users:        []string{"test-user"},
+										MaxResources: map[string]string{"memory": "10"},
+									},
+									{
+										Limit:        "group-limit",
+										Groups:       []string{"test-group"},
+										MaxResources: map[string]string{"memory": "10"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			hasError: false,
+		},
+		{
+			name: "leaf queue user maxresources exceed parent queue user maxresources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:        "user-limit",
+						Users:        []string{"test-user"},
+						MaxResources: map[string]string{"memory": "100"},
+					},
+					{
+						Limit:        "group-limit",
+						Groups:       []string{"test-group"},
+						MaxResources: map[string]string{"memory": "100"},
+					},
+				},
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: []Limit{
+							{
+								Limit:        "user-limit",
+								Users:        []string{"test-user"},
+								MaxResources: map[string]string{"memory": "200"},
+							},
+							{
+								Limit:        "group-limit",
+								Groups:       []string{"test-group"},
+								MaxResources: map[string]string{"memory": "50"},
+							},
+						},
+					},
+				},
+			},
+			hasError: true,
+		},
+		{
+			name: "leaf queue group maxresources exceed parent queue group maxresources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:        "user-limit",
+						Users:        []string{"test-user"},
+						MaxResources: map[string]string{"memory": "100"},
+					},
+					{
+						Limit:        "group-limit",
+						Groups:       []string{"test-group"},
+						MaxResources: map[string]string{"memory": "100"},
+					},
+				},
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: []Limit{
+							{
+								Limit:        "user-limit",
+								Users:        []string{"test-user"},
+								MaxResources: map[string]string{"memory": "50"},
+							},
+							{
+								Limit:        "group-limit",
+								Groups:       []string{"test-group"},
+								MaxResources: map[string]string{"memory": "200"},
+							},
+						},
+					},
+				},
+			},
+			hasError: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := checkLimitResource(testCase.config, nil, make(map[string]*resources.Resource), make(map[string]*resources.Resource))
+			if testCase.hasError {
+				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent maximum resource")
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
+}
+
+func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name     string
+		config   QueueConfig
+		hasError bool
+	}{
+		{
+			name: "leaf queue user group maxapplications are within parent queue user group maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 100,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 100,
+					},
+				},
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: []Limit{
+							{
+								Limit:           "user-limit",
+								Users:           []string{"test-user"},
+								MaxApplications: 100,
+							},
+							{
+								Limit:           "group-limit",
+								Groups:          []string{"test-group"},
+								MaxApplications: 100,
+							},
+						},
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: []Limit{
+									{
+										Limit:           "user-limit",
+										Users:           []string{"test-user"},
+										MaxApplications: 100,
+									},
+									{
+										Limit:           "group-limit",
+										Groups:          []string{"test-group"},
+										MaxApplications: 100,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			hasError: false,
+		},
+		{
+			name: "leaf queue user maxapplications exceed parent queue user maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 100,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 100,
+					},
+				},
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: []Limit{
+							{
+								Limit:           "user-limit",
+								Users:           []string{"test-user"},
+								MaxApplications: 200,
+							},
+							{
+								Limit:           "group-limit",
+								Groups:          []string{"test-group"},
+								MaxApplications: 50,
+							},
+						},
+					},
+				},
+			},
+			hasError: true,
+		},
+		{
+			name: "leaf queue group maxapplications exceed parent queue group maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 100,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 100,
+					},
+				},
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: []Limit{
+							{
+								Limit:           "user-limit",
+								Users:           []string{"test-user"},
+								MaxApplications: 50,
+							},
+							{
+								Limit:           "group-limit",
+								Groups:          []string{"test-group"},
+								MaxApplications: 200,
+							},
+						},
+					},
+				},
+			},
+			hasError: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := checkLimitMaxApplications(testCase.config, nil, make(map[string]uint64), make(map[string]uint64))
+			if testCase.hasError {
+				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent max applications")
+			} else {
+				assert.NilError(t, err)
+			}
+		})
+	}
+}
+
+func TestCheckLimits(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name   string
+		config QueueConfig
+		errMsg string
+	}{
+		{
+			name: "user group maxresources and maxapplications are within queue limits",
+			config: QueueConfig{
+				Name: "parent",
+				Resources: Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				MaxApplications: 100,
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user", "*"},
+						MaxResources:    map[string]string{"memory": "100"},
+						MaxApplications: 100,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group", "*"},
+						MaxResources:    map[string]string{"memory": "100"},
+						MaxApplications: 100,
+					},
+				},
+			},
+			errMsg: "",
+		},
+		{
+			name: "default queue maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 100,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 100,
+					},
+				},
+			},
+			errMsg: "",
+		},
+		{
+			name: "user maxresources exceed queue limits",
+			config: QueueConfig{
+				Name: "parent",
+				Resources: Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				Limits: []Limit{
+					{
+						Limit:        "user-limit",
+						Users:        []string{"test-user"},
+						MaxResources: map[string]string{"memory": "200"},
+					},
+					{
+						Limit:        "group-limit",
+						Groups:       []string{"test-group"},
+						MaxResources: map[string]string{"memory": "100"},
+					},
+				},
+			},
+			errMsg: "invalid MaxResources settings",
+		},
+		{
+			name: "group maxresources exceed queue limits",
+			config: QueueConfig{
+				Name: "parent",
+				Resources: Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				Limits: []Limit{
+					{
+						Limit:        "user-limit",
+						Users:        []string{"test-user"},
+						MaxResources: map[string]string{"memory": "100"},
+					},
+					{
+						Limit:        "group-limit",
+						Groups:       []string{"test-group"},
+						MaxResources: map[string]string{"memory": "200"},
+					},
+				},
+			},
+			errMsg: "invalid MaxResources settings",
+		},
+		{
+			name: "user maxapplications exceed queue limits",
+			config: QueueConfig{
+				Name:            "parent",
+				MaxApplications: 100,
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 200,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 100,
+					},
+				},
+			},
+			errMsg: "invalid MaxApplications settings",
+		},
+		{
+			name: "group maxapplications exceed queue limits",
+			config: QueueConfig{
+				Name:            "parent",
+				MaxApplications: 100,
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 100,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 200,
+					},
+				},
+			},
+			errMsg: "invalid MaxApplications settings",
+		},
+		{
+			name: "user maxapplications is 0",
+			config: QueueConfig{
+				Name: "parent",
+				Resources: Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				MaxApplications: 100,
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 0,
+						MaxResources:    map[string]string{"memory": "100"},
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 100,
+						MaxResources:    map[string]string{"memory": "100"},
+					},
+				},
+			},
+			errMsg: "MaxApplications is 0",
+		},
+		{
+			name: "group maxapplications is 0",
+			config: QueueConfig{
+				Name: "parent",
+				Resources: Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				MaxApplications: 100,
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 100,
+						MaxResources:    map[string]string{"memory": "100"},
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 0,
+						MaxResources:    map[string]string{"memory": "100"},
+					},
+				},
+			},
+			errMsg: "MaxApplications is 0",
+		},
+		{
+			name: "user wildcard is not last entry",
+			config: QueueConfig{
+				Name: "parent",
+				Resources: Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				MaxApplications: 100,
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"*", "test-user"},
+						MaxResources:    map[string]string{"memory": "100"},
+						MaxApplications: 100,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"test-group", "*"},
+						MaxResources:    map[string]string{"memory": "100"},
+						MaxApplications: 100,
+					},
+				},
+			},
+			errMsg: "should not set no wildcard user test-user after wildcard user limit",
+		},
+		{
+			name: "group wildcard is not last entry",
+			config: QueueConfig{
+				Name: "parent",
+				Resources: Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				MaxApplications: 100,
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user", "*"},
+						MaxResources:    map[string]string{"memory": "100"},
+						MaxApplications: 100,
+					},
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"*", "test-group"},
+						MaxResources:    map[string]string{"memory": "100"},
+						MaxApplications: 100,
+					},
+				},
+			},
+			errMsg: "should not set no wildcard group test-group after wildcard group limit",
+		},
+		{
+			name: "group wildcard is only entry",
+			config: QueueConfig{
+				Name: "parent",
+				Resources: Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				MaxApplications: 100,
+				Limits: []Limit{
+					{
+						Limit:           "group-limit",
+						Groups:          []string{"*"},
+						MaxResources:    map[string]string{"memory": "100"},
+						MaxApplications: 100,
+					},
+				},
+			},
+			errMsg: "should not specify only one group limit that is using the wildcard.",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := checkLimits(testCase.config.Limits, testCase.config.Name, &testCase.config)
+			if testCase.errMsg != "" {
+				assert.ErrorContains(t, err, testCase.errMsg)
+			} else {
+				assert.NilError(t, err)
+			}
 		})
 	}
 }

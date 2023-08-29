@@ -55,7 +55,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of scheduler.GetClusterContext() and scheduler.
@@ -233,7 +233,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	mockRM := ms.mockRM
 	ms.serviceContext.StopAll()
 	// restart
-	err = ms.Init(configData, false)
+	err = ms.Init(configData, false, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// Register nodes, and add apps
@@ -343,7 +343,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register node, and add app
@@ -411,7 +411,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	mockRM := ms.mockRM
 	ms.serviceContext.StopAll()
 	// restart
-	err = ms.Init(configData, false)
+	err = ms.Init(configData, false, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// Register nodes, and add apps
@@ -453,7 +453,7 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register nodes, and add apps
@@ -725,7 +725,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// initially there is only 1 root queue exist
@@ -860,7 +860,7 @@ partitions:
 	ms.serviceContext.StopAll()
 
 	// restart
-	err = ms.Init(configData, false)
+	err = ms.Init(configData, false, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 	part = ms.scheduler.GetClusterContext().GetPartition(ms.partitionName)
 	rootQ = part.GetQueue("root")

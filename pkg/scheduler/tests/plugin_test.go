@@ -64,7 +64,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, true)
+	err := ms.Init(configData, true, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// register a fake container state updater for testing

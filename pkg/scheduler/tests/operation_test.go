@@ -55,7 +55,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
@@ -183,7 +183,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
@@ -331,7 +331,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
@@ -447,7 +447,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
@@ -566,7 +566,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.

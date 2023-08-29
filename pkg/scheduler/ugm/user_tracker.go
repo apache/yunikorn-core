@@ -65,7 +65,7 @@ func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, 
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
 			zap.Stringer("resource", usage))
-		increasedGroupUsage := gt.increaseTrackedResource(queuePath, applicationID, usage)
+		increasedGroupUsage := gt.increaseTrackedResource(queuePath, applicationID, usage, ut.userName)
 		if !increasedGroupUsage {
 			_, decreased := ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, false)
 			if !decreased {
@@ -168,4 +168,10 @@ func (ut *UserTracker) canBeRemoved() bool {
 	ut.RLock()
 	defer ut.RUnlock()
 	return len(ut.queueTracker.childQueueTrackers) == 0 && len(ut.queueTracker.runningApplications) == 0
+}
+
+func (ut *UserTracker) canRunApp(queuePath, applicationID string) bool {
+	ut.Lock()
+	defer ut.Unlock()
+	return ut.queueTracker.canRunApp(queuePath, applicationID, user)
 }

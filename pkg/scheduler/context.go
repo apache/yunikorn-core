@@ -324,26 +324,6 @@ func (cc *ClusterContext) removePartitionsByRMID(event *rmevent.RMPartitionsRemo
 	}
 }
 
-// Locked version of the configuration update called from the webservice
-// NOTE: this call assumes one RM which is registered and uses that RM for the updates
-func (cc *ClusterContext) UpdateSchedulerConfig(conf *configs.SchedulerConfig) error {
-	cc.Lock()
-	defer cc.Unlock()
-	// hack around the missing rmID
-	for _, pi := range cc.partitions {
-		rmID := pi.RmID
-		log.Log(log.SchedContext).Debug("Assuming one RM on config update call from webservice",
-			zap.String("rmID", rmID))
-		if err := cc.updateSchedulerConfig(conf, rmID); err != nil {
-			return err
-		}
-		// update global scheduler configs
-		configs.ConfigContext.Set(cc.policyGroup, conf)
-		return nil
-	}
-	return fmt.Errorf("RM has no active partitions, make sure it is registered")
-}
-
 // Locked version of the configuration update called outside of event system.
 // Updates the current config via the config loader.
 // Used in test only, normal updates use the internal call
@@ -747,11 +727,15 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 }
 
 // Process an ask and allocation update request.
+// - Add new allocations for the application(s).
 // - Add new asks and remove released asks for the application(s).
 // - Release allocations for the application(s).
 // Lock free call, all updates occur on the underlying application which is locked or via events.
 func (cc *ClusterContext) handleRMUpdateAllocationEvent(event *rmevent.RMUpdateAllocationEvent) {
 	request := event.Request
+	if len(request.Allocations) != 0 {
+		cc.processAllocations(request)
+	}
 	if len(request.Asks) != 0 {
 		cc.processAsks(request)
 	}
@@ -762,6 +746,54 @@ func (cc *ClusterContext) handleRMUpdateAllocationEvent(event *rmevent.RMUpdateA
 		if len(request.Releases.AllocationsToRelease) > 0 {
 			cc.processAllocationReleases(request.Releases.AllocationsToRelease, request.RmID)
 		}
+	}
+}
+
+func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
+	// Send rejected allocations back to RM
+	rejectedAllocs := make([]*si.RejectedAllocation, 0)
+
+	// Send to scheduler
+	for _, siAlloc := range request.Allocations {
+		// try to get partition
+		partition := cc.GetPartition(siAlloc.PartitionName)
+		if partition == nil {
+			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", siAlloc.PartitionName, siAlloc.ApplicationID, siAlloc.AllocationKey)
+			log.Log(log.SchedContext).Error("Invalid allocation add requested by shim, partition not found",
+				zap.String("partition", siAlloc.PartitionName),
+				zap.String("nodeID", siAlloc.NodeID),
+				zap.String("applicationID", siAlloc.ApplicationID),
+				zap.String("allocationKey", siAlloc.AllocationKey))
+			rejectedAllocs = append(rejectedAllocs, &si.RejectedAllocation{
+				AllocationKey: siAlloc.AllocationKey,
+				ApplicationID: siAlloc.ApplicationID,
+				Reason:        msg,
+			})
+			continue
+		}
+
+		alloc := objects.NewAllocationFromSI(siAlloc)
+		if err := partition.addAllocation(alloc); err != nil {
+			rejectedAllocs = append(rejectedAllocs, &si.RejectedAllocation{
+				AllocationKey: siAlloc.AllocationKey,
+				ApplicationID: siAlloc.ApplicationID,
+				Reason:        err.Error(),
+			})
+			log.Log(log.SchedContext).Error("Invalid allocation add requested by shim",
+				zap.String("partition", siAlloc.PartitionName),
+				zap.String("nodeID", siAlloc.NodeID),
+				zap.String("applicationID", siAlloc.ApplicationID),
+				zap.String("allocationKey", siAlloc.AllocationKey),
+				zap.Error(err))
+		}
+	}
+
+	// Reject allocs returned to RM proxy for the apps and partitions not found
+	if len(rejectedAllocs) > 0 {
+		cc.rmEventHandler.HandleEvent(&rmevent.RMRejectedAllocationEvent{
+			RmID:                request.RmID,
+			RejectedAllocations: rejectedAllocs,
+		})
 	}
 }
 

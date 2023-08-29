@@ -65,7 +65,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// memorize the checksum of current configs
@@ -162,7 +162,7 @@ func TestBasicScheduler(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configDataSmokeTest, false)
+	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -384,7 +384,7 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configDataSmokeTest, true)
+	err := ms.Init(configDataSmokeTest, true, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -491,7 +491,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafApp1 := "root.leaf1"
@@ -614,7 +614,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.leaf"
@@ -739,7 +739,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register a node, and add applications
@@ -830,7 +830,7 @@ partitions:
 			ms := &mockScheduler{}
 			defer ms.Stop()
 
-			err := ms.Init(param.configData, false)
+			err := ms.Init(param.configData, false, false)
 			assert.NilError(t, err, "RegisterResourceManager failed in run %s", param.name)
 
 			// Register a node, and add applications
@@ -942,7 +942,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	node1ID := "node-1:1234"
@@ -1064,7 +1064,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.leaf"
@@ -1182,7 +1182,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register 10 nodes, and add applications
@@ -1283,7 +1283,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configDataSmokeTest, false)
+	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -1469,7 +1469,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.

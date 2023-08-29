@@ -874,40 +874,38 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 func getEvents(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	eventSystem := events.GetEventSystem()
-	if eventSystem == nil {
-		buildJSONErrorResponse(w, "Event system is disabled", http.StatusBadRequest)
+	if !eventSystem.IsEventTrackingEnabled() {
+		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusBadRequest)
 		return
 	}
 
 	count := uint64(10000)
 	var start uint64
-	vars := httprouter.ParamsFromContext(r.Context())
-	if vars != nil {
-		if countStr := vars.ByName("count"); countStr != "" {
-			c, err := strconv.ParseInt(countStr, 10, 64)
-			if err != nil {
-				buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if c <= 0 {
-				buildJSONErrorResponse(w, fmt.Sprintf("Illegal number of events: %d", c), http.StatusBadRequest)
-				return
-			}
-			count = uint64(c)
-		}
 
-		if startStr := vars.ByName("start"); startStr != "" {
-			i, err := strconv.ParseInt(startStr, 10, 64)
-			if err != nil {
-				buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			if i < 0 {
-				buildJSONErrorResponse(w, fmt.Sprintf("Illegal id: %d", i), http.StatusBadRequest)
-				return
-			}
-			start = uint64(i)
+	if countStr := r.URL.Query().Get("count"); countStr != "" {
+		c, err := strconv.ParseInt(countStr, 10, 64)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
 		}
+		if c <= 0 {
+			buildJSONErrorResponse(w, fmt.Sprintf("Illegal number of events: %d", c), http.StatusBadRequest)
+			return
+		}
+		count = uint64(c)
+	}
+
+	if startStr := r.URL.Query().Get("start"); startStr != "" {
+		i, err := strconv.ParseInt(startStr, 10, 64)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if i < 0 {
+			buildJSONErrorResponse(w, fmt.Sprintf("Illegal id: %d", i), http.StatusBadRequest)
+			return
+		}
+		start = uint64(i)
 	}
 
 	records, lowestID, highestID := eventSystem.GetEventsFromID(start, count)

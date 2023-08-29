@@ -19,9 +19,11 @@
 package ugm
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -81,7 +83,7 @@ func (gt *GroupTracker) setLimits(queuePath string, resource *resources.Resource
 func (gt *GroupTracker) headroom(queuePath string) *resources.Resource {
 	gt.Lock()
 	defer gt.Unlock()
-	return gt.queueTracker.headroom(queuePath)
+	return gt.queueTracker.headroom(strings.Split(queuePath, configs.DOT))
 }
 
 func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {

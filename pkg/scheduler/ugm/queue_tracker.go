@@ -245,34 +245,32 @@ func (qt *QueueTracker) setLimit(queuePath string, maxResource *resources.Resour
 	childQueueTracker.maxResources = maxResource
 }
 
-func (qt *QueueTracker) headroom(queuePath string) *resources.Resource {
+func (qt *QueueTracker) headroom(hierarchy []string) *resources.Resource {
 	log.Log(log.SchedUGM).Debug("Calculating headroom",
-		zap.String("queue path", queuePath))
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != common.Empty {
-		if qt.childQueueTrackers[immediateChildQueueName] != nil {
-			headroom := qt.childQueueTrackers[immediateChildQueueName].headroom(childQueuePath)
-			if headroom != nil {
-				return resources.ComponentWiseMinPermissive(headroom, qt.maxResources)
-			}
-		} else {
-			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
-				zap.String("child queueTracker name", immediateChildQueueName))
-			return nil
+		zap.Strings("queue path", hierarchy))
+	// depth first: all the way to the leaf, create if not exists
+	// more than 1 in the slice means we need to recurse down
+	var headroom, childHeadroom *resources.Resource
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] == nil {
+			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName)
 		}
+		childHeadroom = qt.childQueueTrackers[childName].headroom(hierarchy[1:])
 	}
-
+	// arrived at the leaf or on the way out: check against current max if set
 	if !resources.Equals(resources.NewResource(), qt.maxResources) {
-		headroom := qt.maxResources.Clone()
+		headroom = qt.maxResources.Clone()
 		headroom.SubOnlyExisting(qt.resourceUsage)
 		log.Log(log.SchedUGM).Debug("Calculated headroom",
-			zap.String("queue path", queuePath),
-			zap.String("queue", qt.queueName),
+			zap.String("queue path", qt.queuePath),
 			zap.Stringer("max resource", qt.maxResources),
 			zap.Stringer("headroom", headroom))
-		return headroom
 	}
-	return nil
+	if headroom == nil {
+		return childHeadroom
+	}
+	return resources.ComponentWiseMinPermissive(headroom, childHeadroom)
 }
 
 func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {

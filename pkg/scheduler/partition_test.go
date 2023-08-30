@@ -3583,19 +3583,20 @@ func TestPlaceholderAllocationTracking(t *testing.T) {
 	ask3 := newAllocationAskTG(allocID, appID1, taskGroup, res, false)
 	err = app.AddAllocationAsk(ask3)
 	assert.NilError(t, err, "failed to add ask to app")
-	alloc = partition.tryPlaceholderAllocate()
-	assert.Assert(t, alloc != nil, "ask should have been allocated")
+	ask4 := newAllocationAskTG(allocID2, appID1, taskGroup, res, false)
+	err = app.AddAllocationAsk(ask4)
+	assert.NilError(t, err, "failed to add ask to app")
+	alloc1 := partition.tryPlaceholderAllocate()
+	assert.Assert(t, alloc1 != nil, "ask should have been allocated")
+	alloc2 := partition.tryPlaceholderAllocate()
+	assert.Assert(t, alloc2 != nil, "ask should have been allocated")
+
 	partition.removeAllocation(&si.AllocationRelease{
 		UUID:            ph1uuid,
 		ApplicationID:   appID1,
 		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 	})
 	assert.Equal(t, 1, partition.getPhAllocationCount())
-	ask4 := newAllocationAskTG(allocID2, appID1, taskGroup, res, false)
-	err = app.AddAllocationAsk(ask4)
-	assert.NilError(t, err, "failed to add ask to app")
-	alloc = partition.tryPlaceholderAllocate()
-	assert.Assert(t, alloc != nil, "ask should have been allocated")
 	partition.removeAllocation(&si.AllocationRelease{
 		UUID:            ph2uuid,
 		ApplicationID:   appID1,

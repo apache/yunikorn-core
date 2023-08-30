@@ -2302,6 +2302,40 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Assert(t, childNonLeaf.maxResource == nil)
 }
 
+func TestNewRecoveryQueue(t *testing.T) {
+	var err error
+	if _, err = NewRecoveryQueue(nil); err == nil {
+		t.Fatalf("recovery queue creation should fail with nil parent")
+	}
+
+	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	if _, err = NewRecoveryQueue(parent); err == nil {
+		t.Fatalf("recovery queue creation should fail with non-root parent")
+	}
+
+	parentConfig := configs.QueueConfig{
+		Name:          "root",
+		Parent:        true,
+		Properties:    map[string]string{configs.ApplicationSortPolicy: "fair"},
+		ChildTemplate: configs.ChildTemplate{Properties: map[string]string{configs.ApplicationSortPolicy: "fair"}},
+	}
+	parent, err = NewConfiguredQueue(parentConfig, nil)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	recoveryQueue, err := NewRecoveryQueue(parent)
+	assert.NilError(t, err, "failed to create recovery queue: %v", err)
+	assert.Equal(t, common.RecoveryQueueFull, recoveryQueue.GetQueuePath(), "wrong queue name")
+	assert.Equal(t, policies.FifoSortPolicy, recoveryQueue.getSortType(), "wrong sort type")
+}
+
+func TestNewDynamicQueueDoesNotCreateRecovery(t *testing.T) {
+	parent, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	if _, err := NewDynamicQueue(common.RecoveryQueue, true, parent); err == nil {
+		t.Fatalf("invalid recovery queue %s was created", common.RecoveryQueueFull)
+	}
+}
+
 func TestNewDynamicQueue(t *testing.T) {
 	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)

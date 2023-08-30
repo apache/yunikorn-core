@@ -20,6 +20,7 @@ package objects
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
@@ -39,7 +41,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 var (
@@ -146,6 +148,25 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	return sq, nil
 }
 
+// NewRecoveryQueue creates a recovery queue if it does not exist. The recovery queue
+// is a dynamic queue, but has an invalid name so that it cannot be directly referenced.
+func NewRecoveryQueue(parent *Queue) (*Queue, error) {
+	if parent == nil {
+		return nil, errors.New("recovery queue cannot be created with nil parent")
+	}
+	if parent.GetQueuePath() != configs.RootQueue {
+		return nil, fmt.Errorf("recovery queue cannot be created with non-root parent: %s", parent.GetQueuePath())
+	}
+	queue, err := newDynamicQueueInternal(common.RecoveryQueue, true, parent)
+	if err == nil {
+		queue.Lock()
+		defer queue.Unlock()
+		queue.submitACL = security.ACL{}
+		queue.sortType = policies.FifoSortPolicy
+	}
+	return queue, err
+}
+
 // NewDynamicQueue creates a new queue to be added to the system based on the placement rules
 // A dynamically added queue can never be the root queue so parent must be set
 // lock free as it cannot be referenced yet
@@ -158,6 +179,10 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	if !configs.QueueNameRegExp.MatchString(name) {
 		return nil, fmt.Errorf("invalid queue name '%s', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters", name)
 	}
+	return newDynamicQueueInternal(name, leaf, parent)
+}
+
+func newDynamicQueueInternal(name string, leaf bool, parent *Queue) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(name)
 	sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
@@ -385,12 +410,15 @@ func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 func (sq *Queue) UpdateQueueProperties() {
 	sq.Lock()
 	defer sq.Unlock()
-
+	if common.IsRecoveryQueue(sq.QueuePath) {
+		// recovery queue properties should never be updated
+		sq.sortType = policies.FifoSortPolicy
+		return
+	}
 	if !sq.isLeaf {
 		// set the sorting type for parent queues
 		sq.sortType = policies.FairSortPolicy
 	}
-
 	// walk over all properties and process
 	var err error
 	for key, value := range sq.properties {
@@ -536,6 +564,10 @@ func (sq *Queue) GetPreemptionDelay() time.Duration {
 // The check is performed recursively: i.e. access to the parent allows access to this queue.
 // This will check both submitACL and adminACL.
 func (sq *Queue) CheckSubmitAccess(user security.UserGroup) bool {
+	if common.IsRecoveryQueue(sq.QueuePath) {
+		// recovery queue can never pass ACL checks
+		return false
+	}
 	sq.RLock()
 	allow := sq.submitACL.CheckAccess(user) || sq.adminACL.CheckAccess(user)
 	sq.RUnlock()
@@ -681,9 +713,9 @@ func (sq *Queue) AddApplication(app *Application) {
 	sq.queueEvents.sendNewApplicationEvent(appID)
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
-	quota := app.GetTag(common.AppTagNamespaceResourceQuota)
+	quota := app.GetTag(siCommon.AppTagNamespaceResourceQuota)
 	// get the tag with the guaranteed resource
-	guaranteed := app.GetTag(common.AppTagNamespaceResourceGuaranteed)
+	guaranteed := app.GetTag(siCommon.AppTagNamespaceResourceGuaranteed)
 	if quota == "" && guaranteed == "" {
 		return
 	}

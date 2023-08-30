@@ -63,30 +63,31 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
+func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error) {
 	// before anything run the filter
 	if !fr.filter.allowUser(app.GetUser()) {
 		log.Log(log.Config).Debug("Fixed rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()),
 			zap.String("queueName", fr.queue))
-		return "", nil
+		return "", true, nil
 	}
 	var parentName string
+	var aclCheck = true
 	var err error
 	queueName := fr.queue
 	// if the fixed queue is already fully qualified skip the parent check
 	if !fr.qualified {
 		// run the parent rule if set
 		if fr.parent != nil {
-			parentName, err = fr.parent.placeApplication(app, queueFn)
+			parentName, aclCheck, err = fr.parent.placeApplication(app, queueFn)
 			// failed parent rule, fail this rule
 			if err != nil {
-				return "", err
+				return "", aclCheck, err
 			}
 			// rule did not return a parent: this could be filter or create flag related
 			if parentName == "" {
-				return "", nil
+				return "", aclCheck, nil
 			}
 			// check if this is a parent queue and qualify it
 			if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
@@ -95,7 +96,7 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 			// if the parent queue exists it cannot be a leaf
 			parentQueue := queueFn(parentName)
 			if parentQueue != nil && parentQueue.IsLeafQueue() {
-				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+				return "", aclCheck, fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 			}
 		}
 		// the parent is set from the rule otherwise set it to the root
@@ -112,10 +113,10 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 	queue := queueFn(queueName)
 	// if we cannot create the queue must exist
 	if !fr.create && queue == nil {
-		return "", nil
+		return "", aclCheck, nil
 	}
 	log.Log(log.Config).Info("Fixed rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, nil
+	return queueName, aclCheck, nil
 }

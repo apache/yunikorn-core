@@ -24,4 +24,5 @@ const (
 	Provided = "provided"
 	Tag      = "tag"
 	Test     = "test"
+	Recovery = "recovery"
 )

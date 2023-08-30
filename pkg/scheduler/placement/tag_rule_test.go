@@ -23,6 +23,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 )
@@ -89,34 +90,48 @@ partitions:
 	tags := make(map[string]string)
 	appInfo := newApplication("app1", "default", "ignored", user, tags, nil, "")
 	var queue string
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	var aclCheck bool
+	queue, aclCheck, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule failed with no tag value '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// tag queue that exists directly in hierarchy
 	tags = map[string]string{"label1": "testqueue"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testqueue" || err != nil {
 		t.Errorf("tag rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// tag queue that does not exists
 	tags = map[string]string{"label1": "unknown"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule placed in queue that does not exists '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// tag queue fully qualified
 	tags = map[string]string{"label1": "root.testparent.testchild"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule did fail with qualified queue '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
+
+	// tag queue references recovery
+	tags = map[string]string{"label1": common.RecoveryQueueFull}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, aclCheck, err = tr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err != nil {
+		t.Errorf("tag rule failed with explicit recovery queue: queue '%s', error %v", queue, err)
+	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a parent
 	conf = configs.PlacementRule{
@@ -133,16 +148,18 @@ partitions:
 	}
 	tags = map[string]string{"label1": "testchild"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule with parent queue should have failed value not set '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 	tags = map[string]string{"label1": "testchild", "label2": "testparent"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule with parent queue incorrect queue '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 }
 
 func TestTagRuleParent(t *testing.T) {
@@ -173,10 +190,12 @@ func TestTagRuleParent(t *testing.T) {
 	tags := map[string]string{"label1": "testchild", "label2": "testparent"}
 	appInfo := newApplication("app1", "default", "unknown", user, tags, nil, "")
 	var queue string
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	var aclCheck bool
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a non creatable parent
 	conf = configs.PlacementRule{
@@ -196,10 +215,11 @@ func TestTagRuleParent(t *testing.T) {
 
 	tags = map[string]string{"label1": "testchild", "label2": "testparentnew"}
 	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a creatable parent
 	conf = configs.PlacementRule{
@@ -216,10 +236,11 @@ func TestTagRuleParent(t *testing.T) {
 	if err != nil || ur == nil {
 		t.Errorf("tag rule create failed with queue name, err %v", err)
 	}
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a parent which is defined as a leaf
 	conf = configs.PlacementRule{
@@ -237,8 +258,9 @@ func TestTagRuleParent(t *testing.T) {
 	}
 
 	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
+	queue, aclCheck, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 }

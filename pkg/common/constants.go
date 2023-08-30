@@ -21,7 +21,11 @@ package common
 const (
 	Empty = ""
 
-	Wildcard  = "*"
-	Separator = ","
-	Space     = " "
+	Wildcard          = "*"
+	Separator         = ","
+	Space             = " "
+	AnonymousUser     = "nobody"
+	AnonymousGroup    = "nogroup"
+	RecoveryQueue     = "@recovery@"
+	RecoveryQueueFull = "root." + RecoveryQueue
 )

@@ -25,57 +25,34 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
 // basic test to check if no rules leave the manager unusable
 func TestManagerNew(t *testing.T) {
 	// basic info without rules, manager should not init
-	man := NewPlacementManager(nil, nil)
-	if man.initialised {
-		t.Error("Placement manager marked initialised without rules")
-	}
-	if man.IsInitialised() {
-		t.Error("Placement manager marked initialised without rules")
-	}
-	if len(man.rules) != 0 {
-		t.Error("Placement manager marked initialised without rules")
-	}
-}
-
-func TestManagerNoFunc(t *testing.T) {
-	// basic info without rules, manager should not init
-	rules := []configs.PlacementRule{
-		{Name: "test"},
-	}
-	man := NewPlacementManager(rules, nil)
-	if man.initialised {
-		t.Error("Placement manager marked initialised without queue func")
-	}
-	if man.initialise(rules) == nil {
-		t.Error("Placement manager should not initialise with nil function")
-	}
-	if man.UpdateRules(rules) == nil {
-		t.Error("Placement manager should not update with nil function")
-	}
+	man := NewPlacementManager(nil, queueFunc)
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty placement manager")
+	assert.Equal(t, types.Provided, man.rules[0].getName(), "wrong name for implicit provided rule")
+	assert.Equal(t, types.Recovery, man.rules[1].getName(), "wrong name for implicit recovery rule")
 }
 
 func TestManagerInit(t *testing.T) {
-	// basic info without rules, manager should not init no error
+	// basic info without rules, manager should implicitly init
 	man := NewPlacementManager(nil, queueFunc)
-	if man.initialised {
-		t.Error("Placement manager marked initialised without rules")
-	}
-	// try to init with empty list must error
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
+
+	// try to init with empty list should do the same
 	var rules []configs.PlacementRule
 	err := man.initialise(rules)
-	if err == nil || man.initialised {
-		t.Error("initialise without rules should have failed")
-	}
+	assert.NilError(t, err, "Failed to initialize empty placement rules")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty placement manager")
+
 	rules = []configs.PlacementRule{
 		{Name: "unknown"},
 	}
 	err = man.initialise(rules)
-	if err == nil || man.initialised {
+	if err == nil {
 		t.Error("initialise with 'unknown' rule list should have failed")
 	}
 
@@ -84,20 +61,18 @@ func TestManagerInit(t *testing.T) {
 		{Name: "test"},
 	}
 	err = man.initialise(rules)
-	if err != nil || !man.initialised {
-		t.Errorf("failed to init existing manager, init state: %t, error: %v", man.initialised, err)
-	}
-	// update the manager: remove rules init state is reverted
+	assert.NilError(t, err, "failed to init existing manager")
+
+	// update the manager: remove rules implicit state is reverted
 	rules = []configs.PlacementRule{}
 	err = man.initialise(rules)
-	if err == nil || !man.initialised {
-		t.Errorf("init should have failed with empty list, init state: %t, error: %v", man.initialised, err)
-	}
+	assert.NilError(t, err, "Failed to re-initialize empty placement rules")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for newly empty placement manager")
+
 	// check if we handle a nil list
 	err = man.initialise(nil)
-	if err == nil || !man.initialised {
-		t.Errorf("init should have failed with nil list, init state: %t, error: %v", man.initialised, err)
-	}
+	assert.NilError(t, err, "Failed to re-initialize nil placement rules")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
 }
 
 func TestManagerUpdate(t *testing.T) {
@@ -108,20 +83,18 @@ func TestManagerUpdate(t *testing.T) {
 		{Name: "test"},
 	}
 	err := man.UpdateRules(rules)
-	if err != nil || !man.initialised {
-		t.Errorf("failed to update existing manager, init state: %t, error: %v", man.initialised, err)
-	}
+	assert.NilError(t, err, "failed to update existing manager")
+
 	// update the manager: remove rules init state is reverted
 	rules = []configs.PlacementRule{}
 	err = man.UpdateRules(rules)
-	if err != nil || man.initialised {
-		t.Errorf("failed to update existing manager, init state: %t, error: %v", man.initialised, err)
-	}
+	assert.NilError(t, err, "Failed to re-initialize empty placement rules")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for newly empty placement manager")
+
 	// check if we handle a nil list
 	err = man.UpdateRules(nil)
-	if err != nil || man.initialised {
-		t.Errorf("failed to update existing manager with nil list, init state: %t, error: %v", man.initialised, err)
-	}
+	assert.NilError(t, err, "Failed to re-initialize nil placement rules")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
 }
 
 func TestManagerBuildRule(t *testing.T) {
@@ -134,8 +107,8 @@ func TestManagerBuildRule(t *testing.T) {
 	if err != nil {
 		t.Errorf("test rule build should not have failed, err: %v", err)
 	}
-	if len(ruleObjs) != 1 {
-		t.Errorf("test rule build should have created 1 rule found: %d", len(ruleObjs))
+	if len(ruleObjs) != 2 {
+		t.Errorf("test rule build should have created 2 rules found: %d", len(ruleObjs))
 	}
 
 	// rule with a parent rule should only be 1 rule in the list
@@ -147,8 +120,8 @@ func TestManagerBuildRule(t *testing.T) {
 		},
 	}
 	ruleObjs, err = man.buildRules(rules)
-	if err != nil || len(ruleObjs) != 1 {
-		t.Errorf("test rule build should not have failed and created 1 top level rule, err: %v, rules: %v", err, ruleObjs)
+	if err != nil || len(ruleObjs) != 2 {
+		t.Errorf("test rule build should not have failed and created 2 top level rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
 		parent := ruleObjs[0].getParent()
 		if parent == nil || parent.getName() != "test" {
@@ -162,9 +135,9 @@ func TestManagerBuildRule(t *testing.T) {
 		{Name: "test"},
 	}
 	ruleObjs, err = man.buildRules(rules)
-	if err != nil || len(ruleObjs) != 2 {
-		t.Errorf("rule build should not have failed and created 2 rule, err: %v, rules: %v", err, ruleObjs)
-	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" {
+	if err != nil || len(ruleObjs) != 3 {
+		t.Errorf("rule build should not have failed and created 3 rules, err: %v, rules: %v", err, ruleObjs)
+	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" || ruleObjs[2].getName() != "recovery" {
 		t.Errorf("rule build order is not preserved: %v", ruleObjs)
 	}
 }
@@ -207,9 +180,7 @@ partitions:
 			Create: true},
 	}
 	err = man.UpdateRules(rules)
-	if err != nil || !man.initialised {
-		t.Errorf("failed to update existing manager, init state: %t, error: %v", man.initialised, err)
-	}
+	assert.NilError(t, err, "failed to update existing manager")
 	tags := make(map[string]string)
 	user := security.UserGroup{
 		User:   "testchild",

@@ -118,7 +118,6 @@ func TestNewPartition(t *testing.T) {
 	if partition.root.QueuePath != "root" {
 		t.Fatal("partition root queue not set as expected")
 	}
-	assert.Assert(t, !partition.placementManager.IsInitialised(), "partition should not have initialised placement manager")
 }
 
 func TestNewWithPlacement(t *testing.T) {
@@ -143,8 +142,7 @@ func TestNewWithPlacement(t *testing.T) {
 	}
 	partition, err := newPartitionContext(confWith, rmID, nil)
 	assert.NilError(t, err, "test partition create failed with error")
-	assert.Assert(t, partition.placementManager.IsInitialised(), "partition should have initialised placement manager")
-	assert.Equal(t, len(*partition.rules), 1, "Placement rules not set as expected ")
+	assert.Equal(t, len(*partition.rules), 1, "Placement rules not set as expected")
 
 	// add a rule and check if it is updated
 	confWith = configs.PartitionConfig{
@@ -170,8 +168,7 @@ func TestNewWithPlacement(t *testing.T) {
 	}
 	err = partition.updatePartitionDetails(confWith)
 	assert.NilError(t, err, "update partition failed unexpected with error")
-	assert.Assert(t, partition.placementManager.IsInitialised(), "partition should have initialised placement manager")
-	assert.Equal(t, len(*partition.rules), 2, "Placement rules not updated as expected ")
+	assert.Equal(t, len(*partition.rules), 2, "Placement rules not updated as expected")
 
 	// update to turn off placement manager
 	conf := configs.PartitionConfig{
@@ -187,14 +184,12 @@ func TestNewWithPlacement(t *testing.T) {
 	}
 	err = partition.updatePartitionDetails(conf)
 	assert.NilError(t, err, "update partition failed unexpected with error")
-	assert.Assert(t, !partition.placementManager.IsInitialised(), "partition should not have initialised placement manager")
-	assert.Equal(t, len(*partition.rules), 0, "Placement rules not updated as expected ")
+	assert.Equal(t, len(*partition.rules), 0, "Placement rules not updated as expected")
 
 	// set the old config back this should turn on the placement again
 	err = partition.updatePartitionDetails(confWith)
 	assert.NilError(t, err, "update partition failed unexpected with error")
-	assert.Assert(t, partition.placementManager.IsInitialised(), "partition should have initialised placement manager")
-	assert.Equal(t, len(*partition.rules), 2, "Placement rules not updated as expected ")
+	assert.Equal(t, len(*partition.rules), 2, "Placement rules not updated as expected")
 }
 
 func TestAddNode(t *testing.T) {
@@ -926,6 +921,115 @@ func TestAddApp(t *testing.T) {
 	if err == nil || partition.getApplication(appID3) != nil {
 		t.Errorf("add application on draining partition should have failed but did not")
 	}
+}
+
+func TestAddAppForced(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	// add a new app to an invalid queue
+	app := newApplication(appID1, "default", "root.invalid")
+	err = partition.AddApplication(app)
+	if err == nil || partition.getApplication(appID1) != nil {
+		t.Fatalf("add application to nonexistent queue should have failed but did not")
+	}
+
+	// re-add the app, but mark it as forced. this should create the recovery queue and assign the app to it
+	app = newApplicationTags(appID1, "default", "root.invalid", map[string]string{siCommon.AppTagCreateForce: "true"})
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app create failed")
+	partApp := partition.getApplication(appID1)
+	if partApp == nil {
+		t.Fatalf("app not found after adding to partition")
+	}
+	recoveryQueue := partition.GetQueue(common.RecoveryQueueFull)
+	if recoveryQueue == nil {
+		t.Fatalf("recovery queue not found")
+	}
+	assert.Equal(t, common.RecoveryQueueFull, partApp.GetQueuePath(), "wrong queue path for app2")
+	assert.Check(t, recoveryQueue == partApp.GetQueue(), "wrong queue for app")
+	assert.Equal(t, 1, len(recoveryQueue.GetCopyOfApps()), "wrong queue length")
+
+	// add second forced app. this should use the existing recovery queue rather than recreating it
+	app2 := newApplicationTags(appID2, "default", "root.invalid2", map[string]string{siCommon.AppTagCreateForce: "true"})
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err, "app2 create failed")
+	partApp2 := partition.getApplication(appID2)
+	if partApp2 == nil {
+		t.Fatalf("app2 not found after adding to partition")
+	}
+	assert.Equal(t, common.RecoveryQueueFull, partApp2.GetQueuePath(), "wrong queue path for app2")
+	assert.Check(t, recoveryQueue == partApp2.GetQueue(), "wrong queue for app2")
+	assert.Equal(t, 2, len(recoveryQueue.GetCopyOfApps()), "wrong queue length")
+
+	// add third app (not forced), but referencing the recovery queue. this should fail.
+	app3 := newApplication(appID3, "default", common.RecoveryQueueFull)
+	err = partition.AddApplication(app3)
+	if err == nil || partition.getApplication(appID3) != nil {
+		t.Fatalf("add app3 to recovery queue should have failed but did not")
+	}
+
+	// re-add third app, but forced. This should succeed.
+	app3 = newApplicationTags(appID3, "default", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true"})
+	err = partition.AddApplication(app3)
+	assert.NilError(t, err, "app3 create failed")
+	partApp3 := partition.getApplication(appID3)
+	if partApp3 == nil {
+		t.Fatalf("app3 not found after adding to partition")
+	}
+	assert.Equal(t, common.RecoveryQueueFull, partApp3.GetQueuePath(), "wrong queue path for app3")
+	assert.Check(t, recoveryQueue == partApp3.GetQueue(), "wrong queue for app3")
+	assert.Equal(t, 3, len(recoveryQueue.GetCopyOfApps()), "wrong queue length")
+}
+
+func TestAddAppForcedWithPlacement(t *testing.T) {
+	confWith := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues:    nil,
+			},
+		},
+		PlacementRules: []configs.PlacementRule{
+			{
+				Name:   "tag",
+				Value:  "queue",
+				Create: true,
+			},
+		},
+		Limits:         nil,
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+	partition, err := newPartitionContext(confWith, rmID, nil)
+	assert.NilError(t, err, "test partition create failed with error")
+
+	// add a new app using tag rule
+	app := newApplicationTags(appID1, "default", "", map[string]string{"queue": "root.test"})
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app to tagged queue")
+	assert.Equal(t, "root.test", app.GetQueuePath(), "app assigned to wrong queue")
+
+	// add a second app without a tag rule
+	app2 := newApplicationTags(appID2, "default", "root.untagged", map[string]string{})
+	err = partition.AddApplication(app2)
+	if err == nil || partition.getApplication(appID2) != nil {
+		t.Fatalf("add app2 to fixed queue should have failed but did not")
+	}
+
+	// attempt to add the app again, but with forced addition
+	app2 = newApplicationTags(appID2, "default", "root.untagged", map[string]string{siCommon.AppTagCreateForce: "true"})
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err, "failed to add app2 to tagged queue")
+	assert.Equal(t, common.RecoveryQueueFull, app2.GetQueuePath(), "app2 assigned to wrong queue")
+
+	// add a third app, but with the recovery queue tagged
+	app3 := newApplicationTags(appID3, "default", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true"})
+	err = partition.AddApplication(app3)
+	assert.NilError(t, err, "failed to add app3 to tagged queue")
+	assert.Equal(t, common.RecoveryQueueFull, app3.GetQueuePath(), "app2 assigned to wrong queue")
 }
 
 func TestAddAppTaskGroup(t *testing.T) {

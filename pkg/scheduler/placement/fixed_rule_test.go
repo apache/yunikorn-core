@@ -90,10 +90,12 @@ partitions:
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
 	var queue string
-	queue, err = fr.placeApplication(app, queueFunc)
+	var aclCheck bool
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testqueue" || err != nil {
 		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// fixed queue that exists directly in hierarchy
 	conf = configs.PlacementRule{
@@ -104,10 +106,11 @@ partitions:
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// fixed queue that does not exists
 	conf = configs.PlacementRule{
@@ -119,10 +122,11 @@ partitions:
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.newqueue" || err != nil {
 		t.Errorf("fixed rule failed to place queue in to be created queue '%s', err %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a parent queue should not fail: failure happens on create in this case
 	conf = configs.PlacementRule{
@@ -133,10 +137,11 @@ partitions:
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("fixed rule did fail with parent queue '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a parent
 	conf = configs.PlacementRule{
@@ -151,10 +156,11 @@ partitions:
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("fixed rule with parent queue should not have failed '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 }
 
 func TestFixedRuleParent(t *testing.T) {
@@ -184,10 +190,12 @@ func TestFixedRuleParent(t *testing.T) {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
 	var queue string
-	queue, err = fr.placeApplication(app, queueFunc)
+	var aclCheck bool
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("fixed rule with create false for child should have failed and gave '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a non creatable parent
 	conf = configs.PlacementRule{
@@ -204,10 +212,11 @@ func TestFixedRuleParent(t *testing.T) {
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("fixed rule with non existing parent queue should have failed '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a creatable parent
 	conf = configs.PlacementRule{
@@ -224,10 +233,11 @@ func TestFixedRuleParent(t *testing.T) {
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("fixed rule with non existing parent queue should created '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 
 	// trying to place in a child using a parent which is defined as a leaf
 	conf = configs.PlacementRule{
@@ -243,8 +253,9 @@ func TestFixedRuleParent(t *testing.T) {
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	queue, aclCheck, err = fr.placeApplication(app, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
 	}
+	assert.Check(t, aclCheck, "acls should be checked")
 }

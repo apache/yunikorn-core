@@ -191,6 +191,29 @@ func IsAllowPreemptOther(policy *si.PreemptionPolicy) bool {
 	return policy != nil && policy.AllowPreemptOther
 }
 
+// IsAppCreationForced returns true if the application creation is triggered by the shim
+// reporting an existing allocation. In this case, it needs to be accepted regardless
+// of whether it maps to a valid queue.
+func IsAppCreationForced(tags map[string]string) bool {
+	tagVal := ""
+	for key, val := range tags {
+		if strings.EqualFold(key, interfaceCommon.AppTagCreateForce) {
+			tagVal = val
+			break
+		}
+	}
+	result, err := strconv.ParseBool(tagVal)
+	if err != nil {
+		return false
+	}
+	return result
+}
+
+// IsRecoveryQueue returns true if the given queue represents the recovery queue
+func IsRecoveryQueue(queueName string) bool {
+	return strings.EqualFold(queueName, RecoveryQueueFull)
+}
+
 // ZeroTimeInUnixNano return the unix nano or nil if the time is zero.
 func ZeroTimeInUnixNano(t time.Time) *int64 {
 	if t.IsZero() {

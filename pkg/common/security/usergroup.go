@@ -26,6 +26,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -122,14 +123,25 @@ func (c *UserGroupCache) resetCache() {
 	c.ugs = make(map[string]*UserGroup)
 }
 
-func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation) (UserGroup, error) {
+func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (UserGroup, error) {
 	// check if we have a user to convert
 	if ugi == nil || ugi.User == "" {
-		return UserGroup{}, fmt.Errorf("empty user cannot resolve")
+		if force {
+			// app creation is forced, so we need to synthesize a user / group
+			ugi.User = common.AnonymousUser
+			ugi.Groups = []string{common.AnonymousGroup}
+		} else {
+			return UserGroup{}, fmt.Errorf("empty user cannot resolve")
+		}
 	}
 	// try to resolve the user if group info is empty otherwise we just convert
 	if len(ugi.Groups) == 0 {
-		return c.GetUserGroup(ugi.User)
+		ug, err := c.GetUserGroup(ugi.User)
+		if force && (err != nil || ug.failed) {
+			ugi.Groups = []string{common.AnonymousGroup}
+		} else {
+			return ug, err
+		}
 	}
 	// If groups are already present we should just convert
 	newUG := UserGroup{User: ugi.User}

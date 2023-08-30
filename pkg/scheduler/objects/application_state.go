@@ -74,6 +74,17 @@ const (
 	Resuming
 )
 
+var stateEvents = map[string]si.EventRecord_ChangeDetail{
+	Accepted.String():   si.EventRecord_APP_ACCEPTED,
+	Starting.String():   si.EventRecord_APP_STARTING,
+	Running.String():    si.EventRecord_APP_RUNNING,
+	Rejected.String():   si.EventRecord_APP_REJECT,
+	Completing.String(): si.EventRecord_APP_COMPLETING,
+	Completed.String():  si.EventRecord_APP_COMPLETED,
+	Failing.String():    si.EventRecord_APP_FAILING,
+	Failed.String():     si.EventRecord_APP_FAILED,
+}
+
 func (as applicationState) String() string {
 	return [...]string{"New", "Accepted", "Starting", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming"}[as]
 }
@@ -142,6 +153,13 @@ func NewAppState() *fsm.FSM {
 				} else {
 					app.OnStateChange(event, "")
 				}
+				eventDetails, ok := stateEvents[event.Dst]
+				if !ok {
+					log.Log(log.SchedFSM).Error("event details not found",
+						zap.String("state", event.Dst))
+					return
+				}
+				app.appEvents.sendStateChangeEvent(eventDetails)
 			},
 			"leave_state": func(_ context.Context, event *fsm.Event) {
 				event.Args[0].(*Application).clearStateTimer() //nolint:errcheck
@@ -153,7 +171,6 @@ func NewAppState() *fsm.FSM {
 				app.setStateTimer(app.startTimeout, app.stateMachine.Current(), RunApplication)
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
-				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_STARTING)
 			},
 			fmt.Sprintf("enter_%s", Resuming.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
@@ -168,13 +185,11 @@ func NewAppState() *fsm.FSM {
 					metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 				}
 				app.setStateTimer(completingTimeout, app.stateMachine.Current(), CompleteApplication)
-				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_COMPLETING)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsAccepted()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
-				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_ACCEPTED)
 			},
 			fmt.Sprintf("enter_%s", Rejected.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
@@ -199,7 +214,6 @@ func NewAppState() *fsm.FSM {
 				// account for going back into running state
 				if event.Dst == Running.String() {
 					app.queue.incRunningApps(app.ApplicationID)
-					app.appEvents.sendStateChangeEvent(si.EventRecord_APP_RUNNING)
 				}
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(_ context.Context, event *fsm.Event) {
@@ -207,7 +221,6 @@ func NewAppState() *fsm.FSM {
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsCompleted()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
-				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_COMPLETED)
 				app.executeTerminatedCallback()
 				app.clearPlaceholderTimer()
 				app.cleanupAsks()
@@ -216,12 +229,10 @@ func NewAppState() *fsm.FSM {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsFailed()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsFailed()
-				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_FAILING)
 			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
-				app.appEvents.sendStateChangeEvent(si.EventRecord_APP_FAILED)
 				app.executeTerminatedCallback()
 				app.cleanupAsks()
 			},

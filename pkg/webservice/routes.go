@@ -185,7 +185,7 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/events/batch/",
+		"/ws/v1/events/batch",
 		getEvents,
 	},
 	// endpoint to retrieve CPU, Memory profiling data,

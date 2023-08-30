@@ -45,9 +45,10 @@ type eventRingBuffer struct {
 	events   []*si.EventRecord
 	capacity uint64 // capacity of the buffer
 	head     uint64 // position of the next element (no tail since we don't remove elements)
-	full     bool   // indicates whether the buffer if full - once it is, it stays full unless buffer is resized
+	full     bool   // indicates whether the buffer if full - once it is, it stays full unless the buffer is resized
 	id       uint64 // unique id of an event record
 	lowestId uint64 // lowest id of an event record available in the buffer at any given time
+	idAtZero uint64 // id at index 0, used to calculate position based on id
 
 	sync.RWMutex
 }
@@ -58,13 +59,14 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.Lock()
 	defer e.Unlock()
 
+	if e.head == 0 {
+		e.idAtZero = e.lowestId
+	}
+
 	e.events[e.head] = event
 	if !e.full {
 		e.full = e.head == e.capacity-1
 	} else {
-		// lowest event id updates when new event added to a full buffer
-		log.Log(log.Events).Debug("event buffer full, oldest event will be lost",
-			zap.String("id", strconv.FormatUint(e.lowestId, 10)))
 		e.lowestId++
 	}
 	e.head = (e.head + 1) % e.capacity
@@ -162,36 +164,13 @@ func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange) []*si.EventRe
 }
 
 // id2pos translates the unique event ID to an index in the event slice.
-// If the event is present the position will be returned and the found flag will be true.
-// In the case that the event ID is not present the position returned is 0 and the flag false.
 func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
-	pos := id % e.capacity
-	var calculatedID uint64 // calculated ID based on index values
-	if pos > e.head {
-		diff := pos - e.head
-		calculatedID = e.getLowestID() + diff
-	} else {
-		pId := e.id - 1
-		idAtZero := pId - (pId % e.capacity) // unique id at slice position 0
-		calculatedID = idAtZero + pos
+	// id out of range?
+	if id < e.lowestId || id >= e.id {
+		return 0, false
 	}
 
-	if !e.full {
-		if e.head == 0 {
-			// empty
-			return 0, false
-		}
-		if pos >= e.head {
-			// "pos" is not in the [0..head-1] range
-			return 0, false
-		}
-	}
-
-	if calculatedID != id {
-		return calculatedID, false
-	}
-
-	return pos, true
+	return (id - e.idAtZero) % e.capacity, true
 }
 
 // getLowestID returns the current lowest available id in the buffer.
@@ -206,7 +185,7 @@ func newEventRingBuffer(capacity uint64) *eventRingBuffer {
 	}
 }
 
-// called from Resize(), This functuin updates the lowest event id available in the buffer
+// called from Resize(), this function updates the lowest event id available in the buffer
 func (e *eventRingBuffer) updateLowestId(beginSize, endSize uint64) {
 	// if buffer size is increasing, lowestId stays the same
 	if beginSize < endSize {
@@ -223,22 +202,18 @@ func (e *eventRingBuffer) updateLowestId(beginSize, endSize uint64) {
 	e.lowestId = e.id - endSize
 }
 
-// resize the existing ring buffer
+// Resize resizes the existing ring buffer
 // this method will be called upon configuration reload
 func (e *eventRingBuffer) Resize(newSize uint64) {
 	e.Lock()
 	defer e.Unlock()
 
 	if newSize == e.capacity {
-		return // Nothing to do if the size is the same
+		return
 	}
 
 	initialSize := e.capacity
-
-	// Create a new buffer with the desired size
 	newEvents := make([]*si.EventRecord, newSize)
-
-	// Determine the number of events to copy
 	var numEventsToCopy uint64
 	if e.id-e.getLowestID() > newSize {
 		numEventsToCopy = newSize
@@ -270,11 +245,9 @@ func (e *eventRingBuffer) Resize(newSize uint64) {
 		copy(newEvents[e.capacity-startIndex:], e.events[:endIndex+1])
 	}
 
-	// Update the buffer's state
 	e.capacity = newSize
 	e.events = newEvents
 	e.head = numEventsToCopy % newSize
-
-	// Update e.full based on whether the buffer is full after resizing
+	e.idAtZero = e.lowestId
 	e.full = numEventsToCopy == e.capacity
 }

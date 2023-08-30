@@ -430,7 +430,13 @@ func newApplicationTags(appID, partition, queueName string, tags map[string]stri
 		User:   "testuser",
 		Groups: []string{"testgroup"},
 	}
-	return newApplicationWithUser(appID, partition, queueName, user)
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partition,
+		Tags:          tags,
+	}
+	return objects.NewApplication(siApp, user, nil, rmID)
 }
 
 func newApplicationWithUser(appID, partition, queueName string, user security.UserGroup) *objects.Application {
@@ -438,7 +444,6 @@ func newApplicationWithUser(appID, partition, queueName string, user security.Us
 		ApplicationID: appID,
 		QueueName:     queueName,
 		PartitionName: partition,
-		Tags:          tags,
 	}
 	return objects.NewApplication(siApp, user, nil, rmID)
 }

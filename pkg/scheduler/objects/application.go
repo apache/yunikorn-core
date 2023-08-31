@@ -308,9 +308,6 @@ func (sa *Application) HandleApplicationEventWithInfo(event applicationEvent, ev
 	if err != nil && err.Error() == noTransition {
 		return nil
 	}
-	if event == RejectApplication {
-		sa.appEvents.sendRejectApplicationEvent(eventInfo)
-	}
 	return err
 }
 

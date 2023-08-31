@@ -272,21 +272,34 @@ func TestAppStateTransitionEvents(t *testing.T) {
 	assert.NilError(t, err, "no error expected failing to failed")
 	assert.Assert(t, appInfo.IsFailed(), "App should be in Failed state")
 
+	// failed to expired
+	err = appInfo.HandleApplicationEvent(ExpireApplication)
+	assert.NilError(t, err, "no error expected failed to expired")
+	assert.Assert(t, appInfo.IsExpired(), "App should be in Expired state")
+
+	// accepted to resuming
+	appInfo.stateMachine.SetState(Accepted.String())
+	err = appInfo.HandleApplicationEvent(ResumeApplication)
+	assert.NilError(t, err, "no error expected accepted to resuming")
+	assert.Assert(t, appInfo.IsResuming(), "App should be in Resuming state")
+
 	// Verify application events
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
-		return eventSystem.Store.CountStoredEvents() == 6
+		return eventSystem.Store.CountStoredEvents() == 8
 	})
 	assert.NilError(t, err, "the event should have been processed")
 	records := eventSystem.Store.CollectEvents()
 	if records == nil {
 		t.Fatal("collecting eventChannel should return something")
 	}
-	assert.Equal(t, 6, len(records), "expecting 6 events")
+	assert.Equal(t, 8, len(records), "expecting 8 events")
 	isNewApplicationEvent(t, appInfo, records[0])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_ACCEPTED, records[1])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_COMPLETING, records[2])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_RUNNING, records[3])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILING, records[4])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILED, records[5])
+	isStateChangeEvent(t, appInfo, si.EventRecord_APP_EXPIRED, records[6])
+	isStateChangeEvent(t, appInfo, si.EventRecord_APP_RESUMING, records[7])
 }

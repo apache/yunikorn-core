@@ -26,11 +26,10 @@ import (
 )
 
 /*
-	A utility command to load queue configuration file and check its validity
- */
+A utility command to load queue configuration file and check its validity
+*/
 func main() {
 	if len(os.Args) != 2 {
-		log.Println("Error: queue config file is not provided")
 		log.Println("Usage: " + os.Args[0] + " <queue-config-file>")
 		os.Exit(1)
 	}
@@ -38,7 +37,11 @@ func main() {
 	iv, err := os.ReadFile(queueFile)
 	if err != nil {
 		log.Println(err)
-		os.Exit(1)
+		os.Exit(2)
 	}
-	configs.LoadSchedulerConfigFromByteArray(iv)
+	_, err1 := configs.LoadSchedulerConfigFromByteArray(iv)
+	if err1 != nil {
+		log.Println(err1)
+		os.Exit(3)
+	}
 }

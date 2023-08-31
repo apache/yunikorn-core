@@ -83,6 +83,8 @@ var stateEvents = map[string]si.EventRecord_ChangeDetail{
 	Completed.String():  si.EventRecord_APP_COMPLETED,
 	Failing.String():    si.EventRecord_APP_FAILING,
 	Failed.String():     si.EventRecord_APP_FAILED,
+	Resuming.String():   si.EventRecord_APP_RESUMING,
+	Expired.String():    si.EventRecord_APP_EXPIRED,
 }
 
 func (as applicationState) String() string {

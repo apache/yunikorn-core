@@ -1718,7 +1718,7 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 		}
 
 		// skip this queue if we are within guaranteed limits
-		guaranteed := resources.ComponentWiseMinPermissive(sq.GetActualGuaranteedResource(), sq.GetMaxResource())
+		guaranteed := sq.GetActualGuaranteedResource()
 		if guaranteed.FitInMaxUndef(sq.GetAllocatedResource()) {
 			return
 		}

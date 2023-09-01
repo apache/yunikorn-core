@@ -1919,8 +1919,8 @@ func TestFindQueueByAppID(t *testing.T) {
 
 // nolint: funlen
 func TestFindEligiblePreemptionVictims(t *testing.T) {
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100})
-	parentMax := map[string]string{siCommon.Memory: "200"}
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100, siCommon.CPU: 0, "pods": 1})
+	parentMax := map[string]string{siCommon.Memory: "200", siCommon.CPU: "0", "pods": "0"}
 	parentGuar := map[string]string{siCommon.Memory: "100"}
 	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
 	ask.pendingAskRepeat = 1
@@ -1957,9 +1957,9 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.NilError(t, err, "failed to add ask")
 	app2.AddAllocation(alloc2)
 	app2.AddAllocation(alloc3)
-	err = leaf2.IncAllocatedResource(alloc2.allocatedResource, false)
+	err = leaf2.IncAllocatedResource(alloc2.allocatedResource, true)
 	assert.NilError(t, err, "failed to inc allocated resources")
-	err = leaf2.IncAllocatedResource(alloc3.allocatedResource, false)
+	err = leaf2.IncAllocatedResource(alloc3.allocatedResource, true)
 	assert.NilError(t, err, "failed to inc allocated resources")
 
 	// verify victims
@@ -2049,6 +2049,43 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	parent2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100})
+}
+
+func TestFindVictimsWithoutSetGuar(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100, "pods": 1})
+	parentMax := map[string]string{siCommon.Memory: "200", siCommon.CPU: "0", "pods": "0"}
+	parentGuar := map[string]string{siCommon.Memory: "50"}
+	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
+	ask.pendingAskRepeat = 1
+	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
+	ask2.pendingAskRepeat = 1
+	alloc2 := NewAllocation("alloc-2", nodeID1, ask2)
+	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
+	assert.NilError(t, err, "failed to create queue")
+	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
+	assert.NilError(t, err, "failed to create queue")
+	parent2, err := createManagedQueueGuaranteed(root, "parent2", true, parentMax, nil)
+	assert.NilError(t, err, "failed to create queue")
+	leaf1, err := createManagedQueueGuaranteed(parent1, "leaf1", false, nil, nil)
+	assert.NilError(t, err, "failed to create queue")
+	leaf2, err := createManagedQueueGuaranteed(parent2, "leaf2", false, nil, nil)
+	assert.NilError(t, err, "failed to create queue")
+
+	// add two lower-priority allocs in leaf2
+	app2 := newApplication(appID2, "default", "root.parent.leaf")
+	app2.pending = res
+	leaf2.AddApplication(app2)
+	app2.SetQueue(leaf2)
+	err = app2.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask")
+	app2.AddAllocation(alloc2)
+	err = leaf2.IncAllocatedResource(alloc2.allocatedResource, true)
+	assert.NilError(t, err, "failed to inc allocated resources")
+
+	// can't find victims from root.parent2.leaf2 which only set max resource
+	snapshot := leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 3, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
+	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 }
 
 func victims(snapshot map[string]*QueuePreemptionSnapshot) []*Allocation {

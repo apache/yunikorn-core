@@ -192,7 +192,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, uint64(6), ringBuffer.capacity)
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
 	assert.Equal(t, 6, len(ringBuffer.events))
-	assert.Equal(t, uint64(0), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(0), ringBuffer.resizeOffset)
 
 	// Test case 2: Resize to a smaller size
 	lastEventIdBeforeResize = ringBuffer.GetLastEventID()
@@ -200,7 +200,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, uint64(2), ringBuffer.capacity)
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
 	assert.Equal(t, 2, len(ringBuffer.events))
-	assert.Equal(t, uint64(2), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(2), ringBuffer.resizeOffset)
 
 	// Test case 3: Resize to a larger size
 	lastEventIdBeforeResize = ringBuffer.GetLastEventID()
@@ -208,7 +208,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, uint64(20), ringBuffer.capacity)
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
 	assert.Equal(t, 20, len(ringBuffer.events))
-	assert.Equal(t, uint64(2), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(2), ringBuffer.resizeOffset)
 
 	// Test case 4: Resize when head is at the last element
 	ringBuffer = newEventRingBuffer(5)
@@ -218,7 +218,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, uint64(2), ringBuffer.capacity)
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
 	assert.Equal(t, 2, len(ringBuffer.events))
-	assert.Equal(t, uint64(2), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(2), ringBuffer.resizeOffset)
 
 	// Test case 5: Resize to events length when head is at the last element
 	ringBuffer = newEventRingBuffer(5)
@@ -229,7 +229,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, uint64(4), ringBuffer.capacity)
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
 	assert.Equal(t, 4, len(ringBuffer.events))
-	assert.Equal(t, uint64(0), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(0), ringBuffer.resizeOffset)
 	assert.Assert(t, ringBuffer.full)
 
 	// Test case 6: Resize when the buffer is full
@@ -242,7 +242,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, 6, len(ringBuffer.events))
 	assert.Equal(t, uint64(0), ringBuffer.head)
 	assert.Equal(t, true, ringBuffer.full)
-	assert.Equal(t, uint64(4), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(4), ringBuffer.resizeOffset)
 
 	// Test case 7: Resize when the buffer is overflown (head is wrapped and position > 0)
 	ringBuffer = newEventRingBuffer(10)
@@ -254,7 +254,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
 	assert.Equal(t, 8, len(ringBuffer.events))
 	assert.Equal(t, uint64(0), ringBuffer.head)
-	assert.Equal(t, uint64(7), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(7), ringBuffer.resizeOffset)
 	assert.Assert(t, ringBuffer.full)
 
 	// Test case 8: Test event full : Resize to lower size, followed by resize to a large size
@@ -265,7 +265,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, true, ringBuffer.full)
 	ringBuffer.Resize(6)
 	assert.Equal(t, false, ringBuffer.full)
-	assert.Equal(t, uint64(7), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(7), ringBuffer.resizeOffset)
 
 	// Test case 9: Test resize to same size
 	lastEventIdBeforeResize = ringBuffer.GetLastEventID()
@@ -274,7 +274,7 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, lastEventIdBeforeResize, ringBuffer.getLastEventID())
 	assert.Equal(t, 6, len(ringBuffer.events))
 	assert.Equal(t, false, ringBuffer.full)
-	assert.Equal(t, uint64(7), ringBuffer.idAtZero)
+	assert.Equal(t, uint64(7), ringBuffer.resizeOffset)
 }
 
 func populate(buffer *eventRingBuffer, count int) {

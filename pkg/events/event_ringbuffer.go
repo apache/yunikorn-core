@@ -35,20 +35,21 @@ type eventRange struct {
 
 // eventRingBuffer A specialized circular buffer to store event objects.
 //
-// Unlike to regular circular buffers, existing entries are never directly removed and new entries can be added if the buffer is full.
+// Unlike regular circular buffers, existing entries are never directly removed
+// and new entries can be added if the buffer is full.
 // In this case, the oldest entry is overwritten and can be collected by the GC.
-// Each event has an ID, however, this mapping is not stored directly. If needed, we calculate the id
-// of the event based on slice positions.
+// Each event has an ID; however, this mapping is not stored directly.
+// If needed, we calculate the id of the event based on slice positions.
 //
-// Retrieving the records can be achieved with GetEventsFromID and GetRecentEntries.
+// Retrieving the records can be achieved with GetEventsFromID.
 type eventRingBuffer struct {
-	events   []*si.EventRecord
-	capacity uint64 // capacity of the buffer
-	head     uint64 // position of the next element (no tail since we don't remove elements)
-	full     bool   // indicates whether the buffer if full - once it is, it stays full unless the buffer is resized
-	id       uint64 // unique id of an event record
-	lowestId uint64 // lowest id of an event record available in the buffer at any given time
-	idAtZero uint64 // id at index 0, used to calculate position based on id
+	events       []*si.EventRecord
+	capacity     uint64 // capacity of the buffer
+	head         uint64 // position of the next element (no tail since we don't remove elements)
+	full         bool   // indicates whether the buffer if full - once it is, it stays full unless the buffer is resized
+	id           uint64 // unique id of an event record
+	lowestId     uint64 // lowest id of an event record available in the buffer at any given time
+	resizeOffset uint64 // used to aid the calculation of id->pos after resize (see id2pos)
 
 	sync.RWMutex
 }
@@ -58,10 +59,6 @@ type eventRingBuffer struct {
 func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.Lock()
 	defer e.Unlock()
-
-	if e.head == 0 {
-		e.idAtZero = e.lowestId
-	}
 
 	e.events[e.head] = event
 	if !e.full {
@@ -73,7 +70,7 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.id++
 }
 
-// GetEventsFromID returns "count" number of event records from id if possible. The id can be determined from
+// GetEventsFromID returns "count" number of event records from "id" if possible. The id can be determined from
 // the first call of the method - if it returns nothing because the id is not in the buffer, the lowest valid
 // identifier is returned which can be used to get the first batch.
 // If the caller does not want to pose limit on the number of events returned, "count" must be set to a high
@@ -164,13 +161,18 @@ func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange) []*si.EventRe
 }
 
 // id2pos translates the unique event ID to an index in the event slice.
+// If the event is present, the position will be returned and the found flag will be true.
+// If the event ID is not present, the position returned is 0 and the flag is false.
 func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 	// id out of range?
 	if id < e.lowestId || id >= e.id {
 		return 0, false
 	}
 
-	return (id - e.idAtZero) % e.capacity, true
+	// resizeOffset tells how many elements were "shifted out" after resizing the buffer
+	// eg a buffer with 10 elements is full, then gets resized to 6
+	// the first element at index 0 is no longer 0 or the multiples of 10, but 4, 16, 22, etc.
+	return (id - e.resizeOffset) % e.capacity, true
 }
 
 // getLowestID returns the current lowest available id in the buffer.
@@ -193,7 +195,7 @@ func (e *eventRingBuffer) updateLowestId(beginSize, endSize uint64) {
 	}
 
 	// bufferSize is shrinking
-	// if number of events is < newSize no change
+	// if the number of events is < newSize, then no change
 	if (e.id - e.getLowestID()) <= endSize {
 		return
 	}
@@ -248,6 +250,6 @@ func (e *eventRingBuffer) Resize(newSize uint64) {
 	e.capacity = newSize
 	e.events = newEvents
 	e.head = numEventsToCopy % newSize
-	e.idAtZero = e.lowestId
+	e.resizeOffset = e.lowestId
 	e.full = numEventsToCopy == e.capacity
 }

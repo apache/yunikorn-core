@@ -34,14 +34,14 @@ func main() {
 		os.Exit(1)
 	}
 	queueFile := os.Args[1]
-	iv, err := os.ReadFile(queueFile)
+	conf, err := os.ReadFile(queueFile)
 	if err != nil {
-		log.Println(err)
+		log.Printf("Could not read file: %v", err)
 		os.Exit(2)
 	}
-	_, err1 := configs.LoadSchedulerConfigFromByteArray(iv)
-	if err1 != nil {
-		log.Println(err1)
+	_, err = configs.LoadSchedulerConfigFromByteArray(conf)
+	if err != nil {
+		log.Printf("Config validation failed: %v", err)
 		os.Exit(3)
 	}
 }

@@ -85,7 +85,8 @@ type Application struct {
 	user              security.UserGroup        // owner of the application
 	allocatedResource *resources.Resource       // total allocated resources
 
-	usedResource *resources.UsedResource // keep track of resource usage of the application
+	usedResource      *resources.TrackedResource   // keep track of resource usage of the application
+	preemptedResource *resources.TrackedResource   // keep track of preempted resource usage of the application
 
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
@@ -115,15 +116,16 @@ type Application struct {
 }
 
 type ApplicationSummary struct {
-	ApplicationID  string
-	SubmissionTime time.Time
-	StartTime      time.Time
-	FinishTime     time.Time
-	User           string
-	Queue          string
-	State          string
-	RmID           string
-	ResourceUsage  *resources.UsedResource
+	ApplicationID     string
+	SubmissionTime    time.Time
+	StartTime         time.Time
+	FinishTime        time.Time
+	User              string
+	Queue             string
+	State             string
+	RmID              string
+	ResourceUsage     *resources.TrackedResource
+	PreemptedResource *resources.TrackedResource
 }
 
 func (as *ApplicationSummary) DoLogging() {
@@ -136,12 +138,15 @@ func (as *ApplicationSummary) DoLogging() {
 		zap.String("queue", as.Queue),
 		zap.String("state", as.State),
 		zap.String("rmID", as.RmID),
-		zap.Any("resourceUsage", as.ResourceUsage.UsedResourceMap))
+		zap.Any("resourceUsage", as.ResourceUsage.TrackedResourceMap),
+		zap.Any("preemptedResource", as.PreemptedResource.TrackedResourceMap),
+	)
 }
 
 func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	state := sa.stateMachine.Current()
 	ru := sa.usedResource.Clone()
+	pu := sa.preemptedResource.Clone()
 	sa.RLock()
 	defer sa.RUnlock()
 	appSummary := &ApplicationSummary{
@@ -154,6 +159,7 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 		State:          state,
 		RmID:           rmID,
 		ResourceUsage:  ru,
+		PreemptedResource: pu,
 	}
 	return appSummary
 }
@@ -167,7 +173,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		tags:                  siApp.Tags,
 		pending:               resources.NewResource(),
 		allocatedResource:     resources.NewResource(),
-		usedResource:          resources.NewUsedResource(),
+		usedResource:          resources.NewTrackedResource(),
+		preemptedResource:     resources.NewTrackedResource(),
 		maxAllocatedResource:  resources.NewResource(),
 		allocatedPlaceholder:  resources.NewResource(),
 		requests:              make(map[string]*AllocationAsk),
@@ -1671,10 +1678,26 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 	ugm.GetUserManager().DecreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user, removeApp)
 }
 
+// Track used and preempted resources
+func (sa *Application) trackCompletedResource(info *Allocation) {
+	if info.IsPreempted() {
+		sa.updatePreemptedResource(info)
+	} else {
+		sa.updateUsedResource(info)
+	}
+}
+
 // When the resource allocated with this allocation is to be removed,
 // have the usedResource to aggregate the resource used by this allocation
 func (sa *Application) updateUsedResource(info *Allocation) {
-	sa.usedResource.AggregateUsedResource(info.GetInstanceType(),
+	sa.usedResource.AggregateTrackedResource(info.GetInstanceType(),
+		info.GetAllocatedResource(), info.GetBindTime())
+}
+
+// When the resource allocated with this allocation is to be preempted,
+// have the preemptedResource to aggregate the resource used by this allocation
+func (sa *Application) updatePreemptedResource(info *Allocation) {
+	sa.preemptedResource.AggregateTrackedResource(info.GetInstanceType(),
 		info.GetAllocatedResource(), info.GetBindTime())
 }
 
@@ -1770,8 +1793,8 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
 
-		// Aggregate the resources used by this alloc to the application's user resource tracker
-		sa.updateUsedResource(alloc)
+		// Aggregate the resources used by this alloc to the application's resource tracker
+		sa.trackCompletedResource(alloc)
 
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if sa.hasZeroAllocations() {
@@ -1823,7 +1846,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
 		// Aggregate the resources used by this alloc to the application's user resource tracker
-		sa.updateUsedResource(alloc)
+		sa.trackCompletedResource(alloc)
 		sa.appEvents.sendRemoveAllocationEvent(alloc, si.TerminationType_STOPPED_BY_RM)
 	}
 
@@ -2008,6 +2031,15 @@ func (sa *Application) cleanupAsks() {
 
 func (sa *Application) CleanupUsedResource() {
 	sa.usedResource = nil
+}
+
+func (sa *Application) CleanupPreemptedResource() {
+	sa.preemptedResource = nil
+}
+
+func (sa *Application) CleanupTrackedResource() {
+	sa.CleanupUsedResource()
+	sa.CleanupPreemptedResource()
 }
 
 func (sa *Application) LogAppSummary(rmID string) {

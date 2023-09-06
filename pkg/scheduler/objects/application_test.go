@@ -1062,7 +1062,7 @@ func TestCompleted(t *testing.T) {
 }
 
 func assertResourceUsage(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64, vcoresSecconds int64) {
-	detailedResource := appSummary.ResourceUsage.UsedResourceMap[instType1]
+	detailedResource := appSummary.ResourceUsage.TrackedResourceMap[instType1]
 	assert.Equal(t, memorySeconds, detailedResource["memory"])
 	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
 }

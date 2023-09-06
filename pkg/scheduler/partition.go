@@ -1452,7 +1452,7 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 		zap.String("appID", appID),
 		zap.String("app status", app.CurrentState()))
 	app.LogAppSummary(pc.RmID)
-	app.CleanupUsedResource()
+	app.CleanupTrackedResource()
 	pc.Lock()
 	defer pc.Unlock()
 	delete(pc.applications, appID)

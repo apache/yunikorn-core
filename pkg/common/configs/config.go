@@ -149,7 +149,6 @@ type NodeSortingPolicy struct {
 	ResourceWeights map[string]float64 `yaml:",omitempty" json:",omitempty"`
 }
 
-// Visible by tests
 func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) {
 	conf, err := ParseAndValidateConfig(content)
 	if err != nil {

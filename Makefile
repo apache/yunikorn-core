@@ -177,7 +177,7 @@ pseudo:
 
 # Build the example binaries for dev and test
 .PHONY: commands
-commands: build/simplescheduler build/schedulerclient
+commands: build/simplescheduler build/schedulerclient build/queueconfigchecker
 
 build/simplescheduler: go.mod go.sum cmd
 	@echo "building example scheduler"
@@ -188,6 +188,11 @@ build/schedulerclient:
 	@echo "building example client"
 	@mkdir -p build
 	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/schedulerclient ./cmd/schedulerclient
+
+build/queueconfigchecker:
+	@echo "building queueconfigchecker"
+	@mkdir -p build
+	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/queueconfigchecker ./cmd/queueconfigchecker
 
 # Build binaries for dev and test
 .PHONY: build

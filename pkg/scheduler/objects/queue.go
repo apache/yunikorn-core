@@ -1722,6 +1722,7 @@ func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnaps
 	snapshot = &QueuePreemptionSnapshot{
 		Parent:             parentSnapshot,
 		QueuePath:          sq.QueuePath,
+		Leaf:               sq.isLeaf,
 		AllocatedResource:  sq.allocatedResource.Clone(),
 		PreemptingResource: sq.preemptingResource.Clone(),
 		MaxResource:        sq.maxResource.Clone(),

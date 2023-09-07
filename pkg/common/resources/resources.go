@@ -907,6 +907,11 @@ func (r *Resource) HasNegativeValue() bool {
 	return false
 }
 
+// IsEmpty returns true if the resource is nil or has no component resources specified.
+func (r *Resource) IsEmpty() bool {
+	return r == nil || len(r.Resources) == 0
+}
+
 // Returns a new resource with the largest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
 func ComponentWiseMax(left, right *Resource) *Resource {

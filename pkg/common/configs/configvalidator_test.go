@@ -1078,6 +1078,49 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 			errMsg: "",
 		},
 		{
+			name: "partial fields in maxresources are 0",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 1,
+						MaxResources:    map[string]string{"memory": "100", "cpu": "0", "nvidia.com/gpu": "0"},
+					},
+				},
+			},
+			errMsg: "",
+		},
+		{
+			name: "all fields in maxresources are 0",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 1,
+						MaxResources:    map[string]string{"memory": "0", "cpu": "0"},
+					},
+				},
+			},
+			errMsg: "MaxResources is zero",
+		},
+		{
+			name: "both maxresources and maxresources are 0",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: []Limit{
+					{
+						Limit: "user-limit",
+						Users: []string{"test-user"},
+					},
+				},
+			},
+			errMsg: "invalid resource combination",
+		},
+		{
 			name: "user maxresources exceed queue limits",
 			config: QueueConfig{
 				Name: "parent",
@@ -1086,14 +1129,16 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 				},
 				Limits: []Limit{
 					{
-						Limit:        "user-limit",
-						Users:        []string{"test-user"},
-						MaxResources: map[string]string{"memory": "200"},
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 1,
+						MaxResources:    map[string]string{"memory": "200"},
 					},
 					{
-						Limit:        "group-limit",
-						Groups:       []string{"test-group"},
-						MaxResources: map[string]string{"memory": "100"},
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 1,
+						MaxResources:    map[string]string{"memory": "100"},
 					},
 				},
 			},
@@ -1108,14 +1153,16 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 				},
 				Limits: []Limit{
 					{
-						Limit:        "user-limit",
-						Users:        []string{"test-user"},
-						MaxResources: map[string]string{"memory": "100"},
+						Limit:           "user-limit",
+						Users:           []string{"test-user"},
+						MaxApplications: 1,
+						MaxResources:    map[string]string{"memory": "100"},
 					},
 					{
-						Limit:        "group-limit",
-						Groups:       []string{"test-group"},
-						MaxResources: map[string]string{"memory": "200"},
+						Limit:           "group-limit",
+						Groups:          []string{"test-group"},
+						MaxApplications: 1,
+						MaxResources:    map[string]string{"memory": "200"},
 					},
 				},
 			},

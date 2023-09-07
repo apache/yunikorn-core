@@ -509,19 +509,21 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 				zap.Error(err))
 			return err
 		}
+		if resources.IsZero(limitResource) {
+			return fmt.Errorf("MaxResources is zero in '%s' limit, all resource types are zero", limit.Limit)
+		}
 	}
 	// at least some resource should be not null
 	if limit.MaxApplications == 0 && resources.IsZero(limitResource) {
 		return fmt.Errorf("invalid resource combination for limit %s all resource limits are null", limit.Limit)
 	}
 
-	if queue.MaxApplications != 0 {
-		if limit.MaxApplications > queue.MaxApplications {
-			return fmt.Errorf("invalid MaxApplications settings for limit %s exeecd current the queue MaxApplications", limit.Limit)
-		}
-		if limit.MaxApplications == 0 {
-			return fmt.Errorf("MaxApplications is 0 in limit name %s, it should be 1 ~ %d", limit.Limit, queue.MaxApplications)
-		}
+	if limit.MaxApplications == 0 {
+		return fmt.Errorf("MaxApplications is 0 in '%s' limit name, it should be between 1 - %d", limit.Limit, queue.MaxApplications)
+	}
+
+	if queue.MaxApplications != 0 && queue.MaxApplications < limit.MaxApplications {
+		return fmt.Errorf("invalid MaxApplications settings for limit %s exceed current the queue MaxApplications", limit.Limit)
 	}
 
 	// If queue is RootQueue, the queue.Resources.Max will be null, we don't need to check for root queue

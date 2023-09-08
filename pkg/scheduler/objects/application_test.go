@@ -2281,6 +2281,69 @@ func TestAppDoesNotFitEvent(t *testing.T) {
 	assert.Equal(t, "alloc-0", records[1].ObjectID)
 }
 
+func TestGetOutstandingRequests(t *testing.T) {
+	// Create a sample Resource and AllocationAsk
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+
+	allocationAsk1 := newAllocationAsk("alloc-1", "app-1", res)
+	allocationAsk2 := newAllocationAsk("alloc-2", "app-1", res)
+
+	// Create an Application instance
+	app := &Application{
+		ApplicationID: "app-1",
+		queuePath:     "default",
+	}
+
+	app.user = security.UserGroup{
+		User:   "user1",
+		Groups: []string{"group1"},
+	}
+
+	// Set up the Application's sortedRequests with AllocationAsks
+	sr := sortedRequests{}
+	sr.insert(allocationAsk1)
+	sr.insert(allocationAsk2)
+	app.sortedRequests = sr
+
+	// Test Case 1: queueHeadroom meets, but userHeadroom does not
+	queueHeadroom, err := resources.NewResourceFromConf(map[string]string{"memory": "250", "vcores": "25"})
+	assert.NilError(t, err, "failed to create queue headroom resource with error")
+	userHeadroom, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcores": "5"})
+	assert.NilError(t, err, "failed to create user headroom resource with error")
+	total1 := []*AllocationAsk{}
+	app.getOutstandingRequests(queueHeadroom, userHeadroom, &total1)
+	assert.Equal(t, 0, len(total1), "expected one outstanding request for TestCase 1")
+
+	// Test Case 2: Both queueHeadroom and userHeadroom meet
+	queueHeadroom2, err := resources.NewResourceFromConf(map[string]string{"memory": "250", "vcores": "25"})
+	assert.NilError(t, err, "failed to create queue headroom resource with error")
+	userHeadroom2, err := resources.NewResourceFromConf(map[string]string{"memory": "250", "vcores": "25"})
+	assert.NilError(t, err, "failed to create user headroom resource with error")
+	total2 := []*AllocationAsk{}
+	app.getOutstandingRequests(queueHeadroom2, userHeadroom2, &total2)
+	assert.Equal(t, 2, len(total2), "expected two outstanding requests for TestCase 2")
+
+	// Test Case 3: queueHeadroom does not meet, but userHeadroom meets
+	queueHeadroom3, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcores": "5"})
+	assert.NilError(t, err, "failed to create queue headroom resource with error")
+	userHeadroom3, err := resources.NewResourceFromConf(map[string]string{"memory": "250", "vcores": "25"})
+	assert.NilError(t, err, "failed to create user headroom resource with error")
+	total3 := []*AllocationAsk{}
+	app.getOutstandingRequests(queueHeadroom3, userHeadroom3, &total3)
+	assert.Equal(t, 0, len(total3), "expected one outstanding request for TestCase 3")
+
+	// Test Case 4: Neither queueHeadroom nor userHeadroom meets
+	queueHeadroom4, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcores": "5"})
+	assert.NilError(t, err, "failed to create queue headroom resource with error")
+	userHeadroom4, err := resources.NewResourceFromConf(map[string]string{"memory": "80", "vcores": "8"})
+	assert.NilError(t, err, "failed to create user headroom resource with error")
+	total4 := []*AllocationAsk{}
+	app.getOutstandingRequests(queueHeadroom4, userHeadroom4, &total4)
+	assert.Equal(t, 0, len(total4), "expected no outstanding requests for TestCase 4")
+}
+
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()

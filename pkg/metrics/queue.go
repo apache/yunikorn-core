@@ -43,10 +43,10 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 
 	q.appMetricsLabel = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: Namespace,
-			Name:      "queue_app",
+			Namespace:   Namespace,
+			Name:        "queue_app",
 			ConstLabels: prometheus.Labels{"queue": name},
-			Help:      "Queue application metrics. State of the application includes `running`.",
+			Help:        "Queue application metrics. State of the application includes `running`.",
 		}, []string{"state"})
 
 	q.appMetricsSubsystem = prometheus.NewGaugeVec(
@@ -67,10 +67,10 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 
 	q.ResourceMetricsLabel = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
-			Namespace: Namespace,
-			Name:      "queue_resource",
+			Namespace:   Namespace,
+			Name:        "queue_resource",
 			ConstLabels: prometheus.Labels{"queue": name},
-			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`.",
+			Help:        "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`.",
 		}, []string{"state", "resource"})
 
 	q.ResourceMetricsSubsystem = prometheus.NewGaugeVec(

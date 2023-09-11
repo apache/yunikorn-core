@@ -63,6 +63,7 @@ type Preemptor struct {
 type QueuePreemptionSnapshot struct {
 	Parent             *QueuePreemptionSnapshot // snapshot of parent queue
 	QueuePath          string                   // fully qualified path to queue
+	Leaf               bool                     // true if queue is a leaf queue
 	AllocatedResource  *resources.Resource      // allocated resources
 	PreemptingResource *resources.Resource      // resources currently flagged for preemption
 	MaxResource        *resources.Resource      // maximum resources for this queue
@@ -683,6 +684,7 @@ func (qps *QueuePreemptionSnapshot) Duplicate(copy map[string]*QueuePreemptionSn
 	snapshot := &QueuePreemptionSnapshot{
 		Parent:             parent,
 		QueuePath:          qps.QueuePath,
+		Leaf:               qps.Leaf,
 		AllocatedResource:  qps.AllocatedResource.Clone(),
 		PreemptingResource: qps.PreemptingResource.Clone(),
 		MaxResource:        qps.MaxResource.Clone(),
@@ -723,6 +725,11 @@ func (qps *QueuePreemptionSnapshot) IsWithinGuaranteedResource() bool {
 		return false
 	}
 	guaranteed := qps.GetGuaranteedResource()
+
+	// if this is a leaf queue and we have not found any guaranteed resources, then we are never within guaranteed usage
+	if qps.Leaf && guaranteed.IsEmpty() {
+		return false
+	}
 	max := qps.GetMaxResource()
 	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)

@@ -36,7 +36,7 @@ shim layer and adopt to different ResourceManager implementation including Apach
 See how to get started with running YuniKorn on Kubernetes, please read the documentation on [yunikorn.apache.org](http://yunikorn.apache.org/docs/).
 
 Want to know more about the value of the YuniKorn project, and what YuniKorn can do? Here is some
-[session recordings and demos](http://yunikorn.apache.org/community/sessions).
+[session recordings and demos](https://yunikorn.apache.org/community/events#past-conference--meetup-recordings).
 
 ## Get Involved
 

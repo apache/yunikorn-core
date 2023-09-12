@@ -152,9 +152,6 @@ func checkLimitResource(cur QueueConfig, parent *QueueConfig, users map[string]*
 		for u, v := range users {
 			keyArr := strings.Split(u, Separator)
 			if keyArr[0] == parentName {
-				log.Log(log.Config).Debug("step 1",
-					zap.String("cur is ", cur.Name),
-					zap.String("u  is ", u))
 				users[cur.Name+Separator+keyArr[1]] = v
 			}
 		}

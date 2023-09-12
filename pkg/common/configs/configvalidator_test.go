@@ -872,7 +872,7 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimitResource(testCase.config, nil, make(map[string]*resources.Resource), make(map[string]*resources.Resource))
+			err := checkLimitResource(testCase.config, make(map[string]map[string]*resources.Resource), make(map[string]map[string]*resources.Resource), "")
 			if testCase.hasError {
 				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent maximum resource")
 			} else {
@@ -1017,7 +1017,7 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimitMaxApplications(testCase.config, nil, make(map[string]uint64), make(map[string]uint64))
+			err := checkLimitMaxApplications(testCase.config, make(map[string]map[string]uint64), make(map[string]map[string]uint64), "")
 			if testCase.hasError {
 				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent max applications")
 			} else {

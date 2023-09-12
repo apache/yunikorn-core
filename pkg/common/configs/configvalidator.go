@@ -58,6 +58,7 @@ const (
 	errNonExistingQueue
 	errQueueNotLeaf
 	errLastQueueLeaf
+	Separator = "~"
 )
 
 type placementPathCheckResult int
@@ -141,52 +142,58 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 }
 
 func checkLimitResource(cur QueueConfig, parent *QueueConfig, users map[string]*resources.Resource, groups map[string]*resources.Resource) error {
-	// Collect user and group limits of parent queue
 	var parentName string
 	if parent != nil {
 		parentName = parent.Name
-		for _, limit := range parent.Limits {
-			parentLimitMaxResources, err := resources.NewResourceFromConf(limit.MaxResources)
+	}
+
+	// Carry forward (populate) the parent limit settings to the next level if limits are not configured for the current queue
+	if len(cur.Limits) == 0 {
+		for u, v := range users {
+			keyArr := strings.Split(u, Separator)
+			if keyArr[0] == parentName {
+				log.Log(log.Config).Debug("step 1",
+					zap.String("cur is ", cur.Name),
+					zap.String("u  is ", u))
+				users[cur.Name+Separator+keyArr[1]] = v
+			}
+		}
+		for g, v := range groups {
+			keyArr := strings.Split(g, Separator)
+			if keyArr[0] == parentName {
+				groups[cur.Name+Separator+keyArr[1]] = v
+			}
+		}
+	} else {
+		// compare user & group limit setting between the current queue and parent queue
+		for _, limit := range cur.Limits {
+			limitMaxResources, err := resources.NewResourceFromConf(limit.MaxResources)
 			if err != nil {
 				return err
 			}
 			for _, user := range limit.Users {
-				users[parentName+"_"+user] = parentLimitMaxResources
+				// Is user limit setting exists?
+				if userMaxResource, ok := users[parentName+Separator+user]; ok {
+					if !userMaxResource.FitInMaxUndef(limitMaxResources) {
+						return fmt.Errorf("user %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", user, limitMaxResources.String(), cur.Name, userMaxResource.String())
+					}
+					// Override with min resource
+					users[cur.Name+Separator+user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
+				} else {
+					users[cur.Name+Separator+user] = limitMaxResources
+				}
 			}
 			for _, group := range limit.Groups {
-				groups[parentName+"_"+group] = parentLimitMaxResources
-			}
-		}
-	}
-
-	// compare user & group limit setting between the current queue and parent queue
-	for _, limit := range cur.Limits {
-		limitMaxResources, err := resources.NewResourceFromConf(limit.MaxResources)
-		if err != nil {
-			return err
-		}
-		for _, user := range limit.Users {
-			// Is user limit setting exists?
-			if userMaxResource, ok := users[parentName+"_"+user]; ok {
-				if !userMaxResource.FitInMaxUndef(limitMaxResources) {
-					return fmt.Errorf("user %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", user, limitMaxResources.String(), cur.Name, userMaxResource.String())
+				// Is group limit setting exists?
+				if groupMaxResource, ok := groups[parentName+Separator+group]; ok {
+					if !groupMaxResource.FitInMaxUndef(limitMaxResources) {
+						return fmt.Errorf("group %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", group, limitMaxResources.String(), cur.Name, groupMaxResource.String())
+					}
+					// Override with min resource
+					groups[cur.Name+Separator+group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
+				} else {
+					groups[cur.Name+Separator+group] = limitMaxResources
 				}
-				// Override with min resource
-				users[cur.Name+"_"+user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
-			} else {
-				users[cur.Name+"_"+user] = limitMaxResources
-			}
-		}
-		for _, group := range limit.Groups {
-			// Is group limit setting exists?
-			if groupMaxResource, ok := groups[parentName+"_"+group]; ok {
-				if !groupMaxResource.FitInMaxUndef(limitMaxResources) {
-					return fmt.Errorf("group %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", group, limitMaxResources.String(), cur.Name, groupMaxResource.String())
-				}
-				// Override with min resource
-				groups[cur.Name+"_"+group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
-			} else {
-				groups[cur.Name+"_"+group] = limitMaxResources
 			}
 		}
 	}
@@ -216,43 +223,49 @@ func checkQueueMaxApplications(cur QueueConfig) error {
 
 func checkLimitMaxApplications(cur QueueConfig, parent *QueueConfig, users map[string]uint64, groups map[string]uint64) error {
 	var parentName string
-	// Collect user and group limits of parent queue
 	if parent != nil {
 		parentName = parent.Name
-		for _, limit := range parent.Limits {
-			parentLimitMaxApplications := limit.MaxApplications
-			for _, user := range limit.Users {
-				users[parentName+"_"+user] = parentLimitMaxApplications
-			}
-			for _, group := range limit.Groups {
-				groups[parentName+"_"+group] = parentLimitMaxApplications
-			}
-		}
 	}
 
-	// compare user & group limit setting between the current queue and parent queue
-	for _, limit := range cur.Limits {
-		limitMaxApplications := limit.MaxApplications
-		for _, user := range limit.Users {
-			// Is user limit setting exists?
-			if userMaxApplications, ok := users[parentName+"_"+user]; ok {
-				if userMaxApplications != 0 && (userMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
-					return fmt.Errorf("user %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", user, limitMaxApplications, cur.Name, userMaxApplications)
-				}
-				users[cur.Name+"_"+user] = common.Min(limitMaxApplications, userMaxApplications)
-			} else {
-				users[cur.Name+"_"+user] = limitMaxApplications
+	// Carry forward (populate) the parent limit settings to the next level if limits are not configured for the current queue
+	if len(cur.Limits) == 0 {
+		for u, v := range users {
+			keyArr := strings.Split(u, Separator)
+			if keyArr[0] == parentName {
+				users[cur.Name+Separator+keyArr[1]] = v
 			}
 		}
-		for _, group := range limit.Groups {
-			// Is group limit setting exists?
-			if groupMaxApplications, ok := groups[parentName+"_"+group]; ok {
-				if groupMaxApplications != 0 && (groupMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
-					return fmt.Errorf("group %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", group, limitMaxApplications, cur.Name, groupMaxApplications)
+		for g, v := range groups {
+			keyArr := strings.Split(g, Separator)
+			if keyArr[0] == parentName {
+				groups[cur.Name+Separator+keyArr[1]] = v
+			}
+		}
+	} else {
+		// compare user & group limit setting between the current queue and parent queue
+		for _, limit := range cur.Limits {
+			limitMaxApplications := limit.MaxApplications
+			for _, user := range limit.Users {
+				// Is user limit setting exists?
+				if userMaxApplications, ok := users[parentName+Separator+user]; ok {
+					if userMaxApplications != 0 && (userMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+						return fmt.Errorf("user %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", user, limitMaxApplications, cur.Name, userMaxApplications)
+					}
+					users[cur.Name+Separator+user] = common.Min(limitMaxApplications, userMaxApplications)
+				} else {
+					users[cur.Name+Separator+user] = limitMaxApplications
 				}
-				groups[cur.Name+"_"+group] = common.Min(limitMaxApplications, groupMaxApplications)
-			} else {
-				groups[cur.Name+"_"+group] = limitMaxApplications
+			}
+			for _, group := range limit.Groups {
+				// Is group limit setting exists?
+				if groupMaxApplications, ok := groups[parentName+Separator+group]; ok {
+					if groupMaxApplications != 0 && (groupMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+						return fmt.Errorf("group %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", group, limitMaxApplications, cur.Name, groupMaxApplications)
+					}
+					groups[cur.Name+Separator+group] = common.Min(limitMaxApplications, groupMaxApplications)
+				} else {
+					groups[cur.Name+Separator+group] = limitMaxApplications
+				}
 			}
 		}
 	}

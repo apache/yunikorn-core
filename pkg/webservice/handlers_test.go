@@ -197,6 +197,241 @@ partitions:
                 vcore: 10000
 `
 
+const userGroupLimitsConfig = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxresources:
+                    cpu: "200"
+                - limit: ""
+                  users:
+                    - test_user1
+                  maxresources:
+                    cpu: "200"
+                - limit: ""
+                  groups:
+                    - test_group
+                  maxresources:
+                    cpu: "200"
+              queues:
+                - name: child1
+                  parent: false
+                  limits:
+                    - limit: ""
+                      users:
+                        - test_user1
+                      maxresources:
+                        cpu: "190"
+            - name: parent2
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxresources:
+                    cpu: "204"
+          limits:
+            - limit: ""
+              users:
+                - test_user
+              maxresources:
+                cpu: "205"
+`
+
+const userGroupLimitsInvalidConfig = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxresources:
+                    cpu: "200"
+                - limit: ""
+                  users:
+                    - test_user1
+                  maxresources:
+                    cpu: "200"
+                - limit: ""
+                  groups:
+                    - test_group
+                  maxresources:
+                    cpu: "200"
+              queues:
+                - name: child1
+                  parent: false
+                  limits:
+                    - limit: ""
+                      users:
+                        - test_user1
+                      maxresources:
+                        cpu: "300"
+            - name: parent2
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxresources:
+                    cpu: "204"
+          limits:
+            - limit: ""
+              users:
+                - test_user
+              maxresources:
+                cpu: "205"
+`
+
+const userGroupLimitsInvalidConfig1 = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxresources:
+                    cpu: "200"
+                - limit: ""
+                  users:
+                    - test_user1
+                  maxresources:
+                    cpu: "200"
+                - limit: ""
+                  groups:
+                    - test_group
+                  maxresources:
+                    cpu: "200"
+              queues:
+                - name: child1
+                  parent: false
+                  limits:
+                    - limit: ""
+                      users:
+                        - test_user1
+                      maxresources:
+                        cpu: "180"
+            - name: parent2
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxresources:
+                    cpu: "210"
+          limits:
+            - limit: ""
+              users:
+                - test_user
+              maxresources:
+                cpu: "205"
+`
+
+const userGroupLimitsInvalidConfig2 = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 3
+                - limit: ""
+                  users:
+                    - test_user1
+                  maxapplications: 4
+              queues:
+                - name: child1
+                  parent: false
+                  limits:
+                    - limit: ""
+                      users:
+                        - test_user1
+                      maxapplications: 5
+            - name: parent2
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 4
+          limits:
+            - limit: ""
+              users:
+                - test_user
+              maxapplications: 5
+`
+
+const userGroupLimitsInvalidConfig3 = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 3
+                - limit: ""
+                  users:
+                    - test_user1
+                  maxapplications: 4
+              queues:
+                - name: child1
+                  parent: false
+                  limits:
+                    - limit: ""
+                      users:
+                        - test_user1
+                      maxapplications: 4
+            - name: parent2
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 6
+          limits:
+            - limit: ""
+              users:
+                - test_user
+              maxapplications: 5
+`
+
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
@@ -249,6 +484,61 @@ func TestValidateConf(t *testing.T) {
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: false,
 				Reason:  "undefined policy: invalid",
+			},
+		},
+	}
+	for _, test := range confTests {
+		// No err check: new request always returns correctly
+		//nolint: errcheck
+		req, _ := http.NewRequest("POST", "", strings.NewReader(test.content))
+		resp := &MockResponseWriter{}
+		validateConf(resp, req)
+		var vcr dao.ValidateConfResponse
+		err := json.Unmarshal(resp.outputBytes, &vcr)
+		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
+		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
+		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
+	}
+}
+
+func TestUserGroupLimits(t *testing.T) {
+	confTests := []struct {
+		content          string
+		expectedResponse dao.ValidateConfResponse
+	}{
+		{
+			content: userGroupLimitsConfig,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: true,
+				Reason:  "",
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "user test_user1 max resource map[cpu:300] of queue child1 is greater than immediate or ancestor parent maximum resource map[cpu:200]",
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig1,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "user test_user max resource map[cpu:210] of queue parent2 is greater than immediate or ancestor parent maximum resource map[cpu:205]",
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig2,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "user test_user1 max applications 5 of queue child1 is greater than immediate or ancestor parent max applications 4",
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig3,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "user test_user max applications 6 of queue parent2 is greater than immediate or ancestor parent max applications 5",
 			},
 		},
 	}

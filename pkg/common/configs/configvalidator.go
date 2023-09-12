@@ -142,17 +142,19 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 
 func checkLimitResource(cur QueueConfig, parent *QueueConfig, users map[string]*resources.Resource, groups map[string]*resources.Resource) error {
 	// Collect user and group limits of parent queue
+	var parentName string
 	if parent != nil {
+		parentName = parent.Name
 		for _, limit := range parent.Limits {
 			parentLimitMaxResources, err := resources.NewResourceFromConf(limit.MaxResources)
 			if err != nil {
 				return err
 			}
 			for _, user := range limit.Users {
-				users[user] = parentLimitMaxResources
+				users[parentName+"_"+user] = parentLimitMaxResources
 			}
 			for _, group := range limit.Groups {
-				groups[group] = parentLimitMaxResources
+				groups[parentName+"_"+group] = parentLimitMaxResources
 			}
 		}
 	}
@@ -165,26 +167,26 @@ func checkLimitResource(cur QueueConfig, parent *QueueConfig, users map[string]*
 		}
 		for _, user := range limit.Users {
 			// Is user limit setting exists?
-			if userMaxResource, ok := users[user]; ok {
+			if userMaxResource, ok := users[parentName+"_"+user]; ok {
 				if !userMaxResource.FitInMaxUndef(limitMaxResources) {
 					return fmt.Errorf("user %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", user, limitMaxResources.String(), cur.Name, userMaxResource.String())
 				}
 				// Override with min resource
-				users[user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
+				users[cur.Name+"_"+user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
 			} else {
-				users[user] = limitMaxResources
+				users[cur.Name+"_"+user] = limitMaxResources
 			}
 		}
 		for _, group := range limit.Groups {
 			// Is group limit setting exists?
-			if groupMaxResource, ok := groups[group]; ok {
+			if groupMaxResource, ok := groups[parentName+"_"+group]; ok {
 				if !groupMaxResource.FitInMaxUndef(limitMaxResources) {
 					return fmt.Errorf("group %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", group, limitMaxResources.String(), cur.Name, groupMaxResource.String())
 				}
 				// Override with min resource
-				groups[group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
+				groups[cur.Name+"_"+group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
 			} else {
-				groups[group] = limitMaxResources
+				groups[cur.Name+"_"+group] = limitMaxResources
 			}
 		}
 	}
@@ -213,15 +215,17 @@ func checkQueueMaxApplications(cur QueueConfig) error {
 }
 
 func checkLimitMaxApplications(cur QueueConfig, parent *QueueConfig, users map[string]uint64, groups map[string]uint64) error {
+	var parentName string
 	// Collect user and group limits of parent queue
 	if parent != nil {
+		parentName = parent.Name
 		for _, limit := range parent.Limits {
 			parentLimitMaxApplications := limit.MaxApplications
 			for _, user := range limit.Users {
-				users[user] = parentLimitMaxApplications
+				users[parentName+"_"+user] = parentLimitMaxApplications
 			}
 			for _, group := range limit.Groups {
-				groups[group] = parentLimitMaxApplications
+				groups[parentName+"_"+group] = parentLimitMaxApplications
 			}
 		}
 	}
@@ -231,24 +235,24 @@ func checkLimitMaxApplications(cur QueueConfig, parent *QueueConfig, users map[s
 		limitMaxApplications := limit.MaxApplications
 		for _, user := range limit.Users {
 			// Is user limit setting exists?
-			if userMaxApplications, ok := users[user]; ok {
+			if userMaxApplications, ok := users[parentName+"_"+user]; ok {
 				if userMaxApplications != 0 && (userMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
 					return fmt.Errorf("user %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", user, limitMaxApplications, cur.Name, userMaxApplications)
 				}
-				users[user] = common.Min(limitMaxApplications, userMaxApplications)
+				users[cur.Name+"_"+user] = common.Min(limitMaxApplications, userMaxApplications)
 			} else {
-				users[user] = limitMaxApplications
+				users[cur.Name+"_"+user] = limitMaxApplications
 			}
 		}
 		for _, group := range limit.Groups {
 			// Is group limit setting exists?
-			if groupMaxApplications, ok := groups[group]; ok {
+			if groupMaxApplications, ok := groups[parentName+"_"+group]; ok {
 				if groupMaxApplications != 0 && (groupMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
 					return fmt.Errorf("group %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", group, limitMaxApplications, cur.Name, groupMaxApplications)
 				}
-				groups[group] = common.Min(limitMaxApplications, groupMaxApplications)
+				groups[cur.Name+"_"+group] = common.Min(limitMaxApplications, groupMaxApplications)
 			} else {
-				groups[group] = limitMaxApplications
+				groups[cur.Name+"_"+group] = limitMaxApplications
 			}
 		}
 	}
@@ -762,6 +766,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err = checkLimitResource(partition.Queues[0], nil, make(map[string]*resources.Resource), make(map[string]*resources.Resource)); err != nil {
 			return err
 		}
+
 		if err = checkLimitMaxApplications(partition.Queues[0], nil, make(map[string]uint64), make(map[string]uint64)); err != nil {
 			return err
 		}

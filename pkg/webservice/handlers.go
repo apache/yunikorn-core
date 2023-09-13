@@ -910,6 +910,7 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 
 	records, lowestID, highestID := eventSystem.GetEventsFromID(start, count)
 	eventDao := dao.EventRecordDAO{
+		UUID:         schedulerContext.GetUUID(),
 		LowestID:     lowestID,
 		HighestID:    highestID,
 		EventRecords: records,

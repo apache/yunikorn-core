@@ -1333,6 +1333,7 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 }
 
 func TestGetEvents(t *testing.T) {
+	prepareSchedulerContext(t, false)
 	appEvent, nodeEvent, queueEvent := addEvents(t)
 
 	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
@@ -1420,6 +1421,7 @@ func checkSingleEvent(t *testing.T, event *si.EventRecord, query string) {
 	req, err := http.NewRequest("GET", "/ws/v1/events/batch?"+query, strings.NewReader(""))
 	assert.NilError(t, err)
 	eventDao := getEventRecordDao(t, req)
+	assert.Assert(t, eventDao.UUID != "")
 	assert.Equal(t, 1, len(eventDao.EventRecords))
 	compareEvents(t, event, eventDao.EventRecords[0])
 }

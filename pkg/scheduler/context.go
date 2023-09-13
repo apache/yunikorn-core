@@ -46,6 +46,7 @@ type ClusterContext struct {
 	partitions     map[string]*PartitionContext
 	policyGroup    string
 	rmEventHandler handler.EventHandler
+	uuid           string
 
 	// config values that change scheduling behaviour
 	needPreemption      bool
@@ -77,6 +78,7 @@ func NewClusterContext(rmID, policyGroup string, config []byte) (*ClusterContext
 		policyGroup:         policyGroup,
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
 		startTime:           time.Now(),
+		uuid:                common.GetNewUUID(),
 	}
 	// If reservation is turned off set the reservation delay to the maximum duration defined.
 	// The time package does not export maxDuration so use the equivalent from the math package.
@@ -97,6 +99,7 @@ func newClusterContext() *ClusterContext {
 		partitions:          make(map[string]*PartitionContext),
 		reservationDisabled: common.GetBoolEnvVar(disableReservation, false),
 		startTime:           time.Now(),
+		uuid:                common.GetNewUUID(),
 	}
 	// If reservation is turned off set the reservation delay to the maximum duration defined.
 	// The time package does not export maxDuration so use the equivalent from the math package.
@@ -976,4 +979,10 @@ func (cc *ClusterContext) SetLastHealthCheckResult(c *dao.SchedulerHealthDAOInfo
 	cc.Lock()
 	defer cc.Unlock()
 	cc.lastHealthCheckResult = c
+}
+
+func (cc *ClusterContext) GetUUID() string {
+	cc.RLock()
+	defer cc.RUnlock()
+	return cc.uuid
 }

@@ -150,7 +150,7 @@ partitions:
 
 	err = common.WaitFor(100*time.Millisecond, 3000*time.Millisecond, func() bool {
 		reqSent := fk.getContainerUpdateRequest()
-		return reqSent != nil && reqSent.ApplicartionID == appID1 &&
+		return reqSent != nil && reqSent.ApplicationID == appID1 &&
 			reqSent.GetState() == si.UpdateContainerSchedulingStateRequest_FAILED
 	})
 	assert.NilError(t, err)

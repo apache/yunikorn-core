@@ -167,10 +167,10 @@ func (s *Scheduler) inspectOutstandingRequests() {
 				// they can fit into the max head room, but they are pending because lack of partition resources
 				if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
 					updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
-						ApplicartionID: ask.GetApplicationID(),
-						AllocationKey:  ask.GetAllocationKey(),
-						State:          si.UpdateContainerSchedulingStateRequest_FAILED,
-						Reason:         "request is waiting for cluster resources become available",
+						ApplicationID: ask.GetApplicationID(),
+						AllocationKey: ask.GetAllocationKey(),
+						State:         si.UpdateContainerSchedulingStateRequest_FAILED,
+						Reason:        "request is waiting for cluster resources become available",
 					})
 				}
 			}

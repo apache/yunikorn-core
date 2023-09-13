@@ -23,6 +23,7 @@ import (
 )
 
 type EventRecordDAO struct {
+	InstanceUUID string
 	LowestID     uint64
 	HighestID    uint64
 	EventRecords []*si.EventRecord

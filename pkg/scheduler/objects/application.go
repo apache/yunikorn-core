@@ -85,8 +85,8 @@ type Application struct {
 	user              security.UserGroup        // owner of the application
 	allocatedResource *resources.Resource       // total allocated resources
 
-	usedResource      *resources.TrackedResource   // keep track of resource usage of the application
-	preemptedResource *resources.TrackedResource   // keep track of preempted resource usage of the application
+	usedResource      *resources.TrackedResource // keep track of resource usage of the application
+	preemptedResource *resources.TrackedResource // keep track of preempted resource usage of the application
 
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
@@ -150,15 +150,15 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	sa.RLock()
 	defer sa.RUnlock()
 	appSummary := &ApplicationSummary{
-		ApplicationID:  sa.ApplicationID,
-		SubmissionTime: sa.SubmissionTime,
-		StartTime:      sa.startTime,
-		FinishTime:     sa.finishedTime,
-		User:           sa.user.User,
-		Queue:          sa.queuePath,
-		State:          state,
-		RmID:           rmID,
-		ResourceUsage:  ru,
+		ApplicationID:     sa.ApplicationID,
+		SubmissionTime:    sa.SubmissionTime,
+		StartTime:         sa.startTime,
+		FinishTime:        sa.finishedTime,
+		User:              sa.user.User,
+		Queue:             sa.queuePath,
+		State:             state,
+		RmID:              rmID,
+		ResourceUsage:     ru,
 		PreemptedResource: pu,
 	}
 	return appSummary

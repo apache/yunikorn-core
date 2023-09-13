@@ -15,15 +15,13 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-#
 
 # options for analysis running
 run:
-  go: '1.21'
   issues-exit-code: 1
   skip-dirs-use-default: true
   modules-download-mode: readonly
-  deadline: 5m
+  timeout: 5m
 
 # settings of specific linters
 linters-settings:
@@ -98,4 +96,3 @@ issues:
 
   # Show only new issues created in git patch with set file path.
   # new-from-patch: path/to/patch/file
-

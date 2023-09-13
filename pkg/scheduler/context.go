@@ -982,7 +982,5 @@ func (cc *ClusterContext) SetLastHealthCheckResult(c *dao.SchedulerHealthDAOInfo
 }
 
 func (cc *ClusterContext) GetUUID() string {
-	cc.RLock()
-	defer cc.RUnlock()
 	return cc.uuid
 }

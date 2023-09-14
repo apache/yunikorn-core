@@ -522,6 +522,60 @@ partitions:
               maxapplications: 5
 `
 
+const userGroupLimitsInvalidConfig6 = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 1
+                  maxresources:
+                    cpu: "0"
+`
+
+const userGroupLimitsInvalidConfig7 = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+`
+
+const userGroupLimitsConfig1 = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 0
+                  maxresources:
+                    cpu: "200"
+`
+
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
@@ -600,7 +654,14 @@ func TestUserGroupLimits(t *testing.T) {
 			content: userGroupLimitsConfig,
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: true,
-				Reason:  "",
+				Reason:  common.Empty,
+			},
+		},
+		{
+			content: userGroupLimitsConfig1,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: true,
+				Reason:  common.Empty,
 			},
 		},
 		{
@@ -643,6 +704,20 @@ func TestUserGroupLimits(t *testing.T) {
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: false,
 				Reason:  "user test_user1 max applications 5 of queue child11 is greater than immediate or ancestor parent max applications 4",
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig6,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "MaxResources is zero in '' limit, all resource types are zero",
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig7,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "invalid resource combination for limit  all resource limits are null",
 			},
 		},
 	}

@@ -24,6 +24,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
@@ -872,7 +873,7 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimitResource(testCase.config, make(map[string]map[string]*resources.Resource), make(map[string]map[string]*resources.Resource), "")
+			err := checkLimitResource(testCase.config, make(map[string]map[string]*resources.Resource), make(map[string]map[string]*resources.Resource), common.Empty)
 			if testCase.hasError {
 				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent maximum resource")
 			} else {
@@ -1017,7 +1018,7 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimitMaxApplications(testCase.config, make(map[string]map[string]uint64), make(map[string]map[string]uint64), "")
+			err := checkLimitMaxApplications(testCase.config, make(map[string]map[string]uint64), make(map[string]map[string]uint64), common.Empty)
 			if testCase.hasError {
 				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent max applications")
 			} else {
@@ -1231,7 +1232,7 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 					},
 				},
 			},
-			errMsg: "MaxApplications is 0",
+			errMsg: "",
 		},
 		{
 			name: "group maxapplications is 0",
@@ -1256,7 +1257,7 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 					},
 				},
 			},
-			errMsg: "MaxApplications is 0",
+			errMsg: "",
 		},
 		{
 			name: "user wildcard is not last entry",

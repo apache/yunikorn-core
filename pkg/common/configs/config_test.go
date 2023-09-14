@@ -1037,7 +1037,7 @@ partitions:
 	_, err := CreateConfig(data)
 	assert.ErrorContains(t, err, "invalid MaxApplications settings for limit")
 
-	// Make sure limit max apps not set, but queue limit set, will fail.
+	// Make sure limit max apps not set, but queue limit set. will not fail.
 	data = `
 partitions:
   - name: default
@@ -1071,7 +1071,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "MaxApplications is 0")
+	assert.NilError(t, err, "No error should be thrown even when queue maxapps is set but not for user or group")
 
 	// Make sure limit max apps set, but queue limit not set, will not fail.
 	data = `

@@ -547,12 +547,8 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 		}
 	}
 	// at least some resource should be not null
-	if limit.MaxApplications == 0 && resources.IsZero(limitResource) {
+	if limit.MaxApplications == 0 && len(limit.MaxResources) == 0 {
 		return fmt.Errorf("invalid resource combination for limit %s all resource limits are null", limit.Limit)
-	}
-
-	if limit.MaxApplications == 0 {
-		return fmt.Errorf("MaxApplications is 0 in '%s' limit name, it should be between 1 - %d", limit.Limit, queue.MaxApplications)
 	}
 
 	if queue.MaxApplications != 0 && queue.MaxApplications < limit.MaxApplications {
@@ -792,11 +788,11 @@ func Validate(newConfig *SchedulerConfig) error {
 			return err
 		}
 
-		if err = checkLimitResource(partition.Queues[0], make(map[string]map[string]*resources.Resource), make(map[string]map[string]*resources.Resource), ""); err != nil {
+		if err = checkLimitResource(partition.Queues[0], make(map[string]map[string]*resources.Resource), make(map[string]map[string]*resources.Resource), common.Empty); err != nil {
 			return err
 		}
 
-		if err = checkLimitMaxApplications(partition.Queues[0], make(map[string]map[string]uint64), make(map[string]map[string]uint64), ""); err != nil {
+		if err = checkLimitMaxApplications(partition.Queues[0], make(map[string]map[string]uint64), make(map[string]map[string]uint64), common.Empty); err != nil {
 			return err
 		}
 		// write back the partition to keep changes

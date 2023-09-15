@@ -42,7 +42,7 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 			Namespace: Namespace,
 			Subsystem: replaceStr,
 			Name:      "queue_app",
-			Help:      "Queue application metrics. State of the application includes `running`.",
+			Help:      "Queue application metrics. State of the application includes `running`, `accepted`, `rejected`, `failed`, `completed`, `allocated`, `released`.",
 		}, []string{"state"})
 
 	q.ResourceMetrics = prometheus.NewGaugeVec(

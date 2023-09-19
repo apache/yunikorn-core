@@ -1200,44 +1200,6 @@ func TestFullStateDumpPath(t *testing.T) {
 	verifyStateDumpJSON(t, &aggregated)
 }
 
-func TestGetLoggerLevel(t *testing.T) {
-	req, err := http.NewRequest("GET", "/ws/v1/loglevel", strings.NewReader(""))
-	assert.NilError(t, err)
-
-	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(getLogLevel)
-	handler.ServeHTTP(rr, req)
-
-	assert.Equal(t, rr.Code, http.StatusGone)
-	var errObject dao.YAPIError
-	errResponse := json.Unmarshal(rr.Body.Bytes(), &errObject)
-	expected := "Getting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release."
-	assert.NilError(t, errResponse, "cannot unmarshal YAPIError")
-	assert.Equal(t, errObject.Message, expected,
-		fmt.Sprintf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected))
-	assert.Equal(t, errObject.StatusCode, http.StatusGone)
-}
-
-func TestSetLoggerLevel(t *testing.T) {
-	req, err := http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
-	assert.NilError(t, err)
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "level", Value: "error"},
-	}))
-	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(setLogLevel)
-	handler.ServeHTTP(rr, req)
-
-	assert.Equal(t, rr.Code, http.StatusGone)
-	var errObject dao.YAPIError
-	errResponse := json.Unmarshal(rr.Body.Bytes(), &errObject)
-	expected := "Setting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release."
-	assert.NilError(t, errResponse, "cannot unmarshal YAPIError")
-	assert.Equal(t, errObject.Message, expected,
-		fmt.Sprintf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected))
-	assert.Equal(t, errObject.StatusCode, http.StatusGone)
-}
-
 func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	prepareUserAndGroupContext(t)
 	// Test user name is missing

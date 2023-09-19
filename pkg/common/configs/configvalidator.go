@@ -58,7 +58,6 @@ const (
 	errNonExistingQueue
 	errQueueNotLeaf
 	errLastQueueLeaf
-	Separator = "~"
 )
 
 type placementPathCheckResult int

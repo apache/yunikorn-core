@@ -1435,7 +1435,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 						zap.String("appID", appID))
 					return nil
 				}
-				if app.IsAccepted() && !sq.canRunApp(appID) {
+				if app.IsAccepted() && (!sq.canRunApp(appID) || !ugm.GetUserManager().CanRunApp(sq.QueuePath, appID, app.user)) {
 					continue
 				}
 				alloc := app.tryReservedAllocate(headRoom, iterator)

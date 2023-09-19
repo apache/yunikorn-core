@@ -57,7 +57,8 @@ func newUserTracker(user string) *UserTracker {
 func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource) bool {
 	ut.Lock()
 	defer ut.Unlock()
-	increased := ut.queueTracker.increaseTrackedResource(queuePath, applicationID, user, usage)
+	hierarchy := strings.Split(queuePath, configs.DOT)
+	increased := ut.queueTracker.increaseTrackedResource(hierarchy, applicationID, user, usage)
 	if increased {
 		gt := ut.appGroupTrackers[applicationID]
 		log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
@@ -67,7 +68,7 @@ func (ut *UserTracker) increaseTrackedResource(queuePath, applicationID string, 
 			zap.Stringer("resource", usage))
 		increasedGroupUsage := gt.increaseTrackedResource(queuePath, applicationID, usage, ut.userName)
 		if !increasedGroupUsage {
-			_, decreased := ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, false)
+			_, decreased := ut.queueTracker.decreaseTrackedResource(hierarchy, applicationID, usage, false)
 			if !decreased {
 				log.Log(log.SchedUGM).Error("User resource usage rollback has failed",
 					zap.String("queue path", queuePath),
@@ -86,7 +87,7 @@ func (ut *UserTracker) decreaseTrackedResource(queuePath, applicationID string, 
 	if removeApp {
 		delete(ut.appGroupTrackers, applicationID)
 	}
-	return ut.queueTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
+	return ut.queueTracker.decreaseTrackedResource(strings.Split(queuePath, configs.DOT), applicationID, usage, removeApp)
 }
 
 func (ut *UserTracker) hasGroupForApp(applicationID string) bool {
@@ -120,7 +121,7 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 func (ut *UserTracker) setLimits(queuePath string, resource *resources.Resource, maxApps uint64) {
 	ut.Lock()
 	defer ut.Unlock()
-	ut.queueTracker.setLimit(queuePath, resource, maxApps)
+	ut.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), resource, maxApps)
 }
 
 func (ut *UserTracker) headroom(queuePath string) *resources.Resource {
@@ -148,19 +149,19 @@ func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOIn
 func (ut *UserTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
 	ut.RLock()
 	defer ut.RUnlock()
-	return ut.queueTracker.IsQueuePathTrackedCompletely(queuePath)
+	return ut.queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath, configs.DOT))
 }
 
 func (ut *UserTracker) IsUnlinkRequired(queuePath string) bool {
 	ut.RLock()
 	defer ut.RUnlock()
-	return ut.queueTracker.IsUnlinkRequired(queuePath)
+	return ut.queueTracker.IsUnlinkRequired(strings.Split(queuePath, configs.DOT))
 }
 
 func (ut *UserTracker) UnlinkQT(queuePath string) bool {
 	ut.RLock()
 	defer ut.RUnlock()
-	return ut.queueTracker.UnlinkQT(queuePath)
+	return ut.queueTracker.UnlinkQT(strings.Split(queuePath, configs.DOT))
 }
 
 // canBeRemoved Does "root" queue has any child queue trackers? Is there any running applications in "root" qt?
@@ -173,5 +174,5 @@ func (ut *UserTracker) canBeRemoved() bool {
 func (ut *UserTracker) canRunApp(queuePath, applicationID string) bool {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.queueTracker.canRunApp(queuePath, applicationID, user)
+	return ut.queueTracker.canRunApp(strings.Split(queuePath, configs.DOT), applicationID, user)
 }

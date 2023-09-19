@@ -70,12 +70,25 @@ const (
 	group
 )
 
-func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID string, trackType trackingType, usage *resources.Resource) bool {
+func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource) bool {
 	log.Log(log.SchedUGM).Debug("Increasing resource usage",
 		zap.Int("tracking type", int(trackType)),
-		zap.String("queue path", queuePath),
+		zap.String("queue path", qt.queuePath),
+		zap.Strings("hierarchy", hierarchy),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage))
+	// depth first: all the way to the leaf, create if not exists
+	// more than 1 in the slice means we need to recurse down
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] == nil {
+			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName)
+		}
+		if !qt.childQueueTrackers[childName].increaseTrackedResource(hierarchy[1:], applicationID, trackType, usage) {
+			return false
+		}
+	}
+
 	finalResourceUsage := qt.resourceUsage.Clone()
 	finalResourceUsage.AddTo(usage)
 	wildCardQuotaExceeded := false
@@ -85,7 +98,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	if qt.maxRunningApps != 0 && !resources.Equals(resources.NewResource(), qt.maxResources) {
 		log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of specific user/group",
 			zap.Int("tracking type", int(trackType)),
-			zap.String("queue path", queuePath),
+			zap.String("queue path", qt.queuePath),
 			zap.Bool("existing app", existingApp),
 			zap.Uint64("max running apps", qt.maxRunningApps),
 			zap.Stringer("max resources", qt.maxResources))
@@ -93,7 +106,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 			resources.StrictlyGreaterThan(finalResourceUsage, qt.maxResources) {
 			log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit of specific user/group",
 				zap.Int("tracking type", int(trackType)),
-				zap.String("queue path", queuePath),
+				zap.String("queue path", qt.queuePath),
 				zap.Bool("existing app", existingApp),
 				zap.Int("current running applications", len(qt.runningApplications)),
 				zap.Uint64("max running applications", qt.maxRunningApps),
@@ -115,7 +128,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 		if config != nil {
 			log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of wild card user/group",
 				zap.Int("tracking type", int(trackType)),
-				zap.String("queue path", queuePath),
+				zap.String("queue path", qt.queuePath),
 				zap.Bool("existing app", existingApp),
 				zap.Uint64("wild card max running apps", config.maxApplications),
 				zap.Stringer("wild card max resources", config.maxResources),
@@ -125,7 +138,7 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 			if wildCardQuotaExceeded {
 				log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit of wild card user/group",
 					zap.Int("tracking type", int(trackType)),
-					zap.String("queue path", queuePath),
+					zap.String("queue path", qt.queuePath),
 					zap.Bool("existing app", existingApp),
 					zap.Int("current running applications", len(qt.runningApplications)),
 					zap.Uint64("max running applications", config.maxApplications),
@@ -136,24 +149,12 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 		}
 	}
 
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != common.Empty {
-		if qt.childQueueTrackers[immediateChildQueueName] == nil {
-			qt.childQueueTrackers[immediateChildQueueName] = newQueueTracker(qt.queuePath, immediateChildQueueName)
-		}
-		allowed := qt.childQueueTrackers[immediateChildQueueName].increaseTrackedResource(childQueuePath, applicationID, trackType, usage)
-		if !allowed {
-			return allowed
-		}
-	}
-
 	qt.resourceUsage.AddTo(usage)
 	qt.runningApplications[applicationID] = true
 
 	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
 		zap.Int("tracking type", int(trackType)),
-		zap.String("queue path", queuePath),
-		zap.String("qt queue path", qt.queuePath),
+		zap.String("queue path", qt.queuePath),
 		zap.String("application", applicationID),
 		zap.Bool("existing app", existingApp),
 		zap.Stringer("resource", usage),
@@ -164,42 +165,44 @@ func (qt *QueueTracker) increaseTrackedResource(queuePath string, applicationID 
 	return true
 }
 
-func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
+func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
 	log.Log(log.SchedUGM).Debug("Decreasing resource usage",
-		zap.String("queue path", queuePath),
+		zap.String("queue path", qt.queuePath),
+		zap.Strings("hierarchy", hierarchy),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != common.Empty {
-		if qt.childQueueTrackers[immediateChildQueueName] == nil {
+	// depth first: all the way to the leaf, return false if not exists
+	// more than 1 in the slice means we need to recurse down
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] == nil {
 			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
-				zap.String("child queueTracker name", immediateChildQueueName))
+				zap.String("child queueTracker name", childName))
 			return false, false
 		}
-		removeQT, decreased := qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResource(childQueuePath, applicationID, usage, removeApp)
+		removeQT, decreased := qt.childQueueTrackers[childName].decreaseTrackedResource(hierarchy[1:], applicationID, usage, removeApp)
 		if !decreased {
 			return false, decreased
 		}
 		if removeQT {
 			log.Log(log.SchedUGM).Debug("Removed queue tracker linkage from its parent",
-				zap.String("queue path ", queuePath),
-				zap.String("removed queue name", immediateChildQueueName),
-				zap.String("parent queue", qt.queueName))
-			delete(qt.childQueueTrackers, immediateChildQueueName)
+				zap.String("queue path ", qt.queuePath),
+				zap.String("removed queue name", childName),
+				zap.String("parent queue name", qt.queueName))
+			delete(qt.childQueueTrackers, childName)
 		}
 	}
-
 	qt.resourceUsage.SubFrom(usage)
 	if removeApp {
 		log.Log(log.SchedUGM).Debug("Removed application from running applications",
 			zap.String("application", applicationID),
-			zap.String("queue path", queuePath),
+			zap.String("queue path", qt.queuePath),
 			zap.String("queue name", qt.queueName))
 		delete(qt.runningApplications, applicationID)
 	}
 	log.Log(log.SchedUGM).Debug("Successfully decreased resource usage",
-		zap.String("queue path", queuePath),
+		zap.String("queue path", qt.queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
 		zap.Stringer("total resource after decreasing", qt.resourceUsage),
@@ -209,40 +212,29 @@ func (qt *QueueTracker) decreaseTrackedResource(queuePath string, applicationID 
 	removeQT := len(qt.childQueueTrackers) == 0 && len(qt.runningApplications) == 0 && resources.IsZero(qt.resourceUsage) &&
 		qt.maxRunningApps == 0 && resources.Equals(resources.NewResource(), qt.maxResources)
 	log.Log(log.SchedUGM).Debug("Remove queue tracker",
-		zap.String("queue path ", queuePath),
+		zap.String("queue path ", qt.queuePath),
 		zap.Bool("remove QT", removeQT))
 	return removeQT, true
 }
 
-func (qt *QueueTracker) getChildQueueTracker(queuePath string) *QueueTracker {
-	var childQueuePath, immediateChildQueueName string
-	childQueuePath, immediateChildQueueName = getChildQueuePath(queuePath)
-	childQueueTracker := qt
-	if childQueuePath != common.Empty {
-		for childQueuePath != common.Empty {
-			if childQueueTracker != nil {
-				if len(childQueueTracker.childQueueTrackers) == 0 || childQueueTracker.childQueueTrackers[immediateChildQueueName] == nil {
-					newChildQt := newQueueTracker(qt.queuePath, immediateChildQueueName)
-					childQueueTracker.childQueueTrackers[immediateChildQueueName] = newChildQt
-					childQueueTracker = newChildQt
-				} else {
-					childQueueTracker = childQueueTracker.childQueueTrackers[immediateChildQueueName]
-				}
-			}
-			childQueuePath, immediateChildQueueName = getChildQueuePath(childQueuePath)
-		}
-	}
-	return childQueueTracker
-}
-
-func (qt *QueueTracker) setLimit(queuePath string, maxResource *resources.Resource, maxApps uint64) {
+func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Resource, maxApps uint64) {
 	log.Log(log.SchedUGM).Debug("Setting limits",
-		zap.String("queue path", queuePath),
+		zap.String("queue path", qt.queuePath),
+		zap.Strings("hierarchy", hierarchy),
 		zap.Uint64("max applications", maxApps),
 		zap.Stringer("max resources", maxResource))
-	childQueueTracker := qt.getChildQueueTracker(queuePath)
-	childQueueTracker.maxRunningApps = maxApps
-	childQueueTracker.maxResources = maxResource
+	// depth first: all the way to the leaf, create if not exists
+	// more than 1 in the slice means we need to recurse down
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] == nil {
+			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName)
+		}
+		qt.childQueueTrackers[childName].setLimit(hierarchy[1:], maxResource, maxApps)
+	} else if len(hierarchy) == 1 {
+		qt.maxRunningApps = maxApps
+		qt.maxResources = maxResource
+	}
 }
 
 func (qt *QueueTracker) headroom(hierarchy []string) *resources.Resource {
@@ -299,14 +291,18 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.Res
 
 // IsQueuePathTrackedCompletely Traverse queue path upto the end queue through its linkage
 // to confirm entire queuePath has been tracked completely or not
-func (qt *QueueTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
-	if queuePath == configs.RootQueue || queuePath == qt.queueName {
-		return true
-	}
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if immediateChildQueueName != common.Empty {
-		if childUt, ok := qt.childQueueTrackers[immediateChildQueueName]; ok {
-			return childUt.IsQueuePathTrackedCompletely(childQueuePath)
+func (qt *QueueTracker) IsQueuePathTrackedCompletely(hierarchy []string) bool {
+	// depth first: all the way to the leaf, ignore if not exists
+	// more than 1 in the slice means we need to recurse down
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] != nil {
+			return qt.childQueueTrackers[childName].IsQueuePathTrackedCompletely(hierarchy[1:])
+		}
+	} else if len(hierarchy) == 1 {
+		// reach end of hierarchy
+		if hierarchy[0] == configs.RootQueue || hierarchy[0] == qt.queueName {
+			return true
 		}
 	}
 	return false
@@ -316,19 +312,23 @@ func (qt *QueueTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
 // linkage needs to be removed or not based on the running applications.
 // If there are any running applications in end leaf queue, we should remove the linkage between
 // the leaf and its parent queue using UnlinkQT method. Otherwise, we should leave as it is.
-func (qt *QueueTracker) IsUnlinkRequired(queuePath string) bool {
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if immediateChildQueueName != common.Empty {
-		if childUt, ok := qt.childQueueTrackers[immediateChildQueueName]; ok {
-			return childUt.IsUnlinkRequired(childQueuePath)
+func (qt *QueueTracker) IsUnlinkRequired(hierarchy []string) bool {
+	// depth first: all the way to the leaf, ignore if not exists
+	// more than 1 in the slice means we need to recurse down
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] != nil {
+			return qt.childQueueTrackers[childName].IsUnlinkRequired(hierarchy[1:])
 		}
-	}
-	if queuePath == configs.RootQueue || queuePath == qt.queueName {
-		if len(qt.runningApplications) == 0 {
-			log.Log(log.SchedUGM).Debug("Is Unlink Required?",
-				zap.String("queue path", queuePath),
-				zap.Int("no. of applications", len(qt.runningApplications)))
-			return true
+	} else if len(hierarchy) == 1 {
+		// reach end of hierarchy
+		if hierarchy[0] == configs.RootQueue || hierarchy[0] == qt.queueName {
+			if len(qt.runningApplications) == 0 {
+				log.Log(log.SchedUGM).Debug("Is Unlink Required?",
+					zap.String("queue path", qt.queuePath),
+					zap.Int("no. of applications", len(qt.runningApplications)))
+				return true
+			}
 		}
 	}
 	return false
@@ -336,25 +336,36 @@ func (qt *QueueTracker) IsUnlinkRequired(queuePath string) bool {
 
 // UnlinkQT Traverse queue path upto the end queue. If end queue has any more child queue trackers,
 // then goes upto each child queue and removes the linkage with its immediate parent
-func (qt *QueueTracker) UnlinkQT(queuePath string) bool {
+func (qt *QueueTracker) UnlinkQT(hierarchy []string) bool {
 	log.Log(log.SchedUGM).Debug("Unlinking current queue tracker from its parent",
 		zap.String("current queue ", qt.queueName),
-		zap.String("queue path", queuePath),
+		zap.String("queue path", qt.queuePath),
+		zap.Strings("hierarchy", hierarchy),
 		zap.Int("no. of child queue trackers", len(qt.childQueueTrackers)))
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-
-	if childQueuePath == common.Empty && len(qt.childQueueTrackers) > 0 {
-		for qName := range qt.childQueueTrackers {
-			qt.UnlinkQT(qt.queueName + configs.DOT + qName)
+	// depth first: all the way to the leaf, ignore if not exists
+	// more than 1 in the slice means we need to recurse down
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] != nil {
+			if qt.childQueueTrackers[childName].UnlinkQT(hierarchy[1:]) {
+				delete(qt.childQueueTrackers, childName)
+			}
 		}
+	} else if len(hierarchy) <= 1 {
+		// reach end of hierarchy, unlink all queues under this queue
+		qt.unlinkAllQT()
 	}
 
-	if childQueuePath != common.Empty {
-		if qt.childQueueTrackers[immediateChildQueueName] != nil {
-			unlink := qt.childQueueTrackers[immediateChildQueueName].UnlinkQT(childQueuePath)
-			if unlink {
-				delete(qt.childQueueTrackers, immediateChildQueueName)
-			}
+	if len(qt.runningApplications) == 0 && len(qt.childQueueTrackers) == 0 {
+		return true
+	}
+	return false
+}
+
+func (qt *QueueTracker) unlinkAllQT() bool {
+	for childName, childQT := range qt.childQueueTrackers {
+		if childQT.unlinkAllQT() {
+			delete(qt.childQueueTrackers, childName)
 		}
 	}
 	if len(qt.runningApplications) == 0 && len(qt.childQueueTrackers) == 0 {
@@ -363,57 +374,70 @@ func (qt *QueueTracker) UnlinkQT(queuePath string) bool {
 	return false
 }
 
-// decreaseTrackedResourceUsageDownwards queuePath either could be parent or leaf queue path. If it is parent queue path, then traverse upto the end leaf
-// recursively for all child queues, reset resourceUsage and runningApplications to the default value.
-// Once downward traversal has been completed, traverse downwards using decreaseTrackedResourceUsageUpwards
-func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(queuePath string) map[string]bool {
-	childQueueTracker := qt.getChildQueueTracker(queuePath)
-	childQueueTrackers := childQueueTracker.childQueueTrackers
-	removedApplications := make(map[string]bool)
-	for _, childQT := range childQueueTrackers {
-		if len(childQT.runningApplications) > 0 && childQT.resourceUsage != resources.NewResource() {
-			removedApplications = childQT.runningApplications
-			childQT.resourceUsage = resources.NewResource()
-			childQT.runningApplications = make(map[string]bool)
-			childQT.decreaseTrackedResourceUsageDownwards(childQT.queuePath)
+// decreaseTrackedResourceUsageDownwards queuePath either could be parent or leaf queue path.
+// If it is parent queue path, then reset resourceUsage and runningApplications for all child queues,
+// If it is leaf queue path, reset resourceUsage and runningApplications for queue trackers in this queue path.
+func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(hierarchy []string) map[string]bool {
+	// depth first: all the way to the leaf, ignore if not exists
+	// more than 1 in the slice means we need to recurse down
+	var removedApplications map[string]bool
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] != nil {
+			removedApplications = qt.childQueueTrackers[childName].decreaseTrackedResourceUsageDownwards(hierarchy[1:])
 		}
+	} else if len(hierarchy) <= 1 {
+		// reach end of hierarchy, remove all resources under this queue
+		removedApplications = qt.decreaseAllTrackedResourceUsage()
 	}
-	qt.decreaseTrackedResourceUsageUpwards(queuePath)
-	return removedApplications
-}
 
-// decreaseTrackedResourceUsageUpwards Traverse upwards all the way upto the root starting from last queue in queuePath,
-// reset resourceUsage and runningApplications to the default value.
-func (qt *QueueTracker) decreaseTrackedResourceUsageUpwards(queuePath string) {
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != common.Empty {
-		if qt.childQueueTrackers[immediateChildQueueName] == nil {
-			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
-				zap.String("child queueTracker name", immediateChildQueueName))
-		}
-		qt.childQueueTrackers[immediateChildQueueName].decreaseTrackedResourceUsageUpwards(childQueuePath)
-	}
 	if len(qt.runningApplications) > 0 && qt.resourceUsage != resources.NewResource() {
 		qt.resourceUsage = resources.NewResource()
 		qt.runningApplications = make(map[string]bool)
 	}
+
+	return removedApplications
 }
 
-func (qt *QueueTracker) canRunApp(queuePath string, applicationID string, trackType trackingType) bool {
-	log.Log(log.SchedUGM).Debug("Checking can run app",
-		zap.Int("tracking type", int(trackType)),
-		zap.String("queue path", queuePath),
-		zap.String("application", applicationID))
-	childQueuePath, immediateChildQueueName := getChildQueuePath(queuePath)
-	if childQueuePath != common.Empty {
-		if qt.childQueueTrackers[immediateChildQueueName] != nil {
-			allowed := qt.childQueueTrackers[immediateChildQueueName].canRunApp(childQueuePath, applicationID, trackType)
-			if !allowed {
-				return false
+func (qt *QueueTracker) decreaseAllTrackedResourceUsage() map[string]bool {
+	removedApplications := make(map[string]bool)
+	for _, childQT := range qt.childQueueTrackers {
+		if len(childQT.runningApplications) > 0 && childQT.resourceUsage != resources.NewResource() {
+			for k, v := range childQT.runningApplications {
+				removedApplications[k] = v
 			}
+			childQT.resourceUsage = resources.NewResource()
+			childQT.runningApplications = make(map[string]bool)
+			// runningApplications in parent queue should contain all the running applications in child queues,
+			// so we don't need to update removedApplications from child queue result.
+			childQT.decreaseAllTrackedResourceUsage()
 		}
 	}
+	return removedApplications
+}
 
+func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trackType trackingType) bool {
+	log.Log(log.SchedUGM).Debug("Checking can run app",
+		zap.Int("tracking type", int(trackType)),
+		zap.String("queue path", qt.queuePath),
+		zap.String("application", applicationID),
+		zap.Strings("hierarchy", hierarchy))
+	// depth first: all the way to the leaf, create if not exists
+	// more than 1 in the slice means we need to recurse down
+	childCanRunApp := true
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] == nil {
+			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName)
+		}
+		childCanRunApp = qt.childQueueTrackers[childName].canRunApp(hierarchy[1:], applicationID, trackType)
+	}
+
+	if !childCanRunApp {
+		return false
+	}
+
+	// arrived at the leaf or on the way out: check against current max if set
 	var running int
 	if existingApp := qt.runningApplications[applicationID]; existingApp {
 		return true
@@ -425,7 +449,7 @@ func (qt *QueueTracker) canRunApp(queuePath string, applicationID string, trackT
 	if qt.maxRunningApps != 0 && running > int(qt.maxRunningApps) {
 		log.Log(log.SchedUGM).Warn("can't run app as allowing new application to run would exceed configured max applications limit of specific user/group",
 			zap.Int("tracking type", int(trackType)),
-			zap.String("queue path", queuePath),
+			zap.String("queue path", qt.queuePath),
 			zap.Int("current running applications", len(qt.runningApplications)),
 			zap.Uint64("max running applications", qt.maxRunningApps))
 		return false
@@ -442,7 +466,7 @@ func (qt *QueueTracker) canRunApp(queuePath string, applicationID string, trackT
 		if config != nil && config.maxApplications != 0 && running > int(config.maxApplications) {
 			log.Log(log.SchedUGM).Warn("can't run app as allowing new application to run would exceed configured max applications limit of wildcard user/group",
 				zap.Int("tracking type", int(trackType)),
-				zap.String("queue path", queuePath),
+				zap.String("queue path", qt.queuePath),
 				zap.Int("current running applications", len(qt.runningApplications)),
 				zap.Uint64("max running applications", config.maxApplications))
 			return false

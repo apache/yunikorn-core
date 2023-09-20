@@ -114,7 +114,7 @@ func TestCheckPreemptionQueueGuarantees(t *testing.T) {
 	app2 := newApplication(appID2, "default", "root.parent.child2")
 	app2.SetQueue(childQ2)
 	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4}))
 	assert.NilError(t, app2.AddAllocationAsk(ask3))
 	childQ2.incPendingResource(ask3.GetAllocatedResource())
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
@@ -126,6 +126,45 @@ func TestCheckPreemptionQueueGuarantees(t *testing.T) {
 	// verify too large of a resource will not succeed
 	ask3.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25})
 	assert.Assert(t, !preemptor.checkPreemptionQueueGuarantees(), "queue guarantees did not fail")
+}
+
+func TestCheckPreemptionQueueGuaranteesWithAggregatedVictims(t *testing.T) {
+	node := newNode("node1", map[string]resources.Quantity{"first": 20})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, map[string]string{"first": "10"}, map[string]string{"first": "2"})
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, map[string]string{"first": "8"})
+	assert.NilError(t, err)
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3}))
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3}))
+	assert.NilError(t, app1.AddAllocationAsk(ask2))
+	app1.AddAllocation(NewAllocation("alloc1", "node1", ask1))
+	app1.AddAllocation(NewAllocation("alloc2", "node1", ask2))
+	assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
+	assert.NilError(t, childQ1.IncAllocatedResource(ask2.GetAllocatedResource(), false))
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.applications[appID2] = app2
+	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4}))
+	assert.NilError(t, app2.AddAllocationAsk(ask3))
+	childQ2.incPendingResource(ask3.GetAllocatedResource())
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	// The aggregated resource is smaller than the ask resource, so it will fail
+	assert.Assert(t, !preemptor.checkPreemptionQueueGuarantees(), "queue guarantees did not fail")
+
+	// The aggregated resource is larger than the ask resource, so it will succeed
+	ask3.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
+	assert.Assert(t, preemptor.checkPreemptionQueueGuarantees(), "queue guarantees fail")
 }
 
 func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {

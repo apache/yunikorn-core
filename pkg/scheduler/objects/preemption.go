@@ -189,13 +189,21 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 		return false
 	}
 
+	// If current queue after adding the ask is already at or above guaranteed, we can't preempt
 	currentQueue.AddAllocation(p.ask.GetAllocatedResource())
+	if currentQueue.IsAtOrAboveGuaranteedResource() {
+		return false
+	}
 
+	aggregatedVictims := resources.NewResource()
 	// remove each allocation in turn, validating that at some point we free enough resources to allow this ask to fit
 	for _, snapshot := range queues {
 		for _, alloc := range snapshot.PotentialVictims {
 			snapshot.RemoveAllocation(alloc.GetAllocatedResource())
-			if currentQueue.IsWithinGuaranteedResource() {
+			if snapshot.IsAtOrAboveGuaranteedResource() {
+				aggregatedVictims.AddTo(alloc.allocatedResource)
+			}
+			if aggregatedVictims.FitInMaxUndef(p.ask.GetAllocatedResource()) {
 				return true
 			}
 		}

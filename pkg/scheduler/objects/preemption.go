@@ -399,7 +399,8 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 }
 
 // calculateAdditionalVictims finds additional preemption victims necessary to ensure
-func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Allocation, bool) {
+func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation, nodeId string) ([]*Allocation, bool) {
+	nodeCurrentAvailable := p.nodeAvailableMap[nodeId].Clone()
 	// clone the queue snapshots
 	allocationsByQueueSnap := p.duplicateQueueSnapshots()
 
@@ -420,6 +421,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 				seen[victim.GetAllocationKey()] = victim
+				nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
 			}
 		}
 	}
@@ -448,6 +450,9 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 		}
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
+			if qv.QueuePath == p.queuePath {
+				continue
+			}
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
 				remaining := askQueue.GetRemainingGuaranteed()
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
@@ -461,6 +466,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 					} else {
 						// remaining capacity changed, so we should keep this task
 						victims = append(victims, victim)
+						nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
 					}
 				} else {
 					// removing this allocation would have reduced queue below guaranteed limits, put it back
@@ -478,7 +484,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 
 // tryNodes attempts to find potential nodes for scheduling. For each node, potential victims are passed to
 // the shim for evaluation, and the best solution found will be returned.
-func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
+func (p *Preemptor) tryNodes() (string, []*Allocation, bool, bool) {
 	// calculate victim list for each node
 	predicateChecks := make([]*si.PreemptionPredicatesArgs, 0)
 	victimsByNode := make(map[string][]*Allocation)
@@ -509,10 +515,10 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 	// call predicates to evaluate each node
 	result := p.checkPreemptionPredicates(predicateChecks, victimsByNode)
 	if result != nil && result.success {
-		return result.nodeID, result.victims, true
+		return result.nodeID, result.victims, result.index == -1, true
 	}
 
-	return "", nil, false
+	return "", nil, true, false
 }
 
 func (p *Preemptor) TryPreemption() (*Allocation, bool) {
@@ -525,19 +531,21 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 	p.initWorkingState()
 
 	// try to find a node to schedule on and victims to preempt
-	nodeID, victims, ok := p.tryNodes()
+	nodeID, victims, needsAdditionalVistims, ok := p.tryNodes()
 	if !ok {
 		// no preemption possible
 		return nil, false
 	}
 
 	// look for additional victims in case we have not yet made enough capacity in the queue
-	extraVictims, ok := p.calculateAdditionalVictims(victims)
-	if !ok {
-		// not enough resources were preempted
-		return nil, false
+	if needsAdditionalVistims {
+		extraVictims, ok := p.calculateAdditionalVictims(victims, nodeID)
+		if !ok {
+			// not enough resources were preempted
+			return nil, false
+		}
+		victims = append(victims, extraVictims...)
 	}
-	victims = append(victims, extraVictims...)
 	if len(victims) == 0 {
 		return nil, false
 	}
@@ -699,6 +707,9 @@ func (qps *QueuePreemptionSnapshot) Duplicate(copy map[string]*QueuePreemptionSn
 // may be eligible for further preemption
 func (qps *QueuePreemptionSnapshot) IsAtOrAboveGuaranteedResource() bool {
 	if qps == nil {
+		return false
+	}
+	if qps.Parent != nil && !qps.Parent.IsAtOrAboveGuaranteedResource() {
 		return false
 	}
 	guaranteed := qps.GetGuaranteedResource()

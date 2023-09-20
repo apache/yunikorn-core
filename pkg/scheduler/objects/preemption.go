@@ -190,13 +190,22 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 	}
 
 	currentQueue.AddAllocation(p.ask.GetAllocatedResource())
+	if !currentQueue.IsWithinMaxResource() {
+		return false
+	}
+	availableResource := p.headRoom.Clone()
 
 	// remove each allocation in turn, validating that at some point we free enough resources to allow this ask to fit
 	for _, snapshot := range queues {
 		for _, alloc := range snapshot.PotentialVictims {
 			snapshot.RemoveAllocation(alloc.GetAllocatedResource())
-			if currentQueue.IsWithinGuaranteedResource() {
-				return true
+			if snapshot.IsAtOrAboveGuaranteedResource() {
+				availableResource.AddTo(alloc.GetAllocatedResource())
+				if availableResource.FitInMaxUndef(p.ask.GetAllocatedResource()) {
+					return true
+				}
+			} else {
+				snapshot.AddAllocation(alloc.GetAllocatedResource())
 			}
 		}
 	}
@@ -713,6 +722,28 @@ func (qps *QueuePreemptionSnapshot) IsAtOrAboveGuaranteedResource() bool {
 
 	usedOrMax := resources.ComponentWiseMax(guaranteed, used)
 	return resources.Equals(usedOrMax, used)
+}
+
+// IsWithinResourceRestruction determines if this queue is exceeding resource guarantees and below max resource.
+func (qps *QueuePreemptionSnapshot) IsWithinMaxResource() bool {
+	if qps == nil {
+		return false
+	}
+	if qps.Parent != nil && !qps.Parent.IsWithinMaxResource() {
+		return false
+	}
+	guaranteed := qps.GetGuaranteedResource()
+	max := qps.GetMaxResource()
+	absMax := resources.ComponentWiseMax(guaranteed, max)
+	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
+
+	// if we don't fit, we're clearly above
+	if !resources.FitIn(absMax, used) {
+		return true
+	}
+
+	usedOrMax := resources.ComponentWiseMax(absMax, used)
+	return resources.Equals(usedOrMax, absMax)
 }
 
 // IsWithinGuaranteedResource determines if this queue is within its current resource guarantees

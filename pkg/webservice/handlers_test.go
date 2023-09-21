@@ -197,6 +197,60 @@ partitions:
                 vcore: 10000
 `
 
+const userGroupLimitsConfig = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 0
+                  maxresources:
+                    cpu: "200"
+`
+
+const userGroupLimitsInvalidConfig = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 1
+                  maxresources:
+                    cpu: "0"
+`
+
+const userGroupLimitsInvalidConfig1 = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+`
+
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
@@ -249,6 +303,47 @@ func TestValidateConf(t *testing.T) {
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: false,
 				Reason:  "undefined policy: invalid",
+			},
+		},
+	}
+	for _, test := range confTests {
+		// No err check: new request always returns correctly
+		//nolint: errcheck
+		req, _ := http.NewRequest("POST", "", strings.NewReader(test.content))
+		resp := &MockResponseWriter{}
+		validateConf(resp, req)
+		var vcr dao.ValidateConfResponse
+		err := json.Unmarshal(resp.outputBytes, &vcr)
+		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
+		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
+		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
+	}
+}
+
+func TestUserGroupLimits(t *testing.T) {
+	confTests := []struct {
+		content          string
+		expectedResponse dao.ValidateConfResponse
+	}{
+		{
+			content: userGroupLimitsConfig,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: true,
+				Reason:  common.Empty,
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "MaxResources is zero in '' limit, all resource types are zero",
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig1,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "invalid resource combination for limit  all resource limits are null",
 			},
 		},
 	}

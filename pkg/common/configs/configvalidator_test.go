@@ -24,6 +24,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
@@ -744,51 +745,47 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 		hasError bool
 	}{
 		{
-			name: "leaf queue user group maxresoruces are within parent queue user group maxresources",
+			name: "leaf queue user group maxresources are within immediate parent queue user group maxresources",
 			config: QueueConfig{
 				Name: "parent",
-				Limits: []Limit{
-					{
-						Limit:        "user-limit",
-						Users:        []string{"test-user"},
-						MaxResources: map[string]string{"memory": "100"},
-					},
-					{
-						Limit:        "group-limit",
-						Groups:       []string{"test-group"},
-						MaxResources: map[string]string{"memory": "100"},
-					},
-				},
+				Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "100"}},
+					map[string]map[string]string{"test-group": {"memory": "100"}}),
 				Queues: []QueueConfig{
 					{
 						Name: "child1",
-						Limits: []Limit{
-							{
-								Limit:        "user-limit",
-								Users:        []string{"test-user"},
-								MaxResources: map[string]string{"memory": "50"},
-							},
-							{
-								Limit:        "group-limit",
-								Groups:       []string{"test-group"},
-								MaxResources: map[string]string{"memory": "50"},
-							},
-						},
+						Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "50"}},
+							map[string]map[string]string{"test-group": {"memory": "50"}}),
 						Queues: []QueueConfig{
 							{
 								Name: "child2",
-								Limits: []Limit{
-									{
-										Limit:        "user-limit",
-										Users:        []string{"test-user"},
-										MaxResources: map[string]string{"memory": "10"},
-									},
-									{
-										Limit:        "group-limit",
-										Groups:       []string{"test-group"},
-										MaxResources: map[string]string{"memory": "10"},
-									},
-								},
+								Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "10"}},
+									map[string]map[string]string{"test-group": {"memory": "10"}}),
+							},
+						},
+					},
+				},
+			},
+			hasError: false,
+		},
+		{
+			name: "leaf queue user group maxresources are within ancestor parent queue user group maxresources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "100"}},
+					map[string]map[string]string{"test-group": {"memory": "100"}}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Queues: []QueueConfig{
+							{
+								Name: "childA",
+								Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "50"}},
+									map[string]map[string]string{"test-group": {"memory": "50"}}),
+							},
+							{
+								Name: "childB",
+								Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "10"}},
+									map[string]map[string]string{"test-group": {"memory": "10"}}),
 							},
 						},
 					},
@@ -800,33 +797,13 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 			name: "leaf queue user maxresources exceed parent queue user maxresources",
 			config: QueueConfig{
 				Name: "parent",
-				Limits: []Limit{
-					{
-						Limit:        "user-limit",
-						Users:        []string{"test-user"},
-						MaxResources: map[string]string{"memory": "100"},
-					},
-					{
-						Limit:        "group-limit",
-						Groups:       []string{"test-group"},
-						MaxResources: map[string]string{"memory": "100"},
-					},
-				},
+				Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "100"}},
+					map[string]map[string]string{"test-group": {"memory": "100"}}),
 				Queues: []QueueConfig{
 					{
 						Name: "child1",
-						Limits: []Limit{
-							{
-								Limit:        "user-limit",
-								Users:        []string{"test-user"},
-								MaxResources: map[string]string{"memory": "200"},
-							},
-							{
-								Limit:        "group-limit",
-								Groups:       []string{"test-group"},
-								MaxResources: map[string]string{"memory": "50"},
-							},
-						},
+						Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "200"}},
+							map[string]map[string]string{"test-group": {"memory": "50"}}),
 					},
 				},
 			},
@@ -836,43 +813,70 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 			name: "leaf queue group maxresources exceed parent queue group maxresources",
 			config: QueueConfig{
 				Name: "parent",
-				Limits: []Limit{
-					{
-						Limit:        "user-limit",
-						Users:        []string{"test-user"},
-						MaxResources: map[string]string{"memory": "100"},
-					},
-					{
-						Limit:        "group-limit",
-						Groups:       []string{"test-group"},
-						MaxResources: map[string]string{"memory": "100"},
-					},
-				},
+				Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "100"}},
+					map[string]map[string]string{"test-group": {"memory": "100"}}),
 				Queues: []QueueConfig{
 					{
 						Name: "child1",
-						Limits: []Limit{
-							{
-								Limit:        "user-limit",
-								Users:        []string{"test-user"},
-								MaxResources: map[string]string{"memory": "50"},
-							},
-							{
-								Limit:        "group-limit",
-								Groups:       []string{"test-group"},
-								MaxResources: map[string]string{"memory": "200"},
-							},
-						},
+						Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "50"}},
+							map[string]map[string]string{"test-group": {"memory": "200"}}),
 					},
 				},
 			},
 			hasError: true,
 		},
+		{
+			name: "queues at same level maxresources can be greater or less than or equal to the other but with in immediate parent",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "100"}},
+					map[string]map[string]string{"test-group": {"memory": "100"}}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "50"}},
+							map[string]map[string]string{"test-group": {"memory": "50"}}),
+					},
+					{
+						Name: "child2",
+						Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "60"}},
+							map[string]map[string]string{"test-group": {"memory": "60"}}),
+					},
+				},
+			},
+			hasError: false,
+		},
+		{
+			name: "queues at same level maxresources can be greater or less than or equal to the other but with in ancestor parent",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "100"}},
+					map[string]map[string]string{"test-group": {"memory": "100"}}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Queues: []QueueConfig{
+							{
+								Name: "childA",
+								Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "50"}},
+									map[string]map[string]string{"test-group": {"memory": "50"}}),
+							},
+							{
+								Name: "childB",
+								Limits: createLimitMaxResources(map[string]map[string]string{"test-user": {"memory": "60"}},
+									map[string]map[string]string{"test-group": {"memory": "60"}}),
+							},
+						},
+					},
+				},
+			},
+			hasError: false,
+		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimitResource(testCase.config, nil, make(map[string]*resources.Resource), make(map[string]*resources.Resource))
+			err := checkLimitResource(testCase.config, make(map[string]map[string]*resources.Resource), make(map[string]map[string]*resources.Resource), common.Empty)
 			if testCase.hasError {
 				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent maximum resource")
 			} else {
@@ -880,6 +884,41 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 			}
 		})
 	}
+}
+
+func createLimitMaxResources(users map[string]map[string]string, groups map[string]map[string]string) []Limit {
+	var limits []Limit
+	for user, limit := range users {
+		var users []string
+		users = append(users, user)
+		limit := Limit{Limit: "user-limit", Users: users, MaxResources: limit}
+		limits = append(limits, limit)
+	}
+	for group, limit := range groups {
+		var groups []string
+		groups = append(groups, group)
+		limit := Limit{Limit: "group-limit", Groups: groups, MaxResources: limit}
+		limits = append(limits, limit)
+	}
+	return limits
+}
+
+func createLimitMaxApplications(users map[string]uint64, groups map[string]uint64) []Limit {
+	var limits []Limit
+	for user, limit := range users {
+		var users []string
+		users = append(users, user)
+		limit := Limit{Limit: "user-limit", Users: users, MaxApplications: limit}
+		limits = append(limits, limit)
+	}
+
+	for group, limit := range groups {
+		var groups []string
+		groups = append(groups, group)
+		limit := Limit{Limit: "group-limit", Groups: groups, MaxApplications: limit}
+		limits = append(limits, limit)
+	}
+	return limits
 }
 
 func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
@@ -892,48 +931,18 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 			name: "leaf queue user group maxapplications are within parent queue user group maxapplications",
 			config: QueueConfig{
 				Name: "parent",
-				Limits: []Limit{
-					{
-						Limit:           "user-limit",
-						Users:           []string{"test-user"},
-						MaxApplications: 100,
-					},
-					{
-						Limit:           "group-limit",
-						Groups:          []string{"test-group"},
-						MaxApplications: 100,
-					},
-				},
+				Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
+					map[string]uint64{"test-group": 100}),
 				Queues: []QueueConfig{
 					{
 						Name: "child1",
-						Limits: []Limit{
-							{
-								Limit:           "user-limit",
-								Users:           []string{"test-user"},
-								MaxApplications: 100,
-							},
-							{
-								Limit:           "group-limit",
-								Groups:          []string{"test-group"},
-								MaxApplications: 100,
-							},
-						},
+						Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
+							map[string]uint64{"test-group": 100}),
 						Queues: []QueueConfig{
 							{
 								Name: "child2",
-								Limits: []Limit{
-									{
-										Limit:           "user-limit",
-										Users:           []string{"test-user"},
-										MaxApplications: 100,
-									},
-									{
-										Limit:           "group-limit",
-										Groups:          []string{"test-group"},
-										MaxApplications: 100,
-									},
-								},
+								Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
+									map[string]uint64{"test-group": 100}),
 							},
 						},
 					},
@@ -945,33 +954,13 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 			name: "leaf queue user maxapplications exceed parent queue user maxapplications",
 			config: QueueConfig{
 				Name: "parent",
-				Limits: []Limit{
-					{
-						Limit:           "user-limit",
-						Users:           []string{"test-user"},
-						MaxApplications: 100,
-					},
-					{
-						Limit:           "group-limit",
-						Groups:          []string{"test-group"},
-						MaxApplications: 100,
-					},
-				},
+				Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
+					map[string]uint64{"test-group": 100}),
 				Queues: []QueueConfig{
 					{
 						Name: "child1",
-						Limits: []Limit{
-							{
-								Limit:           "user-limit",
-								Users:           []string{"test-user"},
-								MaxApplications: 200,
-							},
-							{
-								Limit:           "group-limit",
-								Groups:          []string{"test-group"},
-								MaxApplications: 50,
-							},
-						},
+						Limits: createLimitMaxApplications(map[string]uint64{"test-user": 200},
+							map[string]uint64{"test-group": 50}),
 					},
 				},
 			},
@@ -981,33 +970,13 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 			name: "leaf queue group maxapplications exceed parent queue group maxapplications",
 			config: QueueConfig{
 				Name: "parent",
-				Limits: []Limit{
-					{
-						Limit:           "user-limit",
-						Users:           []string{"test-user"},
-						MaxApplications: 100,
-					},
-					{
-						Limit:           "group-limit",
-						Groups:          []string{"test-group"},
-						MaxApplications: 100,
-					},
-				},
+				Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
+					map[string]uint64{"test-group": 100}),
 				Queues: []QueueConfig{
 					{
 						Name: "child1",
-						Limits: []Limit{
-							{
-								Limit:           "user-limit",
-								Users:           []string{"test-user"},
-								MaxApplications: 50,
-							},
-							{
-								Limit:           "group-limit",
-								Groups:          []string{"test-group"},
-								MaxApplications: 200,
-							},
-						},
+						Limits: createLimitMaxApplications(map[string]uint64{"test-user": 50},
+							map[string]uint64{"test-group": 200}),
 					},
 				},
 			},
@@ -1017,7 +986,7 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimitMaxApplications(testCase.config, nil, make(map[string]uint64), make(map[string]uint64))
+			err := checkLimitMaxApplications(testCase.config, make(map[string]map[string]uint64), make(map[string]map[string]uint64), common.Empty)
 			if testCase.hasError {
 				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent max applications")
 			} else {
@@ -1231,7 +1200,7 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 					},
 				},
 			},
-			errMsg: "MaxApplications is 0",
+			errMsg: "",
 		},
 		{
 			name: "group maxapplications is 0",
@@ -1256,7 +1225,7 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 					},
 				},
 			},
-			errMsg: "MaxApplications is 0",
+			errMsg: "",
 		},
 		{
 			name: "user wildcard is not last entry",

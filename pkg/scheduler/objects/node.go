@@ -113,6 +113,11 @@ func (sn *Node) String() string {
 func (sn *Node) initializeAttribute(newAttributes map[string]string) {
 	sn.attributes = newAttributes
 
+	// Avoid passing empty nodeAttributes in initializeAttribute
+	if len(sn.attributes) == 0 {
+		sn.attributes = map[string]string{}
+	}
+
 	sn.Hostname = sn.attributes[common.HostName]
 	sn.Rackname = sn.attributes[common.RackName]
 	sn.Partition = sn.attributes[common.NodePartition]

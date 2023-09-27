@@ -86,7 +86,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_total",
-			Help:      "Total number of applications. State of the application includes `running` and `completed`.",
+			Help:      "Total number of applications. State of the application includes `running`, `completed` and `failed`.",
 		}, []string{"state"})
 
 	s.node = prometheus.NewGaugeVec(

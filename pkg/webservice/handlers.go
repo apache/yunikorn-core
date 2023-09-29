@@ -424,9 +424,17 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	conf := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
 	var marshalledConf []byte
 	var err error
+
+	// merge core config with extra config
+	schedulerConf := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
+	extraConfig := configs.GetConfigMap()
+	conf := dao.ConfigDAOInfo{
+		SchedulerConfig: schedulerConf,
+		Extra:           extraConfig,
+	}
+
 	// check if we have a request for json output
 	if r.Header.Get("Accept") == "application/json" {
 		marshalledConf, err = json.Marshal(&conf)

@@ -40,7 +40,7 @@ func TestQTIncreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
 
-	result := queueTracker.increaseTrackedResource(queuePath1, TestApp1, user, usage1)
+	result := queueTracker.increaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, user, usage1)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
@@ -49,7 +49,7 @@ func TestQTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = queueTracker.increaseTrackedResource(queuePath2, TestApp2, user, usage2)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp2, user, usage2)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage2)
 	}
@@ -58,7 +58,7 @@ func TestQTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = queueTracker.increaseTrackedResource(queuePath3, TestApp3, user, usage3)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath3, configs.DOT), TestApp3, user, usage3)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath3, TestApp3, usage3)
 	}
@@ -67,7 +67,7 @@ func TestQTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = queueTracker.increaseTrackedResource(queuePath4, TestApp4, user, usage4)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath4, configs.DOT), TestApp4, user, usage4)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath4, TestApp4, usage4)
 	}
@@ -93,7 +93,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
 
-	result := queueTracker.increaseTrackedResource(queuePath1, TestApp1, user, usage1)
+	result := queueTracker.increaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, user, usage1)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
@@ -103,7 +103,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = queueTracker.increaseTrackedResource(queuePath2, TestApp2, user, usage2)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp2, user, usage2)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage2)
 	}
@@ -120,13 +120,13 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	removeQT, decreased := queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
+	removeQT, decreased := queueTracker.decreaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, usage3, false)
 	if !decreased {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
 	}
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 
-	removeQT, decreased = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
+	removeQT, decreased = queueTracker.decreaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp2, usage3, false)
 	if !decreased {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage3, err)
 	}
@@ -143,7 +143,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	removeQT, decreased = queueTracker.decreaseTrackedResource(queuePath1, TestApp1, usage4, true)
+	removeQT, decreased = queueTracker.decreaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, usage4, true)
 	if !decreased {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
 	}
@@ -156,7 +156,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage5)
 	}
-	removeQT, decreased = queueTracker.decreaseTrackedResource(queuePath2, TestApp2, usage5, true)
+	removeQT, decreased = queueTracker.decreaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp2, usage5, true)
 	if !decreased {
 		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
 	}
@@ -166,7 +166,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
 
 	// Test parent queueTracker has not zero usage, but child queueTrackers has all deleted
-	result = queueTracker.increaseTrackedResource(queuePath1, TestApp1, user, usage1)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, user, usage1)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
@@ -176,7 +176,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = queueTracker.increaseTrackedResource("root.parent", TestApp2, user, usage2)
+	result = queueTracker.increaseTrackedResource([]string{"root", "parent"}, TestApp2, user, usage2)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", "root.parent", TestApp2, usage2)
 	}
@@ -216,37 +216,37 @@ func TestQTQuotaEnforcement(t *testing.T) {
 	child2QueueTracker.maxRunningApps = 2
 	parentQueueTracker.childQueueTrackers["child2"] = child2QueueTracker
 
-	result := queueTracker.increaseTrackedResource(queuePath1, TestApp1, user, usage1)
+	result := queueTracker.increaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, user, usage1)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(queuePath2, TestApp2, user, usage1)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp2, user, usage1)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(queuePath2, TestApp2, user, usage1)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp2, user, usage1)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(queuePath2, TestApp3, user, usage1)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp3, user, usage1)
 	if result {
 		t.Fatalf("Increasing resource usage should fail as child2's resource usage exceeded configured max resources limit. queuepath %s, app %s, res %v", queuePath2, TestApp3, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(queuePath3, TestApp3, user, usage1)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath3, configs.DOT), TestApp3, user, usage1)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath3, TestApp3, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(queuePath4, TestApp4, user, usage1)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath4, configs.DOT), TestApp4, user, usage1)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath4, TestApp4, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(queuePath4, TestApp4, user, usage1)
+	result = queueTracker.increaseTrackedResource(strings.Split(queuePath4, configs.DOT), TestApp4, user, usage1)
 	if result {
 		t.Fatalf("Increasing resource usage should fail as parent's resource usage exceeded configured max resources limit. queuepath %s, app %s, res %v", queuePath4, TestApp4, usage1)
 	}
@@ -259,9 +259,11 @@ func TestHeadroom(t *testing.T) {
 
 	// nothing exists make sure the hierarchy gets created
 	root := newRootQueueTracker()
-	parent := root.getChildQueueTracker("root.parent")
+	root.childQueueTrackers["parent"] = newQueueTracker("root", "parent")
+	parent := root.childQueueTrackers["parent"]
 	assert.Assert(t, parent != nil, "parent queue tracker should have been created")
-	leaf := root.getChildQueueTracker(path)
+	parent.childQueueTrackers["leaf"] = newQueueTracker("root.parent", "leaf")
+	leaf := parent.childQueueTrackers["leaf"]
 	assert.Assert(t, leaf != nil, "leaf queue tracker should have been created")
 
 	// auto created trackers no max resource set

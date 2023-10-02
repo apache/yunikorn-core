@@ -284,7 +284,7 @@ func (m *SchedulerMetrics) SetTotalApplicationsRunning(value int) {
 	m.application.With(prometheus.Labels{"state": "running"}).Set(float64(value))
 }
 
-func (m *SchedulerMetrics) getTotalApplicationsRunning() (int, error) {
+func (m *SchedulerMetrics) GetTotalApplicationsRunning() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.application.With(prometheus.Labels{"state": "running"}).Write(metricDto)
 	if err == nil {

@@ -108,7 +108,7 @@ type CoreSchedulerMetrics interface {
 	DecTotalApplicationsRunning()
 	SubTotalApplicationsRunning(value int)
 	SetTotalApplicationsRunning(value int)
-	getTotalApplicationsRunning() (int, error)
+	GetTotalApplicationsRunning() (int, error)
 
 	// Metrics Ops related to TotalApplicationsFailed
 	IncTotalApplicationsFailed()

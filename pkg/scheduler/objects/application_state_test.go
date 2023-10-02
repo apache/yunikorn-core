@@ -27,6 +27,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -302,4 +303,109 @@ func TestAppStateTransitionEvents(t *testing.T) {
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_FAILED, records[5])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_EXPIRED, records[6])
 	isStateChangeEvent(t, appInfo, si.EventRecord_APP_RESUMING, records[7])
+}
+
+func TestAppStateTransitionMetrics(t *testing.T) {
+	// Test New -> Accepted -> Starting -> Running -> Completing-> Completed
+	metrics.GetSchedulerMetrics().Reset()
+	app := newApplication("app-00001", "default", "root.a")
+	totalAppsRunning := getTotalAppsRunning(t)
+	assert.Equal(t, totalAppsRunning, 0)
+	// New -> Accepted
+	err := app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected New to Accepted")
+	// Accepted -> Starting
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected Accepted to Starting")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Starting.String())
+	assert.Equal(t, totalAppsRunning, 1)
+	// Starting -> Running
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected Starting to Running")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Running.String())
+	assert.Equal(t, totalAppsRunning, 1)
+	// Running -> Completing
+	err = app.HandleApplicationEvent(CompleteApplication)
+	assert.NilError(t, err, "no error expected Running to Completing")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Completing.String())
+	assert.Equal(t, totalAppsRunning, 0)
+	// Completing -> Completed
+	err = app.HandleApplicationEvent(CompleteApplication)
+	assert.NilError(t, err, "no error expected Completing to Completed")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Completed.String())
+	assert.Equal(t, totalAppsRunning, 0)
+
+	// Test New -> Accepted -> Starting -> Completing -> Running -> Completing-> Completed
+	metrics.GetSchedulerMetrics().Reset()
+	app = newApplication("app-00002", "default", "root.a")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, totalAppsRunning, 0)
+	// New -> Accepted
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected New to Accepted")
+	// Accepted -> Starting
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected Accepted to Starting")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Starting.String())
+	assert.Equal(t, totalAppsRunning, 1)
+	// Starting -> Completing
+	err = app.HandleApplicationEvent(CompleteApplication)
+	assert.NilError(t, err, "no error expected Starting to Completing")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Completing.String())
+	assert.Equal(t, totalAppsRunning, 0)
+	// Completing -> Running
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected Completing to Running")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Running.String())
+	assert.Equal(t, totalAppsRunning, 1)
+	// Running -> Completing
+	err = app.HandleApplicationEvent(CompleteApplication)
+	assert.NilError(t, err, "no error expected Running to Completing")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Completing.String())
+	assert.Equal(t, totalAppsRunning, 0)
+	// Completing -> Completed
+	err = app.HandleApplicationEvent(CompleteApplication)
+	assert.NilError(t, err, "no error expected Completing to Completed")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Completed.String())
+	assert.Equal(t, totalAppsRunning, 0)
+
+	// Test New -> Accepted -> Starting -> Failing -> Failed
+	metrics.GetSchedulerMetrics().Reset()
+	app = newApplication("app-00003", "default", "root.a")
+	// New -> Accepted
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected New to Accepted")
+	// Accepted -> Starting
+	err = app.HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "no error expected Accepted to Starting")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Starting.String())
+	assert.Equal(t, totalAppsRunning, 1)
+	// Starting -> Failing
+	err = app.HandleApplicationEvent(FailApplication)
+	assert.NilError(t, err, "no error expected Starting to Failing")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Failing.String())
+	assert.Equal(t, totalAppsRunning, 0)
+	// Failing -> Failed
+	err = app.HandleApplicationEvent(FailApplication)
+	assert.NilError(t, err, "no error expected Failing to Failed")
+	totalAppsRunning = getTotalAppsRunning(t)
+	assert.Equal(t, app.CurrentState(), Failed.String())
+	assert.Equal(t, totalAppsRunning, 0)
+}
+
+func getTotalAppsRunning(t *testing.T) int {
+	totalAppsRunning, err := metrics.GetSchedulerMetrics().GetTotalApplicationsRunning()
+	assert.NilError(t, err, "no error expected when getting total running application count.")
+	return totalAppsRunning
 }

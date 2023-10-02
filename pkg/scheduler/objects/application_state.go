@@ -205,6 +205,14 @@ func NewAppState() *fsm.FSM {
 					app.rejectedMessage = event.Args[1].(string) //nolint:errcheck
 				}
 			},
+			fmt.Sprintf("enter_%s", Running.String()): func(_ context.Context, event *fsm.Event) {
+				if event.Src == Completing.String() {
+					app := event.Args[0].(*Application) //nolint:errcheck
+					app.queue.incRunningApps(app.ApplicationID)
+					metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRunning()
+					metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
+				}
+			},
 			fmt.Sprintf("leave_%s", Running.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				app.queue.decRunningApps()
@@ -231,6 +239,11 @@ func NewAppState() *fsm.FSM {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsFailed()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsFailed()
+				if event.Src == Starting.String() {
+					app.queue.decRunningApps()
+					metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
+					metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
+				}
 			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck

@@ -257,6 +257,14 @@ const queueName = "root.default"
 const nodeID = "node-1"
 const instType = "itype-1"
 
+var (
+	updatedExtraConf = map[string]string{
+		"log.level":                  "info",
+		"service.schedulingInterval": "1s",
+		"admissionController.accessControl.bypassAuth": "false",
+	}
+)
+
 // setup To take care of setting up config, cluster, partitions etc
 func setup(t *testing.T, config string, partitionCount int) *scheduler.PartitionContext {
 	var err error
@@ -481,7 +489,7 @@ func TestGetConfigYAML(t *testing.T) {
 	resp := &MockResponseWriter{}
 	getClusterConfig(resp, req)
 	// yaml unmarshal handles the checksum add the end automatically in this implementation
-	conf := &configs.SchedulerConfig{}
+	conf := &dao.ConfigDAOInfo{}
 	err = yaml.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
@@ -492,6 +500,8 @@ func TestGetConfigYAML(t *testing.T) {
 	// change the config
 	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
+	configs.SetConfigMap(updatedExtraConf)
+
 	// check that we return yaml by default, unmarshal will error when we don't
 	req.Header.Set("Accept", "unknown")
 	getClusterConfig(resp, req)
@@ -499,6 +509,10 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in output")
+	assert.Assert(t, reflect.DeepEqual(conf.Extra, updatedExtraConf), "extra config did not change")
+
+	// reset extra config map
+	configs.SetConfigMap(map[string]string{})
 }
 
 func TestGetConfigJSON(t *testing.T) {
@@ -510,7 +524,7 @@ func TestGetConfigJSON(t *testing.T) {
 	resp := &MockResponseWriter{}
 	getClusterConfig(resp, req)
 
-	conf := &configs.SchedulerConfig{}
+	conf := &dao.ConfigDAOInfo{}
 	err := json.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (json)")
 	startConfSum := conf.Checksum
@@ -519,12 +533,17 @@ func TestGetConfigJSON(t *testing.T) {
 	// change the config
 	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
+	configs.SetConfigMap(updatedExtraConf)
 
 	getClusterConfig(resp, req)
 	err = json.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in json output: %s, %s", startConfSum, conf.Checksum)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
+	assert.Assert(t, reflect.DeepEqual(conf.Extra, updatedExtraConf), "extra config did not change")
+
+	// reset extra config map
+	configs.SetConfigMap(map[string]string{})
 }
 
 func TestBuildUpdateResponseSuccess(t *testing.T) {

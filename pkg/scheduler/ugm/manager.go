@@ -338,13 +338,7 @@ func (m *Manager) UpdateConfig(config configs.QueueConfig, queuePath string) err
 	}
 	m.userLimits = make(map[string]map[string]bool)
 	m.groupLimits = make(map[string]map[string]bool)
-	if err := m.internalProcessConfig(config, queuePath, earlierUserLimits, earlierGroupLimits); err != nil {
-		return err
-	}
-	// clean up the copies of user and group limits
-	earlierUserLimits = make(map[string]map[string]bool)
-	earlierGroupLimits = make(map[string]map[string]bool)
-	return nil
+	return m.internalProcessConfig(config, queuePath, earlierUserLimits, earlierGroupLimits)
 }
 
 func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath string, earlierUserLimits map[string]map[string]bool, earlierGroupLimits map[string]map[string]bool) error {
@@ -428,7 +422,6 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 // clearEarlierSetLimits Clear already configured limits of users and groups for which limits have been configured before but not now
 func (m *Manager) clearEarlierSetLimits(currentUserLimits map[string]bool, currentGroupLimits map[string]bool, earlierUserLimits map[string]map[string]bool,
 	earlierGroupLimits map[string]map[string]bool, queuePath string) error {
-
 	// Clear already configured limits of group for which limits have been configured before but not now
 	for _, gt := range m.groupTrackers {
 		appUsersMap := m.clearEarlierSetGroupLimits(gt, queuePath, currentGroupLimits, earlierGroupLimits)

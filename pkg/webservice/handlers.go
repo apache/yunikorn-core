@@ -630,19 +630,6 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func setLogLevel(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	log.Log(log.Deprecation).Warn("Setting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release.")
-}
-
-func getLogLevel(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	log.Log(log.Deprecation).Warn("Getting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release.")
-	if _, err := w.Write([]byte("info")); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
 func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
 	var result []*dao.PartitionInfo
 

@@ -21,6 +21,7 @@ package ugm
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -224,19 +225,19 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	assert.Equal(t, user.User, manager.GetUserTracker(user.User).userName)
 	assert.Equal(t, user1.User, manager.GetUserTracker(user1.User).userName)
 
-	assert.Equal(t, true, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(queuePath1))
-	assert.Equal(t, true, manager.GetUserTracker(user1.User).queueTracker.IsQueuePathTrackedCompletely(queuePath2))
-	assert.Equal(t, false, manager.GetUserTracker(user1.User).queueTracker.IsQueuePathTrackedCompletely(queuePath1))
-	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(queuePath2))
-	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(queuePath3))
-	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(queuePath4))
+	assert.Equal(t, true, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
+	assert.Equal(t, true, manager.GetUserTracker(user1.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user1.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath3, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath4, configs.DOT)))
 
-	assert.Equal(t, true, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(queuePath1))
-	assert.Equal(t, true, manager.GetUserTracker(user1.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(queuePath2))
-	assert.Equal(t, false, manager.GetUserTracker(user1.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(queuePath1))
-	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(queuePath2))
-	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(queuePath3))
-	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(queuePath4))
+	assert.Equal(t, true, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
+	assert.Equal(t, true, manager.GetUserTracker(user1.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user1.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath3, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath4, configs.DOT)))
 
 	usage3, err := resources.NewResourceFromConf(map[string]string{"mem": "5M", "vcore": "5"})
 	if err != nil {

@@ -25,19 +25,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 )
 
-func getChildQueuePath(queuePath string) (string, string) {
-	idx := strings.Index(queuePath, configs.DOT)
-	if idx == -1 {
-		return "", ""
-	}
-	childQueuePath := queuePath[idx+1:]
-	idx = strings.Index(childQueuePath, configs.DOT)
-	if idx == -1 {
-		return childQueuePath, childQueuePath
-	}
-	return childQueuePath, childQueuePath[:idx]
-}
-
 // getParentPath return the path of the parent queue and an empty string if this queue is
 // the root queue.
 func getParentPath(queuePath string) string {

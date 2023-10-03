@@ -540,6 +540,28 @@ func TestUpdateConfigClearEarlierSetLimits(t *testing.T) {
 	assert.Equal(t, len(manager.groupWildCardLimitsConfig), 0)
 }
 
+func TestUpdateConfigClearEarlierSetGroupLimits(t *testing.T) {
+	setupUGM()
+	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
+	conf := createConfigWithGroupOnly(user.Groups[0], 50, 5)
+
+	manager := GetUserManager()
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+	usage, err := resources.NewResourceFromConf(map[string]string{"memory": "25", "vcores": "25"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+	}
+	cQueue := "root.parent.leaf"
+	for i := 1; i <= 2; i++ {
+		increased := manager.IncreaseTrackedResource(cQueue, TestApp1, usage, user)
+		assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+cQueue+", app "+TestApp1+", res "+usage.String())
+	}
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+	increased := manager.IncreaseTrackedResource(cQueue, TestApp1, usage, user)
+	assert.Equal(t, increased, false, "unable to increase tracked resource: queuepath "+cQueue+", app "+TestApp1+", res "+usage.String())
+}
+
 func TestSetMaxLimitsForRemovedUsers(t *testing.T) {
 	setupUGM()
 	// Queue setup:
@@ -1296,6 +1318,48 @@ func createConfigWithDifferentGroups(user string, group string, resourceKey stri
 							"vcores": strconv.Itoa(mem * 2),
 						},
 						MaxApplications: maxApps * 2,
+					},
+				},
+			},
+		},
+	}
+	return conf
+}
+
+func createConfigWithGroupOnly(group string, mem int, maxApps uint64) configs.PartitionConfig {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "parent",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:      "leaf",
+								Parent:    false,
+								SubmitACL: "*",
+								Queues:    nil,
+							},
+						},
+						Limits: []configs.Limit{
+							{
+								Limit: "parent queue limit",
+								Groups: []string{
+									group,
+								},
+								MaxResources: map[string]string{
+									"memory": strconv.Itoa(mem),
+									"vcores": strconv.Itoa(mem),
+								},
+								MaxApplications: maxApps,
+							},
+						},
 					},
 				},
 			},

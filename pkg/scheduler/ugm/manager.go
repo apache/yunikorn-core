@@ -39,9 +39,11 @@ var m *Manager
 type Manager struct {
 	userTrackers              map[string]*UserTracker
 	groupTrackers             map[string]*GroupTracker
-	userWildCardLimitsConfig  map[string]*LimitConfig // Hold limits settings of user '*'
-	groupWildCardLimitsConfig map[string]*LimitConfig // Hold limits settings of group '*'
-	configuredGroups          map[string][]string     // Hold groups for all configured queue paths.
+	userWildCardLimitsConfig  map[string]*LimitConfig    // Hold limits settings of user '*'
+	groupWildCardLimitsConfig map[string]*LimitConfig    // Hold limits settings of group '*'
+	configuredGroups          map[string][]string        // Hold groups for all configured queue paths.
+	userLimits                map[string]map[string]bool // Holds queue path * user limit config
+	groupLimits               map[string]map[string]bool // Holds queue path * group limit config
 	sync.RWMutex
 }
 
@@ -318,13 +320,36 @@ func (m *Manager) UpdateConfig(config configs.QueueConfig, queuePath string) err
 	m.userWildCardLimitsConfig = make(map[string]*LimitConfig)
 	m.groupWildCardLimitsConfig = make(map[string]*LimitConfig)
 	m.configuredGroups = make(map[string][]string)
-	return m.internalProcessConfig(config, queuePath)
+
+	// deep copy of the existing user and group limits
+	earlierUserLimits := make(map[string]map[string]bool)
+	earlierGroupLimits := make(map[string]map[string]bool)
+	for k, v := range m.userLimits {
+		if _, ok := earlierUserLimits[k]; !ok {
+			earlierUserLimits[k] = make(map[string]bool)
+		}
+		earlierUserLimits[k] = v
+	}
+	for k, v := range m.groupLimits {
+		if _, ok := earlierGroupLimits[k]; !ok {
+			earlierGroupLimits[k] = make(map[string]bool)
+		}
+		earlierGroupLimits[k] = v
+	}
+	m.userLimits = make(map[string]map[string]bool)
+	m.groupLimits = make(map[string]map[string]bool)
+	if err := m.internalProcessConfig(config, queuePath, earlierUserLimits, earlierGroupLimits); err != nil {
+		return err
+	}
+	// clean up the copies of user and group limits
+	earlierUserLimits = make(map[string]map[string]bool)
+	earlierGroupLimits = make(map[string]map[string]bool)
+	return nil
 }
 
-func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath string) error {
-	// Holds user and group for which limits have been configured with specific queue path
-	userLimits := make(map[string]bool)
-	groupLimits := make(map[string]bool)
+func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath string, earlierUserLimits map[string]map[string]bool, earlierGroupLimits map[string]map[string]bool) error {
+	currentUserLimits := make(map[string]bool)
+	currentGroupLimits := make(map[string]bool)
 	// Traverse limits of specific queue path
 	for _, limit := range cur.Limits {
 		var maxResource *resources.Resource
@@ -351,9 +376,14 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 				m.userWildCardLimitsConfig[queuePath] = limitConfig
 				continue
 			}
-			if err := m.processUserConfig(user, limitConfig, queuePath, userLimits); err != nil {
+			if err := m.setUserLimits(user, limitConfig, queuePath); err != nil {
 				return err
 			}
+			currentUserLimits[user] = true
+			if _, ok := m.userLimits[queuePath]; !ok {
+				m.userLimits[queuePath] = make(map[string]bool)
+			}
+			m.userLimits[queuePath][user] = true
 		}
 		for _, group := range limit.Groups {
 			if group == common.Empty {
@@ -365,9 +395,14 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 				zap.String("queue path", queuePath),
 				zap.Uint64("max application", limit.MaxApplications),
 				zap.Any("max resources", limit.MaxResources))
-			if err := m.processGroupConfig(group, limitConfig, queuePath, groupLimits); err != nil {
+			if err := m.setGroupLimits(group, limitConfig, queuePath); err != nil {
 				return err
 			}
+			currentGroupLimits[group] = true
+			if _, ok := m.groupLimits[queuePath]; !ok {
+				m.groupLimits[queuePath] = make(map[string]bool)
+			}
+			m.groupLimits[queuePath][group] = true
 			if group == common.Wildcard {
 				m.groupWildCardLimitsConfig[queuePath] = limitConfig
 			} else {
@@ -375,14 +410,14 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			}
 		}
 	}
-	if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
+	if err := m.clearEarlierSetLimits(currentUserLimits, currentGroupLimits, earlierUserLimits, earlierGroupLimits, queuePath); err != nil {
 		return err
 	}
 
 	if len(cur.Queues) > 0 {
 		for _, child := range cur.Queues {
 			childQueuePath := queuePath + configs.DOT + child.Name
-			if err := m.internalProcessConfig(child, childQueuePath); err != nil {
+			if err := m.internalProcessConfig(child, childQueuePath, earlierUserLimits, earlierGroupLimits); err != nil {
 				return err
 			}
 		}
@@ -390,27 +425,13 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 	return nil
 }
 
-func (m *Manager) processUserConfig(user string, limitConfig *LimitConfig, queuePath string, userLimits map[string]bool) error {
-	if err := m.setUserLimits(user, limitConfig, queuePath); err != nil {
-		return err
-	}
-	userLimits[user] = true
-	return nil
-}
-
-func (m *Manager) processGroupConfig(group string, limitConfig *LimitConfig, queuePath string, groupLimits map[string]bool) error {
-	if err := m.setGroupLimits(group, limitConfig, queuePath); err != nil {
-		return err
-	}
-	groupLimits[group] = true
-	return nil
-}
-
 // clearEarlierSetLimits Clear already configured limits of users and groups for which limits have been configured before but not now
-func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits map[string]bool, queuePath string) error {
+func (m *Manager) clearEarlierSetLimits(currentUserLimits map[string]bool, currentGroupLimits map[string]bool, earlierUserLimits map[string]map[string]bool,
+	earlierGroupLimits map[string]map[string]bool, queuePath string) error {
+
 	// Clear already configured limits of group for which limits have been configured before but not now
 	for _, gt := range m.groupTrackers {
-		appUsersMap := m.clearEarlierSetGroupLimits(gt, queuePath, groupLimits)
+		appUsersMap := m.clearEarlierSetGroupLimits(gt, queuePath, currentGroupLimits, earlierGroupLimits)
 		if len(appUsersMap) > 0 {
 			for app, user := range appUsersMap {
 				ut := m.userTrackers[user]
@@ -421,65 +442,68 @@ func (m *Manager) clearEarlierSetLimits(userLimits map[string]bool, groupLimits 
 
 	// Clear already configured limits of user for which limits have been configured before but not now
 	for _, ut := range m.userTrackers {
-		m.clearEarlierSetUserLimits(ut, queuePath, userLimits)
+		m.clearEarlierSetUserLimits(ut, queuePath, currentUserLimits, earlierUserLimits)
 	}
 	return nil
 }
 
-func (m *Manager) clearEarlierSetUserLimits(ut *UserTracker, queuePath string, userLimits map[string]bool) {
+func (m *Manager) clearEarlierSetUserLimits(ut *UserTracker, queuePath string, currentUserLimits map[string]bool, earlierUserLimits map[string]map[string]bool) {
+	u := ut.userName
+	// Need to clear user config only when
+	// 1. config set earlier but not now
+	// 2. user already tracked for the queue path
+	earlier := earlierUserLimits[queuePath][u]
+	current := currentUserLimits[u]
 	// Is this user already tracked for the queue path?
-	if ut.IsQueuePathTrackedCompletely(queuePath) {
-		u := ut.userName
-		// Is there any limit config set for user in the current configuration? If not, then clear those old limit settings
-		if _, ok := userLimits[u]; !ok {
-			log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
+	if earlier && !current && ut.IsQueuePathTrackedCompletely(queuePath) {
+		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
+			zap.String("user", u),
+			zap.String("queue path", queuePath))
+		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
+		if ut.IsUnlinkRequired(queuePath) {
+			ut.UnlinkQT(queuePath)
+		} else {
+			ut.setLimits(queuePath, resources.NewResource(), 0)
+			log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for user",
 				zap.String("user", u),
 				zap.String("queue path", queuePath))
-			// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
-			if ut.IsUnlinkRequired(queuePath) {
-				ut.UnlinkQT(queuePath)
-			} else {
-				ut.setLimits(queuePath, resources.NewResource(), 0)
-				log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for user",
-					zap.String("user", u),
-					zap.String("queue path", queuePath))
-			}
-			// Does "root" queue has any child queue trackers? At some point during this whole traversal, root might
-			// not have any child queue trackers. When the situation comes, remove the linkage between the user and
-			// its root queue tracker
-			if ut.canBeRemoved() {
-				delete(m.userTrackers, ut.userName)
-			}
+		}
+		// Does "root" queue has any child queue trackers? At some point during this whole traversal, root might
+		// not have any child queue trackers. When the situation comes, remove the linkage between the user and
+		// its root queue tracker
+		if ut.canBeRemoved() {
+			delete(m.userTrackers, ut.userName)
 		}
 	}
 }
 
-func (m *Manager) clearEarlierSetGroupLimits(gt *GroupTracker, queuePath string, groupLimits map[string]bool) map[string]string {
+func (m *Manager) clearEarlierSetGroupLimits(gt *GroupTracker, queuePath string, currentGroupLimits map[string]bool, earlierGroupLimits map[string]map[string]bool) map[string]string {
 	appUsersMap := make(map[string]string)
-	// Is this group already tracked for the queue path?
-	if gt.IsQueuePathTrackedCompletely(queuePath) {
-		g := gt.groupName
-		// Is there any limit config set for group in the current configuration? If not, then clear those old limit settings
-		if ok := groupLimits[g]; !ok {
-			log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for group",
+	g := gt.groupName
+	// Need to clear group config only when
+	// 1. config set earlier but not now
+	// 2. group already tracked for the queue path
+	earlier := earlierGroupLimits[queuePath][g]
+	current := currentGroupLimits[g]
+	if earlier && !current && gt.IsQueuePathTrackedCompletely(queuePath) {
+		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for group",
+			zap.String("group", g),
+			zap.String("queue path", queuePath))
+		appUsersMap = gt.decreaseAllTrackedResourceUsage(queuePath)
+		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
+		if gt.IsUnlinkRequired(queuePath) {
+			gt.UnlinkQT(queuePath)
+		} else {
+			gt.setLimits(queuePath, resources.NewResource(), 0)
+			log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for group",
 				zap.String("group", g),
 				zap.String("queue path", queuePath))
-			appUsersMap = gt.decreaseAllTrackedResourceUsage(queuePath)
-			// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
-			if gt.IsUnlinkRequired(queuePath) {
-				gt.UnlinkQT(queuePath)
-			} else {
-				gt.setLimits(queuePath, resources.NewResource(), 0)
-				log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for group",
-					zap.String("group", g),
-					zap.String("queue path", queuePath))
-			}
-			// Does "root" queue has any child queue trackers? At some point during this whole traversal, root might
-			// not have any child queue trackers. When the situation comes, remove the linkage between the group and
-			// its root queue tracker
-			if gt.canBeRemoved() {
-				delete(m.groupTrackers, gt.groupName)
-			}
+		}
+		// Does "root" queue has any child queue trackers? At some point during this whole traversal, root might
+		// not have any child queue trackers. When the situation comes, remove the linkage between the group and
+		// its root queue tracker
+		if gt.canBeRemoved() {
+			delete(m.groupTrackers, gt.groupName)
 		}
 	}
 	return appUsersMap

@@ -768,8 +768,6 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 			log.Log(log.SchedPartition).Warn("failed to release resources from queue",
 				zap.String("appID", alloc.GetApplicationID()),
 				zap.Error(err))
-		} else {
-			metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		}
 		// remove preempted resources
 		if alloc.IsPreempted() {
@@ -781,6 +779,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 
 		// the allocation is removed so add it to the list that we return
 		released = append(released, alloc)
+		metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		log.Log(log.SchedPartition).Info("allocation removed from node",
 			zap.String("nodeID", node.NodeID),
 			zap.String("allocationId", allocID))
@@ -1356,8 +1355,6 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid),
 				zap.Error(err))
-		} else {
-			metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		}
 	}
 	if resources.StrictlyGreaterThanZero(totalPreempting) {
@@ -1371,6 +1368,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 	// track the number of allocations, when we replace the result is no change
 	pc.updateAllocationCount(-len(released))
+	metrics.GetQueueMetrics(queue.GetQueuePath()).AddReleasedContainers(len(released))
 
 	// if the termination type is timeout, we don't notify the shim, because it's
 	// originated from that side

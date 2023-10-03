@@ -108,6 +108,10 @@ func (m *QueueMetrics) IncReleasedContainer() {
 	m.appMetrics.With(prometheus.Labels{"state": "released"}).Inc()
 }
 
+func (m *QueueMetrics) AddReleasedContainers(value int) {
+	m.appMetrics.With(prometheus.Labels{"state": "released"}).Add(float64(value))
+}
+
 func (m *QueueMetrics) SetQueueGuaranteedResourceMetrics(resourceName string, value float64) {
 	m.ResourceMetrics.With(prometheus.Labels{"state": "guaranteed", "resource": resourceName}).Set(value)
 }

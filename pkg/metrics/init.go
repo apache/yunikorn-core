@@ -54,6 +54,7 @@ type CoreQueueMetrics interface {
 	IncQueueApplicationsCompleted()
 	IncAllocatedContainer()
 	IncReleasedContainer()
+	AddReleasedContainers(value int)
 	SetQueueGuaranteedResourceMetrics(resourceName string, value float64)
 	SetQueueMaxResourceMetrics(resourceName string, value float64)
 	SetQueueAllocatedResourceMetrics(resourceName string, value float64)

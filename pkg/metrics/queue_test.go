@@ -86,6 +86,14 @@ func TestReleasedContainers(t *testing.T) {
 	verifyAppMetrics(t, "released")
 }
 
+func TestAddReleasedContainers(t *testing.T) {
+	cqm = getQueueMetrics()
+	defer unregisterQueueMetrics(t)
+
+	cqm.AddReleasedContainers(1)
+	verifyAppMetrics(t, "released")
+}
+
 func TestQueueGuaranteedResourceMetrics(t *testing.T) {
 	cqm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)

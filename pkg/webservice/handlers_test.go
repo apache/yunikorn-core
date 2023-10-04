@@ -1292,6 +1292,15 @@ func TestValidateQueue(t *testing.T) {
 }
 
 func TestFullStateDumpPath(t *testing.T) {
+	original := configs.GetConfigMap()
+	defer func() {
+		configs.SetConfigMap(original)
+	}()
+	configMap := map[string]string{
+		"log.level": "WARN",
+	}
+	configs.SetConfigMap(configMap)
+
 	schedulerContext = prepareSchedulerContext(t, false)
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
@@ -1622,4 +1631,6 @@ func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
 	assert.Check(t, len(aggregated.ClusterInfo) > 0)
 	assert.Check(t, len(aggregated.Queues) > 0)
 	assert.Check(t, len(aggregated.LogLevel) > 0)
+	assert.Check(t, len(aggregated.Config.SchedulerConfig.Partitions) > 0)
+	assert.Check(t, len(aggregated.Config.Extra) > 0)
 }

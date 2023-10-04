@@ -427,13 +427,7 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	var marshalledConf []byte
 	var err error
 
-	// merge core config with extra config
-	schedulerConf := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
-	extraConfig := configs.GetConfigMap()
-	conf := dao.ConfigDAOInfo{
-		SchedulerConfig: schedulerConf,
-		Extra:           extraConfig,
-	}
+	conf := getClusterConfigDAO()
 
 	// check if we have a request for json output
 	if r.Header.Get("Accept") == "application/json" {
@@ -448,6 +442,16 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	if _, err = w.Write(marshalledConf); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func getClusterConfigDAO() *dao.ConfigDAOInfo {
+	// merge core config with extra config
+	conf := dao.ConfigDAOInfo{
+		SchedulerConfig: configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()),
+		Extra:           configs.GetConfigMap(),
+	}
+
+	return &conf
 }
 
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {

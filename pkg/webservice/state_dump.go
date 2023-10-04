@@ -47,6 +47,7 @@ type AggregatedStateInfo struct {
 	Queues           []dao.PartitionQueueDAOInfo      `json:"queues,omitempty"`
 	RMDiagnostics    map[string]interface{}           `json:"rmDiagnostics,omitempty"`
 	LogLevel         string                           `json:"logLevel,omitempty"`
+	Config           *dao.ConfigDAOInfo               `json:"config,omitempty"`
 }
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {
@@ -80,6 +81,7 @@ func doStateDump(w io.Writer) error {
 		Queues:           getPartitionQueuesDAO(partitionContext),
 		RMDiagnostics:    getResourceManagerDiagnostics(),
 		LogLevel:         zapConfig.Level.Level().String(),
+		Config:           getClusterConfigDAO(),
 	}
 
 	var prettyJSON []byte

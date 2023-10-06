@@ -420,10 +420,11 @@ func (m *Manager) GroupConfighasChanged(group string, limitConfig *LimitConfig) 
 	if !ok {
 		return true
 	}
-	//
+	// maxApplications limit changed
 	if groupTracker.queueTracker.maxRunningApps != limitConfig.maxApplications {
 		return true
 	}
+	// maxResources limit changed
 	if !resources.Equals(groupTracker.queueTracker.maxResources, limitConfig.maxResources) {
 		return true
 	}

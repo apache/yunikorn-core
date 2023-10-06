@@ -325,6 +325,7 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 	// Holds user and group for which limits have been configured with specific queue path
 	userLimits := make(map[string]bool)
 	groupLimits := make(map[string]bool)
+	GroupConfigChanged := false
 	// Traverse limits of specific queue path
 	for _, limit := range cur.Limits {
 		var maxResource *resources.Resource
@@ -365,6 +366,9 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 				zap.String("queue path", queuePath),
 				zap.Uint64("max application", limit.MaxApplications),
 				zap.Any("max resources", limit.MaxResources))
+			if !GroupConfigChanged {
+				GroupConfigChanged = m.GroupConfighasChanged(group, limitConfig)
+			}
 			if err := m.processGroupConfig(group, limitConfig, queuePath, groupLimits); err != nil {
 				return err
 			}
@@ -375,8 +379,11 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 			}
 		}
 	}
-	if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
-		return err
+
+	if GroupConfigChanged {
+		if err := m.clearEarlierSetLimits(userLimits, groupLimits, queuePath); err != nil {
+			return err
+		}
 	}
 
 	if len(cur.Queues) > 0 {
@@ -404,6 +411,23 @@ func (m *Manager) processGroupConfig(group string, limitConfig *LimitConfig, que
 	}
 	groupLimits[group] = true
 	return nil
+}
+
+func (m *Manager) GroupConfighasChanged(group string, limitConfig *LimitConfig) bool {
+	groupTracker, ok := m.groupTrackers[group]
+
+	// new group limits
+	if !ok {
+		return true
+	}
+	//
+	if groupTracker.queueTracker.maxRunningApps != limitConfig.maxApplications {
+		return true
+	}
+	if !resources.Equals(groupTracker.queueTracker.maxResources, limitConfig.maxResources) {
+		return true
+	}
+	return false
 }
 
 // clearEarlierSetLimits Clear already configured limits of users and groups for which limits have been configured before but not now

@@ -1064,6 +1064,57 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 	}
 }
 
+func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name      string
+		user      security.UserGroup
+		limits    []configs.Limit
+		newLimits []configs.Limit
+	}{
+		{
+			name: "maxresources with an updated specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, mediumResource, 2),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUGM()
+
+			manager := GetUserManager()
+			conf := createConfigWithLimits(tc.limits)
+
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			usage, err := resources.NewResourceFromConf(mediumResource)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+			}
+
+			increased := manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
+			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp1+", res "+usage.String())
+
+			increased = manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
+			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
+
+			decreased := manager.DecreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user, true)
+			assert.Equal(t, decreased, true, "unable to decreased tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
+
+			conf.Queues[0].Queues[0].Limits = tc.newLimits
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			increased = manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
+			assert.Equal(t, increased, false, "should not increase tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
+		})
+	}
+}
+
 func createLimit(users, groups []string, maxResources map[string]string, maxApps uint64) configs.Limit {
 	return configs.Limit{
 		Users:           users,

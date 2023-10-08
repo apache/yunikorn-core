@@ -146,7 +146,11 @@ func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllo
 			Released: event.ReleasedAllocations,
 		}
 		rmp.triggerUpdateAllocation(event.RmID, response)
-		metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
+		// If preemption is triggered, we should prevent an increase in the count of released containers until shim detects it.
+		// When shim detects the release of a preempted allocation, the TerminationType will be set to STOPPED_BY_RM.
+		if event.ReleasedAllocations[0].TerminationType != si.TerminationType_PREEMPTED_BY_SCHEDULER {
+			metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
+		}
 	}
 
 	// Done, notify channel

@@ -27,8 +27,9 @@ import (
 
 // QueueMetrics to declare queue metrics
 type QueueMetrics struct {
-	appMetrics      *prometheus.GaugeVec
-	ResourceMetrics *prometheus.GaugeVec
+	appMetrics       *prometheus.GaugeVec
+	containerMetrics *prometheus.CounterVec
+	ResourceMetrics  *prometheus.GaugeVec
 }
 
 // InitQueueMetrics to initialize queue metrics
@@ -42,7 +43,15 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 			Namespace: Namespace,
 			Subsystem: replaceStr,
 			Name:      "queue_app",
-			Help:      "Queue application metrics. State of the application includes `running`, `accepted`, `rejected`, `failed`, `completed`, `allocated`, `released`.",
+			Help:      "Queue application metrics. State of the application includes `accepted`, `rejected`, `running`, `failed`, `completed`.",
+		}, []string{"state"})
+
+	q.containerMetrics = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Subsystem: replaceStr,
+			Name:      "queue_container",
+			Help:      "Queue container metrics. State of the attempt includes `allocated`, `released`.",
 		}, []string{"state"})
 
 	q.ResourceMetrics = prometheus.NewGaugeVec(
@@ -55,6 +64,7 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 
 	var queueMetricsList = []prometheus.Collector{
 		q.appMetrics,
+		q.containerMetrics,
 		q.ResourceMetrics,
 	}
 
@@ -101,15 +111,15 @@ func (m *QueueMetrics) IncQueueApplicationsCompleted() {
 }
 
 func (m *QueueMetrics) IncAllocatedContainer() {
-	m.appMetrics.With(prometheus.Labels{"state": "allocated"}).Inc()
+	m.containerMetrics.With(prometheus.Labels{"state": "allocated"}).Inc()
 }
 
 func (m *QueueMetrics) IncReleasedContainer() {
-	m.appMetrics.With(prometheus.Labels{"state": "released"}).Inc()
+	m.containerMetrics.With(prometheus.Labels{"state": "released"}).Inc()
 }
 
 func (m *QueueMetrics) AddReleasedContainers(value int) {
-	m.appMetrics.With(prometheus.Labels{"state": "released"}).Add(float64(value))
+	m.containerMetrics.With(prometheus.Labels{"state": "released"}).Add(float64(value))
 }
 
 func (m *QueueMetrics) SetQueueGuaranteedResourceMetrics(resourceName string, value float64) {

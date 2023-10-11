@@ -2142,3 +2142,58 @@ partitions:
 	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "group * max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
 }
+
+func TestFieldIsDefault(t *testing.T) {
+	data := `
+partitions:
+  - name: default1
+    placementrules:
+      - name: tag
+        value: namespace
+        create: 
+    queues:
+      - name: root
+        submitacl: '*'
+        maxapplications: 0
+    nodesortpolicy:
+      type:      
+  - name: default2
+    placementrules:
+    - name: tag2
+      value: 
+      create:
+      filter:
+        type: deny
+    queues:
+      - name: root1
+        submitacl: '*'
+        adminacl: ''
+        maxapplications: 0
+        childtemplate:
+          maxapplications: 10
+          properties:
+            application.sort.policy: stateaware
+    nodesortpolicy:
+      type:
+    statedumpfilepath: ""
+`
+
+	conf, err := CreateConfig(data)
+	assert.NilError(t, err, "config parsing should not have failed")
+
+	firstPartition := conf.Partitions[0]
+	secondPartition := conf.Partitions[1]
+
+	assert.Equal(t, true, firstPartition.IsDefault("statedumpfilepath"))
+	assert.Equal(t, false, secondPartition.IsDefault("statedumpfilepath"))
+
+	assert.Equal(t, true, firstPartition.Queues[0].IsDefault("adminacl"))
+	assert.Equal(t, false, secondPartition.Queues[0].IsDefault("adminacl"))
+
+	assert.Equal(t, true, firstPartition.Queues[0].ChildTemplate.IsDefault("maxapplications"))
+
+	assert.Equal(t, true, secondPartition.PlacementRules[0].IsDefault("value"))
+
+	assert.Equal(t, true, firstPartition.PlacementRules[0].Filter.IsDefault("type"))
+	assert.Equal(t, false, secondPartition.PlacementRules[0].Filter.IsDefault("type"))
+}

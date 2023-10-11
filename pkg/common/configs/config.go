@@ -32,11 +32,20 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
+const (
+	stringDefaultValue = "defaultStringValue"
+	uint64DefaultValue = uint64(18446744073709551615) // max in uint64
+)
+
 // The configuration can contain multiple partitions. Each partition contains the queue definition for a logical
 // set of scheduler resources.
 type SchedulerConfig struct {
 	Partitions []PartitionConfig
 	Checksum   string `yaml:",omitempty" json:",omitempty"`
+}
+
+type DefaultValues struct {
+	defaultFields []string
 }
 
 // The partition object for each partition:
@@ -53,6 +62,7 @@ type PartitionConfig struct {
 	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"` // deprecated
 	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
 	StateDumpFilePath string                    `yaml:",omitempty" json:",omitempty"`
+	DefaultValues     `yaml:"-"`
 }
 
 // deprecated
@@ -79,12 +89,14 @@ type QueueConfig struct {
 	ChildTemplate   ChildTemplate     `yaml:",omitempty" json:",omitempty"`
 	Queues          []QueueConfig     `yaml:",omitempty" json:",omitempty"`
 	Limits          []Limit           `yaml:",omitempty" json:",omitempty"`
+	DefaultValues   `yaml:"-"`
 }
 
 type ChildTemplate struct {
 	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
 	Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
 	Resources       Resources         `yaml:",omitempty" json:",omitempty"`
+	DefaultValues   `yaml:"-"`
 }
 
 // The resource limits to set on the queue. The definition allows for an unlimited number of types to be used.
@@ -104,11 +116,12 @@ type Resources struct {
 // - value a generic value interpreted depending on the rule type (i.e queue name for the "fixed" rule
 // or the application label name for the "tag" rule)
 type PlacementRule struct {
-	Name   string
-	Create bool           `yaml:",omitempty" json:",omitempty"`
-	Filter Filter         `yaml:",omitempty" json:",omitempty"`
-	Parent *PlacementRule `yaml:",omitempty" json:",omitempty"`
-	Value  string         `yaml:",omitempty" json:",omitempty"`
+	Name          string
+	Create        bool           `yaml:",omitempty" json:",omitempty"`
+	Filter        Filter         `yaml:",omitempty" json:",omitempty"`
+	Parent        *PlacementRule `yaml:",omitempty" json:",omitempty"`
+	Value         string         `yaml:",omitempty" json:",omitempty"`
+	DefaultValues `yaml:"-"`
 }
 
 // The user and group filter for a rule.
@@ -117,9 +130,10 @@ type PlacementRule struct {
 // - list of groups to filter (maybe empty)
 // if the list of users or groups is exactly 1 long it is interpreted as a regular expression
 type Filter struct {
-	Type   string
-	Users  []string `yaml:",omitempty" json:",omitempty"`
-	Groups []string `yaml:",omitempty" json:",omitempty"`
+	Type          string
+	Users         []string `yaml:",omitempty" json:",omitempty"`
+	Groups        []string `yaml:",omitempty" json:",omitempty"`
+	DefaultValues `yaml:"-"`
 }
 
 // A list of limit objects to define limits for a partition or queue
@@ -140,6 +154,7 @@ type Limit struct {
 	Groups          []string          `yaml:",omitempty" json:",omitempty"`
 	MaxResources    map[string]string `yaml:",omitempty" json:",omitempty"`
 	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
+	DefaultValues   `yaml:"-"`
 }
 
 // Global Node Sorting Policy section
@@ -147,6 +162,154 @@ type Limit struct {
 type NodeSortingPolicy struct {
 	Type            string
 	ResourceWeights map[string]float64 `yaml:",omitempty" json:",omitempty"`
+	DefaultValues   `yaml:"-"`
+}
+
+// CheckAndSetDefault checks if the value is the predefined default value.
+// If yes, add the lowercase field name to the defaultFields slice and return the default value of this variable type.
+// If no, return the value itself
+func (i *DefaultValues) CheckAndSetDefault(v interface{}, name string) interface{} {
+	insertName := strings.ToLower(name)
+	switch v.(type) {
+	case string:
+		if v == stringDefaultValue {
+			i.defaultFields = append(i.defaultFields, insertName)
+			return ""
+		}
+		return v
+	case uint64:
+		if v == uint64DefaultValue {
+			i.defaultFields = append(i.defaultFields, insertName)
+			return uint64(0)
+		}
+		return v
+	default:
+		return v
+	}
+}
+
+func (i *DefaultValues) IsDefault(fieldName string) bool {
+	searchedName := strings.ToLower(fieldName)
+	for _, f := range i.defaultFields {
+		if f == searchedName {
+			return true
+		}
+	}
+	return false
+}
+
+func (pf *PartitionConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	pf.Name = stringDefaultValue
+	pf.StateDumpFilePath = stringDefaultValue
+
+	type plain PartitionConfig
+	if err := unmarshal((*plain)(pf)); err != nil {
+		return err
+	}
+
+	pf.Name = pf.CheckAndSetDefault(pf.Name, "Name").(string)                                        //nolint:errcheck
+	pf.StateDumpFilePath = pf.CheckAndSetDefault(pf.StateDumpFilePath, "StateDumpFilePath").(string) //nolint:errcheck
+
+	return nil
+}
+
+func (qc *QueueConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	qc.Name = stringDefaultValue
+	qc.MaxApplications = uint64DefaultValue
+	qc.AdminACL = stringDefaultValue
+	qc.SubmitACL = stringDefaultValue
+	// Initial a ChildTemplate with all fields set as default. This is to avoid the user's config
+	// is empty, causing the unmarshal process of ChildTemplate to skip and not identity which fields are default.
+	qc.ChildTemplate = ChildTemplate{
+		DefaultValues: DefaultValues{defaultFields: []string{"maxapplications"}},
+	}
+
+	type plain QueueConfig
+	if err := unmarshal((*plain)(qc)); err != nil {
+		return err
+	}
+
+	qc.Name = qc.CheckAndSetDefault(qc.Name, "Name").(string)                                  //nolint:errcheck
+	qc.MaxApplications = qc.CheckAndSetDefault(qc.MaxApplications, "MaxApplications").(uint64) //nolint:errcheck
+	qc.AdminACL = qc.CheckAndSetDefault(qc.AdminACL, "AdminACL").(string)                      //nolint:errcheck
+	qc.SubmitACL = qc.CheckAndSetDefault(qc.SubmitACL, "SubmitACL").(string)                   //nolint:errcheck
+
+	return nil
+}
+
+func (ct *ChildTemplate) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	ct.MaxApplications = uint64DefaultValue
+	ct.defaultFields = make([]string, 0)
+
+	type plain ChildTemplate
+	if err := unmarshal((*plain)(ct)); err != nil {
+		return err
+	}
+
+	ct.MaxApplications = ct.CheckAndSetDefault(ct.MaxApplications, "MaxApplications").(uint64) //nolint:errcheck
+
+	return nil
+}
+
+func (pr *PlacementRule) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	pr.Value = stringDefaultValue
+	// Initial a Filter with all fields set as default. This is to avoid the user's config
+	// is empty, causing the unmarshal process of Filter to skip and not identity which fields are default.
+	pr.Filter = Filter{
+		DefaultValues: DefaultValues{defaultFields: []string{"type"}},
+	}
+
+	type plain PlacementRule
+
+	if err := unmarshal((*plain)(pr)); err != nil {
+		return err
+	}
+
+	pr.Value = pr.CheckAndSetDefault(pr.Value, "Value").(string) //nolint:errcheck
+
+	return nil
+}
+
+func (f *Filter) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	f.Type = stringDefaultValue
+	f.defaultFields = make([]string, 0)
+
+	type plain Filter
+	if err := unmarshal((*plain)(f)); err != nil {
+		return err
+	}
+
+	f.Type = f.CheckAndSetDefault(f.Type, "Type").(string) //nolint:errcheck
+
+	return nil
+}
+
+func (l *Limit) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	l.Limit = stringDefaultValue
+	l.MaxApplications = uint64DefaultValue
+
+	type plain Limit
+	if err := unmarshal((*plain)(l)); err != nil {
+		return err
+	}
+
+	l.Limit = l.CheckAndSetDefault(l.Limit, "Limit").(string)                               //nolint:errcheck
+	l.MaxApplications = l.CheckAndSetDefault(l.MaxApplications, "MaxApplications").(uint64) //nolint:errcheck
+
+	return nil
+}
+
+func (nsp *NodeSortingPolicy) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	nsp.Type = stringDefaultValue
+
+	type plain NodeSortingPolicy
+	if err := unmarshal((*plain)(nsp)); err != nil {
+		return err
+	}
+
+	nsp.Type = nsp.CheckAndSetDefault(nsp.Type, "Type").(string) //nolint:errcheck
+
+	return nil
 }
 
 func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) {

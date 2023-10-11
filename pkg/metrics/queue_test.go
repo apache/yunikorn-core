@@ -75,7 +75,7 @@ func TestAllocatedContainers(t *testing.T) {
 	defer unregisterQueueMetrics(t)
 
 	cqm.IncAllocatedContainer()
-	verifyAppMetrics(t, "allocated")
+	verifyContainerMetrics(t, "allocated", float64(1))
 }
 
 func TestReleasedContainers(t *testing.T) {
@@ -83,15 +83,15 @@ func TestReleasedContainers(t *testing.T) {
 	defer unregisterQueueMetrics(t)
 
 	cqm.IncReleasedContainer()
-	verifyAppMetrics(t, "released")
+	verifyContainerMetrics(t, "released", float64(1))
 }
 
 func TestAddReleasedContainers(t *testing.T) {
 	cqm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.AddReleasedContainers(1)
-	verifyAppMetrics(t, "released")
+	cqm.AddReleasedContainers(2)
+	verifyContainerMetrics(t, "released", float64(2))
 }
 
 func TestQueueGuaranteedResourceMetrics(t *testing.T) {
@@ -148,6 +148,28 @@ func verifyAppMetrics(t *testing.T, expectedState string) {
 	verifyMetrics(t, checkFn)
 }
 
+func verifyContainerMetrics(t *testing.T, expectedState string, value float64) {
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	assert.NilError(t, err)
+
+	var checked bool
+	for _, metric := range mfs {
+		if strings.Contains(metric.GetName(), "yunikorn_root_test") {
+			assert.Equal(t, 1, len(metric.Metric))
+			assert.Equal(t, dto.MetricType_COUNTER, metric.GetType())
+			m := metric.Metric[0]
+			assert.Equal(t, 1, len(m.Label))
+			assert.Equal(t, "state", *m.Label[0].Name)
+			assert.Equal(t, expectedState, *m.Label[0].Value)
+			assert.Assert(t, m.Counter != nil)
+			assert.Equal(t, value, *m.Counter.Value)
+			checked = true
+			break
+		}
+	}
+
+	assert.Assert(t, checked, "Failed to find metric")
+}
 func verifyResourceMetrics(t *testing.T, expectedState, expectedResource string) {
 	checkFn := func(labels []*dto.LabelPair) {
 		assert.Equal(t, 2, len(labels))
@@ -180,6 +202,7 @@ func verifyMetrics(t *testing.T, checkLabel func(label []*dto.LabelPair)) {
 
 	assert.Assert(t, checked, "Failed to find metric")
 }
+
 func unregisterQueueMetrics(t *testing.T) {
 	qm, ok := cqm.(*QueueMetrics)
 	if !ok {
@@ -187,5 +210,6 @@ func unregisterQueueMetrics(t *testing.T) {
 	}
 
 	prometheus.Unregister(qm.appMetrics)
+	prometheus.Unregister(qm.containerMetrics)
 	prometheus.Unregister(qm.ResourceMetrics)
 }

@@ -651,6 +651,7 @@ func (sq *Queue) incPendingResource(delta *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.pending = resources.Add(sq.pending, delta)
+	sq.updatePendingResourceMetrics()
 }
 
 // decPendingResource decrements pending resource of this queue and its parents.
@@ -671,6 +672,8 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 		log.Log(log.SchedQueue).Warn("Pending resources went negative",
 			zap.String("queueName", sq.QueuePath),
 			zap.Error(err))
+	} else {
+		sq.updatePendingResourceMetrics()
 	}
 }
 

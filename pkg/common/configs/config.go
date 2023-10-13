@@ -188,6 +188,18 @@ func (i *DefaultValues) CheckAndSetDefault(v interface{}, name string) interface
 	}
 }
 
+// IsDefault checks whether the provided fieldName exists in the list of default fields.
+// It performs a case-insensitive comparison of the fieldName parameter
+// against the names in the defaultFields slice.
+//
+// This function is designed for use with field types that are either strings or uint64.
+// Other types are not supported and could lead to wrong result.
+//
+// Parameters:
+// - fieldName (string): The name of the field to check.
+//
+// Returns:
+// - bool: True if the fieldName exists in the defaultFields, false otherwise.
 func (i *DefaultValues) IsDefault(fieldName string) bool {
 	searchedName := strings.ToLower(fieldName)
 	for _, f := range i.defaultFields {

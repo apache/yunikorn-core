@@ -26,6 +26,6 @@ type ValidateConfResponse struct {
 }
 
 type ConfigDAOInfo struct {
-	*configs.SchedulerConfig
-	Extra map[string]string `yaml:",omitempty" json:",omitempty"`
+	*configs.SchedulerConfig `yaml:",inline"`
+	Extra                    map[string]string `yaml:",omitempty" json:",omitempty"`
 }

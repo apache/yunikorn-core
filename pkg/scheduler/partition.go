@@ -468,14 +468,16 @@ func (pc *PartitionContext) getQueueInternal(name string) *objects.Queue {
 }
 
 // Get the queue info for the whole queue structure to pass to the webservice
-func (pc *PartitionContext) GetQueueInfo() dao.QueueDAOInfo {
-	return pc.root.GetQueueInfo()
-}
-
-// Get the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
 	PartitionQueueDAOInfo = pc.root.GetPartitionQueueDAOInfo()
+	PartitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
+	return PartitionQueueDAOInfo
+}
+
+func (pc *PartitionContext) GetPartitionQueue(queue *objects.Queue) dao.PartitionQueueDAOInfo {
+	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
+	PartitionQueueDAOInfo = queue.GetPartitionQueueDAOInfo()
 	PartitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
 	return PartitionQueueDAOInfo
 }

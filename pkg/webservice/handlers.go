@@ -519,6 +519,31 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext != nil {
+		queueName := vars.ByName("queue")
+		queue := partitionContext.GetQueue(queueName)
+		if queue == nil {
+			buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
+			return
+		}
+		queueDao := getPartitionQueueDAO(partitionContext, queue)
+		if err := json.NewEncoder(w).Encode(queueDao); err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+	}
+}
+
 func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
@@ -748,6 +773,10 @@ func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.P
 	}
 
 	return result
+}
+
+func getPartitionQueueDAO(partitionContext *scheduler.PartitionContext, queue *objects.Queue) dao.PartitionQueueDAOInfo {
+	return partitionContext.GetPartitionQueue(queue)
 }
 
 func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {

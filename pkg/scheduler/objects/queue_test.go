@@ -34,7 +34,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
-	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -1600,120 +1599,6 @@ func TestMaxResource(t *testing.T) {
 	root.SetMaxResource(res)
 	if !resources.Equals(res, root.GetMaxResource()) {
 		t.Errorf("root max setting not picked up by parent queue expected %v, got %v", res, parent.GetMaxResource())
-	}
-}
-
-func TestGetQueueInfo(t *testing.T) {
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "failed to create basic root queue: %v", err)
-	var rootMax *resources.Resource
-	rootMax, err = resources.NewResourceFromConf(map[string]string{"memory": "2048", "vcores": "10"})
-	assert.NilError(t, err, "failed to create configuration: %v", err)
-	root.SetMaxResource(rootMax)
-
-	var parentUsed *resources.Resource
-	parentUsed, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
-	assert.NilError(t, err, "failed to create resource: %v", err)
-	var parent *Queue
-	parent, err = createManagedQueue(root, "parent", true, nil)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-	err = parent.IncAllocatedResource(parentUsed, false)
-	assert.NilError(t, err, "failed to increment allocated resource: %v", err)
-
-	var child1used *resources.Resource
-	child1used, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
-	assert.NilError(t, err, "failed to create resource: %v", err)
-	var child1 *Queue
-	child1, err = createManagedQueue(parent, "child1", true, nil)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-	err = child1.IncAllocatedResource(child1used, false)
-	assert.NilError(t, err, "failed to increment allocated resource: %v", err, err)
-
-	var child2 *Queue
-	child2, err = createManagedQueue(parent, "child2", true, nil)
-	assert.NilError(t, err, "failed to create child queue: %v", err)
-	child2.SetMaxResource(resources.NewResource())
-	rootDaoInfo := root.GetQueueInfo()
-
-	compareQueueInfoWithDAO(t, root, rootDaoInfo)
-	parentDaoInfo := rootDaoInfo.ChildQueues[0]
-	compareQueueInfoWithDAO(t, parent, parentDaoInfo)
-	for _, childDao := range parentDaoInfo.ChildQueues {
-		name := childDao.QueueName
-		child := parent.children[name]
-		if child == nil {
-			t.Fail()
-		}
-		compareQueueInfoWithDAO(t, child, childDao)
-	}
-}
-
-func TestGetQueueInfoPropertiesSet(t *testing.T) {
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "failed to create basic root queue: %v", err)
-
-	// managed parent queue with property set
-	properties := map[string]string{configs.ApplicationSortPolicy: "fifo"}
-	var parent *Queue
-	parent, err = createManagedQueueWithProps(root, "parent", true, nil, properties)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-
-	// managed leaf queue with some properties set
-	properties = map[string]string{configs.ApplicationSortPolicy: "fair",
-		"some_property": "some_value"}
-	var _ *Queue
-	_, err = createManagedQueueWithProps(parent, "child1", true, nil, properties)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-
-	// managed leaf queue with some properties set
-	properties = map[string]string{configs.ApplicationSortPolicy: "state_aware"}
-	_, err = createManagedQueueWithProps(parent, "child2", true, nil, properties)
-	assert.NilError(t, err, "failed to create child queue: %v", err)
-
-	// dynamic leaf queue picks up from parent
-	_, err = createDynamicQueue(parent, "child3", true)
-	assert.NilError(t, err, "failed to create child queue: %v", err)
-
-	rootDaoInfo := root.GetQueueInfo()
-
-	compareQueueInfoWithDAO(t, root, rootDaoInfo)
-	parentDaoInfo := rootDaoInfo.ChildQueues[0]
-	compareQueueInfoWithDAO(t, parent, parentDaoInfo)
-	for _, childDao := range parentDaoInfo.ChildQueues {
-		name := childDao.QueueName
-		child := parent.children[name]
-		if child == nil {
-			t.Fail()
-		}
-		compareQueueInfoWithDAO(t, child, childDao)
-	}
-}
-
-func compareQueueInfoWithDAO(t *testing.T, queue *Queue, dao dao.QueueDAOInfo) {
-	assert.Equal(t, queue.Name, dao.QueueName)
-	assert.Equal(t, len(queue.children), len(dao.ChildQueues))
-	assert.Equal(t, queue.stateMachine.Current(), dao.Status)
-	emptyRes := map[string]int64{}
-	if queue.allocatedResource == nil {
-		assert.DeepEqual(t, emptyRes, dao.Capacities.UsedCapacity)
-	} else {
-		assert.DeepEqual(t, queue.allocatedResource.DAOMap(), dao.Capacities.UsedCapacity)
-	}
-	if queue.maxResource == nil {
-		assert.DeepEqual(t, emptyRes, dao.Capacities.MaxCapacity)
-	} else {
-		assert.DeepEqual(t, queue.maxResource.DAOMap(), dao.Capacities.MaxCapacity)
-	}
-	if queue.guaranteedResource == nil {
-		assert.DeepEqual(t, emptyRes, dao.Capacities.Capacity)
-	} else {
-		assert.DeepEqual(t, queue.guaranteedResource.DAOMap(), dao.Capacities.Capacity)
-	}
-	assert.Equal(t, len(queue.properties), len(dao.Properties))
-	if len(queue.properties) > 0 {
-		for k, v := range queue.properties {
-			assert.Equal(t, v, dao.Properties[k])
-		}
 	}
 }
 

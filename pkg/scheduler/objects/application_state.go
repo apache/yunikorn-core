@@ -174,11 +174,6 @@ func NewAppState() *fsm.FSM {
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRunning()
 			},
-			fmt.Sprintf("enter_%s", Resuming.String()): func(_ context.Context, event *fsm.Event) {
-				app := event.Args[0].(*Application) //nolint:errcheck
-				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
-				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
-			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(_ context.Context, event *fsm.Event) {
 				app := event.Args[0].(*Application) //nolint:errcheck
 				if event.Src == Starting.String() {

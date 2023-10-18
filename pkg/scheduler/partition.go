@@ -1370,9 +1370,9 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	pc.updateAllocationCount(-len(released))
 	metrics.GetQueueMetrics(queue.GetQueuePath()).AddReleasedContainers(len(released))
 
-	// if the termination type is timeout, we don't notify the shim, because it's
-	// originated from that side
-	if release.TerminationType == si.TerminationType_TIMEOUT {
+	// if the termination type is TIMEOUT/PREEMPTED_BY_SCHEDULER, we don't notify the shim,
+	// because it's originated from that side
+	if release.TerminationType == si.TerminationType_TIMEOUT || release.TerminationType == si.TerminationType_PREEMPTED_BY_SCHEDULER {
 		released = nil
 	}
 	return released, confirmed

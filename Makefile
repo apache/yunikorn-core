@@ -179,17 +179,17 @@ pseudo:
 .PHONY: commands
 commands: build/simplescheduler build/schedulerclient build/queueconfigchecker
 
-build/simplescheduler: go.mod go.sum cmd
+build/simplescheduler: go.mod go.sum $(shell find cmd pkg)
 	@echo "building example scheduler"
 	@mkdir -p build
 	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/simplescheduler ./cmd/simplescheduler
 
-build/schedulerclient:
+build/schedulerclient: go.mod go.sum $(shell find cmd pkg)
 	@echo "building example client"
 	@mkdir -p build
 	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/schedulerclient ./cmd/schedulerclient
 
-build/queueconfigchecker:
+build/queueconfigchecker: go.mod go.sum $(shell find cmd pkg)
 	@echo "building queueconfigchecker"
 	@mkdir -p build
 	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/queueconfigchecker ./cmd/queueconfigchecker

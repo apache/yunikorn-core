@@ -264,6 +264,15 @@ func (m *SchedulerMetrics) AddTotalApplicationsRejected(value int) {
 	m.applicationSubmission.With(prometheus.Labels{"result": "rejected"}).Add(float64(value))
 }
 
+func (m *SchedulerMetrics) GetTotalApplicationsRejected() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.applicationSubmission.With(prometheus.Labels{"result": "rejected"}).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Counter.Value), nil
+	}
+	return -1, err
+}
+
 func (m *SchedulerMetrics) IncTotalApplicationsRunning() {
 	m.application.With(prometheus.Labels{"state": "running"}).Inc()
 }
@@ -315,6 +324,15 @@ func (m *SchedulerMetrics) SubTotalApplicationsCompleted(value int) {
 
 func (m *SchedulerMetrics) SetTotalApplicationsCompleted(value int) {
 	m.application.With(prometheus.Labels{"state": "completed"}).Set(float64(value))
+}
+
+func (m *SchedulerMetrics) GetTotalApplicationsCompleted() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.application.With(prometheus.Labels{"state": "completed"}).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *SchedulerMetrics) IncActiveNodes() {

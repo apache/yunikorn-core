@@ -187,7 +187,7 @@ func NewAppState() *fsm.FSM {
 				app.setStateTimer(completingTimeout, app.stateMachine.Current(), CompleteApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(_ context.Context, event *fsm.Event) {
-				if event.Dst == Resuming.String() || event.Dst == Accepted.String() {
+				if event.Dst != Rejected.String() {
 					app := event.Args[0].(*Application) //nolint:errcheck
 					metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsAccepted()
 					metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()

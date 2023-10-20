@@ -553,9 +553,10 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 				zap.String("askQueue", p.queue.Name),
 				zap.String("victimApplicationID", victim.GetApplicationID()),
 				zap.String("victimAllocationKey", victim.GetAllocationKey()),
+				zap.Stringer("victimAllocatedResource", victim.GetAllocatedResource()),
+				zap.String("victimNodeID", victim.GetNodeID()),
 				zap.String("victimQueue", victimQueue.Name),
-				zap.String("nodeID", victim.GetNodeID()),
-				zap.Stringer("resources", victim.GetAllocatedResource()))
+			)
 
 		} else {
 			log.Log(log.SchedPreemption).Warn("BUG: Queue not found for preemption victim",

@@ -557,7 +557,6 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 				zap.String("victimNodeID", victim.GetNodeID()),
 				zap.String("victimQueue", victimQueue.Name),
 			)
-
 		} else {
 			log.Log(log.SchedPreemption).Warn("BUG: Queue not found for preemption victim",
 				zap.String("queue", p.queue.Name),

@@ -350,6 +350,9 @@ func (qt *QueueTracker) UnlinkQT(hierarchy []string) bool {
 		if qt.childQueueTrackers[childName] != nil {
 			if qt.childQueueTrackers[childName].UnlinkQT(hierarchy[1:]) {
 				delete(qt.childQueueTrackers, childName)
+				// returning false, so that it comes out when end queue detach itself from its immediate parent.
+				// i.e., once leaf detached from root.parent for root.parent.leaf queue path.
+				// otherwise, detachment continues all the way upto the root, even parent from root. which is not needed.
 				return false
 			}
 		}

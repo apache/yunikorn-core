@@ -19,7 +19,6 @@
 package template
 
 import (
-	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -51,14 +50,14 @@ func getResource(t *testing.T) *resources.Resource {
 
 func checkMembers(t *testing.T, template *Template, properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) {
 	// test inner members
-	assert.Assert(t, reflect.DeepEqual(template.properties, properties))
-	assert.Assert(t, reflect.DeepEqual(template.maxResource, maxResource))
-	assert.Assert(t, reflect.DeepEqual(template.guaranteedResource, guaranteedResource))
+	assert.DeepEqual(t, template.properties, properties)
+	assert.DeepEqual(t, template.maxResource, maxResource)
+	assert.DeepEqual(t, template.guaranteedResource, guaranteedResource)
 
 	// test all getters
-	assert.Assert(t, reflect.DeepEqual(template.GetProperties(), properties))
-	assert.Assert(t, reflect.DeepEqual(template.GetMaxResource(), maxResource))
-	assert.Assert(t, reflect.DeepEqual(template.GetGuaranteedResource(), guaranteedResource))
+	assert.DeepEqual(t, template.GetProperties(), properties)
+	assert.DeepEqual(t, template.GetMaxResource(), maxResource)
+	assert.DeepEqual(t, template.GetGuaranteedResource(), guaranteedResource)
 }
 
 func TestNewTemplate(t *testing.T) {

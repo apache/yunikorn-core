@@ -118,11 +118,10 @@ func (gt *GroupTracker) UnlinkQT(queuePath string) bool {
 	return gt.queueTracker.UnlinkQT(strings.Split(queuePath, configs.DOT))
 }
 
-// canBeRemoved Does "root" queue has any child queue trackers? Is there any running applications in "root" qt?
 func (gt *GroupTracker) canBeRemoved() bool {
 	gt.RLock()
 	defer gt.RUnlock()
-	return len(gt.queueTracker.childQueueTrackers) == 0 && len(gt.queueTracker.runningApplications) == 0
+	return gt.queueTracker.canBeRemoved()
 }
 
 func (gt *GroupTracker) getName() string {

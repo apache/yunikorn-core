@@ -59,6 +59,7 @@ func TestUserManagerOnceInitialization(t *testing.T) {
 }
 
 func TestGetGroup(t *testing.T) {
+	setupUGM()
 	user := security.UserGroup{User: "test", Groups: []string{"test", "test1"}}
 	manager := GetUserManager()
 
@@ -368,15 +369,11 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 
 	// should run as user 'user' setting is map[memory:60 vcores:60] and total usage of "root.parent" is map[memory:50 vcores:50]
 	increased := manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user)
-	if !increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user)
-	}
+	assert.Equal(t, increased, true)
 
 	// should not run as user 'user' setting is map[memory:60 vcores:60] and total usage of "root.parent" is map[memory:60 vcores:60]
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp3, usage, user)
-	if increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user)
-	}
+	assert.Equal(t, increased, false)
 
 	// configure max resource for root.parent to allow one more application to run through wild card user settings (not through specific user)
 	// configure limits for user2 only. However, user1 should not be cleared as it has running applications
@@ -390,28 +387,21 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	// user1 still should be able to run app as wild card user '*' setting is map[memory:70 vcores:70] for "root.parent" and
 	// total usage of "root.parent" is map[memory:60 vcores:60]
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user)
-	if !increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp2, user)
-	}
+	assert.Equal(t, increased, true)
 
 	// user1 should not be able to run app as wild card user '*' setting is map[memory:70 vcores:70] for "root.parent"
 	// and total usage of "root.parent" is map[memory:70 vcores:70]
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp3, usage, user)
-	if increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp3, user)
-	}
+	assert.Equal(t, increased, false)
 
 	// configure max resource for group1 * root.parent (map[memory:70 vcores:70]) higher than wild card group * root.parent settings (map[memory:10 vcores:10])
 	// ensure group's specific settings has been used for enforcement checks as specific limits always has higher precedence when compared to wild card group limit settings
+	// group1 quota (map[memory:70 vcores:70]) has been removed from root.parent.leaf.
+	// so resource usage has been decreased for the same group and that too for entire queue hierarchy (root->parent->leaf)
+	// since group1 quota has been configured for root.parent, resource usage would be increased from
+	// the place where it has been left.
 	conf = createUpdateConfigWithWildCardUsersAndGroups(user1.User, user1.Groups[0], "*", "*", "10", "10")
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
-
-	// since group1 quota (map[memory:70 vcores:70]) has reached before, further group increase is not allowed.
-	// Hence, user's tracked usage would be reverted
-	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
-	if increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
-	}
 
 	// configure max resource for user2 * root.parent (map[memory:70 vcores:70]) higher than wild card user * root.parent settings (map[memory:10 vcores:10])
 	// ensure user's specific settings has been used for enforcement checks as specific limits always has higher precedence when compared to wild card user limit settings
@@ -421,16 +411,12 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	// can be allowed to run upto resource usage map[memory:70 vcores:70]
 	for i := 1; i <= 7; i++ {
 		increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
-		if !increased {
-			t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
-		}
+		assert.Equal(t, increased, true)
 	}
 
 	// user2 should not be able to run app as user2 max limit is map[memory:70 vcores:70] and usage so far is map[memory:70 vcores:70]
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
-	if increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
-	}
+	assert.Equal(t, increased, false)
 
 	user3 := security.UserGroup{User: "user3", Groups: []string{"group3"}}
 	conf = createUpdateConfigWithWildCardUsersAndGroups(user1.User, user1.Groups[0], "", "*", "10", "10")
@@ -438,9 +424,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 
 	// user3 should be able to run app as group3 uses wild card group limit settings map[memory:10 vcores:10]
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user3)
-	if !increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user)
-	}
+	assert.Equal(t, increased, true)
 
 	// user4 (though belongs to different group, group4) should not be able to run app as group4 also
 	// uses wild card group limit settings map[memory:10 vcores:10]
@@ -453,16 +437,12 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 
 	// Since app is TestApp1, gt of "*" would be used as it is already mapped. group4 won't be used
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user4)
-	if increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
-	}
+	assert.Equal(t, increased, false)
 
 	// Now group4 would be used as user4 is running TestApp2 for the first time. So can be allowed to run upto resource usage map[memory:70 vcores:70]
 	for i := 1; i <= 7; i++ {
 		increased = manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user4)
-		if !increased {
-			t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user1)
-		}
+		assert.Equal(t, increased, true)
 	}
 
 	// user4 should not be able to run app as user4 max limit is map[memory:70 vcores:70] and usage so far is map[memory:70 vcores:70]
@@ -675,8 +655,12 @@ func TestUserGroupHeadroom(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
 	}
 	// ensure group headroom returned when there is no limit settings configured for user
+	// group1 quota (map[memory:70 vcores:70]) has been removed from root.parent.leaf.
+	// so resource usage has been decreased for the same group and that too for entire queue hierarchy (root->parent->leaf)
+	// since group1 quota has been configured for root.parent, resource usage would be increased from
+	// the place where it has been left. so there is no usage after the recent config change, entire group's quota would be returned as headroom.
 	headroom = manager.Headroom("root.parent", TestApp1, user)
-	assert.Equal(t, resources.Equals(headroom, resources.Sub(usage1, usage)), true)
+	assert.Equal(t, resources.Equals(headroom, usage1), true)
 }
 
 func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
@@ -1394,6 +1378,7 @@ func setupUGM() {
 	manager := GetUserManager()
 	manager.ClearUserTrackers()
 	manager.ClearGroupTrackers()
+	manager.ClearConfigLimits()
 }
 
 func assertUGM(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, usersCount int) {

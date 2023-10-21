@@ -45,6 +45,7 @@ func setupUGM() {
 	userManager := ugm.GetUserManager()
 	userManager.ClearUserTrackers()
 	userManager.ClearGroupTrackers()
+	userManager.ClearConfigLimits()
 }
 
 func setupNode(t *testing.T, nodeID string, partition *PartitionContext, nodeRes *resources.Resource) *objects.Node {

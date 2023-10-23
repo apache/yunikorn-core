@@ -44,4 +44,3 @@ func SortingPolicyFromString(str string) (SortingPolicy, error) {
 		return FairnessPolicy, fmt.Errorf("undefined policy: %s", str)
 	}
 }
-

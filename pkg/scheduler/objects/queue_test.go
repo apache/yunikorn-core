@@ -1636,7 +1636,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 
 	// test properties
 	root.properties = getProperties()
-	assert.Assert(t, reflect.DeepEqual(root.properties, root.GetPartitionQueueDAOInfo().Properties))
+	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo().Properties)
 
 	// test template
 	root.template, err = template.FromConf(&configs.ChildTemplate{
@@ -1647,7 +1647,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 		},
 	})
 	assert.NilError(t, err)
-	assert.Assert(t, reflect.DeepEqual(root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties))
+	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties)
 	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.template.GetMaxResource().DAOMap())
 	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.template.GetGuaranteedResource().DAOMap())
 
@@ -1712,11 +1712,11 @@ func TestSetResources(t *testing.T) {
 
 	expectedGuaranteedResource, err := resources.NewResourceFromConf(guaranteedResource)
 	assert.NilError(t, err, "failed to parse resource: %v", err)
-	assert.Assert(t, reflect.DeepEqual(queue.guaranteedResource, expectedGuaranteedResource))
+	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
 
 	expectedMaxResource, err := resources.NewResourceFromConf(maxResource)
 	assert.NilError(t, err, "failed to parse resource: %v", err)
-	assert.Assert(t, reflect.DeepEqual(queue.maxResource, expectedMaxResource))
+	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 
 	// case 1: empty resource won't change the resources
 	err = queue.setResources(configs.Resources{
@@ -1724,8 +1724,8 @@ func TestSetResources(t *testing.T) {
 		Max:        make(map[string]string),
 	})
 	assert.NilError(t, err, "failed to set resources: %v", err)
-	assert.Assert(t, reflect.DeepEqual(queue.guaranteedResource, expectedGuaranteedResource))
-	assert.Assert(t, reflect.DeepEqual(queue.maxResource, expectedMaxResource))
+	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
+	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 
 	// case 2: zero resource won't change the resources
 	err = queue.setResources(configs.Resources{
@@ -1733,8 +1733,8 @@ func TestSetResources(t *testing.T) {
 		Max:        getZeroResourceConf(),
 	})
 	assert.NilError(t, err, "failed to set resources: %v", err)
-	assert.Assert(t, reflect.DeepEqual(queue.guaranteedResource, expectedGuaranteedResource))
-	assert.Assert(t, reflect.DeepEqual(queue.maxResource, expectedMaxResource))
+	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
+	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 }
 
 func TestPreemptingResource(t *testing.T) {
@@ -1960,9 +1960,9 @@ func TestSetTemplate(t *testing.T) {
 	assert.NilError(t, err, "failed to parse resource: %v", err)
 
 	checkTemplate := func(queue *Queue) {
-		assert.Assert(t, reflect.DeepEqual(queue.template.GetProperties(), properties))
-		assert.Assert(t, reflect.DeepEqual(queue.template.GetGuaranteedResource(), expectedGuaranteedResource))
-		assert.Assert(t, reflect.DeepEqual(queue.template.GetMaxResource(), expectedMaxResource))
+		assert.DeepEqual(t, queue.template.GetProperties(), properties)
+		assert.DeepEqual(t, queue.template.GetGuaranteedResource(), expectedGuaranteedResource)
+		assert.DeepEqual(t, queue.template.GetMaxResource(), expectedMaxResource)
 	}
 
 	// case 0: normal case
@@ -2003,9 +2003,9 @@ func TestApplyTemplate(t *testing.T) {
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 	leaf.applyTemplate(childTemplate)
 	assert.Assert(t, leaf.template == nil)
-	assert.Assert(t, reflect.DeepEqual(leaf.properties, childTemplate.GetProperties()))
-	assert.Assert(t, reflect.DeepEqual(leaf.guaranteedResource, childTemplate.GetGuaranteedResource()))
-	assert.Assert(t, reflect.DeepEqual(leaf.maxResource, childTemplate.GetMaxResource()))
+	assert.DeepEqual(t, leaf.properties, childTemplate.GetProperties())
+	assert.DeepEqual(t, leaf.guaranteedResource, childTemplate.GetGuaranteedResource())
+	assert.DeepEqual(t, leaf.maxResource, childTemplate.GetMaxResource())
 
 	// case 1: zero resource template generates nil resource
 	leaf2, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
@@ -2151,7 +2151,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Equal(t, parent.QueuePath, "parent_queue")
 	assert.Equal(t, parent.isManaged, true)
 	assert.Equal(t, parent.maxRunningApps, uint64(32))
-	assert.Assert(t, reflect.DeepEqual(properties, parent.template.GetProperties()))
+	assert.DeepEqual(t, properties, parent.template.GetProperties())
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetMaxResource()))
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetGuaranteedResource()))
 
@@ -2169,7 +2169,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
 	assert.Assert(t, childLeaf.template == nil)
-	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
+	assert.DeepEqual(t, childLeaf.properties, parent.template.GetProperties())
 	assert.Assert(t, resources.Equals(childLeaf.maxResource, parent.template.GetMaxResource()))
 	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
 
@@ -2237,9 +2237,9 @@ func TestNewDynamicQueue(t *testing.T) {
 	childLeaf, err := NewDynamicQueue("leaf", true, parent)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, childLeaf.template == nil)
-	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
-	assert.Assert(t, reflect.DeepEqual(childLeaf.maxResource, parent.template.GetMaxResource()))
-	assert.Assert(t, reflect.DeepEqual(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+	assert.DeepEqual(t, childLeaf.properties, parent.template.GetProperties())
+	assert.DeepEqual(t, childLeaf.maxResource, parent.template.GetMaxResource())
+	assert.DeepEqual(t, childLeaf.guaranteedResource, parent.template.GetGuaranteedResource())
 	assert.Assert(t, childLeaf.prioritySortEnabled)
 	assert.Equal(t, childLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
 	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)

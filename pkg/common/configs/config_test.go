@@ -1721,7 +1721,7 @@ func TestGetConfigurationString(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.DeepEqual(t, tc.expectedConfig, GetConfigurationString(tc.requestBytes))
+			assert.Equal(t, tc.expectedConfig, GetConfigurationString(tc.requestBytes))
 		})
 	}
 }

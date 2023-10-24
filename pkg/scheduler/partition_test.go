@@ -1168,6 +1168,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 	ask := newAllocationAsk("alloc-nr", appNotRemoved, appRes)
 	alloc := objects.NewAllocation("alloc-nr-uuid", nodeID1, ask)
 	err = partition.addAllocation(alloc)
+	assert.NilError(t, err, "add allocation to partition should not have failed")
 	assertLimits(t, getTestUserGroup(), appRes)
 
 	ask = newAllocationAsk("alloc-1", appNotRemoved, appRes)

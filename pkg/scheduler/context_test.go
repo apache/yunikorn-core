@@ -51,12 +51,6 @@ func newMockEventHandler() *mockEventHandler {
 	}
 }
 
-func (m *mockEventHandler) reset() {
-	m.eventHandled = false
-	m.rejectedNodes = make([]*si.RejectedNode, 0)
-	m.acceptedNodes = make([]*si.AcceptedNode, 0)
-}
-
 func (m *mockEventHandler) HandleEvent(ev interface{}) {
 	if nodeEvent, ok := ev.(*rmevent.RMNodeUpdateEvent); ok {
 		m.eventHandled = true

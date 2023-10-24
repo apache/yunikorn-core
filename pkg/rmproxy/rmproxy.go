@@ -407,23 +407,3 @@ func (rmp *RMProxy) UpdateConfiguration(request *si.UpdateConfigurationRequest) 
 	}
 	return nil
 }
-
-// actual configuration reloader
-type configurationReloader struct {
-	rmID    string
-	rmProxy *RMProxy
-}
-
-func (cr configurationReloader) DoReloadConfiguration() error {
-	c := make(chan *rmevent.Result)
-	cr.rmProxy.EventHandlers.SchedulerEventHandler.HandleEvent(
-		&rmevent.RMConfigUpdateEvent{
-			RmID:    cr.rmID,
-			Channel: c,
-		})
-	result := <-c
-	if !result.Succeeded {
-		return fmt.Errorf("failed to update configuration for RM %s, result: %v", cr.rmID, result)
-	}
-	return nil
-}

@@ -1555,14 +1555,6 @@ func (sq *Queue) updateMaxResourceMetrics() {
 	}
 }
 
-// updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics for all queue types.
-// Deprecated: use specific metric update function for efficiency.
-func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
-	sq.updateAllocatedResourceMetrics()
-	sq.updatePendingResourceMetrics()
-	sq.updatePreemptingResourceMetrics()
-}
-
 // updateAllocatedResourceMetrics updates allocated resource metrics for all queue types.
 func (sq *Queue) updateAllocatedResourceMetrics() {
 	for k, v := range sq.allocatedResource.Resources {

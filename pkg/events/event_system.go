@@ -186,8 +186,8 @@ func (ec *EventSystemImpl) readRingBufferCapacity() uint64 {
 }
 
 func (ec *EventSystemImpl) isRestartNeeded() bool {
-	ec.Lock()
-	defer ec.Unlock()
+	ec.RLock()
+	defer ec.RUnlock()
 	return ec.readIsTrackingEnabled() != ec.trackingEnabled
 }
 
@@ -197,13 +197,18 @@ func (ec *EventSystemImpl) Restart() {
 }
 
 func (ec *EventSystemImpl) reloadConfig() {
-	ec.requestCapacity = ec.readRequestCapacity()
-	newRingBufferCapacity := ec.readRingBufferCapacity()
+	ec.updateRequestCapacity()
 
 	// resize the ring buffer with new capacity
-	ec.eventBuffer.Resize(newRingBufferCapacity)
+	ec.eventBuffer.Resize(ec.readRingBufferCapacity())
 
 	if ec.isRestartNeeded() {
 		ec.Restart()
 	}
+}
+
+func (ec *EventSystemImpl) updateRequestCapacity() {
+	ec.Lock()
+	defer ec.Unlock()
+	ec.requestCapacity = ec.readRequestCapacity()
 }

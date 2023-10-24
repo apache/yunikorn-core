@@ -376,7 +376,7 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				sa.notifyRMAllocationReleased(sa.rmID, toRelease, si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
-				//nolint: errcheck
+				// nolint: errcheck
 				_ = sa.HandleApplicationEvent(event)
 			}
 		}

@@ -651,6 +651,7 @@ func (sq *Queue) incPendingResource(delta *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.pending = resources.Add(sq.pending, delta)
+	sq.updatePendingResourceMetrics()
 }
 
 // decPendingResource decrements pending resource of this queue and its parents.
@@ -671,6 +672,8 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 		log.Log(log.SchedQueue).Warn("Pending resources went negative",
 			zap.String("queueName", sq.QueuePath),
 			zap.Error(err))
+	} else {
+		sq.updatePendingResourceMetrics()
 	}
 }
 
@@ -1017,7 +1020,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	}
 	// all OK update this queue
 	sq.allocatedResource = newAllocated
-	sq.updateAllocatedAndPendingResourceMetrics()
+	sq.updateAllocatedResourceMetrics()
 	return nil
 }
 
@@ -1053,7 +1056,7 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	}
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
-	sq.updateAllocatedAndPendingResourceMetrics()
+	sq.updateAllocatedResourceMetrics()
 	return nil
 }
 
@@ -1066,7 +1069,7 @@ func (sq *Queue) IncPreemptingResource(alloc *resources.Resource) {
 	defer sq.Unlock()
 	sq.parent.IncPreemptingResource(alloc)
 	sq.preemptingResource = resources.Add(sq.preemptingResource, alloc)
-	sq.updateAllocatedAndPendingResourceMetrics()
+	sq.updatePreemptingResourceMetrics()
 }
 
 // DecPreemptingResource decrements the preempting resources for this queue (recursively).
@@ -1078,7 +1081,7 @@ func (sq *Queue) DecPreemptingResource(alloc *resources.Resource) {
 	defer sq.Unlock()
 	sq.parent.DecPreemptingResource(alloc)
 	sq.preemptingResource = resources.Sub(sq.preemptingResource, alloc)
-	sq.updateAllocatedAndPendingResourceMetrics()
+	sq.updatePreemptingResourceMetrics()
 }
 
 func (sq *Queue) IsPrioritySortEnabled() bool {
@@ -1553,13 +1556,29 @@ func (sq *Queue) updateMaxResourceMetrics() {
 }
 
 // updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics for all queue types.
+// Deprecated: use specific metric update function for efficiency.
 func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
+	sq.updateAllocatedResourceMetrics()
+	sq.updatePendingResourceMetrics()
+	sq.updatePreemptingResourceMetrics()
+}
+
+// updateAllocatedResourceMetrics updates allocated resource metrics for all queue types.
+func (sq *Queue) updateAllocatedResourceMetrics() {
 	for k, v := range sq.allocatedResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
 	}
+}
+
+// updatePendingResourceMetrics updates pending resource metrics for all queue types.
+func (sq *Queue) updatePendingResourceMetrics() {
 	for k, v := range sq.pending.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
 	}
+}
+
+// updatePendingResourceMetrics updates preempting resource metrics for all queue types.
+func (sq *Queue) updatePreemptingResourceMetrics() {
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}

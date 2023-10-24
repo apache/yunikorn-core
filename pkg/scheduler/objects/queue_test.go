@@ -23,15 +23,19 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	promtu "github.com/prometheus/client_golang/prometheus/testutil"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -266,6 +270,11 @@ func TestPriorityCalc(t *testing.T) {
 }
 
 func TestPendingCalc(t *testing.T) {
+	// Reset existing metric storage; otherwise this unit test would get metrics populated by other UTs.
+	// In long run, to make the metrics code more testable, we should pass instantiable Metrics obj to Queue
+	// instead of using a global Metrics obj at pkg/metrics/init.go.
+	metrics.Reset()
+
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -284,6 +293,16 @@ func TestPendingCalc(t *testing.T) {
 	if !resources.Equals(leaf.pending, allocRes) {
 		t.Errorf("leaf queue pending allocation failed to increment expected %v, got %v", allocRes, leaf.pending)
 	}
+	metrics := []string{"yunikorn_root_queue_resource", "yunikorn_root_leaf_queue_resource"}
+	want := concatQueueResourceMetric(metrics, []string{`
+yunikorn_root_queue_resource{resource="memory",state="pending"} 100
+yunikorn_root_queue_resource{resource="vcores",state="pending"} 10
+`, `
+yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 100
+yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 10
+`},
+	)
+	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
 	leaf.decPendingResource(allocRes)
 	if !resources.IsZero(root.pending) {
 		t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pending)
@@ -291,6 +310,15 @@ func TestPendingCalc(t *testing.T) {
 	if !resources.IsZero(leaf.pending) {
 		t.Errorf("leaf queue pending allocation failed to decrement expected 0, got %v", leaf.pending)
 	}
+	want = concatQueueResourceMetric(metrics, []string{`
+yunikorn_root_queue_resource{resource="memory",state="pending"} 0
+yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
+`, `
+yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
+yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
+`},
+	)
+	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
 	// Not allowed to go negative: both will be zero after this
 	newRes := resources.Multiply(allocRes, 2)
 	root.pending = newRes
@@ -302,6 +330,30 @@ func TestPendingCalc(t *testing.T) {
 	if !resources.IsZero(leaf.GetPendingResource()) {
 		t.Errorf("leaf queue pending allocation should have failed to decrement expected zero, got %v", leaf.pending)
 	}
+	want = concatQueueResourceMetric(metrics, []string{`
+yunikorn_root_queue_resource{resource="memory",state="pending"} 0
+yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
+`, `
+yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
+yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
+`},
+	)
+	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
+}
+
+const (
+	QueueResourceMetricHelp = "# HELP %v Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`."
+	QueueResourceMetricType = "# TYPE %v gauge"
+)
+
+func concatQueueResourceMetric(metricNames, metricVals []string) string {
+	var out string
+	for i, metricName := range metricNames {
+		out = out + fmt.Sprintf(QueueResourceMetricHelp, metricName) + "\n"
+		out = out + fmt.Sprintf(QueueResourceMetricType, metricName) + "\n"
+		out += strings.TrimLeft(metricVals[i], "\n")
+	}
+	return out
 }
 
 func TestGetChildQueueInfo(t *testing.T) {

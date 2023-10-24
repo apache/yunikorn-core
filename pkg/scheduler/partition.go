@@ -254,10 +254,6 @@ func (pc *PartitionContext) isDraining() bool {
 	return pc.stateMachine.Current() == objects.Draining.String()
 }
 
-func (pc *PartitionContext) isRunning() bool {
-	return pc.stateMachine.Current() == objects.Active.String()
-}
-
 func (pc *PartitionContext) isStopped() bool {
 	return pc.stateMachine.Current() == objects.Stopped.String()
 }

@@ -255,7 +255,6 @@ const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
 const nodeID = "node-1"
-const instType = "itype-1"
 
 var (
 	updatedExtraConf = map[string]string{

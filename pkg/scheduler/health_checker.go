@@ -33,8 +33,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
-const defaultPeriod = 30 * time.Second
-
 type HealthChecker struct {
 	context       *ClusterContext
 	confWatcherId string

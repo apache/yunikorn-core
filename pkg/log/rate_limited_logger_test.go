@@ -47,14 +47,20 @@ func TestRateLimitedLog(t *testing.T) {
 			zap.NewAtomicLevelAt(zap.InfoLevel),
 		),
 	)
+	// log once within one minute
 	logger := &rateLimitedLogger{
 		logger:  zapLogger,
 		limiter: rate.NewLimiter(rate.Every(time.Minute), 1),
 	}
 
-	// this won't last over one minute, assert there is only one record in buffer
-	for i := 0; i < 10000; i++ {
+	startTime := time.Now()
+	for {
+		elapsed := time.Since(startTime)
+		if elapsed > 2*time.Second {
+			break
+		}
 		logger.Info("YuniKorn")
+		time.Sleep(100 * time.Millisecond)
 	}
 	writer.Flush()
 

@@ -1115,6 +1115,52 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 	}
 }
 
+func TestMultipleGroupLimitChange(t *testing.T) {
+	setupUGM()
+
+	manager := GetUserManager()
+	conf := createConfigWithLimits([]configs.Limit{
+		createLimit(nil, []string{"group1", "group2"}, largeResource, 2),
+		createLimit(nil, []string{"*"}, mediumResource, 1),
+	})
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+	user1 := security.UserGroup{User: "user1", Groups: []string{"group1"}}
+	user2 := security.UserGroup{User: "user2", Groups: []string{"group2"}}
+	user3 := security.UserGroup{User: "user3", Groups: []string{"group3"}}
+
+	usage, err := resources.NewResourceFromConf(mediumResource)
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+	}
+
+	// all users can increate usage within the quota
+	increased := manager.IncreaseTrackedResource(queuePathParent, "test-app-1-1", usage, user1)
+	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app test-app-1-1, res "+usage.String())
+
+	increased = manager.IncreaseTrackedResource(queuePathParent, "test-app-2-1", usage, user2)
+	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app test-app-2-1, res "+usage.String())
+
+	increased = manager.IncreaseTrackedResource(queuePathParent, "test-app-3-1", usage, user3)
+	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app test-app-3-1, res "+usage.String())
+
+	// remove group2 from the specific group
+	conf.Queues[0].Queues[0].Limits[0].Groups = []string{"group1"}
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+	// user1 still can increase usage within the quota
+	increased = manager.IncreaseTrackedResource(queuePathParent, "test-app-1-2", usage, user1)
+	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app test-app-1-2, res "+usage.String())
+
+	// user2 can't increase usage more than wildcard limit
+	increased = manager.IncreaseTrackedResource(queuePathParent, "test-app-2-2", usage, user2)
+	assert.Equal(t, increased, false, "should not increase tracked resource: queuepath "+queuePathParent+", app test-app-2-2, res "+usage.String())
+
+	// user3 can't increase usage more than wildcard limit
+	increased = manager.IncreaseTrackedResource(queuePathParent, "test-app-3-2", usage, user3)
+	assert.Equal(t, increased, false, "should not increase tracked resource: queuepath "+queuePathParent+", app test-app-3-2, res "+usage.String())
+}
+
 func createLimit(users, groups []string, maxResources map[string]string, maxApps uint64) configs.Limit {
 	return configs.Limit{
 		Users:           users,

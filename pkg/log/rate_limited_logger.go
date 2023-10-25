@@ -38,14 +38,6 @@ func RateLimitedLog(handle *LoggerHandle, every time.Duration) *rateLimitedLogge
 	}
 }
 
-// visible for testing
-func TestingRateLimitedLog(logger *zap.Logger, every time.Duration) *rateLimitedLogger {
-	return &rateLimitedLogger{
-		logger:  logger,
-		limiter: rate.NewLimiter(rate.Every(every), 1),
-	}
-}
-
 func (rl *rateLimitedLogger) Debug(msg string, fields ...zap.Field) {
 	if rl.limiter.Allow() {
 		rl.logger.Debug(msg, fields...)

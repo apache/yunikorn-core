@@ -27,6 +27,7 @@ import (
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"golang.org/x/time/rate"
 	"gotest.tools/v3/assert"
 )
 
@@ -37,7 +38,7 @@ type logMessage struct {
 
 func TestRateLimitedLog(t *testing.T) {
 	zapLogger, logFile := createZapTestLogger()
-	logger := TestingRateLimitedLog(zapLogger, time.Minute)
+	logger := getTestRateLimitedLog(zapLogger, time.Minute)
 
 	// this won't last over one minute, assert there is only one record in log file
 	for i := 0; i < 10000; i++ {
@@ -53,6 +54,13 @@ func TestRateLimitedLog(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal logMessage from log file: %s", content)
 	assert.Equal(t, zapcore.InfoLevel.String(), logMessage.Level)
 	assert.Equal(t, "YuniKorn", logMessage.Message)
+}
+
+func getTestRateLimitedLog(logger *zap.Logger, every time.Duration) *rateLimitedLogger {
+	return &rateLimitedLogger{
+		logger:  logger,
+		limiter: rate.NewLimiter(rate.Every(every), 1),
+	}
 }
 
 // create zap logger that log in json format and output to temp file

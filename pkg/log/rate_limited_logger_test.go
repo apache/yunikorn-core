@@ -19,9 +19,9 @@
 package log
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
-	"fmt"
-	"os"
 	"testing"
 	"time"
 
@@ -32,53 +32,35 @@ import (
 )
 
 type logMessage struct {
-	Level   string `json:"level"`
-	Message string `json:"msg"`
+	Level   string `json:"L"`
+	Message string `json:"M"`
 }
 
 func TestRateLimitedLog(t *testing.T) {
-	zapLogger, logFile := createZapTestLogger()
-	logger := getTestRateLimitedLog(zapLogger, time.Minute)
+	encoderConfig := zap.NewDevelopmentEncoderConfig()
+	buf := bytes.Buffer{}
+	writer := bufio.NewWriter(&buf)
+	zapLogger := zap.New(
+		zapcore.NewCore(
+			zapcore.NewJSONEncoder(encoderConfig),
+			zapcore.AddSync(writer),
+			zap.NewAtomicLevelAt(zap.InfoLevel),
+		),
+	)
+	logger := &rateLimitedLogger{
+		logger:  zapLogger,
+		limiter: rate.NewLimiter(rate.Every(time.Minute), 1),
+	}
 
-	// this won't last over one minute, assert there is only one record in log file
+	// this won't last over one minute, assert there is only one record in buffer
 	for i := 0; i < 10000; i++ {
 		logger.Info("YuniKorn")
 	}
+	writer.Flush()
 
-	content, err := os.ReadFile(logFile)
-	if err != nil {
-		fmt.Printf("Failed reading file: %s", err)
-	}
 	var logMessage logMessage
-	err = json.Unmarshal(content, &logMessage)
-	assert.NilError(t, err, "failed to unmarshal logMessage from log file: %s", content)
-	assert.Equal(t, zapcore.InfoLevel.String(), logMessage.Level)
+	err := json.Unmarshal(buf.Bytes(), &logMessage)
+	assert.NilError(t, err, "failed to unmarshal logMessage from buffer: %s", buf.Bytes())
+	assert.Equal(t, "INFO", logMessage.Level)
 	assert.Equal(t, "YuniKorn", logMessage.Message)
-}
-
-func getTestRateLimitedLog(logger *zap.Logger, every time.Duration) *rateLimitedLogger {
-	return &rateLimitedLogger{
-		logger:  logger,
-		limiter: rate.NewLimiter(rate.Every(every), 1),
-	}
-}
-
-// create zap logger that log in json format and output to temp file
-func createZapTestLogger() (*zap.Logger, string) {
-	logDir, err := os.MkdirTemp("", "log*")
-	if err != nil {
-		panic(err)
-	}
-	logFile := fmt.Sprintf("%s/log.stdout", logDir)
-	outputPaths := []string{logFile}
-	zapConfig := zap.NewProductionConfig()
-	zapConfig.Encoding = "json"
-	zapConfig.OutputPaths = outputPaths
-
-	zapLogger, err := zapConfig.Build()
-	if err != nil {
-		panic(err)
-	}
-
-	return zapLogger, logFile
 }

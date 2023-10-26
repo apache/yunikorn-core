@@ -51,6 +51,8 @@ var (
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
+var rateLimitedLog = log.RateLimitedLog(log.SchedApplication, time.Second)
+
 const (
 	Soft string = "Soft"
 	Hard string = "Hard"
@@ -990,7 +992,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
 			if node == nil {
-				log.Log(log.SchedApplication).Warn("required node is not found (could be transient)",
+				rateLimitedLog.Warn("required node is not found (could be transient)",
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))

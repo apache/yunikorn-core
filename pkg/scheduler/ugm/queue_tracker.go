@@ -126,6 +126,8 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 			config = m.getGroupWildCardLimitsConfig(qt.queuePath)
 		}
 		if config != nil {
+			wildCardQuotaExceeded = (config.maxApplications != 0 && !existingApp && len(qt.runningApplications)+1 > int(config.maxApplications)) ||
+				(!resources.Equals(resources.NewResource(), config.maxResources) && resources.StrictlyGreaterThan(finalResourceUsage, config.maxResources))
 			log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of wild card user/group",
 				zap.Int("tracking type", int(trackType)),
 				zap.String("queue path", qt.queuePath),
@@ -133,8 +135,6 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 				zap.Uint64("wild card max running apps", config.maxApplications),
 				zap.Stringer("wild card max resources", config.maxResources),
 				zap.Bool("wild card quota exceeded", wildCardQuotaExceeded))
-			wildCardQuotaExceeded = (config.maxApplications != 0 && !existingApp && len(qt.runningApplications)+1 > int(config.maxApplications)) ||
-				(!resources.Equals(resources.NewResource(), config.maxResources) && resources.StrictlyGreaterThan(finalResourceUsage, config.maxResources))
 			if wildCardQuotaExceeded {
 				log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit of wild card user/group",
 					zap.Int("tracking type", int(trackType)),

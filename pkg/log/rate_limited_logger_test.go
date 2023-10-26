@@ -56,17 +56,17 @@ func TestRateLimitedLog(t *testing.T) {
 	startTime := time.Now()
 	for {
 		elapsed := time.Since(startTime)
-		if elapsed > 2*time.Second {
+		if elapsed > 500*time.Millisecond {
 			break
 		}
 		logger.Info("YuniKorn")
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	writer.Flush()
 
-	var logMessage logMessage
-	err := json.Unmarshal(buf.Bytes(), &logMessage)
+	var lm logMessage
+	err := json.Unmarshal(buf.Bytes(), &lm)
 	assert.NilError(t, err, "failed to unmarshal logMessage from buffer: %s", buf.Bytes())
-	assert.Equal(t, "INFO", logMessage.Level)
-	assert.Equal(t, "YuniKorn", logMessage.Message)
+	assert.Equal(t, "INFO", lm.Level)
+	assert.Equal(t, "YuniKorn", lm.Message)
 }

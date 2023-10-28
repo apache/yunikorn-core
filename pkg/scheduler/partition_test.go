@@ -563,7 +563,7 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 		TerminationType: si.TerminationType_PREEMPTED_BY_SCHEDULER,
 	}
 	releases, _ := partition.removeAllocation(release)
-	assert.Equal(t, 1, len(releases), "unexpected number of allocations released")
+	assert.Equal(t, 0, len(releases), "not expecting any released allocations")
 	assertPlaceholderData(t, gangApp, 7, 1)
 }
 
@@ -1168,6 +1168,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 	ask := newAllocationAsk("alloc-nr", appNotRemoved, appRes)
 	alloc := objects.NewAllocation("alloc-nr-uuid", nodeID1, ask)
 	err = partition.addAllocation(alloc)
+	assert.NilError(t, err, "add allocation to partition should not have failed")
 	assertLimits(t, getTestUserGroup(), appRes)
 
 	ask = newAllocationAsk("alloc-1", appNotRemoved, appRes)
@@ -2120,7 +2121,7 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 		TerminationType: si.TerminationType_PREEMPTED_BY_SCHEDULER,
 	}
 	releases, _ := partition.removeAllocation(release)
-	assert.Equal(t, 1, len(releases), "unexpected number of allocations released")
+	assert.Equal(t, 0, len(releases), "not expecting any released allocations")
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 0}), getExpectedQueuesLimitsForPreemptionWithRequiredNode())
 	return partition, app
 }

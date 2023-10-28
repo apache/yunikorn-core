@@ -255,7 +255,6 @@ const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
 const nodeID = "node-1"
-const instType = "itype-1"
 
 var (
 	updatedExtraConf = map[string]string{
@@ -509,7 +508,7 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in output")
-	assert.Assert(t, reflect.DeepEqual(conf.Extra, updatedExtraConf), "extra config did not change")
+	assert.DeepEqual(t, conf.Extra, updatedExtraConf)
 
 	// reset extra config map
 	configs.SetConfigMap(map[string]string{})
@@ -540,7 +539,7 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in json output: %s, %s", startConfSum, conf.Checksum)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
-	assert.Assert(t, reflect.DeepEqual(conf.Extra, updatedExtraConf), "extra config did not change")
+	assert.DeepEqual(t, conf.Extra, updatedExtraConf)
 
 	// reset extra config map
 	configs.SetConfigMap(map[string]string{})

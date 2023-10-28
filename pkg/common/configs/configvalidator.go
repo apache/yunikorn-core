@@ -21,8 +21,6 @@ package configs
 import (
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -721,13 +719,6 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 func checkDeprecatedStateDumpFilePath(partition *PartitionConfig) error {
 	if partition.StateDumpFilePath != "" {
 		log.Log(log.Deprecation).Warn("Ignoring deprecated partition setting 'statedumpfilepath'. This parameter will be removed in a future release.")
-	}
-	return nil
-}
-
-func ensureDir(fileName string) error {
-	if err := os.MkdirAll(filepath.Dir(fileName), os.ModePerm); err != nil {
-		return err
 	}
 	return nil
 }

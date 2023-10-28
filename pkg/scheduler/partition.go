@@ -254,10 +254,6 @@ func (pc *PartitionContext) isDraining() bool {
 	return pc.stateMachine.Current() == objects.Draining.String()
 }
 
-func (pc *PartitionContext) isRunning() bool {
-	return pc.stateMachine.Current() == objects.Active.String()
-}
-
 func (pc *PartitionContext) isStopped() bool {
 	return pc.stateMachine.Current() == objects.Stopped.String()
 }
@@ -469,10 +465,9 @@ func (pc *PartitionContext) getQueueInternal(name string) *objects.Queue {
 
 // Get the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
-	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
-	PartitionQueueDAOInfo = pc.root.GetPartitionQueueDAOInfo()
-	PartitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
-	return PartitionQueueDAOInfo
+	partitionQueueDAOInfo := pc.root.GetPartitionQueueDAOInfo()
+	partitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
+	return partitionQueueDAOInfo
 }
 
 func (pc *PartitionContext) GetPartitionQueue(queue *objects.Queue) dao.PartitionQueueDAOInfo {
@@ -1372,9 +1367,9 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	pc.updateAllocationCount(-len(released))
 	metrics.GetQueueMetrics(queue.GetQueuePath()).AddReleasedContainers(len(released))
 
-	// if the termination type is timeout, we don't notify the shim, because it's
-	// originated from that side
-	if release.TerminationType == si.TerminationType_TIMEOUT {
+	// if the termination type is TIMEOUT/PREEMPTED_BY_SCHEDULER, we don't notify the shim,
+	// because it's originated from that side
+	if release.TerminationType == si.TerminationType_TIMEOUT || release.TerminationType == si.TerminationType_PREEMPTED_BY_SCHEDULER {
 		released = nil
 	}
 	return released, confirmed

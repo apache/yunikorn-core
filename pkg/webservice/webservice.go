@@ -21,7 +21,6 @@ package webservice
 import (
 	"context"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -34,7 +33,6 @@ import (
 )
 
 var imHistory *history.InternalMetricsHistory
-var lock sync.RWMutex
 var schedulerContext *scheduler.ClusterContext
 
 type WebService struct {

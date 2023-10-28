@@ -63,4 +63,3 @@ func TestSortingPolicyToString(t *testing.T) {
 		}
 	}
 }
-

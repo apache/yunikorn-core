@@ -1690,7 +1690,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 
 	// test properties
 	root.properties = getProperties()
-	assert.Assert(t, reflect.DeepEqual(root.properties, root.GetPartitionQueueDAOInfo().Properties))
+	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo().Properties)
 
 	// test template
 	root.template, err = template.FromConf(&configs.ChildTemplate{
@@ -1701,15 +1701,15 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 		},
 	})
 	assert.NilError(t, err)
-	assert.Assert(t, reflect.DeepEqual(root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties))
-	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.template.GetMaxResource().DAOMap())
-	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.template.GetGuaranteedResource().DAOMap())
+	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties)
+	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo().TemplateInfo.MaxResource)
+	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo().TemplateInfo.GuaranteedResource)
 
 	// test resources
 	root.maxResource = getResource(t)
 	root.guaranteedResource = getResource(t)
-	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetMaxResource().DAOMap())
-	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetGuaranteedResource().DAOMap())
+	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo().MaxResource)
+	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo().GuaranteedResource)
 
 	// test allocatingAcceptedApps
 	root.allocatingAcceptedApps = getAllocatingAcceptedApps()

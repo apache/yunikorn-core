@@ -875,6 +875,21 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
 	assertParamsMissing(t, resp)
+
+	// Test specific queue
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/a", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "queue", Value: "a"}}))
+	assert.NilError(t, err, "Get Queue for PartitionQueue Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+
+	// Test queue name is missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/a", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: ""}}))
+	assert.NilError(t, err, "Get Queue for PartitionQueue Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	assertQueueExists(t, resp)
 }
 
 func TestGetClusterInfo(t *testing.T) {
@@ -1228,7 +1243,7 @@ func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Application not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, ApplicationDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1237,7 +1252,7 @@ func assertUserExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "User not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, UserDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1246,7 +1261,7 @@ func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "User name is missing", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, UserNameMissing, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1255,7 +1270,7 @@ func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Group not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, GroupDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1264,7 +1279,7 @@ func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Group name is missing", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, GroupNameMissing, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1273,7 +1288,7 @@ func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, "failed to unmarshal node dao response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Node not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, NodeDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 

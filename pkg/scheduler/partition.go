@@ -471,10 +471,9 @@ func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 }
 
 func (pc *PartitionContext) GetPartitionQueue(queue *objects.Queue) dao.PartitionQueueDAOInfo {
-	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
-	PartitionQueueDAOInfo = queue.GetPartitionQueueDAOInfo()
-	PartitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
-	return PartitionQueueDAOInfo
+	partitionQueueDAOInfo := queue.GetPartitionQueueDAOInfo()
+	partitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
+	return partitionQueueDAOInfo
 }
 
 // Create the recovery queue.

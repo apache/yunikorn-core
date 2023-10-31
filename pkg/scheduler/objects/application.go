@@ -909,22 +909,22 @@ func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 	return pending > len(resNumber)
 }
 
-func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk) {
+func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*AllocationAsk) {
 	sa.RLock()
 	defer sa.RUnlock()
 	if sa.sortedRequests == nil {
 		return
 	}
-
 	for _, request := range sa.sortedRequests {
 		if request.GetPendingAskRepeat() == 0 {
 			continue
 		}
 		// ignore nil checks resource function calls are nil safe
-		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
+		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
 			// if headroom is still enough for the resources
 			*total = append(*total, request)
 			headRoom.SubOnlyExisting(request.GetAllocatedResource())
+			userHeadRoom.SubOnlyExisting(request.GetAllocatedResource())
 		}
 	}
 }

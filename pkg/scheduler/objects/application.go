@@ -146,11 +146,11 @@ func (as *ApplicationSummary) DoLogging() {
 }
 
 func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
+	sa.RLock()
+	defer sa.RUnlock()
 	state := sa.stateMachine.Current()
 	ru := sa.usedResource.Clone()
 	pu := sa.preemptedResource.Clone()
-	sa.RLock()
-	defer sa.RUnlock()
 	appSummary := &ApplicationSummary{
 		ApplicationID:     sa.ApplicationID,
 		SubmissionTime:    sa.SubmissionTime,
@@ -2031,17 +2031,15 @@ func (sa *Application) cleanupAsks() {
 	sa.sortedRequests = nil
 }
 
-func (sa *Application) CleanupUsedResource() {
+func (sa *Application) cleanupTrackedResource() {
 	sa.usedResource = nil
-}
-
-func (sa *Application) CleanupPreemptedResource() {
 	sa.preemptedResource = nil
 }
 
 func (sa *Application) CleanupTrackedResource() {
-	sa.CleanupUsedResource()
-	sa.CleanupPreemptedResource()
+	sa.Lock()
+	defer sa.Unlock()
+	sa.cleanupTrackedResource()
 }
 
 func (sa *Application) LogAppSummary(rmID string) {

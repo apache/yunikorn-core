@@ -1840,7 +1840,8 @@ func TestPreemption(t *testing.T) {
 	// delay so that preemption delay passes
 	time.Sleep(100 * time.Millisecond)
 
-	time.Sleep(3 * time.Second)
+	// delay 1 second to have a minimum resource*seconds measurement for preempted resources
+	time.Sleep(1 * time.Second)
 
 	// third allocation should not succeed, as we are currently above capacity
 	alloc := partition.tryAllocate()
@@ -1888,7 +1889,7 @@ func TestPreemption(t *testing.T) {
 
 	appSummary := app1.GetApplicationSummary("default")
 	appSummary.DoLogging()
-	assertPreemptedResource(t, appSummary, -1, 15000)
+	assertPreemptedResource(t, appSummary, -1, 5000)
 
 	appSummary = app2.GetApplicationSummary("default")
 	appSummary.DoLogging()

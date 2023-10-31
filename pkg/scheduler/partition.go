@@ -254,10 +254,6 @@ func (pc *PartitionContext) isDraining() bool {
 	return pc.stateMachine.Current() == objects.Draining.String()
 }
 
-func (pc *PartitionContext) isRunning() bool {
-	return pc.stateMachine.Current() == objects.Active.String()
-}
-
 func (pc *PartitionContext) isStopped() bool {
 	return pc.stateMachine.Current() == objects.Stopped.String()
 }
@@ -468,16 +464,10 @@ func (pc *PartitionContext) getQueueInternal(name string) *objects.Queue {
 }
 
 // Get the queue info for the whole queue structure to pass to the webservice
-func (pc *PartitionContext) GetQueueInfo() dao.QueueDAOInfo {
-	return pc.root.GetQueueInfo()
-}
-
-// Get the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
-	var PartitionQueueDAOInfo = dao.PartitionQueueDAOInfo{}
-	PartitionQueueDAOInfo = pc.root.GetPartitionQueueDAOInfo()
-	PartitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
-	return PartitionQueueDAOInfo
+	partitionQueueDAOInfo := pc.root.GetPartitionQueueDAOInfo()
+	partitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
+	return partitionQueueDAOInfo
 }
 
 // Create the recovery queue.
@@ -685,6 +675,9 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 				zap.String("nodeID", node.NodeID))
 			continue
 		}
+		// Processing a removal while in the Completing state could race with the state change.
+		// Retrieve the queue early before a possible race.
+		queue := app.GetQueue()
 		// check for an inflight replacement.
 		if alloc.GetReleaseCount() != 0 {
 			release := alloc.GetFirstRelease()
@@ -706,7 +699,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 					// The reverse case is handled during allocation.
 					if delta.HasNegativeValue() {
 						// this looks incorrect but the delta is negative and the result will be a real decrease
-						err := app.GetQueue().IncAllocatedResource(delta, false)
+						err := queue.IncAllocatedResource(delta, false)
 						// this should not happen as we really decrease the value
 						if err != nil {
 							log.Log(log.SchedPartition).Warn("unexpected failure during queue update: replacing placeholder",
@@ -761,16 +754,14 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 				zap.String("nodeID", node.NodeID))
 			continue
 		}
-		if err := app.GetQueue().DecAllocatedResource(alloc.GetAllocatedResource()); err != nil {
+		if err := queue.DecAllocatedResource(alloc.GetAllocatedResource()); err != nil {
 			log.Log(log.SchedPartition).Warn("failed to release resources from queue",
 				zap.String("appID", alloc.GetApplicationID()),
 				zap.Error(err))
-		} else {
-			metrics.GetQueueMetrics(app.GetQueuePath()).IncReleasedContainer()
 		}
 		// remove preempted resources
 		if alloc.IsPreempted() {
-			app.GetQueue().DecPreemptingResource(alloc.GetAllocatedResource())
+			queue.DecPreemptingResource(alloc.GetAllocatedResource())
 		}
 		if alloc.IsPlaceholder() {
 			pc.decPhAllocationCount(1)
@@ -778,6 +769,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 
 		// the allocation is removed so add it to the list that we return
 		released = append(released, alloc)
+		metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		log.Log(log.SchedPartition).Info("allocation removed from node",
 			zap.String("nodeID", node.NodeID),
 			zap.String("allocationId", allocID))
@@ -1251,6 +1243,12 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			zap.Stringer("terminationType", release.TerminationType))
 		return nil, nil
 	}
+	// Processing a removal while in the Completing state could race with the state change.
+	// The race occurs between removing the allocation and updating the queue after node processing.
+	// If the state change removes the queue link before we get to updating the queue after the node we
+	// leave the resources as allocated on the queue. The queue cannot be removed yet at this point as
+	// there are still allocations left. So retrieve the queue early to sidestep the race.
+	queue := app.GetQueue()
 	// temp store for allocations manipulated
 	released := make([]*objects.Allocation, 0)
 	var confirmed *objects.Allocation
@@ -1295,7 +1293,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	for _, alloc := range released {
 		node := pc.GetNode(alloc.GetNodeID())
 		if node == nil {
-			log.Log(log.SchedPartition).Info("node not found while releasing allocation",
+			log.Log(log.SchedPartition).Warn("node not found while releasing allocation",
 				zap.String("appID", appID),
 				zap.String("allocationId", alloc.GetUUID()),
 				zap.String("nodeID", alloc.GetNodeID()))
@@ -1342,18 +1340,15 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		}
 	}
 	if resources.StrictlyGreaterThanZero(total) {
-		queue := app.GetQueue()
 		if err := queue.DecAllocatedResource(total); err != nil {
 			log.Log(log.SchedPartition).Warn("failed to release resources from queue",
 				zap.String("appID", appID),
 				zap.String("allocationId", uuid),
 				zap.Error(err))
-		} else {
-			metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
 		}
 	}
 	if resources.StrictlyGreaterThanZero(totalPreempting) {
-		app.GetQueue().DecPreemptingResource(totalPreempting)
+		queue.DecPreemptingResource(totalPreempting)
 	}
 
 	// if confirmed is set we can assume there will just be one alloc in the released
@@ -1363,10 +1358,11 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 	// track the number of allocations, when we replace the result is no change
 	pc.updateAllocationCount(-len(released))
+	metrics.GetQueueMetrics(queue.GetQueuePath()).AddReleasedContainers(len(released))
 
-	// if the termination type is timeout, we don't notify the shim, because it's
-	// originated from that side
-	if release.TerminationType == si.TerminationType_TIMEOUT {
+	// if the termination type is TIMEOUT/PREEMPTED_BY_SCHEDULER, we don't notify the shim,
+	// because it's originated from that side
+	if release.TerminationType == si.TerminationType_TIMEOUT || release.TerminationType == si.TerminationType_PREEMPTED_BY_SCHEDULER {
 		released = nil
 	}
 	return released, confirmed

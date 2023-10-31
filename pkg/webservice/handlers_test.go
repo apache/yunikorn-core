@@ -197,11 +197,72 @@ partitions:
                 vcore: 10000
 `
 
+const userGroupLimitsConfig = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 0
+                  maxresources:
+                    cpu: "200"
+`
+
+const userGroupLimitsInvalidConfig = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+                  maxapplications: 1
+                  maxresources:
+                    cpu: "0"
+`
+
+const userGroupLimitsInvalidConfig1 = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: parent1
+              parent: true
+              limits:
+                - limit: ""
+                  users:
+                    - test_user
+`
+
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
 const nodeID = "node-1"
-const instType = "itype-1"
+
+var (
+	updatedExtraConf = map[string]string{
+		"log.level":                  "info",
+		"service.schedulingInterval": "1s",
+		"admissionController.accessControl.bypassAuth": "false",
+	}
+)
 
 // setup To take care of setting up config, cluster, partitions etc
 func setup(t *testing.T, config string, partitionCount int) *scheduler.PartitionContext {
@@ -249,6 +310,47 @@ func TestValidateConf(t *testing.T) {
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: false,
 				Reason:  "undefined policy: invalid",
+			},
+		},
+	}
+	for _, test := range confTests {
+		// No err check: new request always returns correctly
+		//nolint: errcheck
+		req, _ := http.NewRequest("POST", "", strings.NewReader(test.content))
+		resp := &MockResponseWriter{}
+		validateConf(resp, req)
+		var vcr dao.ValidateConfResponse
+		err := json.Unmarshal(resp.outputBytes, &vcr)
+		assert.NilError(t, err, "failed to unmarshal ValidateConfResponse from response body")
+		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
+		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
+	}
+}
+
+func TestUserGroupLimits(t *testing.T) {
+	confTests := []struct {
+		content          string
+		expectedResponse dao.ValidateConfResponse
+	}{
+		{
+			content: userGroupLimitsConfig,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: true,
+				Reason:  common.Empty,
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "MaxResources is zero in '' limit, all resource types are zero",
+			},
+		},
+		{
+			content: userGroupLimitsInvalidConfig1,
+			expectedResponse: dao.ValidateConfResponse{
+				Allowed: false,
+				Reason:  "invalid resource combination for limit  all resource limits are null",
 			},
 		},
 	}
@@ -386,7 +488,7 @@ func TestGetConfigYAML(t *testing.T) {
 	resp := &MockResponseWriter{}
 	getClusterConfig(resp, req)
 	// yaml unmarshal handles the checksum add the end automatically in this implementation
-	conf := &configs.SchedulerConfig{}
+	conf := &dao.ConfigDAOInfo{}
 	err = yaml.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
@@ -397,6 +499,8 @@ func TestGetConfigYAML(t *testing.T) {
 	// change the config
 	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
+	configs.SetConfigMap(updatedExtraConf)
+
 	// check that we return yaml by default, unmarshal will error when we don't
 	req.Header.Set("Accept", "unknown")
 	getClusterConfig(resp, req)
@@ -404,6 +508,10 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.NilError(t, err, "failed to unmarshal config from response body (updated config)")
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in output")
+	assert.DeepEqual(t, conf.Extra, updatedExtraConf)
+
+	// reset extra config map
+	configs.SetConfigMap(map[string]string{})
 }
 
 func TestGetConfigJSON(t *testing.T) {
@@ -415,7 +523,7 @@ func TestGetConfigJSON(t *testing.T) {
 	resp := &MockResponseWriter{}
 	getClusterConfig(resp, req)
 
-	conf := &configs.SchedulerConfig{}
+	conf := &dao.ConfigDAOInfo{}
 	err := json.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (json)")
 	startConfSum := conf.Checksum
@@ -424,12 +532,17 @@ func TestGetConfigJSON(t *testing.T) {
 	// change the config
 	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
+	configs.SetConfigMap(updatedExtraConf)
 
 	getClusterConfig(resp, req)
 	err = json.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, "failed to unmarshal config from response body (json, updated config)")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in json output: %s, %s", startConfSum, conf.Checksum)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
+	assert.DeepEqual(t, conf.Extra, updatedExtraConf)
+
+	// reset extra config map
+	configs.SetConfigMap(map[string]string{})
 }
 
 func TestBuildUpdateResponseSuccess(t *testing.T) {
@@ -1178,6 +1291,15 @@ func TestValidateQueue(t *testing.T) {
 }
 
 func TestFullStateDumpPath(t *testing.T) {
+	original := configs.GetConfigMap()
+	defer func() {
+		configs.SetConfigMap(original)
+	}()
+	configMap := map[string]string{
+		"log.level": "WARN",
+	}
+	configs.SetConfigMap(configMap)
+
 	schedulerContext = prepareSchedulerContext(t, false)
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
@@ -1198,32 +1320,6 @@ func TestFullStateDumpPath(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &aggregated)
 	assert.NilError(t, err)
 	verifyStateDumpJSON(t, &aggregated)
-}
-
-func TestGetLoggerLevel(t *testing.T) {
-	req, err := http.NewRequest("GET", "/ws/v1/loglevel", strings.NewReader(""))
-	assert.NilError(t, err)
-
-	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(getLogLevel)
-	handler.ServeHTTP(rr, req)
-
-	expected := "info"
-	assert.Equal(t, rr.Body.String(), expected,
-		fmt.Sprintf("handler returned unexpected body: got %v want %v", rr.Body.String(), expected))
-	assert.Equal(t, rr.Code, http.StatusOK)
-}
-
-func TestSetLoggerLevel(t *testing.T) {
-	req, err := http.NewRequest("PUT", "/ws/v1/loglevel", strings.NewReader(""))
-	assert.NilError(t, err)
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "level", Value: "error"},
-	}))
-	rr := httptest.NewRecorder()
-	handler := http.HandlerFunc(setLogLevel)
-	handler.ServeHTTP(rr, req)
-	assert.Equal(t, rr.Code, http.StatusOK)
 }
 
 func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
@@ -1534,4 +1630,6 @@ func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
 	assert.Check(t, len(aggregated.ClusterInfo) > 0)
 	assert.Check(t, len(aggregated.Queues) > 0)
 	assert.Check(t, len(aggregated.LogLevel) > 0)
+	assert.Check(t, len(aggregated.Config.SchedulerConfig.Partitions) > 0)
+	assert.Check(t, len(aggregated.Config.Extra) > 0)
 }

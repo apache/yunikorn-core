@@ -23,18 +23,21 @@ import (
 	"reflect"
 	"sort"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	promtu "github.com/prometheus/client_golang/prometheus/testutil"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
-	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -267,6 +270,11 @@ func TestPriorityCalc(t *testing.T) {
 }
 
 func TestPendingCalc(t *testing.T) {
+	// Reset existing metric storage; otherwise this unit test would get metrics populated by other UTs.
+	// In long run, to make the metrics code more testable, we should pass instantiable Metrics obj to Queue
+	// instead of using a global Metrics obj at pkg/metrics/init.go.
+	metrics.Reset()
+
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -285,6 +293,16 @@ func TestPendingCalc(t *testing.T) {
 	if !resources.Equals(leaf.pending, allocRes) {
 		t.Errorf("leaf queue pending allocation failed to increment expected %v, got %v", allocRes, leaf.pending)
 	}
+	metrics := []string{"yunikorn_root_queue_resource", "yunikorn_root_leaf_queue_resource"}
+	want := concatQueueResourceMetric(metrics, []string{`
+yunikorn_root_queue_resource{resource="memory",state="pending"} 100
+yunikorn_root_queue_resource{resource="vcores",state="pending"} 10
+`, `
+yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 100
+yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 10
+`},
+	)
+	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
 	leaf.decPendingResource(allocRes)
 	if !resources.IsZero(root.pending) {
 		t.Errorf("root queue pending allocation failed to decrement expected 0, got %v", root.pending)
@@ -292,6 +310,15 @@ func TestPendingCalc(t *testing.T) {
 	if !resources.IsZero(leaf.pending) {
 		t.Errorf("leaf queue pending allocation failed to decrement expected 0, got %v", leaf.pending)
 	}
+	want = concatQueueResourceMetric(metrics, []string{`
+yunikorn_root_queue_resource{resource="memory",state="pending"} 0
+yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
+`, `
+yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
+yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
+`},
+	)
+	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
 	// Not allowed to go negative: both will be zero after this
 	newRes := resources.Multiply(allocRes, 2)
 	root.pending = newRes
@@ -303,6 +330,30 @@ func TestPendingCalc(t *testing.T) {
 	if !resources.IsZero(leaf.GetPendingResource()) {
 		t.Errorf("leaf queue pending allocation should have failed to decrement expected zero, got %v", leaf.pending)
 	}
+	want = concatQueueResourceMetric(metrics, []string{`
+yunikorn_root_queue_resource{resource="memory",state="pending"} 0
+yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
+`, `
+yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
+yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
+`},
+	)
+	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
+}
+
+const (
+	QueueResourceMetricHelp = "# HELP %v Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`."
+	QueueResourceMetricType = "# TYPE %v gauge"
+)
+
+func concatQueueResourceMetric(metricNames, metricVals []string) string {
+	var out string
+	for i, metricName := range metricNames {
+		out = out + fmt.Sprintf(QueueResourceMetricHelp, metricName) + "\n"
+		out = out + fmt.Sprintf(QueueResourceMetricType, metricName) + "\n"
+		out += strings.TrimLeft(metricVals[i], "\n")
+	}
+	return out
 }
 
 func TestGetChildQueueInfo(t *testing.T) {
@@ -1603,120 +1654,6 @@ func TestMaxResource(t *testing.T) {
 	}
 }
 
-func TestGetQueueInfo(t *testing.T) {
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "failed to create basic root queue: %v", err)
-	var rootMax *resources.Resource
-	rootMax, err = resources.NewResourceFromConf(map[string]string{"memory": "2048", "vcores": "10"})
-	assert.NilError(t, err, "failed to create configuration: %v", err)
-	root.SetMaxResource(rootMax)
-
-	var parentUsed *resources.Resource
-	parentUsed, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
-	assert.NilError(t, err, "failed to create resource: %v", err)
-	var parent *Queue
-	parent, err = createManagedQueue(root, "parent", true, nil)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-	err = parent.IncAllocatedResource(parentUsed, false)
-	assert.NilError(t, err, "failed to increment allocated resource: %v", err)
-
-	var child1used *resources.Resource
-	child1used, err = resources.NewResourceFromConf(map[string]string{"memory": "1012", "vcores": "2"})
-	assert.NilError(t, err, "failed to create resource: %v", err)
-	var child1 *Queue
-	child1, err = createManagedQueue(parent, "child1", true, nil)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-	err = child1.IncAllocatedResource(child1used, false)
-	assert.NilError(t, err, "failed to increment allocated resource: %v", err, err)
-
-	var child2 *Queue
-	child2, err = createManagedQueue(parent, "child2", true, nil)
-	assert.NilError(t, err, "failed to create child queue: %v", err)
-	child2.SetMaxResource(resources.NewResource())
-	rootDaoInfo := root.GetQueueInfo()
-
-	compareQueueInfoWithDAO(t, root, rootDaoInfo)
-	parentDaoInfo := rootDaoInfo.ChildQueues[0]
-	compareQueueInfoWithDAO(t, parent, parentDaoInfo)
-	for _, childDao := range parentDaoInfo.ChildQueues {
-		name := childDao.QueueName
-		child := parent.children[name]
-		if child == nil {
-			t.Fail()
-		}
-		compareQueueInfoWithDAO(t, child, childDao)
-	}
-}
-
-func TestGetQueueInfoPropertiesSet(t *testing.T) {
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "failed to create basic root queue: %v", err)
-
-	// managed parent queue with property set
-	properties := map[string]string{configs.ApplicationSortPolicy: "fifo"}
-	var parent *Queue
-	parent, err = createManagedQueueWithProps(root, "parent", true, nil, properties)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-
-	// managed leaf queue with some properties set
-	properties = map[string]string{configs.ApplicationSortPolicy: "fair",
-		"some_property": "some_value"}
-	var _ *Queue
-	_, err = createManagedQueueWithProps(parent, "child1", true, nil, properties)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-
-	// managed leaf queue with some properties set
-	properties = map[string]string{configs.ApplicationSortPolicy: "state_aware"}
-	_, err = createManagedQueueWithProps(parent, "child2", true, nil, properties)
-	assert.NilError(t, err, "failed to create child queue: %v", err)
-
-	// dynamic leaf queue picks up from parent
-	_, err = createDynamicQueue(parent, "child3", true)
-	assert.NilError(t, err, "failed to create child queue: %v", err)
-
-	rootDaoInfo := root.GetQueueInfo()
-
-	compareQueueInfoWithDAO(t, root, rootDaoInfo)
-	parentDaoInfo := rootDaoInfo.ChildQueues[0]
-	compareQueueInfoWithDAO(t, parent, parentDaoInfo)
-	for _, childDao := range parentDaoInfo.ChildQueues {
-		name := childDao.QueueName
-		child := parent.children[name]
-		if child == nil {
-			t.Fail()
-		}
-		compareQueueInfoWithDAO(t, child, childDao)
-	}
-}
-
-func compareQueueInfoWithDAO(t *testing.T, queue *Queue, dao dao.QueueDAOInfo) {
-	assert.Equal(t, queue.Name, dao.QueueName)
-	assert.Equal(t, len(queue.children), len(dao.ChildQueues))
-	assert.Equal(t, queue.stateMachine.Current(), dao.Status)
-	emptyRes := map[string]int64{}
-	if queue.allocatedResource == nil {
-		assert.DeepEqual(t, emptyRes, dao.Capacities.UsedCapacity)
-	} else {
-		assert.DeepEqual(t, queue.allocatedResource.DAOMap(), dao.Capacities.UsedCapacity)
-	}
-	if queue.maxResource == nil {
-		assert.DeepEqual(t, emptyRes, dao.Capacities.MaxCapacity)
-	} else {
-		assert.DeepEqual(t, queue.maxResource.DAOMap(), dao.Capacities.MaxCapacity)
-	}
-	if queue.guaranteedResource == nil {
-		assert.DeepEqual(t, emptyRes, dao.Capacities.Capacity)
-	} else {
-		assert.DeepEqual(t, queue.guaranteedResource.DAOMap(), dao.Capacities.Capacity)
-	}
-	assert.Equal(t, len(queue.properties), len(dao.Properties))
-	if len(queue.properties) > 0 {
-		for k, v := range queue.properties {
-			assert.Equal(t, v, dao.Properties[k])
-		}
-	}
-}
-
 func TestSupportTaskGroup(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create basic root queue: %v", err)
@@ -1751,7 +1688,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 
 	// test properties
 	root.properties = getProperties()
-	assert.Assert(t, reflect.DeepEqual(root.properties, root.GetPartitionQueueDAOInfo().Properties))
+	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo().Properties)
 
 	// test template
 	root.template, err = template.FromConf(&configs.ChildTemplate{
@@ -1762,7 +1699,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 		},
 	})
 	assert.NilError(t, err)
-	assert.Assert(t, reflect.DeepEqual(root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties))
+	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties)
 	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.template.GetMaxResource().DAOMap())
 	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.template.GetGuaranteedResource().DAOMap())
 
@@ -1827,11 +1764,11 @@ func TestSetResources(t *testing.T) {
 
 	expectedGuaranteedResource, err := resources.NewResourceFromConf(guaranteedResource)
 	assert.NilError(t, err, "failed to parse resource: %v", err)
-	assert.Assert(t, reflect.DeepEqual(queue.guaranteedResource, expectedGuaranteedResource))
+	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
 
 	expectedMaxResource, err := resources.NewResourceFromConf(maxResource)
 	assert.NilError(t, err, "failed to parse resource: %v", err)
-	assert.Assert(t, reflect.DeepEqual(queue.maxResource, expectedMaxResource))
+	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 
 	// case 1: empty resource won't change the resources
 	err = queue.setResources(configs.Resources{
@@ -1839,8 +1776,8 @@ func TestSetResources(t *testing.T) {
 		Max:        make(map[string]string),
 	})
 	assert.NilError(t, err, "failed to set resources: %v", err)
-	assert.Assert(t, reflect.DeepEqual(queue.guaranteedResource, expectedGuaranteedResource))
-	assert.Assert(t, reflect.DeepEqual(queue.maxResource, expectedMaxResource))
+	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
+	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 
 	// case 2: zero resource won't change the resources
 	err = queue.setResources(configs.Resources{
@@ -1848,8 +1785,8 @@ func TestSetResources(t *testing.T) {
 		Max:        getZeroResourceConf(),
 	})
 	assert.NilError(t, err, "failed to set resources: %v", err)
-	assert.Assert(t, reflect.DeepEqual(queue.guaranteedResource, expectedGuaranteedResource))
-	assert.Assert(t, reflect.DeepEqual(queue.maxResource, expectedMaxResource))
+	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
+	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 }
 
 func TestPreemptingResource(t *testing.T) {
@@ -2075,9 +2012,9 @@ func TestSetTemplate(t *testing.T) {
 	assert.NilError(t, err, "failed to parse resource: %v", err)
 
 	checkTemplate := func(queue *Queue) {
-		assert.Assert(t, reflect.DeepEqual(queue.template.GetProperties(), properties))
-		assert.Assert(t, reflect.DeepEqual(queue.template.GetGuaranteedResource(), expectedGuaranteedResource))
-		assert.Assert(t, reflect.DeepEqual(queue.template.GetMaxResource(), expectedMaxResource))
+		assert.DeepEqual(t, queue.template.GetProperties(), properties)
+		assert.DeepEqual(t, queue.template.GetGuaranteedResource(), expectedGuaranteedResource)
+		assert.DeepEqual(t, queue.template.GetMaxResource(), expectedMaxResource)
 	}
 
 	// case 0: normal case
@@ -2118,9 +2055,9 @@ func TestApplyTemplate(t *testing.T) {
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 	leaf.applyTemplate(childTemplate)
 	assert.Assert(t, leaf.template == nil)
-	assert.Assert(t, reflect.DeepEqual(leaf.properties, childTemplate.GetProperties()))
-	assert.Assert(t, reflect.DeepEqual(leaf.guaranteedResource, childTemplate.GetGuaranteedResource()))
-	assert.Assert(t, reflect.DeepEqual(leaf.maxResource, childTemplate.GetMaxResource()))
+	assert.DeepEqual(t, leaf.properties, childTemplate.GetProperties())
+	assert.DeepEqual(t, leaf.guaranteedResource, childTemplate.GetGuaranteedResource())
+	assert.DeepEqual(t, leaf.maxResource, childTemplate.GetMaxResource())
 
 	// case 1: zero resource template generates nil resource
 	leaf2, err := createManagedQueueWithProps(nil, "tmp", false, nil, nil)
@@ -2266,7 +2203,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Equal(t, parent.QueuePath, "parent_queue")
 	assert.Equal(t, parent.isManaged, true)
 	assert.Equal(t, parent.maxRunningApps, uint64(32))
-	assert.Assert(t, reflect.DeepEqual(properties, parent.template.GetProperties()))
+	assert.DeepEqual(t, properties, parent.template.GetProperties())
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetMaxResource()))
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetGuaranteedResource()))
 
@@ -2284,7 +2221,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
 	assert.Assert(t, childLeaf.template == nil)
-	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
+	assert.DeepEqual(t, childLeaf.properties, parent.template.GetProperties())
 	assert.Assert(t, resources.Equals(childLeaf.maxResource, parent.template.GetMaxResource()))
 	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
 
@@ -2352,9 +2289,9 @@ func TestNewDynamicQueue(t *testing.T) {
 	childLeaf, err := NewDynamicQueue("leaf", true, parent)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, childLeaf.template == nil)
-	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
-	assert.Assert(t, reflect.DeepEqual(childLeaf.maxResource, parent.template.GetMaxResource()))
-	assert.Assert(t, reflect.DeepEqual(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+	assert.DeepEqual(t, childLeaf.properties, parent.template.GetProperties())
+	assert.DeepEqual(t, childLeaf.maxResource, parent.template.GetMaxResource())
+	assert.DeepEqual(t, childLeaf.guaranteedResource, parent.template.GetGuaranteedResource())
 	assert.Assert(t, childLeaf.prioritySortEnabled)
 	assert.Equal(t, childLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
 	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)

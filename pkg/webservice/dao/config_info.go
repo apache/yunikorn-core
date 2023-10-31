@@ -18,7 +18,14 @@
 
 package dao
 
+import "github.com/apache/yunikorn-core/pkg/common/configs"
+
 type ValidateConfResponse struct {
 	Allowed bool   `json:"allowed"` // no omitempty, a false value gives a quick way to understand the result.
 	Reason  string `json:"reason,omitempty"`
+}
+
+type ConfigDAOInfo struct {
+	*configs.SchedulerConfig `yaml:",inline"`
+	Extra                    map[string]string `yaml:",omitempty" json:",omitempty"`
 }

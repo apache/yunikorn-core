@@ -424,9 +424,11 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	conf := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
 	var marshalledConf []byte
 	var err error
+
+	conf := getClusterConfigDAO()
+
 	// check if we have a request for json output
 	if r.Header.Get("Accept") == "application/json" {
 		marshalledConf, err = json.Marshal(&conf)
@@ -440,6 +442,16 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	if _, err = w.Write(marshalledConf); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func getClusterConfigDAO() *dao.ConfigDAOInfo {
+	// merge core config with extra config
+	conf := dao.ConfigDAOInfo{
+		SchedulerConfig: configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()),
+		Extra:           configs.GetConfigMap(),
+	}
+
+	return &conf
 }
 
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
@@ -618,19 +630,6 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	appDao := getApplicationDAO(app)
 	if err := json.NewEncoder(w).Encode(appDao); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
-}
-
-func setLogLevel(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	log.Log(log.Deprecation).Warn("Setting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release.")
-}
-
-func getLogLevel(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	log.Log(log.Deprecation).Warn("Getting log levels via the REST API is deprecated. The /ws/v1/loglevel endpoint will be removed in a future release.")
-	if _, err := w.Write([]byte("info")); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

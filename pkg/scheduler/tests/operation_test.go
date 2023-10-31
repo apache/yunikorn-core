@@ -68,7 +68,7 @@ partitions:
 
 	// Check scheduling queue a
 	queueA := part.GetQueue("root.a")
-	assert.Assert(t, 150000000 == queueA.GetMaxResource().Resources[common.Memory])
+	assert.Equal(t, resources.Quantity(150000000), queueA.GetMaxResource().Resources[common.Memory])
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
@@ -196,7 +196,7 @@ partitions:
 
 	// Check scheduling queue a
 	queueA := part.GetQueue("root.a")
-	assert.Assert(t, 150000000 == queueA.GetMaxResource().Resources[common.Memory])
+	assert.Equal(t, resources.Quantity(150000000), queueA.GetMaxResource().Resources[common.Memory])
 
 	// Add one application
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{

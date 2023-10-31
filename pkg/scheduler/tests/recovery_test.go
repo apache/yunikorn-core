@@ -71,7 +71,7 @@ func TestSchedulerRecovery(t *testing.T) {
 
 	// Check scheduling queue a
 	queue := part.GetQueue("root.a")
-	assert.Assert(t, 150 == queue.GetMaxResource().Resources[common.Memory])
+	assert.Equal(t, resources.Quantity(150), queue.GetMaxResource().Resources[common.Memory])
 
 	// Register nodes, and add apps
 	err = ms.proxy.UpdateNode(&si.NodeRequest{

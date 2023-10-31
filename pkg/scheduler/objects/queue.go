@@ -589,33 +589,6 @@ func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 	return allow
 }
 
-// GetQueueInfo returns the queue hierarchy as an object for a REST call.
-// This object is used by the deprecated REST API and is succeeded by the GetPartitionQueueDAOInfo call.
-func (sq *Queue) GetQueueInfo() dao.QueueDAOInfo {
-	queueInfo := dao.QueueDAOInfo{}
-	for _, child := range sq.GetCopyOfChildren() {
-		queueInfo.ChildQueues = append(queueInfo.ChildQueues, child.GetQueueInfo())
-	}
-
-	// children are done we can now lock just this queue.
-	sq.RLock()
-	defer sq.RUnlock()
-	queueInfo.QueueName = sq.Name
-	queueInfo.Status = sq.stateMachine.Current()
-	queueInfo.Capacities = dao.QueueCapacity{
-		Capacity:     sq.guaranteedResource.DAOMap(),
-		MaxCapacity:  sq.maxResource.DAOMap(),
-		UsedCapacity: sq.allocatedResource.DAOMap(),
-		AbsUsedCapacity: resources.CalculateAbsUsedCapacity(
-			sq.maxResource, sq.allocatedResource).DAOMap(),
-	}
-	queueInfo.Properties = make(map[string]string)
-	for k, v := range sq.properties {
-		queueInfo.Properties[k] = v
-	}
-	return queueInfo
-}
-
 // GetPartitionQueueDAOInfo returns the queue hierarchy as an object for a REST call.
 func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
@@ -678,6 +651,7 @@ func (sq *Queue) incPendingResource(delta *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.pending = resources.Add(sq.pending, delta)
+	sq.updatePendingResourceMetrics()
 }
 
 // decPendingResource decrements pending resource of this queue and its parents.
@@ -698,6 +672,8 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 		log.Log(log.SchedQueue).Warn("Pending resources went negative",
 			zap.String("queueName", sq.QueuePath),
 			zap.Error(err))
+	} else {
+		sq.updatePendingResourceMetrics()
 	}
 }
 
@@ -1044,7 +1020,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	}
 	// all OK update this queue
 	sq.allocatedResource = newAllocated
-	sq.updateAllocatedAndPendingResourceMetrics()
+	sq.updateAllocatedResourceMetrics()
 	return nil
 }
 
@@ -1080,7 +1056,7 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	}
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
-	sq.updateAllocatedAndPendingResourceMetrics()
+	sq.updateAllocatedResourceMetrics()
 	return nil
 }
 
@@ -1093,7 +1069,7 @@ func (sq *Queue) IncPreemptingResource(alloc *resources.Resource) {
 	defer sq.Unlock()
 	sq.parent.IncPreemptingResource(alloc)
 	sq.preemptingResource = resources.Add(sq.preemptingResource, alloc)
-	sq.updateAllocatedAndPendingResourceMetrics()
+	sq.updatePreemptingResourceMetrics()
 }
 
 // DecPreemptingResource decrements the preempting resources for this queue (recursively).
@@ -1105,7 +1081,7 @@ func (sq *Queue) DecPreemptingResource(alloc *resources.Resource) {
 	defer sq.Unlock()
 	sq.parent.DecPreemptingResource(alloc)
 	sq.preemptingResource = resources.Sub(sq.preemptingResource, alloc)
-	sq.updateAllocatedAndPendingResourceMetrics()
+	sq.updatePreemptingResourceMetrics()
 }
 
 func (sq *Queue) IsPrioritySortEnabled() bool {
@@ -1399,7 +1375,9 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 		// we calculate all the requests that can fit into the queue's headroom,
 		// all these requests are qualified to trigger the up scaling.
 		for _, app := range sq.sortApplications(false, false) {
-			app.getOutstandingRequests(headRoom, total)
+			// calculate the users' headroom
+			userHeadroom := ugm.GetUserManager().Headroom(app.queuePath, app.ApplicationID, app.user)
+			app.getOutstandingRequests(headRoom, userHeadroom, total)
 		}
 	} else {
 		for _, child := range sq.sortQueues() {
@@ -1435,7 +1413,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 						zap.String("appID", appID))
 					return nil
 				}
-				if app.IsAccepted() && !sq.canRunApp(appID) {
+				if app.IsAccepted() && (!sq.canRunApp(appID) || !ugm.GetUserManager().CanRunApp(sq.QueuePath, appID, app.user)) {
 					continue
 				}
 				alloc := app.tryReservedAllocate(headRoom, iterator)
@@ -1579,14 +1557,22 @@ func (sq *Queue) updateMaxResourceMetrics() {
 	}
 }
 
-// updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics for all queue types.
-func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
+// updateAllocatedResourceMetrics updates allocated resource metrics for all queue types.
+func (sq *Queue) updateAllocatedResourceMetrics() {
 	for k, v := range sq.allocatedResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
 	}
+}
+
+// updatePendingResourceMetrics updates pending resource metrics for all queue types.
+func (sq *Queue) updatePendingResourceMetrics() {
 	for k, v := range sq.pending.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
 	}
+}
+
+// updatePendingResourceMetrics updates preempting resource metrics for all queue types.
+func (sq *Queue) updatePreemptingResourceMetrics() {
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}

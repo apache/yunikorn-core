@@ -1817,11 +1817,19 @@ func TestRequiredNodeAllocation(t *testing.T) {
 func assertPreemptedResource(t *testing.T, appSummary *objects.ApplicationSummary, memorySeconds int64,
 	vcoresSecconds int64) {
 	detailedResource := appSummary.PreemptedResource.TrackedResourceMap["UNKNOWN"]
+	memValue, memPresent := detailedResource["memory"]
+	vcoreValue, vcorePresent := detailedResource["vcore"]
+
 	if memorySeconds != -1 {
-		assert.Equal(t, memorySeconds, detailedResource["memory"])
+		assert.Equal(t, memorySeconds, memValue)
+	} else {
+		assert.Equal(t, memPresent, false)
 	}
+
 	if vcoresSecconds != -1 {
-		assert.Equal(t, vcoresSecconds, detailedResource["vcore"])
+		assert.Equal(t, vcoresSecconds, vcoreValue)
+	} else {
+		assert.Equal(t, vcorePresent, false)
 	}
 }
 
@@ -1838,9 +1846,7 @@ func TestPreemption(t *testing.T) {
 	assert.NilError(t, err, "failed to add ask alloc-3 to app-2")
 
 	// delay so that preemption delay passes
-	time.Sleep(100 * time.Millisecond)
-
-	// delay 1 second to have a minimum resource*seconds measurement for preempted resources
+	// also make the delay 1 second to have a minimum non-zero resource*seconds measurement for preempted resources
 	time.Sleep(1 * time.Second)
 
 	// third allocation should not succeed, as we are currently above capacity

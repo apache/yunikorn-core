@@ -1894,7 +1894,6 @@ func TestPreemption(t *testing.T) {
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000}), getExpectedQueuesLimitsForPreemption())
 
 	appSummary := app1.GetApplicationSummary("default")
-	appSummary.DoLogging()
 	assertPreemptedResource(t, appSummary, -1, 5000)
 
 	appSummary = app2.GetApplicationSummary("default")

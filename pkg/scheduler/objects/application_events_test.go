@@ -20,6 +20,7 @@ package objects
 
 import (
 	"testing"
+	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -63,6 +64,27 @@ func TestSendAppDoesNotFitEvent(t *testing.T) {
 		applicationID: appID0,
 		allocationKey: aKey,
 	})
+	assert.Equal(t, 1, len(mock.events), "event was not generated")
+}
+
+func TestSendAppDoesNotFitEventWithRateLimiter(t *testing.T) {
+	app := &Application{
+		queuePath: "root.test",
+	}
+	mock := newEventSystemMock()
+	appEvents := newApplicationEvents(app, mock)
+	startTime := time.Now()
+	for {
+		elapsed := time.Since(startTime)
+		if elapsed > 500*time.Millisecond {
+			break
+		}
+		appEvents.sendAppDoesNotFitEvent(&AllocationAsk{
+			applicationID: appID0,
+			allocationKey: aKey,
+		})
+		time.Sleep(10 * time.Millisecond)
+	}
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 }
 

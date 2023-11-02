@@ -415,21 +415,17 @@ func (m *Manager) clearEarlierSetLimits(newUserLimits map[string]map[string]*Lim
 	m.clearEarlierSetUserLimits(newUserLimits)
 }
 
+// clearEarlierSetUserLimits Traverse new user config and decide whether earlier usage needs to be cleared or not
+// by comparing with the existing config. Reset earlier usage only config set earlier but not now
 func (m *Manager) clearEarlierSetUserLimits(newUserLimits map[string]map[string]*LimitConfig) {
-	if len(m.userLimits) == 0 {
-		return
-	}
 	m.RLock()
 	defer m.RUnlock()
-	// Need to clear user config only when
-	// 1. config set earlier but not now
-	// 2. user already tracked for the queue path
 	for queuePath, limitConfig := range m.userLimits {
 		// Is queue path exists?
 		if newUserLimit, ok := newUserLimits[queuePath]; !ok {
 			for u := range limitConfig {
 				if ut, utExists := m.userTrackers[u]; utExists {
-					m.clearEarlierSetUserLimit(ut, queuePath)
+					m.resetUserEarlierUsage(ut, queuePath)
 				}
 			}
 		} else {
@@ -437,7 +433,7 @@ func (m *Manager) clearEarlierSetUserLimits(newUserLimits map[string]map[string]
 			for u := range limitConfig {
 				if _, ulExists := newUserLimit[u]; !ulExists {
 					if ut, utExists := m.userTrackers[u]; utExists {
-						m.clearEarlierSetUserLimit(ut, queuePath)
+						m.resetUserEarlierUsage(ut, queuePath)
 					}
 				}
 			}
@@ -445,7 +441,10 @@ func (m *Manager) clearEarlierSetUserLimits(newUserLimits map[string]map[string]
 	}
 }
 
-func (m *Manager) clearEarlierSetUserLimit(ut *UserTracker, queuePath string) {
+// resetUserEarlierUsage Clear or reset earlier usage only when user already tracked for the queue path.
+// Reset the max apps and max resources to default, unlink the end leaf queue of queue path from its immediate parent and
+// eventually remove user tracker object itself from ugm if it can be removed.
+func (m *Manager) resetUserEarlierUsage(ut *UserTracker, queuePath string) {
 	// Is this user already tracked for the queue path?
 	if ut.IsQueuePathTrackedCompletely(queuePath) {
 		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
@@ -465,22 +464,17 @@ func (m *Manager) clearEarlierSetUserLimit(ut *UserTracker, queuePath string) {
 	}
 }
 
+// clearEarlierSetGroupLimits Traverse new group config and decide whether earlier usage needs to be cleared or not
+// by comparing with the existing config. Reset earlier usage only config set earlier but not now
 func (m *Manager) clearEarlierSetGroupLimits(newGroupLimits map[string]map[string]*LimitConfig) {
-	if len(m.groupLimits) == 0 {
-		return
-	}
 	m.RLock()
 	defer m.RUnlock()
-
-	// Need to clear group config only when
-	// 1. config set earlier but not now
-	// 2. group already tracked for the queue path
 	for queuePath, limitConfig := range m.groupLimits {
 		// Is queue path exists?
 		if newGroupLimit, ok := newGroupLimits[queuePath]; !ok {
 			for g := range limitConfig {
 				if gt, gtExists := m.groupTrackers[g]; gtExists {
-					m.clearEarlierSetGroupLimit(gt, queuePath)
+					m.resetGroupEarlierUsage(gt, queuePath)
 				}
 			}
 		} else {
@@ -488,7 +482,7 @@ func (m *Manager) clearEarlierSetGroupLimits(newGroupLimits map[string]map[strin
 			for g := range limitConfig {
 				if _, glExists := newGroupLimit[g]; !glExists {
 					if gt, gtExists := m.groupTrackers[g]; gtExists {
-						m.clearEarlierSetGroupLimit(gt, queuePath)
+						m.resetGroupEarlierUsage(gt, queuePath)
 					}
 				}
 			}
@@ -496,7 +490,11 @@ func (m *Manager) clearEarlierSetGroupLimits(newGroupLimits map[string]map[strin
 	}
 }
 
-func (m *Manager) clearEarlierSetGroupLimit(gt *GroupTracker, queuePath string) {
+// resetGroupEarlierUsage Clear or reset earlier usage only when group already tracked for the queue path.
+// Decrease the group usage and collect the list of applications for which user app group linkage needs to be broken.
+// Reset the max apps and max resources to default, unlink the end leaf queue of queue path from its immediate parent and
+// eventually remove group tracker object itself from ugm if it can be removed.
+func (m *Manager) resetGroupEarlierUsage(gt *GroupTracker, queuePath string) {
 	if gt.IsQueuePathTrackedCompletely(queuePath) {
 		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for group",
 			zap.String("group", gt.groupName),

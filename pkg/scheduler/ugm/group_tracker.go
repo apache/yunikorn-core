@@ -83,7 +83,7 @@ func (gt *GroupTracker) setLimits(queuePath string, resource *resources.Resource
 func (gt *GroupTracker) headroom(queuePath string) *resources.Resource {
 	gt.Lock()
 	defer gt.Unlock()
-	return gt.queueTracker.headroom(strings.Split(queuePath, configs.DOT))
+	return gt.queueTracker.headroom(strings.Split(queuePath, configs.DOT), group)
 }
 
 func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {

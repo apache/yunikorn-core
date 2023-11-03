@@ -127,7 +127,7 @@ func (ut *UserTracker) setLimits(queuePath string, resource *resources.Resource,
 func (ut *UserTracker) headroom(queuePath string) *resources.Resource {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.queueTracker.headroom(strings.Split(queuePath, configs.DOT))
+	return ut.queueTracker.headroom(strings.Split(queuePath, configs.DOT), user)
 }
 
 func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {

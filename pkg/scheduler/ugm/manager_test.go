@@ -895,9 +895,11 @@ func TestSeparateUserGroupHeadroom(t *testing.T) {
 
 func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 	testCases := []struct {
-		name string
-		user security.UserGroup
-		conf configs.PartitionConfig
+		name                          string
+		user                          security.UserGroup
+		conf                          configs.PartitionConfig
+		initExpectedHeadroomResource  map[string]string
+		finalExpectedHeadroomResource map[string]string
 	}{
 		// unmixed user and group limit
 		{
@@ -906,6 +908,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			conf: createConfigWithLimits([]configs.Limit{
 				createLimit([]string{"user1"}, nil, mediumResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with a specific user limit",
@@ -913,6 +917,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			conf: createConfigWithLimits([]configs.Limit{
 				createLimit([]string{"user1"}, nil, largeResource, 1),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 		{
 			name: "maxresources with a specific user limit and a wildcard user limit for a not specific user",
@@ -921,6 +927,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, largeResource, 2),
 				createLimit([]string{"*"}, nil, mediumResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with a specific user limit and a wildcard user limit for a not specific user",
@@ -929,6 +937,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, largeResource, 2),
 				createLimit([]string{"*"}, nil, largeResource, 1),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 		{
 			name: "maxresources with a specific user limit and a wildcard user limit for a specific user",
@@ -937,6 +947,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, mediumResource, 2),
 				createLimit([]string{"*"}, nil, largeResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with a specific user limit and a wildcard user limit for a specific user",
@@ -945,6 +957,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, largeResource, 1),
 				createLimit([]string{"*"}, nil, largeResource, 2),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 		{
 			name: "maxresources with a wildcard user limit",
@@ -952,6 +966,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			conf: createConfigWithLimits([]configs.Limit{
 				createLimit(nil, []string{"*"}, mediumResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with a wildcard user limit",
@@ -959,6 +975,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			conf: createConfigWithLimits([]configs.Limit{
 				createLimit(nil, []string{"*"}, largeResource, 1),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 		{
 			name: "maxresources with a specific group limit",
@@ -966,6 +984,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			conf: createConfigWithLimits([]configs.Limit{
 				createLimit(nil, []string{"group1"}, mediumResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with a specific group limit",
@@ -973,6 +993,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			conf: createConfigWithLimits([]configs.Limit{
 				createLimit(nil, []string{"group1"}, largeResource, 1),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 		{
 			name: "maxresources with a specific group limit and a wildcard group limit for a not specific group user",
@@ -981,6 +1003,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit(nil, []string{"group1"}, largeResource, 2),
 				createLimit(nil, []string{"*"}, mediumResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with a specific group limit and a wildcard group limit for a not specific group user",
@@ -989,6 +1013,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit(nil, []string{"group1"}, largeResource, 2),
 				createLimit(nil, []string{"*"}, largeResource, 1),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 		{
 			name: "maxresources with a specific group limit and a wildcard group limit for a specific group user",
@@ -997,6 +1023,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit(nil, []string{"group1"}, mediumResource, 2),
 				createLimit(nil, []string{"*"}, largeResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with a specific group limit and a wildcard group limit for a specific group user",
@@ -1005,6 +1033,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit(nil, []string{"group1"}, largeResource, 1),
 				createLimit(nil, []string{"*"}, largeResource, 2),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 		// mixed user and group limit
 		{
@@ -1014,6 +1044,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, mediumResource, 2),
 				createLimit(nil, []string{"group1"}, largeResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with user limit lower than group limit",
@@ -1022,6 +1054,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, largeResource, 1),
 				createLimit(nil, []string{"group1"}, largeResource, 2),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 		{
 			name: "maxresources with gorup limit lower than user limit",
@@ -1030,6 +1064,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, largeResource, 2),
 				createLimit(nil, []string{"group1"}, mediumResource, 2),
 			}),
+			initExpectedHeadroomResource:  mediumResource,
+			finalExpectedHeadroomResource: nil,
 		},
 		{
 			name: "maxapplications with group limit lower than user limit",
@@ -1038,6 +1074,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, largeResource, 2),
 				createLimit(nil, []string{"group1"}, largeResource, 1),
 			}),
+			initExpectedHeadroomResource:  largeResource,
+			finalExpectedHeadroomResource: mediumResource,
 		},
 	}
 
@@ -1050,9 +1088,12 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			assert.NilError(t, manager.UpdateConfig(tc.conf.Queues[0], "root"))
 
 			usage, err := resources.NewResourceFromConf(mediumResource)
-			if err != nil {
-				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
-			}
+			assert.NilError(t, err, fmt.Sprintf("can't create resource from %v", mediumResource))
+
+			initExpectedHeadroom, err := resources.NewResourceFromConf(tc.initExpectedHeadroomResource)
+			assert.NilError(t, err, fmt.Sprintf("can't create resource from %v", tc.initExpectedHeadroomResource))
+			headroom := manager.Headroom(queuePathParent, TestApp1, tc.user)
+			assert.Equal(t, resources.Equals(headroom, initExpectedHeadroom), true, "init headroom is not expected")
 
 			increased := manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
 			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp1+", res "+usage.String())
@@ -1063,6 +1104,11 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			assert.Equal(t, userTracker.queueTracker.childQueueTrackers["parent"] != nil, true, fmt.Sprintf("can't get root.parent queue tracker in user tracker: %s", tc.user.User))
 			assert.Equal(t, resources.Equals(userTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, usage), true, "user tracker resource usage is not expected at root.parent level")
 			assert.Equal(t, userTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], true, fmt.Sprintf("%s is not in runningApplications for user tracker %s at root.parent level", TestApp1, tc.user.User))
+
+			finalExpectedHeadroom, err := resources.NewResourceFromConf(tc.finalExpectedHeadroomResource)
+			assert.NilError(t, err, fmt.Sprintf("can't create resource from %v", tc.finalExpectedHeadroomResource))
+			headroom = manager.Headroom(queuePathParent, TestApp1, tc.user)
+			assert.Equal(t, resources.Equals(headroom, finalExpectedHeadroom), true, "final headroom is not expected")
 
 			increased = manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
 			assert.Equal(t, increased, false, "should not increase tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())

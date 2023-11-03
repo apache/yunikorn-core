@@ -213,7 +213,7 @@ func checkQueueMaxApplications(cur QueueConfig) error {
 	var err error
 	for _, child := range cur.Queues {
 		if cur.MaxApplications != 0 && (cur.MaxApplications < child.MaxApplications || child.MaxApplications == 0) {
-			return fmt.Errorf("parent maxRunningApps must be larger than child maxRunningApps")
+			return fmt.Errorf("parent maxApplications must be larger than child maxApplications")
 		}
 		err = checkQueueMaxApplications(child)
 		if err != nil {

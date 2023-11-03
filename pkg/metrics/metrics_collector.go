@@ -67,7 +67,7 @@ func (u *internalMetricsCollector) StartService() {
 func (u *internalMetricsCollector) store() {
 	log.Log(log.Metrics).Debug("Adding current status to historical partition data")
 
-	totalAppsRunning, err := m.scheduler.getTotalApplicationsRunning()
+	totalAppsRunning, err := m.scheduler.GetTotalApplicationsRunning()
 	if err != nil {
 		log.Log(log.Metrics).Warn("Could not encode totalApplications metric.", zap.Error(err))
 		totalAppsRunning = -1

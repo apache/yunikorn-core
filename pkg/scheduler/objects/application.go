@@ -51,6 +51,8 @@ var (
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
+var rateLimitedLog = log.RateLimitedLog(log.SchedApplication, time.Second)
+
 const (
 	Soft string = "Soft"
 	Hard string = "Hard"
@@ -907,22 +909,22 @@ func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 	return pending > len(resNumber)
 }
 
-func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, total *[]*AllocationAsk) {
+func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*AllocationAsk) {
 	sa.RLock()
 	defer sa.RUnlock()
 	if sa.sortedRequests == nil {
 		return
 	}
-
 	for _, request := range sa.sortedRequests {
 		if request.GetPendingAskRepeat() == 0 {
 			continue
 		}
 		// ignore nil checks resource function calls are nil safe
-		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
+		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
 			// if headroom is still enough for the resources
 			*total = append(*total, request)
 			headRoom.SubOnlyExisting(request.GetAllocatedResource())
+			userHeadRoom.SubOnlyExisting(request.GetAllocatedResource())
 		}
 	}
 }
@@ -990,7 +992,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, preemptionDelay
 			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
 			if node == nil {
-				log.Log(log.SchedApplication).Warn("required node is not found (could be transient)",
+				rateLimitedLog.Warn("required node is not found (could be transient)",
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))

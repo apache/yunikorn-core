@@ -20,6 +20,9 @@ package objects
 
 import (
 	"fmt"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
@@ -29,10 +32,11 @@ import (
 type applicationEvents struct {
 	eventSystem events.EventSystem
 	app         *Application
+	limiter     *rate.Limiter
 }
 
 func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk) {
-	if !evt.eventSystem.IsEventTrackingEnabled() {
+	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.limiter.Allow() {
 		return
 	}
 	message := fmt.Sprintf("Application %s does not fit into %s queue", request.GetApplicationID(), evt.app.queuePath)
@@ -132,5 +136,6 @@ func newApplicationEvents(app *Application, evt events.EventSystem) *application
 	return &applicationEvents{
 		eventSystem: evt,
 		app:         app,
+		limiter:     rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 }

@@ -1375,7 +1375,9 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 		// we calculate all the requests that can fit into the queue's headroom,
 		// all these requests are qualified to trigger the up scaling.
 		for _, app := range sq.sortApplications(false, false) {
-			app.getOutstandingRequests(headRoom, total)
+			// calculate the users' headroom
+			userHeadroom := ugm.GetUserManager().Headroom(app.queuePath, app.ApplicationID, app.user)
+			app.getOutstandingRequests(headRoom, userHeadroom, total)
 		}
 	} else {
 		for _, child := range sq.sortQueues() {
@@ -1553,14 +1555,6 @@ func (sq *Queue) updateMaxResourceMetrics() {
 			metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
 		}
 	}
-}
-
-// updateAllocatedAndPendingResourceMetrics updates allocated and pending resource metrics for all queue types.
-// Deprecated: use specific metric update function for efficiency.
-func (sq *Queue) updateAllocatedAndPendingResourceMetrics() {
-	sq.updateAllocatedResourceMetrics()
-	sq.updatePendingResourceMetrics()
-	sq.updatePreemptingResourceMetrics()
 }
 
 // updateAllocatedResourceMetrics updates allocated resource metrics for all queue types.

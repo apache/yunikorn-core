@@ -164,11 +164,10 @@ func (ut *UserTracker) UnlinkQT(queuePath string) bool {
 	return ut.queueTracker.UnlinkQT(strings.Split(queuePath, configs.DOT))
 }
 
-// canBeRemoved Does "root" queue has any child queue trackers? Is there any running applications in "root" qt?
 func (ut *UserTracker) canBeRemoved() bool {
 	ut.RLock()
 	defer ut.RUnlock()
-	return len(ut.queueTracker.childQueueTrackers) == 0 && len(ut.queueTracker.runningApplications) == 0
+	return ut.queueTracker.canBeRemoved()
 }
 
 func (ut *UserTracker) canRunApp(queuePath, applicationID string) bool {

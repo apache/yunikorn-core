@@ -237,9 +237,12 @@ func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Reso
 	}
 }
 
-func (qt *QueueTracker) headroom(hierarchy []string) *resources.Resource {
+func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *resources.Resource {
 	log.Log(log.SchedUGM).Debug("Calculating headroom",
-		zap.Strings("queue path", hierarchy))
+		zap.String("queue path", qt.queuePath),
+		zap.Strings("hierarchy", hierarchy),
+		zap.Int("tracking type", int(trackType)),
+	)
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
 	var headroom, childHeadroom *resources.Resource
@@ -248,7 +251,7 @@ func (qt *QueueTracker) headroom(hierarchy []string) *resources.Resource {
 		if qt.childQueueTrackers[childName] == nil {
 			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName)
 		}
-		childHeadroom = qt.childQueueTrackers[childName].headroom(hierarchy[1:])
+		childHeadroom = qt.childQueueTrackers[childName].headroom(hierarchy[1:], trackType)
 	}
 
 	// arrived at the leaf or on the way out: check against current max if set
@@ -257,8 +260,27 @@ func (qt *QueueTracker) headroom(hierarchy []string) *resources.Resource {
 		headroom.SubOnlyExisting(qt.resourceUsage)
 		log.Log(log.SchedUGM).Debug("Calculated headroom",
 			zap.String("queue path", qt.queuePath),
+			zap.Int("tracking type", int(trackType)),
 			zap.Stringer("max resource", qt.maxResources),
 			zap.Stringer("headroom", headroom))
+	} else if resources.Equals(nil, childHeadroom) {
+		// If childHeadroom is not nil, it means there is an user or wildcard limit config in child queue,
+		// so we don't check wildcard limit config in current queue.
+
+		// Fall back on wild card user limit settings to calculate headroom only for unnamed users.
+		// For unnamed groups, "*" group tracker object would be used using the above block to calculate headroom
+		// because resource usage added together for all unnamed groups under "*" group tracker object.
+		if trackType == user {
+			if config := m.getUserWildCardLimitsConfig(qt.queuePath); config != nil {
+				headroom = config.maxResources.Clone()
+				headroom.SubOnlyExisting(qt.resourceUsage)
+				log.Log(log.SchedUGM).Debug("Calculated headroom",
+					zap.String("queue path", qt.queuePath),
+					zap.Int("tracking type", int(trackType)),
+					zap.Stringer("wildcard max resource", config.maxResources),
+					zap.Stringer("headroom", headroom))
+			}
+		}
 	}
 	if headroom == nil {
 		return childHeadroom

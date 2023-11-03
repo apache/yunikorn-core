@@ -267,7 +267,7 @@ func TestHeadroom(t *testing.T) {
 	assert.Assert(t, leaf != nil, "leaf queue tracker should have been created")
 
 	// auto created trackers no max resource set
-	headroom := root.headroom(hierarchy)
+	headroom := root.headroom(hierarchy, none)
 	assert.Equal(t, headroom, nilResource, "auto create: expected nil resource")
 
 	// prep resources to set as usage and max
@@ -278,21 +278,21 @@ func TestHeadroom(t *testing.T) {
 	parent.maxResources = resources.Multiply(double, 2)
 
 	// headroom should be equal to max cap of leaf queue as there is no usage so far
-	headroom = root.headroom(hierarchy)
+	headroom = root.headroom(hierarchy, none)
 	assert.Assert(t, resources.Equals(headroom, double), "headroom not leaf max")
 
 	// headroom should be equal to sub(max cap of leaf queue - resource usage) as there is some usage
 	leaf.resourceUsage = usage
-	headroom = root.headroom(hierarchy)
+	headroom = root.headroom(hierarchy, none)
 	assert.Assert(t, resources.Equals(headroom, usage), "headroom should be same as usage")
 
 	// headroom should be equal to min headroom of parent and leaf: parent has none so zero
 	parent.maxResources = double
 	parent.resourceUsage = double
-	headroom = root.headroom(hierarchy)
+	headroom = root.headroom(hierarchy, none)
 	assert.Assert(t, resources.IsZero(headroom), "leaf check: parent should have no headroom")
 
-	headroom = root.headroom(hierarchy[:2])
+	headroom = root.headroom(hierarchy[:2], none)
 	assert.Assert(t, resources.IsZero(headroom), "parent check: parent should have no headroom")
 
 	// reset usage for the parent
@@ -305,7 +305,7 @@ func TestHeadroom(t *testing.T) {
 	single, err = resources.NewResourceFromConf(map[string]string{"gpu": "1"})
 	assert.NilError(t, err, "single: new resource create returned error")
 	combined := resources.Add(usage, single)
-	headroom = root.headroom(hierarchy)
+	headroom = root.headroom(hierarchy, none)
 	assert.Assert(t, resources.Equals(headroom, combined), "headroom should be same as combined")
 
 	// this "other" resource should be completely ignored as it has no limit
@@ -313,7 +313,7 @@ func TestHeadroom(t *testing.T) {
 	assert.NilError(t, err, "single: new resource create returned error")
 	parent.resourceUsage = other
 	root.resourceUsage = other
-	headroom = root.headroom(hierarchy)
+	headroom = root.headroom(hierarchy, none)
 	assert.Assert(t, resources.Equals(headroom, combined), "headroom should be same as combined")
 }
 

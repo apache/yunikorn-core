@@ -408,6 +408,9 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 
 // clearEarlierSetLimits Clear already configured limits of users and groups for which limits have been configured before but not now
 func (m *Manager) clearEarlierSetLimits(newUserLimits map[string]map[string]*LimitConfig, newGroupLimits map[string]map[string]*LimitConfig) {
+	m.Lock()
+	defer m.Unlock()
+
 	// Clear already configured limits of group for which limits have been configured before but not now
 	m.clearEarlierSetGroupLimits(newGroupLimits)
 
@@ -418,8 +421,6 @@ func (m *Manager) clearEarlierSetLimits(newUserLimits map[string]map[string]*Lim
 // clearEarlierSetUserLimits Traverse new user config and decide whether earlier usage needs to be cleared or not
 // by comparing with the existing config. Reset earlier usage only config set earlier but not now
 func (m *Manager) clearEarlierSetUserLimits(newUserLimits map[string]map[string]*LimitConfig) {
-	m.RLock()
-	defer m.RUnlock()
 	for queuePath, limitConfig := range m.userLimits {
 		// Is queue path exists?
 		if newUserLimit, ok := newUserLimits[queuePath]; !ok {
@@ -467,8 +468,6 @@ func (m *Manager) resetUserEarlierUsage(ut *UserTracker, queuePath string) {
 // clearEarlierSetGroupLimits Traverse new group config and decide whether earlier usage needs to be cleared or not
 // by comparing with the existing config. Reset earlier usage only config set earlier but not now
 func (m *Manager) clearEarlierSetGroupLimits(newGroupLimits map[string]map[string]*LimitConfig) {
-	m.RLock()
-	defer m.RUnlock()
 	for queuePath, limitConfig := range m.groupLimits {
 		// Is queue path exists?
 		if newGroupLimit, ok := newGroupLimits[queuePath]; !ok {

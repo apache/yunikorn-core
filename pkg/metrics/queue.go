@@ -20,6 +20,7 @@ package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
@@ -94,20 +95,65 @@ func (m *QueueMetrics) DecQueueApplicationsRunning() {
 	m.appMetrics.With(prometheus.Labels{"state": "running"}).Dec()
 }
 
+func (m *QueueMetrics) GetQueueApplicationsRunning() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetrics.With(prometheus.Labels{"state": "running"}).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
 func (m *QueueMetrics) IncQueueApplicationsAccepted() {
 	m.appMetrics.With(prometheus.Labels{"state": "accepted"}).Inc()
+}
+
+func (m *QueueMetrics) GetQueueApplicationsAccepted() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetrics.With(prometheus.Labels{"state": "accepted"}).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *QueueMetrics) IncQueueApplicationsRejected() {
 	m.appMetrics.With(prometheus.Labels{"state": "rejected"}).Inc()
 }
 
+func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetrics.With(prometheus.Labels{"state": "rejected"}).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
 func (m *QueueMetrics) IncQueueApplicationsFailed() {
 	m.appMetrics.With(prometheus.Labels{"state": "failed"}).Inc()
 }
 
+func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetrics.With(prometheus.Labels{"state": "failed"}).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
 func (m *QueueMetrics) IncQueueApplicationsCompleted() {
 	m.appMetrics.With(prometheus.Labels{"state": "completed"}).Inc()
+}
+
+func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetrics.With(prometheus.Labels{"state": "completed"}).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *QueueMetrics) IncAllocatedContainer() {

@@ -20,6 +20,7 @@ package webservice
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -60,6 +61,7 @@ func loggingHandler(inner http.Handler, name string) http.HandlerFunc {
 	}
 }
 
+// StartWebApp starts the web app on the default port.
 // TODO we need the port to be configurable
 func (m *WebService) StartWebApp() {
 	router := newRouter()
@@ -68,7 +70,7 @@ func (m *WebService) StartWebApp() {
 	log.Log(log.REST).Info("web-app started", zap.Int("port", 9080))
 	go func() {
 		httpError := m.httpServer.ListenAndServe()
-		if httpError != nil && httpError != http.ErrServerClosed {
+		if httpError != nil && !errors.Is(httpError, http.ErrServerClosed) {
 			log.Log(log.REST).Error("HTTP serving error",
 				zap.Error(httpError))
 		}

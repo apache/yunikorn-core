@@ -253,4 +253,10 @@ var webRoutes = routes{
 		"/ws/v1/scheduler/healthcheck",
 		checkHealthStatus,
 	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/scheduler/node-utilization",
+		getNodeUtilisation,
+	},
 }

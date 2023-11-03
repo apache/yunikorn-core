@@ -3306,6 +3306,30 @@ func TestRemoveAllocationAsk(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), nil)
 }
 
+func TestUpdatePreemption(t *testing.T) {
+	var True = true
+	var False = false
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "Partition creation failed")
+	assert.Assert(t, partition.isPreemptionEnabled(), "preeemption should be enabled by default")
+
+	partition.updatePreemption(configs.PartitionConfig{})
+	assert.Assert(t, partition.isPreemptionEnabled(), "preeemption should be enabled by empty config")
+
+	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{}})
+	assert.Assert(t, partition.isPreemptionEnabled(), "preeemption should be enabled by empty preemption section")
+
+	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: nil}})
+	assert.Assert(t, partition.isPreemptionEnabled(), "preeemption should be enabled by explicit nil")
+
+	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: &True}})
+	assert.Assert(t, partition.isPreemptionEnabled(), "preeemption should be enabled by explicit true")
+
+	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: &False}})
+	assert.Assert(t, !partition.isPreemptionEnabled(), "preeemption should be disabled by explicit false")
+}
+
 func TestUpdateNodeSortingPolicy(t *testing.T) {
 	partition, err := newBasePartition()
 	if err != nil {

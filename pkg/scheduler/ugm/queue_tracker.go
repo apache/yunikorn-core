@@ -250,6 +250,7 @@ func (qt *QueueTracker) headroom(hierarchy []string) *resources.Resource {
 		}
 		childHeadroom = qt.childQueueTrackers[childName].headroom(hierarchy[1:])
 	}
+
 	// arrived at the leaf or on the way out: check against current max if set
 	if !resources.Equals(resources.NewResource(), qt.maxResources) {
 		headroom = qt.maxResources.Clone()
@@ -349,6 +350,10 @@ func (qt *QueueTracker) UnlinkQT(hierarchy []string) bool {
 		if qt.childQueueTrackers[childName] != nil {
 			if qt.childQueueTrackers[childName].UnlinkQT(hierarchy[1:]) {
 				delete(qt.childQueueTrackers, childName)
+				// returning false, so that it comes out when end queue detach itself from its immediate parent.
+				// i.e., once leaf detached from root.parent for root.parent.leaf queue path.
+				// otherwise, detachment continues all the way upto the root, even parent from root. which is not needed.
+				return false
 			}
 		}
 	} else if len(hierarchy) <= 1 {
@@ -389,12 +394,10 @@ func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(hierarchy []string
 			}
 		}
 	}
-
 	if len(qt.runningApplications) > 0 && qt.resourceUsage != resources.NewResource() {
 		qt.resourceUsage = resources.NewResource()
 		qt.runningApplications = make(map[string]bool)
 	}
-
 	return removedApplications
 }
 
@@ -455,4 +458,30 @@ func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trac
 		}
 	}
 	return true
+}
+
+// canBeRemoved Start from root and reach all levels of queue hierarchy to confirm whether corresponding queue tracker
+// object can be removed from ugm or not. Based on running applications, resource usage, child queue trackers, max running apps, max resources etc
+// it decides the removal. It returns false the moment it sees any unexpected values for any queue in any levels.
+func (qt *QueueTracker) canBeRemoved() bool {
+	for _, childQT := range qt.childQueueTrackers {
+		// quick check to avoid further traversal
+		if childQT.canBeRemovedInternal() {
+			if !childQT.canBeRemoved() {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	// reached leaf queues, no more to traverse
+	return qt.canBeRemovedInternal()
+}
+
+func (qt *QueueTracker) canBeRemovedInternal() bool {
+	if len(qt.runningApplications) == 0 && resources.Equals(resources.NewResource(), qt.resourceUsage) && len(qt.childQueueTrackers) == 0 &&
+		qt.maxRunningApps == 0 && resources.Equals(resources.NewResource(), qt.maxResources) {
+		return true
+	}
+	return false
 }

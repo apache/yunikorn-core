@@ -757,6 +757,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
+	assert.NilError(t, err, "getNodeUtilisation should have returned an object")
 	assert.Equal(t, utilisation.ResourceType, "", "unexpected type returned")
 	assert.Equal(t, len(utilisation.NodesUtil), 10, "empty usage: unexpected bucket count returned")
 	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 0), "unexpected number of nodes returned should be 2")
@@ -772,6 +773,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
+	assert.NilError(t, err, "getNodeUtilisation should have returned an object")
 	assert.Equal(t, utilisation.ResourceType, "first", "expected first as type returned")
 	assert.Equal(t, len(utilisation.NodesUtil), 10, "empty usage: unexpected bucket count returned")
 	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 2), "unexpected number of nodes returned should be 2")
@@ -787,6 +789,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
+	assert.NilError(t, err, "getNodeUtilisation should have returned an object")
 	assert.Equal(t, utilisation.ResourceType, "second", "expected second as type returned")
 	assert.Equal(t, len(utilisation.NodesUtil), 10, "empty usage: unexpected bucket count returned")
 	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 1), "unexpected number of nodes returned should be 1")

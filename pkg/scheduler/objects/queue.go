@@ -1571,7 +1571,7 @@ func (sq *Queue) updatePendingResourceMetrics() {
 	}
 }
 
-// updatePendingResourceMetrics updates preempting resource metrics for all queue types.
+// updatePreemptingResourceMetrics updates preempting resource metrics for all queue types.
 func (sq *Queue) updatePreemptingResourceMetrics() {
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))

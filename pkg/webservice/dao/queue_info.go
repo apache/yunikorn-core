@@ -17,21 +17,6 @@ limitations under the License.
 */
 package dao
 
-type QueueDAOInfo struct {
-	QueueName   string            `json:"queuename,omitempty"`
-	Status      string            `json:"status,omitempty"`
-	Capacities  QueueCapacity     `json:"capacities"` // no omitempty, omitempty doesn't work on a structure value
-	ChildQueues []QueueDAOInfo    `json:"queues,omitempty"`
-	Properties  map[string]string `json:"properties,omitempty"`
-}
-
-type QueueCapacity struct {
-	Capacity        map[string]int64 `json:"capacity,omitempty"`
-	MaxCapacity     map[string]int64 `json:"maxCapacity,omitempty"`
-	UsedCapacity    map[string]int64 `json:"usedCapacity,omitempty"`
-	AbsUsedCapacity map[string]int64 `json:"absUsedCapacity,omitempty"`
-}
-
 type TemplateInfo struct {
 	MaxResource        map[string]int64  `json:"maxResource,omitempty"`
 	GuaranteedResource map[string]int64  `json:"guaranteedResource,omitempty"`

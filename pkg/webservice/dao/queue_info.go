@@ -18,6 +18,7 @@ limitations under the License.
 package dao
 
 type TemplateInfo struct {
+	MaxApplications    uint64            `json:"maxApplications,omitempty"`
 	MaxResource        map[string]int64  `json:"maxResource,omitempty"`
 	GuaranteedResource map[string]int64  `json:"guaranteedResource,omitempty"`
 	Properties         map[string]string `json:"properties,omitempty"`

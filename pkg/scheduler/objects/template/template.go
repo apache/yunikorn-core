@@ -25,6 +25,7 @@ import (
 )
 
 type Template struct {
+	maxApplications    uint64
 	properties         map[string]string
 	maxResource        *resources.Resource
 	guaranteedResource *resources.Resource
@@ -44,7 +45,7 @@ func FromConf(template *configs.ChildTemplate) (*Template, error) {
 		return true
 	}
 
-	if template == nil || (isMapEmpty(template.Properties) && isMapEmpty(template.Resources.Guaranteed) && isMapEmpty(template.Resources.Max)) {
+	if template == nil || (template.MaxApplications == 0 && isMapEmpty(template.Properties) && isMapEmpty(template.Resources.Guaranteed) && isMapEmpty(template.Resources.Max)) {
 		return nil, nil
 	}
 
@@ -58,11 +59,12 @@ func FromConf(template *configs.ChildTemplate) (*Template, error) {
 		return nil, err
 	}
 
-	return newTemplate(template.Properties, maxResource, guaranteedResource), nil
+	return newTemplate(template.MaxApplications, template.Properties, maxResource, guaranteedResource), nil
 }
 
-func newTemplate(properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) *Template {
+func newTemplate(maxApplications uint64, properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) *Template {
 	template := &Template{
+		maxApplications:    maxApplications,
 		properties:         make(map[string]string),
 		maxResource:        nil,
 		guaranteedResource: nil,
@@ -82,6 +84,11 @@ func newTemplate(properties map[string]string, maxResource *resources.Resource, 
 		}
 	}
 	return template
+}
+
+// GetMaxApplications returns max applications.
+func (t *Template) GetMaxApplications() uint64 {
+	return t.maxApplications
 }
 
 // GetProperties returns a copy of properties. An empty map replaces the null value
@@ -115,6 +122,7 @@ func (t *Template) GetTemplateInfo() *dao.TemplateInfo {
 		return nil
 	}
 	return &dao.TemplateInfo{
+		MaxApplications:    t.GetMaxApplications(),
 		Properties:         t.GetProperties(),
 		MaxResource:        t.maxResource.DAOMap(),
 		GuaranteedResource: t.guaranteedResource.DAOMap(),

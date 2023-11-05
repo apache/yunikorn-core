@@ -208,6 +208,7 @@ func newDynamicQueueInternal(name string, leaf bool, parent *Queue) (*Queue, err
 
 // applyTemplate uses input template to initialize properties, maxResource, and guaranteedResource
 func (sq *Queue) applyTemplate(childTemplate *template.Template) {
+	sq.maxRunningApps = childTemplate.GetMaxApplications()
 	sq.properties = childTemplate.GetProperties()
 	// the resources in template are already checked
 	sq.guaranteedResource = childTemplate.GetGuaranteedResource()

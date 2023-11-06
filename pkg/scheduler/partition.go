@@ -64,6 +64,7 @@ type PartitionContext struct {
 	allocations            int                             // Number of allocations on the partition
 	reservations           int                             // number of reservations
 	placeholderAllocations int                             // number of placeholder allocations
+	preemptionEnabled      bool                            // whether preemption is enabled or not
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -131,6 +132,7 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
 	pc.updateNodeSortingPolicy(conf)
+	pc.updatePreemption(conf)
 
 	// update limit settings: start at the root
 	return ugm.GetUserManager().UpdateConfig(queueConf, conf.Queues[0].Name)
@@ -151,6 +153,11 @@ func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig
 	pc.nodes.SetNodeSortingPolicy(objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
 }
 
+// NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
+func (pc *PartitionContext) updatePreemption(conf configs.PartitionConfig) {
+	pc.preemptionEnabled = conf.Preemption.Enabled == nil || *conf.Preemption.Enabled
+}
+
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
 	pc.Lock()
 	defer pc.Unlock()
@@ -165,6 +172,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	}
 	pc.rules = &conf.PlacementRules
 	pc.updateNodeSortingPolicy(conf)
+	pc.updatePreemption(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
 	root := pc.root
@@ -796,7 +804,7 @@ func (pc *PartitionContext) tryAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode)
+	alloc := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.isPreemptionEnabled())
 	if alloc != nil {
 		return pc.allocate(alloc)
 	}
@@ -1431,6 +1439,12 @@ func (pc *PartitionContext) GetNodeSortingResourceWeights() map[string]float64 {
 	defer pc.RUnlock()
 	policy := pc.nodes.GetNodeSortingPolicy()
 	return policy.ResourceWeights()
+}
+
+func (pc *PartitionContext) isPreemptionEnabled() bool {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.preemptionEnabled
 }
 
 func (pc *PartitionContext) moveTerminatedApp(appID string) {

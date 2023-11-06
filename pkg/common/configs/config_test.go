@@ -614,8 +614,28 @@ partitions:
   - name: default
     queues:
       - name: root
+  - name: "partition-0"
+    queues:
+      - name: root
+`
+	dataEnabled := `
+partitions:
+  - name: default
+    queues:
+      - name: root
     preemption:
       enabled: true
+  - name: "partition-0"
+    queues:
+      - name: root
+`
+	dataDisabled := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    preemption:
+      enabled: false
   - name: "partition-0"
     queues:
       - name: root
@@ -623,14 +643,15 @@ partitions:
 	// validate the config and check after the update
 	conf, err := CreateConfig(data)
 	assert.NilError(t, err, "should expect no error")
+	assert.Assert(t, conf.Partitions[0].Preemption.Enabled == nil, "default should be nil")
 
-	if !conf.Partitions[0].Preemption.Enabled {
-		t.Error("default partition's preemption should be enabled.")
-	}
+	conf, err = CreateConfig(dataEnabled)
+	assert.NilError(t, err, "should expect no error")
+	assert.Assert(t, *conf.Partitions[0].Preemption.Enabled, "preemption should be enabled")
 
-	if conf.Partitions[1].Preemption.Enabled {
-		t.Error("partition-0's preemption should NOT be enabled by default")
-	}
+	conf, err = CreateConfig(dataDisabled)
+	assert.NilError(t, err, "should expect no error")
+	assert.Assert(t, !*conf.Partitions[0].Preemption.Enabled, "preemption should be disabled")
 }
 
 func TestParseRule(t *testing.T) {

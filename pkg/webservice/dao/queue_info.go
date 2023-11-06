@@ -56,6 +56,6 @@ type PartitionQueueDAOInfo struct {
 	AbsUsedCapacity        map[string]int64        `json:"absUsedCapacity,omitempty"`
 	MaxRunningApps         uint64                  `json:"maxRunningApps,omitempty"`
 	RunningApps            uint64                  `json:"runningApps,omitempty"`
-	CurrentPriority        int32                   `json:"currentPriority,omitempty"`
+	CurrentPriority        int32                   `json:"currentPriority"` // no omitempty, as the current priority value may be 0, which is a valid priority level
 	AllocatingAcceptedApps []string                `json:"allocatingAcceptedApps,omitempty"`
 }

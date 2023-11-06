@@ -1199,7 +1199,7 @@ func TestGetApplicationHandler(t *testing.T) {
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal DAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, MissingParamsName, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1208,7 +1208,7 @@ func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {
 func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal PartitionQueueDAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, PartitionDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1217,7 +1217,7 @@ func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
 func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal ApplicationDAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, QueueDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1226,7 +1226,7 @@ func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
 func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal ApplicationDAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "Application not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1235,7 +1235,7 @@ func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
 func assertUserExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal UserResourceUsageDAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "User not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1244,7 +1244,7 @@ func assertUserExists(t *testing.T, resp *MockResponseWriter) {
 func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal UserResourceUsageDAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "User name is missing", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1253,7 +1253,7 @@ func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
 func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal GroupResourceUsageDAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "Group not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1262,7 +1262,7 @@ func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
 func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal applications dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal GroupResourceUsageDAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "Group name is missing", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1271,7 +1271,7 @@ func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
 func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "failed to unmarshal node dao response from response body")
+	assert.NilError(t, err, "failed to unmarshal NodesDAOInfo response from response body")
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
 	assert.Equal(t, errInfo.Message, "Node not found", "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)

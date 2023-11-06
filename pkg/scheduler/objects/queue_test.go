@@ -2222,23 +2222,18 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetMaxResource()))
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetGuaranteedResource()))
 
-	// case 0: leaf can use template
+	// case 0: managed leaf queue can't use template
 	leafConfig := configs.QueueConfig{
-		Name:       "leaf_queue",
-		Parent:     false,
-		Properties: getProperties(),
-		Resources: configs.Resources{
-			Max:        getResourceConf(),
-			Guaranteed: getResourceConf(),
-		},
+		Name:   "leaf_queue",
+		Parent: false,
 	}
 	childLeaf, err := NewConfiguredQueue(leafConfig, parent)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
 	assert.Assert(t, childLeaf.template == nil)
-	assert.DeepEqual(t, childLeaf.properties, parent.template.GetProperties())
-	assert.Assert(t, resources.Equals(childLeaf.maxResource, parent.template.GetMaxResource()))
-	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+	assert.Assert(t, !reflect.DeepEqual(childLeaf.properties, parent.template.GetProperties()))
+	assert.Assert(t, !resources.Equals(childLeaf.maxResource, parent.template.GetMaxResource()))
+	assert.Assert(t, !resources.Equals(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
 	NonLeafConfig := configs.QueueConfig{

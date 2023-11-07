@@ -1230,7 +1230,7 @@ func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, UnmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Application not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, ApplicationDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1239,7 +1239,7 @@ func assertUserExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, UnmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "User not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, UserDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1248,7 +1248,7 @@ func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, UnmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "User name is missing", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, UserNameMissing, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1257,7 +1257,7 @@ func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, UnmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Group not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, GroupDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1266,7 +1266,7 @@ func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, UnmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Group name is missing", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, GroupNameMissing, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1275,7 +1275,7 @@ func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, UnmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, "Node not found", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, NodeDoesNotExists, "JSON error message is incorrect")
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 

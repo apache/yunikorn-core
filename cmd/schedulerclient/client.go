@@ -69,9 +69,9 @@ func main() {
 			log.Print("Send request")
 			time.Sleep(time.Millisecond * 100)
 		}
-		// if err := stream.CloseSend(); err != nil {
+		//if err := stream.CloseSend(); err != nil {
 		//   log.Println(err)
-		// }
+		//}
 	}()
 
 	// second goroutine receives data from stream

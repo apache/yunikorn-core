@@ -377,13 +377,6 @@ func (a *Allocation) ClearReleases() {
 	a.releases = nil
 }
 
-// AddRelease adds a new release to this allocation
-func (a *Allocation) AddRelease(release *Allocation) {
-	a.Lock()
-	defer a.Unlock()
-	a.releases = append(a.releases, release)
-}
-
 func (a *Allocation) SetRelease(release *Allocation) {
 	a.Lock()
 	defer a.Unlock()

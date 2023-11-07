@@ -200,22 +200,28 @@ func filterOnPendingResources(apps map[string]*Application) []*Application {
 // scheduled.
 func stateAwareFilter(apps map[string]*Application) []*Application {
 	filteredApps := make([]*Application, 0)
-	var acceptedApp *Application
+	var notRunningApp *Application
 	var foundStarting bool
 	for _, app := range apps {
 		// found a starting app clear out the accepted app (independent of pending resources)
 		if app.IsStarting() {
 			foundStarting = true
-			acceptedApp = nil
+			if notRunningApp != nil && notRunningApp.IsAccepted() {
+				notRunningApp = nil
+			}
 		}
 		// Now just look at app when pending-res > 0
 		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
-			// filter accepted apps
-			if app.IsAccepted() {
+			if app.IsStarting() {
+				if notRunningApp == nil || notRunningApp.SubmissionTime.After(app.SubmissionTime) {
+					notRunningApp = app
+				}
+				continue
+			} else if app.IsAccepted() { // filter accepted apps
 				// check if we have not seen a starting app
 				// replace the currently tracked accepted app if this is an older one
-				if !foundStarting && (acceptedApp == nil || acceptedApp.SubmissionTime.After(app.SubmissionTime)) {
-					acceptedApp = app
+				if !foundStarting && (notRunningApp == nil || notRunningApp.SubmissionTime.After(app.SubmissionTime)) {
+					notRunningApp = app
 				}
 				continue
 			}
@@ -224,8 +230,8 @@ func stateAwareFilter(apps map[string]*Application) []*Application {
 		}
 	}
 	// just add the accepted app if we need to: apps are not sorted yet
-	if acceptedApp != nil {
-		filteredApps = append(filteredApps, acceptedApp)
+	if notRunningApp != nil {
+		filteredApps = append(filteredApps, notRunningApp)
 	}
 	return filteredApps
 }

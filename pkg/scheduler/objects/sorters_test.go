@@ -385,6 +385,18 @@ func TestSortAppsStateAware(t *testing.T) {
 	assert.NilError(t, err, "state change failed for app-3")
 	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
 	assertAppListLength(t, list, []string{appID0, appID1, appID3}, "state not app-2")
+
+	// move 3rd to starting: 1st, 3rd and 4th in that order
+	err = input[appID2].HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "state change failed for app-2")
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
+	assertAppListLength(t, list, []string{appID0, appID2, appID3}, "state not app-1")
+
+	// move 2nd to starting: 1st, 2nd and 4th in that order
+	err = input[appID1].HandleApplicationEvent(RunApplication)
+	assert.NilError(t, err, "state change failed for app-1")
+	list = sortApplications(input, policies.StateAwarePolicy, false, nil)
+	assertAppListLength(t, list, []string{appID0, appID1, appID3}, "state not app-2")
 }
 
 func queueNames(list []*Queue) string {

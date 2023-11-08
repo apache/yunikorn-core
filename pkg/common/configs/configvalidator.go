@@ -146,59 +146,50 @@ func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.
 		curQueuePath = queuePath + DOT + cur.Name
 	}
 
-	// Carry forward (populate) the parent limit settings to the next level if limits are not configured for the current queue
-	if len(cur.Limits) == 0 {
-		if _, ok := users[queuePath]; ok {
-			users[curQueuePath] = users[queuePath]
+	users[curQueuePath] = make(map[string]*resources.Resource)
+	groups[curQueuePath] = make(map[string]*resources.Resource)
+
+	// Carry forward (populate) the parent limit settings to the next level
+	for u, v := range users[queuePath] {
+		users[curQueuePath][u] = v.Clone()
+	}
+	for g, v := range groups[queuePath] {
+		groups[curQueuePath][g] = v.Clone()
+	}
+
+	// compare user & group limit setting between the current queue and parent queue
+	for _, limit := range cur.Limits {
+		limitMaxResources, err := resources.NewResourceFromConf(limit.MaxResources)
+		if err != nil {
+			return err
 		}
-		if _, ok := groups[queuePath]; ok {
-			groups[curQueuePath] = groups[queuePath]
+
+		for _, user := range limit.Users {
+			// Is user limit setting exists?
+			if userMaxResource, ok := users[queuePath][user]; ok {
+				if !userMaxResource.FitInMaxUndef(limitMaxResources) {
+					return fmt.Errorf("user %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", user, limitMaxResources.String(), cur.Name, userMaxResource.String())
+				}
+				// Override with min resource
+				users[curQueuePath][user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
+			} else {
+				users[curQueuePath][user] = limitMaxResources
+			}
 		}
-	} else {
-		// compare user & group limit setting between the current queue and parent queue
-		for _, limit := range cur.Limits {
-			limitMaxResources, err := resources.NewResourceFromConf(limit.MaxResources)
-			if err != nil {
-				return err
-			}
-			for _, user := range limit.Users {
-				// Is user limit setting exists?
-				if userMaxResource, ok := users[queuePath][user]; ok {
-					if !userMaxResource.FitInMaxUndef(limitMaxResources) {
-						return fmt.Errorf("user %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", user, limitMaxResources.String(), cur.Name, userMaxResource.String())
-					}
-					// Override with min resource
-					if _, ok := users[curQueuePath]; !ok {
-						users[curQueuePath] = make(map[string]*resources.Resource)
-					}
-					users[curQueuePath][user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
-				} else {
-					if _, ok := users[curQueuePath]; !ok {
-						users[curQueuePath] = make(map[string]*resources.Resource)
-					}
-					users[curQueuePath][user] = limitMaxResources
+		for _, group := range limit.Groups {
+			// Is group limit setting exists?
+			if groupMaxResource, ok := groups[queuePath][group]; ok {
+				if !groupMaxResource.FitInMaxUndef(limitMaxResources) {
+					return fmt.Errorf("group %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", group, limitMaxResources.String(), cur.Name, groupMaxResource.String())
 				}
-			}
-			for _, group := range limit.Groups {
-				// Is group limit setting exists?
-				if groupMaxResource, ok := groups[queuePath][group]; ok {
-					if !groupMaxResource.FitInMaxUndef(limitMaxResources) {
-						return fmt.Errorf("group %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", group, limitMaxResources.String(), cur.Name, groupMaxResource.String())
-					}
-					// Override with min resource
-					if _, ok := groups[curQueuePath]; !ok {
-						groups[curQueuePath] = make(map[string]*resources.Resource)
-					}
-					groups[curQueuePath][group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
-				} else {
-					if _, ok := groups[curQueuePath]; !ok {
-						groups[curQueuePath] = make(map[string]*resources.Resource)
-					}
-					groups[curQueuePath][group] = limitMaxResources
-				}
+				// Override with min resource
+				groups[curQueuePath][group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
+			} else {
+				groups[curQueuePath][group] = limitMaxResources
 			}
 		}
 	}
+
 	// traverse child queues
 	for _, child := range cur.Queues {
 		err := checkLimitResource(child, users, groups, curQueuePath)

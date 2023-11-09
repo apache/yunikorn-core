@@ -51,9 +51,9 @@ func newQueueTracker(queuePath string, queueName string) *QueueTracker {
 	queueTracker := &QueueTracker{
 		queueName:           queueName,
 		queuePath:           qp,
-		resourceUsage:       resources.NewResource(),
+		resourceUsage:       nil,
 		runningApplications: make(map[string]bool),
-		maxResources:        resources.NewResource(),
+		maxResources:        nil,
 		maxRunningApps:      0,
 		childQueueTrackers:  make(map[string]*QueueTracker),
 	}
@@ -89,13 +89,16 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		}
 	}
 
+	if qt.resourceUsage == nil {
+		qt.resourceUsage = resources.NewResource()
+	}
 	finalResourceUsage := qt.resourceUsage.Clone()
 	finalResourceUsage.AddTo(usage)
 	wildCardQuotaExceeded := false
 	existingApp := qt.runningApplications[applicationID]
 
 	// apply user/group specific limit settings set if configured, otherwise use wild card limit settings
-	if qt.maxRunningApps != 0 && !resources.Equals(resources.NewResource(), qt.maxResources) {
+	if qt.maxRunningApps != 0 && !resources.IsZero(qt.maxResources) {
 		log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of specific user/group",
 			zap.Int("tracking type", int(trackType)),
 			zap.String("queue path", qt.queuePath),
@@ -117,7 +120,7 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 	}
 
 	// Try wild card settings
-	if qt.maxRunningApps == 0 && resources.Equals(resources.NewResource(), qt.maxResources) {
+	if qt.maxRunningApps == 0 && resources.IsZero(qt.maxResources) {
 		// Is there any wild card settings? Do we need to apply enforcement checks using wild card limit settings?
 		var config *LimitConfig
 		if trackType == user {
@@ -127,7 +130,7 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		}
 		if config != nil {
 			wildCardQuotaExceeded = (config.maxApplications != 0 && !existingApp && len(qt.runningApplications)+1 > int(config.maxApplications)) ||
-				(!resources.Equals(resources.NewResource(), config.maxResources) && resources.StrictlyGreaterThan(finalResourceUsage, config.maxResources))
+				(!resources.IsZero(config.maxResources) && resources.StrictlyGreaterThan(finalResourceUsage, config.maxResources))
 			log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of wild card user/group",
 				zap.Int("tracking type", int(trackType)),
 				zap.String("queue path", qt.queuePath),
@@ -210,7 +213,7 @@ func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationI
 
 	// Determine if the queue tracker should be removed
 	removeQT := len(qt.childQueueTrackers) == 0 && len(qt.runningApplications) == 0 && resources.IsZero(qt.resourceUsage) &&
-		qt.maxRunningApps == 0 && resources.Equals(resources.NewResource(), qt.maxResources)
+		qt.maxRunningApps == 0 && resources.IsZero(qt.maxResources)
 	log.Log(log.SchedUGM).Debug("Remove queue tracker",
 		zap.String("queue path ", qt.queuePath),
 		zap.Bool("remove QT", removeQT))
@@ -255,7 +258,7 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 	}
 
 	// arrived at the leaf or on the way out: check against current max if set
-	if !resources.Equals(resources.NewResource(), qt.maxResources) {
+	if !resources.IsZero(qt.maxResources) {
 		headroom = qt.maxResources.Clone()
 		headroom.SubOnlyExisting(qt.resourceUsage)
 		log.Log(log.SchedUGM).Debug("Calculated headroom",
@@ -263,7 +266,7 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 			zap.Int("tracking type", int(trackType)),
 			zap.Stringer("max resource", qt.maxResources),
 			zap.Stringer("headroom", headroom))
-	} else if resources.Equals(nil, childHeadroom) {
+	} else if resources.IsZero(childHeadroom) {
 		// If childHeadroom is not nil, it means there is an user or wildcard limit config in child queue,
 		// so we don't check wildcard limit config in current queue.
 
@@ -409,15 +412,15 @@ func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(hierarchy []string
 		// reach end of hierarchy, remove all resources under this queue
 		removedApplications = qt.runningApplications
 		for childName, childQT := range qt.childQueueTrackers {
-			if len(childQT.runningApplications) > 0 && childQT.resourceUsage != resources.NewResource() {
+			if len(childQT.runningApplications) > 0 && !resources.IsZero(childQT.resourceUsage) {
 				// runningApplications in parent queue should contain all the running applications in child queues,
 				// so we don't need to update removedApplications from child queue result.
 				childQT.decreaseTrackedResourceUsageDownwards([]string{childName})
 			}
 		}
 	}
-	if len(qt.runningApplications) > 0 && qt.resourceUsage != resources.NewResource() {
-		qt.resourceUsage = resources.NewResource()
+	if len(qt.runningApplications) > 0 && !resources.IsZero(qt.resourceUsage) {
+		qt.resourceUsage = nil
 		qt.runningApplications = make(map[string]bool)
 	}
 	return removedApplications
@@ -501,8 +504,8 @@ func (qt *QueueTracker) canBeRemoved() bool {
 }
 
 func (qt *QueueTracker) canBeRemovedInternal() bool {
-	if len(qt.runningApplications) == 0 && resources.Equals(resources.NewResource(), qt.resourceUsage) && len(qt.childQueueTrackers) == 0 &&
-		qt.maxRunningApps == 0 && resources.Equals(resources.NewResource(), qt.maxResources) {
+	if len(qt.runningApplications) == 0 && resources.IsZero(qt.resourceUsage) && len(qt.childQueueTrackers) == 0 &&
+		qt.maxRunningApps == 0 && resources.IsZero(qt.maxResources) {
 		return true
 	}
 	return false

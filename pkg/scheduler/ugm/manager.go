@@ -167,26 +167,6 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 	return true
 }
 
-func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
-	m.RLock()
-	defer m.RUnlock()
-	ut := m.userTrackers[user.User]
-	if ut != nil && len(ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
-		return ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage
-	}
-	return nil
-}
-
-func (m *Manager) GetGroupResources(group string) *resources.Resource {
-	m.RLock()
-	defer m.RUnlock()
-	gt := m.groupTrackers[group]
-	if gt != nil && len(gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
-		return gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage
-	}
-	return nil
-}
-
 func (m *Manager) GetUsersResources() []*UserTracker {
 	m.RLock()
 	defer m.RUnlock()
@@ -451,7 +431,7 @@ func (m *Manager) resetUserEarlierUsage(ut *UserTracker, queuePath string) {
 		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
 			zap.String("user", ut.userName),
 			zap.String("queue path", queuePath))
-		ut.setLimits(queuePath, resources.NewResource(), 0)
+		ut.setLimits(queuePath, nil, 0)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
 		if ut.IsUnlinkRequired(queuePath) {
 			ut.UnlinkQT(queuePath)
@@ -503,7 +483,7 @@ func (m *Manager) resetGroupEarlierUsage(gt *GroupTracker, queuePath string) {
 			ut := m.userTrackers[u]
 			delete(ut.appGroupTrackers, app)
 		}
-		gt.setLimits(queuePath, resources.NewResource(), 0)
+		gt.setLimits(queuePath, nil, 0)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
 		if gt.IsUnlinkRequired(queuePath) {
 			gt.UnlinkQT(queuePath)
@@ -683,4 +663,26 @@ func (m *Manager) ClearConfigLimits() {
 	m.configuredGroups = make(map[string][]string)
 	m.userLimits = make(map[string]map[string]*LimitConfig)
 	m.groupLimits = make(map[string]map[string]*LimitConfig)
+}
+
+// GetUserResources only for tests
+func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
+	m.RLock()
+	defer m.RUnlock()
+	ut := m.userTrackers[user.User]
+	if ut != nil && ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage != nil && len(ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
+		return ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage
+	}
+	return nil
+}
+
+// GetGroupResources only for tests
+func (m *Manager) GetGroupResources(group string) *resources.Resource {
+	m.RLock()
+	defer m.RUnlock()
+	gt := m.groupTrackers[group]
+	if gt != nil && gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage != nil && len(gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
+		return gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage
+	}
+	return nil
 }

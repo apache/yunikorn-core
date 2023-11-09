@@ -451,7 +451,7 @@ func (m *Manager) resetUserEarlierUsage(ut *UserTracker, queuePath string) {
 		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
 			zap.String("user", ut.userName),
 			zap.String("queue path", queuePath))
-		ut.setLimits(queuePath, resources.NewResource(), 0)
+		ut.setLimits(queuePath, nil, 0)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
 		if ut.IsUnlinkRequired(queuePath) {
 			ut.UnlinkQT(queuePath)
@@ -503,7 +503,7 @@ func (m *Manager) resetGroupEarlierUsage(gt *GroupTracker, queuePath string) {
 			ut := m.userTrackers[u]
 			delete(ut.appGroupTrackers, app)
 		}
-		gt.setLimits(queuePath, resources.NewResource(), 0)
+		gt.setLimits(queuePath, nil, 0)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
 		if gt.IsUnlinkRequired(queuePath) {
 			gt.UnlinkQT(queuePath)

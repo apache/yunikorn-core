@@ -993,3 +993,44 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 	}
 	return absResource
 }
+
+// DominantResourceType calculates the most used resource type based on the ratio of used compared to
+// the capacity. If a capacity type is set to 0 assume full usage.
+// Dominant type should be calculated with queue usage and capacity. Queue capacities should never
+// contain 0 values when there is a usage also, however in the root queue this could happen. If the
+// last node reporting that resource was removed but not everything has been updated.
+// immediately
+// Ignores resources types that are used but not defined in the capacity.
+func (r *Resource) DominantResourceType(capacity *Resource) string {
+	if r == nil || capacity == nil {
+		return ""
+	}
+	var div, temp float64
+	dominant := ""
+	for name, usedVal := range r.Resources {
+		capVal, ok := capacity.Resources[name]
+		if !ok {
+			log.Log(log.Resources).Debug("missing resource in dominant calculation",
+				zap.String("missing resource", name))
+			continue
+		}
+		// calculate the ratio between usage and capacity
+		// ratio should be somewhere between 0 and 1, but do not restrict
+		// handle 0 values specifically just to be safe should never happen
+		if capVal == 0 {
+			if usedVal == 0 {
+				temp = 0 // no usage, no cap: consider empty
+			} else {
+				temp = 1 // usage, no cap: fully used
+			}
+		} else {
+			temp = float64(usedVal) / float64(capVal) // both not zero calculate ratio
+		}
+		// if we have exactly the same use the latest one
+		if temp >= div {
+			div = temp
+			dominant = name
+		}
+	}
+	return dominant
+}

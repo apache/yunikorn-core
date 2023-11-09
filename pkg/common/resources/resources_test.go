@@ -1701,3 +1701,29 @@ func TestIsEmpty(t *testing.T) {
 		})
 	}
 }
+
+func TestResource_DominantResource(t *testing.T) {
+	tests := []struct {
+		name     string
+		used     *Resource
+		capacity *Resource
+		wantName string
+	}{
+		{"nil receiver", nil, Zero, ""},
+		{"nil cap", Zero, nil, ""},
+		{"zero cap", NewResourceFromMap(map[string]Quantity{"A": 10}), Zero, ""},
+		{"over cap", NewResourceFromMap(map[string]Quantity{"A": 20}), NewResourceFromMap(map[string]Quantity{"A": 10}), "A"},
+		{"zero usage exist", NewResourceFromMap(map[string]Quantity{"A": 0}), NewResourceFromMap(map[string]Quantity{"A": 10}), "A"},
+		{"usage not in cap", NewResourceFromMap(map[string]Quantity{"B": 10}), NewResourceFromMap(map[string]Quantity{"A": 10}), ""},
+		{"multiple usages", NewResourceFromMap(map[string]Quantity{"B": 10, "A": 10}), NewResourceFromMap(map[string]Quantity{"A": 10, "B": 20}), "A"},
+		{"0 usage with 0 cap", NewResourceFromMap(map[string]Quantity{"A": 0}), NewResourceFromMap(map[string]Quantity{"A": 0}), "A"},
+		{"usage with 0 cap", NewResourceFromMap(map[string]Quantity{"A": 10, "B": 5}), NewResourceFromMap(map[string]Quantity{"A": 0, "B": 10}), "A"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.used.DominantResourceType(tt.capacity); got != tt.wantName {
+				t.Errorf("DominantResourceType() = %v, want %v", got, tt.wantName)
+			}
+		})
+	}
+}

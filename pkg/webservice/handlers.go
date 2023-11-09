@@ -48,15 +48,17 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
-const PartitionDoesNotExists = "Partition not found"
-const MissingParamsName = "Missing parameters"
-const QueueDoesNotExists = "Queue not found"
-const UserDoesNotExists = "User not found"
-const GroupDoesNotExists = "Group not found"
-const UserNameMissing = "User name is missing"
-const GroupNameMissing = "Group name is missing"
-const ApplicationDoesNotExists = "Application not found"
-const NodeDoesNotExists = "Node not found"
+const (
+	PartitionDoesNotExists   = "Partition not found"
+	MissingParamsName        = "Missing parameters"
+	QueueDoesNotExists       = "Queue not found"
+	UserDoesNotExists        = "User not found"
+	GroupDoesNotExists       = "Group not found"
+	UserNameMissing          = "User name is missing"
+	GroupNameMissing         = "Group name is missing"
+	ApplicationDoesNotExists = "Application not found"
+	NodeDoesNotExists        = "Node not found"
+)
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -146,7 +148,7 @@ func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 
 func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUtilDAOInfo {
 	var utils []*dao.ClusterUtilDAOInfo
-	var getResource bool = true
+	var getResource = true
 	total := partition.GetTotalPartitionResource()
 	if resources.IsZero(total) {
 		getResource = false
@@ -162,7 +164,7 @@ func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUti
 				ResourceType: name,
 				Total:        int64(total.Resources[name]),
 				Used:         int64(used.Resources[name]),
-				Usage:        fmt.Sprintf("%d", int64(value)) + "%",
+				Usage:        fmt.Sprintf("%d%%", int64(value)),
 			}
 			utils = append(utils, utilization)
 		}
@@ -348,29 +350,57 @@ func getNodesDAO(entries []*objects.Node) []*dao.NodeDAOInfo {
 	return nodesDAO
 }
 
+// getNodeUtilisation loads the node utilisation based on the dominant resource used
+// for the default partition. Dominant resource is defined as the highest utilised resource
+// type on the root queue based on the registered resources.
+// Use the default partition until we get YUNIKORN-2088 fixed
+func getNodeUtilisation(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(configs.DefaultPartition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+		return
+	}
+	// calculate the dominant resource based on root queue usage and size
+	rootQ := partitionContext.GetQueue(configs.RootQueue)
+	rootMax := rootQ.GetMaxResource()
+	// if no nodes have been registered return an empty object
+	nodesDao := &dao.NodesUtilDAOInfo{}
+	if !resources.IsZero(rootMax) {
+		// if nothing is used we get an empty dominant resource and return an empty object
+		rootUsed := rootQ.GetAllocatedResource()
+		dominant := rootUsed.DominantResourceType(rootMax)
+		nodesDao = getNodesUtilJSON(partitionContext, dominant)
+	}
+	if err := json.NewEncoder(w).Encode(nodesDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// getNodesUtilJSON loads the nodes utilisation for a partition for a specific resource type.
 func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.NodesUtilDAOInfo {
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)
 	var v float64
 	var nodeUtil []*dao.NodeUtilDAOInfo
+	var idx int
 	for _, node := range partition.GetNodes() {
-		resourceExist := true
-		// check resource exist or not
+		// check resource exist or not: only count if node advertises the resource
 		total := node.GetCapacity()
-		if total.Resources[name] <= 0 {
-			resourceExist = false
+		if _, ok := total.Resources[name]; !ok {
+			continue
 		}
 		resourceAllocated := node.GetAllocatedResource()
-		if _, ok := resourceAllocated.Resources[name]; !ok {
-			resourceExist = false
-		}
-		// if resource exist in node, record the bucket it should go
-		if resourceExist {
+		// if resource exist in node, record the bucket it should go into,
+		// otherwise none is used, and it should end up in the 0 bucket
+		if _, ok := resourceAllocated.Resources[name]; ok {
 			v = float64(resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name])
-			idx := int(math.Dim(math.Ceil(v/10), 1))
-			mapResult[idx]++
-			mapName[idx] = append(mapName[idx], node.NodeID)
+			idx = int(math.Dim(math.Ceil(v/10), 1))
+		} else {
+			idx = 0
 		}
+		mapResult[idx]++
+		mapName[idx] = append(mapName[idx], node.NodeID)
 	}
 	// put number of nodes and node name to different buckets
 	for k := 0; k < 10; k++ {

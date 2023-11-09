@@ -661,11 +661,14 @@ func TestGetNodesUtilJSON(t *testing.T) {
 
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
-	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}).ToProto()
 	node1ID := "node-1"
 	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
+	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}).ToProto()
 	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes2})
+	node3ID := "node-3"
+	nodeCPU := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1000}).ToProto()
+	node3 := objects.NewNode(&si.NodeInfo{NodeID: node3ID, SchedulableResource: nodeCPU})
 
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
@@ -678,36 +681,126 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	allocs = []*objects.Allocation{objects.NewAllocation("alloc-2-uuid", node2ID, ask2)}
 	err = partition.AddNode(node2, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
+	err = partition.AddNode(node3, nil)
+	assert.NilError(t, err, "add node to partition should not have failed")
+
+	// two nodes advertise memory: must show up in the list
+	result := getNodesUtilJSON(partition, siCommon.Memory)
+	subResult := result.NodesUtil
+	assert.Equal(t, result.ResourceType, siCommon.Memory)
+	assert.Equal(t, subResult[2].NumOfNodes, int64(1))
+	assert.Equal(t, subResult[4].NumOfNodes, int64(1))
+	assert.Equal(t, subResult[2].NodeNames[0], node2ID)
+	assert.Equal(t, subResult[4].NodeNames[0], node1ID)
+
+	// three nodes advertise cpu: must show up in the list
+	result = getNodesUtilJSON(partition, siCommon.CPU)
+	subResult = result.NodesUtil
+	assert.Equal(t, result.ResourceType, siCommon.CPU)
+	assert.Equal(t, subResult[0].NumOfNodes, int64(1))
+	assert.Equal(t, subResult[0].NodeNames[0], node3ID)
+	assert.Equal(t, subResult[2].NumOfNodes, int64(1))
+	assert.Equal(t, subResult[2].NodeNames[0], node1ID)
+	assert.Equal(t, subResult[4].NumOfNodes, int64(1))
+	assert.Equal(t, subResult[4].NodeNames[0], node2ID)
+
+	// one node advertise GPU: must show up in the list
+	result = getNodesUtilJSON(partition, "GPU")
+	subResult = result.NodesUtil
+	assert.Equal(t, result.ResourceType, "GPU")
+	assert.Equal(t, subResult[4].NumOfNodes, int64(1))
+	assert.Equal(t, subResult[4].NodeNames[0], node2ID)
+
+	result = getNodesUtilJSON(partition, "non-exist")
+	subResult = result.NodesUtil
+	assert.Equal(t, result.ResourceType, "non-exist")
+	assert.Equal(t, subResult[0].NumOfNodes, int64(0))
+	assert.Equal(t, len(subResult[0].NodeNames), 0)
+}
+
+func TestGetNodeUtilisation(t *testing.T) {
+	NewWebApp(&scheduler.ClusterContext{}, nil)
+
+	// var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/scheduler/node-utilization", strings.NewReader(""))
+	assert.NilError(t, err, "Get node utilisation Handler request failed")
+	req = req.WithContext(context.TODO())
+	resp := &MockResponseWriter{}
+
+	getNodeUtilisation(resp, req)
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "getNodeUtilisation should have returned and error")
+
+	partition := setup(t, configDefault, 1)
+	utilisation := &dao.NodesUtilDAOInfo{}
+	err = json.Unmarshal(resp.outputBytes, utilisation)
+	assert.NilError(t, err, "getNodeUtilisation should have returned an empty object")
+	assert.Equal(t, utilisation.ResourceType, "", "unexpected type returned")
+	assert.Equal(t, len(utilisation.NodesUtil), 0, "no nodes should be returned")
+	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 0), "unexpected number of nodes returned should be 0")
+
+	// create test nodes
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}).ToProto()
+	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5}).ToProto()
+	node1ID := "node-1"
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
+	node2ID := "node-2"
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes2})
+
+	err = partition.AddNode(node1, nil)
+	assert.NilError(t, err, "add node to partition should not have failed")
+	err = partition.AddNode(node2, nil)
+	assert.NilError(t, err, "add node to partition should not have failed")
 
 	// get nodes utilization
-	res1 := getNodesUtilJSON(partition, siCommon.Memory)
-	res2 := getNodesUtilJSON(partition, siCommon.CPU)
-	res3 := getNodesUtilJSON(partition, "GPU")
-	resNon := getNodesUtilJSON(partition, "non-exist")
-	subres1 := res1.NodesUtil
-	subres2 := res2.NodesUtil
-	subres3 := res3.NodesUtil
-	subresNon := resNon.NodesUtil
+	getNodeUtilisation(resp, req)
+	utilisation = &dao.NodesUtilDAOInfo{}
+	err = json.Unmarshal(resp.outputBytes, utilisation)
+	assert.NilError(t, err, "getNodeUtilisation should have returned an object")
+	assert.Equal(t, utilisation.ResourceType, "", "unexpected type returned")
+	assert.Equal(t, len(utilisation.NodesUtil), 10, "empty usage: unexpected bucket count returned")
+	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 0), "unexpected number of nodes returned should be 0")
 
-	assert.Equal(t, res1.ResourceType, siCommon.Memory)
-	assert.Equal(t, subres1[2].NumOfNodes, int64(1))
-	assert.Equal(t, subres1[4].NumOfNodes, int64(1))
-	assert.Equal(t, subres1[2].NodeNames[0], node2ID)
-	assert.Equal(t, subres1[4].NodeNames[0], node1ID)
+	resAlloc := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	ask := objects.NewAllocationAsk("alloc-1", "app", resAlloc)
+	alloc := objects.NewAllocation("alloc-1-uuid", node1ID, ask)
+	assert.Assert(t, node1.AddAllocation(alloc), "unexpected failure adding allocation to node")
+	rootQ := partition.GetQueue("root")
+	err = rootQ.IncAllocatedResource(resAlloc, false)
+	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
+	// get nodes utilization
+	getNodeUtilisation(resp, req)
+	utilisation = &dao.NodesUtilDAOInfo{}
+	err = json.Unmarshal(resp.outputBytes, utilisation)
+	assert.NilError(t, err, "getNodeUtilisation should have returned an object")
+	assert.Equal(t, utilisation.ResourceType, "first", "expected first as type returned")
+	assert.Equal(t, len(utilisation.NodesUtil), 10, "empty usage: unexpected bucket count returned")
+	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 2), "unexpected number of nodes returned should be 2")
 
-	assert.Equal(t, res2.ResourceType, siCommon.CPU)
-	assert.Equal(t, subres2[2].NumOfNodes, int64(1))
-	assert.Equal(t, subres2[4].NumOfNodes, int64(1))
-	assert.Equal(t, subres2[2].NodeNames[0], node1ID)
-	assert.Equal(t, subres2[4].NodeNames[0], node2ID)
+	// make second type dominant by using all
+	resAlloc = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
+	ask = objects.NewAllocationAsk("alloc-2", "app", resAlloc)
+	alloc = objects.NewAllocation("alloc-2-uuid", node2ID, ask)
+	assert.Assert(t, node2.AddAllocation(alloc), "unexpected failure adding allocation to node")
+	err = rootQ.IncAllocatedResource(resAlloc, false)
+	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
+	// get nodes utilization
+	getNodeUtilisation(resp, req)
+	utilisation = &dao.NodesUtilDAOInfo{}
+	err = json.Unmarshal(resp.outputBytes, utilisation)
+	assert.NilError(t, err, "getNodeUtilisation should have returned an object")
+	assert.Equal(t, utilisation.ResourceType, "second", "expected second as type returned")
+	assert.Equal(t, len(utilisation.NodesUtil), 10, "empty usage: unexpected bucket count returned")
+	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 1), "unexpected number of nodes returned should be 1")
+}
 
-	assert.Equal(t, res3.ResourceType, "GPU")
-	assert.Equal(t, subres3[4].NumOfNodes, int64(1))
-	assert.Equal(t, subres3[4].NodeNames[0], node2ID)
-
-	assert.Equal(t, resNon.ResourceType, "non-exist")
-	assert.Equal(t, subresNon[0].NumOfNodes, int64(0))
-	assert.Equal(t, len(subresNon[0].NodeNames), 0)
+func confirmNodeCount(info []*dao.NodeUtilDAOInfo, count int64) bool {
+	var total int64
+	for _, node := range info {
+		total += node.NumOfNodes
+	}
+	return total == count
 }
 
 func addAndConfirmApplicationExists(t *testing.T, partitionName string, partition *scheduler.PartitionContext, appName string) *objects.Application {

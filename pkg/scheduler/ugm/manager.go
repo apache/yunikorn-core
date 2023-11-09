@@ -167,26 +167,6 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 	return true
 }
 
-func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
-	m.RLock()
-	defer m.RUnlock()
-	ut := m.userTrackers[user.User]
-	if ut != nil && len(ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
-		return ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage
-	}
-	return nil
-}
-
-func (m *Manager) GetGroupResources(group string) *resources.Resource {
-	m.RLock()
-	defer m.RUnlock()
-	gt := m.groupTrackers[group]
-	if gt != nil && len(gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
-		return gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage
-	}
-	return nil
-}
-
 func (m *Manager) GetUsersResources() []*UserTracker {
 	m.RLock()
 	defer m.RUnlock()
@@ -683,4 +663,26 @@ func (m *Manager) ClearConfigLimits() {
 	m.configuredGroups = make(map[string][]string)
 	m.userLimits = make(map[string]map[string]*LimitConfig)
 	m.groupLimits = make(map[string]map[string]*LimitConfig)
+}
+
+// GetUserResources only for tests
+func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
+	m.RLock()
+	defer m.RUnlock()
+	ut := m.userTrackers[user.User]
+	if ut != nil && ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage != nil && len(ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
+		return ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage
+	}
+	return nil
+}
+
+// GetGroupResources only for tests
+func (m *Manager) GetGroupResources(group string) *resources.Resource {
+	m.RLock()
+	defer m.RUnlock()
+	gt := m.groupTrackers[group]
+	if gt != nil && gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage != nil && len(gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
+		return gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage
+	}
+	return nil
 }

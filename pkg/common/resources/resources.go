@@ -1005,7 +1005,7 @@ func (r *Resource) DominantResourceType(capacity *Resource) string {
 	if r == nil || capacity == nil {
 		return ""
 	}
-	var div float64
+	var div, temp float64
 	dominant := ""
 	for name, usedVal := range r.Resources {
 		capVal, ok := capacity.Resources[name]
@@ -1015,15 +1015,20 @@ func (r *Resource) DominantResourceType(capacity *Resource) string {
 			continue
 		}
 		// calculate the ratio between usage and capacity
-		// filter out 0 just to be safe should never happen: make it fully used
+		// ratio should be somewhere between 0 and 1, but do not restrict
+		// handle 0 values specifically just to be safe should never happen
 		if capVal == 0 {
-			capVal = usedVal
+			if usedVal == 0 {
+				temp = 0 // no usage, no cap: consider empty
+			} else {
+				temp = 1 // usage, no cap: fully used
+			}
+		} else {
+			temp = float64(usedVal) / float64(capVal) // both not zero calculate ratio
 		}
-		// ratio should be somewhere between 0 and 1
 		// if we have exactly the same use the latest one
-		temp := float64(usedVal) / float64(capVal)
 		if temp >= div {
-			div = float64(usedVal) / float64(capVal)
+			div = temp
 			dominant = name
 		}
 	}

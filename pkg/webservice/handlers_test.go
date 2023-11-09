@@ -760,7 +760,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	assert.NilError(t, err, "getNodeUtilisation should have returned an object")
 	assert.Equal(t, utilisation.ResourceType, "", "unexpected type returned")
 	assert.Equal(t, len(utilisation.NodesUtil), 10, "empty usage: unexpected bucket count returned")
-	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 0), "unexpected number of nodes returned should be 2")
+	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 0), "unexpected number of nodes returned should be 0")
 
 	resAlloc := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	ask := objects.NewAllocationAsk("alloc-1", "app", resAlloc)

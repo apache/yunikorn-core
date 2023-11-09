@@ -89,7 +89,7 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		}
 	}
 
-	if resources.IsZero(qt.resourceUsage) {
+	if qt.resourceUsage == nil {
 		qt.resourceUsage = resources.NewResource()
 	}
 	finalResourceUsage := qt.resourceUsage.Clone()
@@ -412,14 +412,14 @@ func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(hierarchy []string
 		// reach end of hierarchy, remove all resources under this queue
 		removedApplications = qt.runningApplications
 		for childName, childQT := range qt.childQueueTrackers {
-			if len(childQT.runningApplications) > 0 && childQT.resourceUsage != nil {
+			if len(childQT.runningApplications) > 0 && !resources.IsZero(childQT.resourceUsage) {
 				// runningApplications in parent queue should contain all the running applications in child queues,
 				// so we don't need to update removedApplications from child queue result.
 				childQT.decreaseTrackedResourceUsageDownwards([]string{childName})
 			}
 		}
 	}
-	if len(qt.runningApplications) > 0 && qt.resourceUsage != nil {
+	if len(qt.runningApplications) > 0 && !resources.IsZero(qt.resourceUsage) {
 		qt.resourceUsage = nil
 		qt.runningApplications = make(map[string]bool)
 	}

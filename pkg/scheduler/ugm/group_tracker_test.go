@@ -86,6 +86,7 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1
 	// root->parent->child2
+	// Initialize ugm
 	GetUserManager()
 	user := &security.UserGroup{User: "test", Groups: []string{"test"}}
 	groupTracker := newGroupTracker(user.User)

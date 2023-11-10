@@ -583,16 +583,6 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 	existedUserName := make(map[string]bool)
 	existedGroupName := make(map[string]bool)
 
-	defer func() {
-		for k := range existedUserName {
-			delete(existedUserName, k)
-		}
-
-		for k := range existedGroupName {
-			delete(existedGroupName, k)
-		}
-	}()
-
 	for _, limit := range limits {
 		if err := checkLimit(limit, existedUserName, existedGroupName, queue); err != nil {
 			return err

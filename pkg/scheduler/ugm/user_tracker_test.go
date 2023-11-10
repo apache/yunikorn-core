@@ -39,20 +39,28 @@ const (
 	queuePath4 = "root.parent.child12"
 )
 
+var hierarchy1 = []string{"root", "parent", "child1"}
+var hierarchy2 = []string{"root", "parent", "child2"}
+var hierarchy3 = []string{"root", "parent", "child1", "child12"}
+var hierarchy4 = []string{"root", "parent", "child12"}
+var hierarchy5 = []string{"root", "parent"}
+
 func TestIncreaseTrackedResource(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1->child12
 	// root->parent->child2
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed)
+	// Initialize ugm
+	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
 	userTracker := newUserTracker(user.User)
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	result := userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v", hierarchy1, TestApp1, usage1)
 	}
 	groupTracker := newGroupTracker(user.User)
 	userTracker.setGroupForApp(TestApp1, groupTracker)
@@ -61,9 +69,9 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = userTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
+	result = userTracker.increaseTrackedResource(hierarchy2, TestApp2, usage2)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy2, TestApp2, usage2, err)
 	}
 	userTracker.setGroupForApp(TestApp2, groupTracker)
 
@@ -71,9 +79,9 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = userTracker.increaseTrackedResource(queuePath3, TestApp3, usage3)
+	result = userTracker.increaseTrackedResource(hierarchy3, TestApp3, usage3)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath3, TestApp3, usage3, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy3, TestApp3, usage3, err)
 	}
 	userTracker.setGroupForApp(TestApp3, groupTracker)
 
@@ -81,9 +89,9 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = userTracker.increaseTrackedResource(queuePath4, TestApp4, usage4)
+	result = userTracker.increaseTrackedResource(hierarchy4, TestApp4, usage4)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath4, TestApp4, usage4, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy4, TestApp4, usage4, err)
 	}
 	userTracker.setGroupForApp(TestApp4, groupTracker)
 
@@ -104,6 +112,8 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1
 	// root->parent->child2
+	// Initialize ugm
+	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
 	userTracker := newUserTracker(user.User)
 
@@ -111,9 +121,9 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	result := userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage1, err)
 	}
 	groupTracker := newGroupTracker(user.User)
 	userTracker.setGroupForApp(TestApp1, groupTracker)
@@ -123,9 +133,9 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = userTracker.increaseTrackedResource(queuePath2, TestApp2, usage2)
+	result = userTracker.increaseTrackedResource(hierarchy2, TestApp2, usage2)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy2, TestApp2, usage2, err)
 	}
 	userTracker.setGroupForApp(TestApp2, groupTracker)
 	actualResources := getUserResource(userTracker)
@@ -140,15 +150,15 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	removeQT, decreased := userTracker.decreaseTrackedResource(queuePath1, TestApp1, usage3, false)
+	removeQT, decreased := userTracker.decreaseTrackedResource(hierarchy1, TestApp1, usage3, false)
 	if !decreased {
-		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
+		t.Fatalf("unable to decrease tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage3, err)
 	}
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 
-	removeQT, decreased = userTracker.decreaseTrackedResource(queuePath2, TestApp2, usage3, false)
+	removeQT, decreased = userTracker.decreaseTrackedResource(hierarchy2, TestApp2, usage3, false)
 	if !decreased {
-		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage3, err)
+		t.Fatalf("unable to decrease tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy2, TestApp2, usage3, err)
 	}
 	actualResources1 := getUserResource(userTracker)
 
@@ -163,9 +173,9 @@ func TestDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	removeQT, decreased = userTracker.decreaseTrackedResource(queuePath1, TestApp1, usage4, true)
+	removeQT, decreased = userTracker.decreaseTrackedResource(hierarchy1, TestApp1, usage4, true)
 	if !decreased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage1, err)
 	}
 	assert.Equal(t, 1, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
@@ -174,9 +184,9 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage5)
 	}
-	removeQT, decreased = userTracker.decreaseTrackedResource(queuePath2, TestApp2, usage5, true)
+	removeQT, decreased = userTracker.decreaseTrackedResource(hierarchy2, TestApp2, usage5, true)
 	if !decreased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy2, TestApp2, usage2, err)
 	}
 	assert.Equal(t, 0, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
@@ -185,31 +195,33 @@ func TestDecreaseTrackedResource(t *testing.T) {
 func TestSetMaxLimits(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1
+	// Initialize ugm
+	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
 	userTracker := newUserTracker(user.User)
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	result := userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage1, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage1, err)
 	}
 
-	userTracker.setLimits(queuePath1, resources.Multiply(usage1, 5), 5)
-	userTracker.setLimits("root.parent", resources.Multiply(usage1, 10), 10)
+	userTracker.setLimits(hierarchy1, resources.Multiply(usage1, 5), 5)
+	userTracker.setLimits(hierarchy5, resources.Multiply(usage1, 10), 10)
 
-	result = userTracker.increaseTrackedResource(queuePath1, TestApp1, usage1)
+	result = userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v", hierarchy1, TestApp1, usage1)
 	}
 
-	result = userTracker.increaseTrackedResource(queuePath1, TestApp2, usage1)
+	result = userTracker.increaseTrackedResource(hierarchy1, TestApp2, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp2, usage1)
+		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v", hierarchy1, TestApp2, usage1)
 	}
-	userTracker.setLimits(queuePath1, usage1, 1)
-	userTracker.setLimits("root.parent", usage1, 1)
+	userTracker.setLimits(hierarchy1, usage1, 1)
+	userTracker.setLimits(hierarchy5, usage1, 1)
 }
 
 func getUserResource(ut *UserTracker) map[string]*resources.Resource {

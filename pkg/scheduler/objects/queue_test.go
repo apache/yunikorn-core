@@ -1943,6 +1943,13 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
 	alloc2.GetAsk().SetRequiredNode("")
 
+	// placeholder which has been marked released should not be considered
+	alloc2.released = true
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 1, len(victims(snapshot)), "wrong victim count")
+	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
+	alloc2.released = false
+
 	// setting priority offset on parent2 queue should remove leaf2 victims
 	parent2.priorityOffset = 1001
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)

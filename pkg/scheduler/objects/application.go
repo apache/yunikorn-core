@@ -1119,9 +1119,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 		// walk over the placeholders, allow for processing all as we can have multiple task groups
 		phAllocs := sa.getPlaceholderAllocations()
 		for _, ph := range phAllocs {
-			// we could have already released this placeholder and are waiting for the shim to confirm
+			// we could have already released preempted this placeholder and are waiting for the shim to confirm
 			// and check that we have the correct task group before trying to swap
-			if ph.IsReleased() || request.GetTaskGroup() != ph.GetTaskGroup() {
+			if ph.IsReleased() || ph.IsPreempted() || request.GetTaskGroup() != ph.GetTaskGroup() {
 				continue
 			}
 			// before we check anything we need to check the resources equality

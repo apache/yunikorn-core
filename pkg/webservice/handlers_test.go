@@ -49,6 +49,8 @@ import (
 )
 
 const unmarshalError = "Failed to unmarshal error response from response body"
+const statusCodeError = "Incorrect Status code"
+const jsonMessageError = "JSON error message is incorrect"
 
 const partitionNameWithoutClusterID = "default"
 const normalizedPartitionName = "[rm-123]default"
@@ -323,7 +325,7 @@ func TestValidateConf(t *testing.T) {
 		validateConf(resp, req)
 		var vcr dao.ValidateConfResponse
 		err := json.Unmarshal(resp.outputBytes, &vcr)
-		assert.NilError(t, err, "%s (ValidateConfResponse)", unmarshalError)
+		assert.NilError(t, err, unmarshalError)
 		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
 		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
 	}
@@ -364,7 +366,7 @@ func TestUserGroupLimits(t *testing.T) {
 		validateConf(resp, req)
 		var vcr dao.ValidateConfResponse
 		err := json.Unmarshal(resp.outputBytes, &vcr)
-		assert.NilError(t, err, "%s (ValidateConfResponse)", unmarshalError)
+		assert.NilError(t, err, unmarshalError)
 		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
 		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")
 	}
@@ -382,9 +384,9 @@ func TestApplicationHistory(t *testing.T) {
 
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "%s (App History): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, http.StatusNotImplemented, resp.statusCode, "app history handler returned wrong status")
-	assert.Equal(t, errInfo.Message, "Internal metrics collection is not enabled.", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, "Internal metrics collection is not enabled.", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotImplemented)
 
 	// init should return null and thus no records
@@ -393,7 +395,7 @@ func TestApplicationHistory(t *testing.T) {
 	getApplicationHistory(resp, req)
 	var appHist []dao.ApplicationHistoryDAOInfo
 	err = json.Unmarshal(resp.outputBytes, &appHist)
-	assert.NilError(t, err, "%s (App History): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
 	assert.Equal(t, len(appHist), 0, "empty response must have no records")
 
@@ -404,7 +406,7 @@ func TestApplicationHistory(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getApplicationHistory(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appHist)
-	assert.NilError(t, err, "%s (App History): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
 	assert.Equal(t, len(appHist), 3, "incorrect number of records returned")
 	assert.Equal(t, appHist[0].TotalApplications, "1", "metric 1 should be 1 apps and was not")
@@ -418,7 +420,7 @@ func TestApplicationHistory(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getApplicationHistory(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appHist)
-	assert.NilError(t, err, "%s (App History): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
 	assert.Equal(t, len(appHist), 5, "incorrect number of records returned")
 	assert.Equal(t, appHist[0].TotalApplications, "2", "metric 1 should be 1 apps and was not")
@@ -437,9 +439,9 @@ func TestContainerHistory(t *testing.T) {
 
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, "%s (Container History): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, http.StatusNotImplemented, resp.statusCode, "container history handler returned wrong status")
-	assert.Equal(t, errInfo.Message, "Internal metrics collection is not enabled.", "JSON error message is incorrect")
+	assert.Equal(t, errInfo.Message, "Internal metrics collection is not enabled.", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotImplemented)
 
 	// init should return null and thus no records
@@ -448,7 +450,7 @@ func TestContainerHistory(t *testing.T) {
 	getContainerHistory(resp, req)
 	var contHist []dao.ContainerHistoryDAOInfo
 	err = json.Unmarshal(resp.outputBytes, &contHist)
-	assert.NilError(t, err, "%s (Container History): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
 	assert.Equal(t, len(contHist), 0, "empty response must have no records")
 
@@ -459,7 +461,7 @@ func TestContainerHistory(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getContainerHistory(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &contHist)
-	assert.NilError(t, err, "%s (Container History): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
 	assert.Equal(t, len(contHist), 3, "incorrect number of records returned")
 	assert.Equal(t, contHist[0].TotalContainers, "1", "metric 1 should be 1 apps and was not")
@@ -473,7 +475,7 @@ func TestContainerHistory(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getContainerHistory(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &contHist)
-	assert.NilError(t, err, "%s (Container History): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
 	assert.Equal(t, len(contHist), 5, "incorrect number of records returned")
 	assert.Equal(t, contHist[0].TotalContainers, "2", "metric 1 should be 1 apps and was not")
@@ -492,7 +494,7 @@ func TestGetConfigYAML(t *testing.T) {
 	// yaml unmarshal handles the checksum add the end automatically in this implementation
 	conf := &dao.ConfigDAOInfo{}
 	err = yaml.Unmarshal(resp.outputBytes, conf)
-	assert.NilError(t, err, "%s (ConfigDAO)", unmarshalError)
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair")
 
 	startConfSum := conf.Checksum
@@ -507,7 +509,7 @@ func TestGetConfigYAML(t *testing.T) {
 	req.Header.Set("Accept", "unknown")
 	getClusterConfig(resp, req)
 	err = yaml.Unmarshal(resp.outputBytes, conf)
-	assert.NilError(t, err, "%s (Updated ConfigDAO)", unmarshalError)
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated")
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in output")
 	assert.DeepEqual(t, conf.Extra, updatedExtraConf)
@@ -527,7 +529,7 @@ func TestGetConfigJSON(t *testing.T) {
 
 	conf := &dao.ConfigDAOInfo{}
 	err := json.Unmarshal(resp.outputBytes, conf)
-	assert.NilError(t, err, "%s (json, ConfigDAO)", unmarshalError)
+	assert.NilError(t, err, unmarshalError)
 	startConfSum := conf.Checksum
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
 
@@ -538,7 +540,7 @@ func TestGetConfigJSON(t *testing.T) {
 
 	getClusterConfig(resp, req)
 	err = json.Unmarshal(resp.outputBytes, conf)
-	assert.NilError(t, err, "%s (json, Updated ConfigDAO)", unmarshalError)
+	assert.NilError(t, err, unmarshalError)
 	assert.Assert(t, startConfSum != conf.Checksum, "checksums did not change in json output: %s, %s", startConfSum, conf.Checksum)
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "binpacking", "node sort policy not updated (json)")
 	assert.DeepEqual(t, conf.Extra, updatedExtraConf)
@@ -560,7 +562,7 @@ func TestBuildUpdateResponseFailure(t *testing.T) {
 
 	var errInfo dao.YAPIError
 	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err1, "%s (UpdateConfig DAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err1, unmarshalError)
 	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
 	assert.Assert(t, strings.Contains(string(errInfo.Message), err.Error()), "Error message should contain the reason")
 	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
@@ -784,7 +786,7 @@ func TestPartitions(t *testing.T) {
 	var partitionInfo []*dao.PartitionInfo
 	getPartitions(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
-	assert.NilError(t, err, "%s (ApplicationDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 
 	cs := make(map[string]*dao.PartitionInfo, 2)
 	for _, d := range partitionInfo {
@@ -842,7 +844,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	var partitionQueuesDao dao.PartitionQueueDAOInfo
 	getPartitionQueues(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
-	assert.NilError(t, err, "%s (PartitionQueuesDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root")
 	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
 	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
@@ -938,7 +940,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	var partitionNodesDao []*dao.NodeDAOInfo
 	getPartitionNodes(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionNodesDao)
-	assert.NilError(t, err, "%s (PartitionNodesDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, 1, len(partitionNodesDao[0].Allocations))
 	for _, node := range partitionNodesDao {
 		assert.Equal(t, 1, len(node.Allocations))
@@ -1049,7 +1051,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	var appsDao []*dao.ApplicationDAOInfo
 	getQueueApplications(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
-	assert.NilError(t, err, "%s (ApplicationDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, len(appsDao), 1)
 
 	if !appsDao[0].HasReserved {
@@ -1102,7 +1104,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	var appsDao3 []*dao.ApplicationDAOInfo
 	getQueueApplications(resp3, req3)
 	err = json.Unmarshal(resp3.outputBytes, &appsDao3)
-	assert.NilError(t, err, "%s (ApplicationDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, len(appsDao3), 0)
 
 	// test missing params name
@@ -1143,7 +1145,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	var appsDao *dao.ApplicationDAOInfo
 	getApplication(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
-	assert.NilError(t, err, "%s (ApplicationDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 
 	if !appsDao.HasReserved {
 		assert.Equal(t, len(appsDao.Reservations), 0)
@@ -1202,8 +1204,8 @@ func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, MissingParamsName, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, MissingParamsName, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1211,8 +1213,8 @@ func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, PartitionDoesNotExists, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, PartitionDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1220,8 +1222,8 @@ func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, QueueDoesNotExists, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, QueueDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1229,8 +1231,8 @@ func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, ApplicationDoesNotExists, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, ApplicationDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1238,8 +1240,8 @@ func assertUserExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, UserDoesNotExists, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, UserDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1247,8 +1249,8 @@ func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, UserNameMissing, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, UserNameMissing, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1256,8 +1258,8 @@ func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, GroupDoesNotExists, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, GroupDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1265,8 +1267,8 @@ func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, GroupNameMissing, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, GroupNameMissing, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1274,8 +1276,8 @@ func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, "Incorrect Status code")
-	assert.Equal(t, errInfo.Message, NodeDoesNotExists, "JSON error message is incorrect")
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, NodeDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1378,7 +1380,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	var groupResourceUsageDao *dao.GroupResourceUsageDAOInfo
 	getGroupResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
-	assert.NilError(t, err, "%s (GroupResourceUsageDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.DeepEqual(t, groupResourceUsageDao, &dao.GroupResourceUsageDAOInfo{GroupName: "", Applications: nil, Queues: nil})
 
 	// Test non-existing group query
@@ -1408,7 +1410,7 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	var usersResourceUsageDao []*dao.UserResourceUsageDAOInfo
 	getUsersResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &usersResourceUsageDao)
-	assert.NilError(t, err, "%s (UserResourceUsageDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, usersResourceUsageDao[0].Queues.ResourceUsage.String(),
 		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
 
@@ -1423,7 +1425,7 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	var expGroupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
 	getGroupsResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
-	assert.NilError(t, err, "%s (GroupResourceUsageDAO): %s", unmarshalError, string(resp.outputBytes))
+	assert.NilError(t, err, unmarshalError)
 	assert.DeepEqual(t, groupsResourceUsageDao, expGroupsResourceUsageDao)
 
 	// Assert existing groups

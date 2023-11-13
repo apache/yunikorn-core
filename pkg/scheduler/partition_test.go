@@ -3003,6 +3003,77 @@ func TestPlaceholderMatch(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), resources.Multiply(phRes, 3))
 }
 
+func TestPreemptedPlaceholderSkip(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	tgRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
+
+	// add node to allow allocation
+	setupNode(t, nodeID1, partition, tgRes)
+
+	// add the app with placeholder request
+	app := newApplicationTG(appID1, "default", "root.default", tgRes)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	// add an ask for a placeholder and allocate
+	ask := newAllocationAskTG(phID, appID1, taskGroup, phRes, true)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
+	// try to allocate a placeholder via normal allocate
+	ph := partition.tryAllocate()
+	if ph == nil {
+		t.Fatal("expected placeholder ph-1 to be allocated")
+	}
+	phUUID := ph.GetUUID()
+	assert.Equal(t, phID, ph.GetAllocationKey(), "expected allocation of ph-1 to be returned")
+	assert.Equal(t, 1, len(app.GetAllPlaceholderData()), "placeholder data should be created on allocate")
+
+	// add a new ask the same task group as the placeholder
+	ask = newAllocationAskTG(allocID, appID1, taskGroup, phRes, false)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask alloc-1 to app")
+	alloc := partition.tryAllocate()
+	if alloc != nil {
+		t.Fatal("expected ask not to be allocated (matched task group)")
+	}
+
+	// mark the placeholder as preempted (shortcut not interested in usage accounting etc.)
+	ph.MarkPreempted()
+
+	// replace the placeholder should NOT work
+	alloc = partition.tryPlaceholderAllocate()
+	if alloc != nil {
+		t.Fatal("allocation should not have matched placeholder")
+	}
+
+	// release placeholder: do what the context would do after the shim processing
+	release := &si.AllocationRelease{
+		PartitionName:   "test",
+		ApplicationID:   appID1,
+		UUID:            phUUID,
+		TerminationType: si.TerminationType_PREEMPTED_BY_SCHEDULER,
+	}
+	released, confirmed := partition.removeAllocation(release)
+	assert.Equal(t, len(released), 0, "expecting no released allocation")
+	if confirmed != nil {
+		t.Fatal("confirmed allocation should be nil")
+	}
+	assert.Equal(t, int64(1), app.GetAllPlaceholderData()[0].TimedOut, "placeholder data should show the preemption")
+
+	// normal allocate should work as we have no placeholders left
+	alloc = partition.tryAllocate()
+	if alloc == nil {
+		t.Fatal("expected ask to be allocated (no placeholder left)")
+	}
+	assert.Equal(t, allocID, alloc.GetAllocationKey(), "expected allocation of alloc-1 to be returned")
+	assert.Equal(t, 1, len(app.GetAllPlaceholderData()), "placeholder data should not be updated")
+	assert.Equal(t, int64(1), app.GetAllPlaceholderData()[0].Count, "placeholder data should show 1 available placeholder")
+	assert.Equal(t, int64(0), app.GetAllPlaceholderData()[0].Replaced, "placeholder data should show no replacements")
+	assert.Equal(t, int64(1), app.GetAllPlaceholderData()[0].TimedOut, "placeholder data should show the preemption")
+}
+
 // simple direct replace with one node
 func TestTryPlaceholderAllocate(t *testing.T) {
 	setupUGM()

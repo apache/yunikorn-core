@@ -19,6 +19,8 @@
 package resources
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -47,15 +49,29 @@ func NewTrackedResourceFromMap(m map[string]map[string]int64) *TrackedResource {
 	return &TrackedResource{TrackedResourceMap: m}
 }
 
+func (tr *TrackedResource) String() string {
+	tr.RLock()
+	defer tr.RUnlock()
+
+	var resourceUsage []string
+	for instanceType, resourceTypeMap := range tr.TrackedResourceMap {
+		for resourceType, usageTime := range resourceTypeMap {
+			resourceUsage = append(resourceUsage, fmt.Sprintf("%s:%s=%d", instanceType, resourceType, usageTime))
+		}
+	}
+
+	return fmt.Sprintf("TrackedResource{%s}", strings.Join(resourceUsage, ","))
+}
+
 // Clone creates a deep copy of TrackedResource.
-func (ur *TrackedResource) Clone() *TrackedResource {
-	if ur == nil {
+func (tr *TrackedResource) Clone() *TrackedResource {
+	if tr == nil {
 		return nil
 	}
 	ret := NewTrackedResource()
-	ur.RLock()
-	defer ur.RUnlock()
-	for k, v := range ur.TrackedResourceMap {
+	tr.RLock()
+	defer tr.RUnlock()
+	for k, v := range tr.TrackedResourceMap {
 		dest := make(map[string]int64)
 		for key, element := range v {
 			dest[key] = element
@@ -67,17 +83,17 @@ func (ur *TrackedResource) Clone() *TrackedResource {
 
 // AggregateTrackedResource aggregates resource usage to TrackedResourceMap[instType].
 // The time the given resource used is the delta between the resource createTime and currentTime.
-func (ur *TrackedResource) AggregateTrackedResource(instType string,
+func (tr *TrackedResource) AggregateTrackedResource(instType string,
 	resource *Resource, bindTime time.Time) {
 	if resource == nil {
 		return
 	}
-	ur.Lock()
-	defer ur.Unlock()
+	tr.Lock()
+	defer tr.Unlock()
 
 	releaseTime := time.Now()
 	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
-	aggregatedResourceTime, ok := ur.TrackedResourceMap[instType]
+	aggregatedResourceTime, ok := tr.TrackedResourceMap[instType]
 	if !ok {
 		aggregatedResourceTime = map[string]int64{}
 	}
@@ -89,5 +105,5 @@ func (ur *TrackedResource) AggregateTrackedResource(instType string,
 		curUsage += int64(element) * timeDiff // resource size times timeDiff
 		aggregatedResourceTime[key] = curUsage
 	}
-	ur.TrackedResourceMap[instType] = aggregatedResourceTime
+	tr.TrackedResourceMap[instType] = aggregatedResourceTime
 }

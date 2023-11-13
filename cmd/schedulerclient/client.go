@@ -36,12 +36,12 @@ const (
 )
 
 func main() {
-	if err := mainNoExit(); err != nil {
+	if err := runApp(); err != nil {
 		log.Fatalf("error: %v", err)
 	}
 }
 
-func mainNoExit() error {
+func runApp() error {
 	// Set up a connection to the server.
 	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
@@ -76,9 +76,6 @@ func mainNoExit() error {
 			log.Print("Send request")
 			time.Sleep(time.Millisecond * 100)
 		}
-		// if err := stream.CloseSend(); err != nil {
-		//   log.Println(err)
-		// }
 	}()
 
 	// second goroutine receives data from stream

@@ -23,51 +23,51 @@ import (
 	"time"
 )
 
-// UsedResource is a utility struct to keep track of application resource usage.
-type UsedResource struct {
-	// UsedResourceMap is a two-level map for aggregated resource usage.
+// TrackedResource is a utility struct to keep track of application resource usage.
+type TrackedResource struct {
+	// TrackedResourceMap is a two-level map for aggregated resource usage.
 	// The top-level key is the instance type, and the value is a map:
 	//   resource type (CPU, memory, etc.) -> aggregated used time (in seconds) of the resource type.
-	UsedResourceMap map[string]map[string]int64
+	TrackedResourceMap map[string]map[string]int64
 
 	sync.RWMutex
 }
 
-// NewUsedResource creates a new instance of UsedResource.
-func NewUsedResource() *UsedResource {
-	return &UsedResource{UsedResourceMap: make(map[string]map[string]int64)}
+// NewTrackedResource creates a new instance of TrackedResource.
+func NewTrackedResource() *TrackedResource {
+	return &TrackedResource{TrackedResourceMap: make(map[string]map[string]int64)}
 }
 
-// NewUsedResourceFromMap creates NewUsedResource from the given map.
+// NewTrackedResourceFromMap creates NewTrackedResource from the given map.
 // Using for Testing purpose only.
-func NewUsedResourceFromMap(m map[string]map[string]int64) *UsedResource {
+func NewTrackedResourceFromMap(m map[string]map[string]int64) *TrackedResource {
 	if m == nil {
-		return NewUsedResource()
+		return NewTrackedResource()
 	}
-	return &UsedResource{UsedResourceMap: m}
+	return &TrackedResource{TrackedResourceMap: m}
 }
 
-// Clone creates a deep copy of UsedResource.
-func (ur *UsedResource) Clone() *UsedResource {
+// Clone creates a deep copy of TrackedResource.
+func (ur *TrackedResource) Clone() *TrackedResource {
 	if ur == nil {
 		return nil
 	}
-	ret := NewUsedResource()
+	ret := NewTrackedResource()
 	ur.RLock()
 	defer ur.RUnlock()
-	for k, v := range ur.UsedResourceMap {
+	for k, v := range ur.TrackedResourceMap {
 		dest := make(map[string]int64)
 		for key, element := range v {
 			dest[key] = element
 		}
-		ret.UsedResourceMap[k] = dest
+		ret.TrackedResourceMap[k] = dest
 	}
 	return ret
 }
 
-// AggregateUsedResource aggregates resource usage to UsedResourceMap[instType].
+// AggregateTrackedResource aggregates resource usage to TrackedResourceMap[instType].
 // The time the given resource used is the delta between the resource createTime and currentTime.
-func (ur *UsedResource) AggregateUsedResource(instType string,
+func (ur *TrackedResource) AggregateTrackedResource(instType string,
 	resource *Resource, bindTime time.Time) {
 	if resource == nil {
 		return
@@ -77,7 +77,7 @@ func (ur *UsedResource) AggregateUsedResource(instType string,
 
 	releaseTime := time.Now()
 	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
-	aggregatedResourceTime, ok := ur.UsedResourceMap[instType]
+	aggregatedResourceTime, ok := ur.TrackedResourceMap[instType]
 	if !ok {
 		aggregatedResourceTime = map[string]int64{}
 	}
@@ -89,5 +89,5 @@ func (ur *UsedResource) AggregateUsedResource(instType string,
 		curUsage += int64(element) * timeDiff // resource size times timeDiff
 		aggregatedResourceTime[key] = curUsage
 	}
-	ur.UsedResourceMap[instType] = aggregatedResourceTime
+	ur.TrackedResourceMap[instType] = aggregatedResourceTime
 }

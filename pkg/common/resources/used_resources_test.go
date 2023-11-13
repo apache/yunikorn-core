@@ -25,20 +25,20 @@ import (
 	"time"
 )
 
-func CheckLenOfUsedResource(res *UsedResource, expected int) (bool, string) {
-	if got := len(res.UsedResourceMap); expected == 0 && (res == nil || got != expected) {
-		return false, fmt.Sprintf("input with empty and nil should be a empty used resource: Expected %d, got %d", expected, got)
+func CheckLenOfTrackedResource(res *TrackedResource, expected int) (bool, string) {
+	if got := len(res.TrackedResourceMap); expected == 0 && (res == nil || got != expected) {
+		return false, fmt.Sprintf("input with empty and nil should be a empty tracked resource: Expected %d, got %d", expected, got)
 	}
-	if got := len(res.UsedResourceMap); got != expected {
-		return false, fmt.Sprintf("Length of used resources is wrong: Expected %d, got %d", expected, got)
+	if got := len(res.TrackedResourceMap); got != expected {
+		return false, fmt.Sprintf("Length of tracked resources is wrong: Expected %d, got %d", expected, got)
 	}
 	return true, ""
 }
 
-func CheckResourceValueOfUsedResource(res *UsedResource, expected map[string]map[string]int64) (bool, string) {
+func CheckResourceValueOfTrackedResource(res *TrackedResource, expected map[string]map[string]int64) (bool, string) {
 	for instanceType, resources := range expected {
 		for key, value := range resources {
-			if got := res.UsedResourceMap[instanceType][key]; got != value {
+			if got := res.TrackedResourceMap[instanceType][key]; got != value {
 				return false, fmt.Sprintf("instance type %s, resource %s, expected %d, got %d", instanceType, key, value, got)
 			}
 		}
@@ -46,10 +46,10 @@ func CheckResourceValueOfUsedResource(res *UsedResource, expected map[string]map
 	return true, ""
 }
 
-func TestNewUsedResourceFromMap(t *testing.T) {
+func TestNewTrackedResourceFromMap(t *testing.T) {
 	type outputs struct {
-		length        int
-		usedResources map[string]map[string]int64
+		length           int
+		trackedResources map[string]map[string]int64
 	}
 	var tests = []struct {
 		caseName string
@@ -67,28 +67,28 @@ func TestNewUsedResourceFromMap(t *testing.T) {
 			outputs{0, map[string]map[string]int64{}},
 		},
 		{
-			"used resources of one instance type",
+			"tracked resources of one instance type",
 			map[string]map[string]int64{"instanceType1": {"first": 1}},
 			outputs{1, map[string]map[string]int64{"instanceType1": {"first": 1}}},
 		},
 		{
-			"used resources of two instance type",
+			"tracked resources of two instance type",
 			map[string]map[string]int64{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}},
 			outputs{2, map[string]map[string]int64{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}}},
 		},
 		{
-			"Multiple used resources for one instance type",
+			"Multiple tracked resources for one instance type",
 			map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2, "third": 3}},
 			outputs{1, map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2, "third": 3}}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			res := NewUsedResourceFromMap(tt.input)
-			if ok, err := CheckLenOfUsedResource(res, tt.expected.length); !ok {
+			res := NewTrackedResourceFromMap(tt.input)
+			if ok, err := CheckLenOfTrackedResource(res, tt.expected.length); !ok {
 				t.Error(err)
 			} else {
-				if ok, err := CheckResourceValueOfUsedResource(res, tt.expected.usedResources); !ok {
+				if ok, err := CheckResourceValueOfTrackedResource(res, tt.expected.trackedResources); !ok {
 					t.Error(err)
 				}
 			}
@@ -96,7 +96,7 @@ func TestNewUsedResourceFromMap(t *testing.T) {
 	}
 }
 
-func TestUsedResourceClone(t *testing.T) {
+func TestTrackedResourceClone(t *testing.T) {
 	var tests = []struct {
 		caseName string
 		input    map[string]map[string]int64
@@ -106,46 +106,46 @@ func TestUsedResourceClone(t *testing.T) {
 			nil,
 		},
 		{
-			"No Resources in UsedResources",
+			"No Resources in TrackedResources",
 			map[string]map[string]int64{},
 		},
 		{
-			"Proper UsedResource mappings",
+			"Proper TrackedResource mappings",
 			map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2}, "instanceType2": {"second": -2, "third": 3}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			original := NewUsedResourceFromMap(tt.input)
+			original := NewTrackedResourceFromMap(tt.input)
 			cloned := original.Clone()
 			if original == cloned {
-				t.Errorf("cloned usedResources pointers are equal, should not be")
+				t.Errorf("cloned trackedResources pointers are equal, should not be")
 			}
-			if !reflect.DeepEqual(original.UsedResourceMap, cloned.UsedResourceMap) {
-				t.Errorf("cloned usedResources are not equal: %v / %v", original, cloned)
+			if !reflect.DeepEqual(original.TrackedResourceMap, cloned.TrackedResourceMap) {
+				t.Errorf("cloned trackedResources are not equal: %v / %v", original, cloned)
 			}
 		})
 	}
 }
 
-// TestUsedResourceAggregateUsedResource tests the AggregateUsedResource function.
-// The modifications to the usedResource depend on time.Now(), making it challenging
-// to construct an expected usedResource for verification.
+// TestTrackedResourceAggregateTrackedResource tests the AggregateTrackedResource function.
+// The modifications to the TrackedResource depend on time.Now(), making it challenging
+// to construct an expected TrackedResource for verification.
 // To address this, we use bindTime passed in and set it to a known time before "now."
 // This provides a reasonably accurate prediction range, considering only whole seconds of the difference.
 // The likelihood of a test failure due to this should be extremely low.
-func TestUsedResourceAggregateUsedResource(t *testing.T) {
+func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 	type inputs struct {
-		usedResource  map[string]map[string]int64
-		instType      string
-		otherResource map[string]Quantity
-		bindTime      time.Time
+		trackedResource map[string]map[string]int64
+		instType        string
+		otherResource   map[string]Quantity
+		bindTime        time.Time
 	}
 
 	var tests = []struct {
-		caseName             string
-		input                inputs
-		expectedUsedResource map[string]map[string]int64
+		caseName                string
+		input                   inputs
+		expectedTrackedResource map[string]map[string]int64
 	}{
 		{
 			"Resource to be aggregated Nil Check",
@@ -168,7 +168,7 @@ func TestUsedResourceAggregateUsedResource(t *testing.T) {
 			map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2}},
 		},
 		{
-			"UsedResource is empty",
+			"TrackedResource is empty",
 			inputs{
 				map[string]map[string]int64{},
 				"instanceType1",
@@ -200,12 +200,12 @@ func TestUsedResourceAggregateUsedResource(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			original := NewUsedResourceFromMap(tt.input.usedResource)
-			original.AggregateUsedResource(tt.input.instType, &Resource{tt.input.otherResource}, tt.input.bindTime)
-			expected := NewUsedResourceFromMap(tt.expectedUsedResource)
+			original := NewTrackedResourceFromMap(tt.input.trackedResource)
+			original.AggregateTrackedResource(tt.input.instType, &Resource{tt.input.otherResource}, tt.input.bindTime)
+			expected := NewTrackedResourceFromMap(tt.expectedTrackedResource)
 
-			if !reflect.DeepEqual(original.UsedResourceMap, expected.UsedResourceMap) {
-				t.Errorf("usedResources are not equal, original usedResource after aggrigation: %v / expected: %v", original, expected)
+			if !reflect.DeepEqual(original.TrackedResourceMap, expected.TrackedResourceMap) {
+				t.Errorf("trackedResources are not equal, original trackedResource after aggrigation: %v / expected: %v", original, expected)
 			}
 		})
 	}

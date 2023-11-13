@@ -207,7 +207,6 @@ func TestUsedResourceAggregateUsedResource(t *testing.T) {
 			if !reflect.DeepEqual(original.UsedResourceMap, expected.UsedResourceMap) {
 				t.Errorf("usedResources are not equal, original usedResource after aggrigation: %v / expected: %v", original, expected)
 			}
-
 		})
 	}
 }

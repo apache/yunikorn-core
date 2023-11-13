@@ -47,43 +47,43 @@ func (q Quantity) string() string {
 }
 
 // Util struct to keep track of application resource usage
-type UsedResource struct {
+type TrackedResource struct {
 	// Two level map for aggregated resource usage
 	// With instance type being the top level key, the mapped value is a map:
 	//   resource type (CPU, memory etc) -> the aggregated used time (in seconds) of the resource type
 	//
-	UsedResourceMap map[string]map[string]int64
+	TrackedResourceMap map[string]map[string]int64
 
 	sync.RWMutex
 }
 
-func (ur *UsedResource) Clone() *UsedResource {
+func (ur *TrackedResource) Clone() *TrackedResource {
 	if ur == nil {
 		return nil
 	}
-	ret := NewUsedResource()
+	ret := NewTrackedResource()
 	ur.RLock()
 	defer ur.RUnlock()
-	for k, v := range ur.UsedResourceMap {
+	for k, v := range ur.TrackedResourceMap {
 		dest := make(map[string]int64)
 		for key, element := range v {
 			dest[key] = element
 		}
-		ret.UsedResourceMap[k] = dest
+		ret.TrackedResourceMap[k] = dest
 	}
 	return ret
 }
 
 // Aggregate the resource usage to UsedResourceMap[instType]
 // The time the given resource used is the delta between the resource createTime and currentTime
-func (ur *UsedResource) AggregateUsedResource(instType string,
+func (ur *TrackedResource) AggregateTrackedResource(instType string,
 	resource *Resource, bindTime time.Time) {
 	ur.Lock()
 	defer ur.Unlock()
 
 	releaseTime := time.Now()
 	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
-	aggregatedResourceTime, ok := ur.UsedResourceMap[instType]
+	aggregatedResourceTime, ok := ur.TrackedResourceMap[instType]
 	if !ok {
 		aggregatedResourceTime = map[string]int64{}
 	}
@@ -95,7 +95,7 @@ func (ur *UsedResource) AggregateUsedResource(instType string,
 		curUsage += int64(element) * timeDiff // resource size times timeDiff
 		aggregatedResourceTime[key] = curUsage
 	}
-	ur.UsedResourceMap[instType] = aggregatedResourceTime
+	ur.TrackedResourceMap[instType] = aggregatedResourceTime
 }
 
 // Never update value of Zero
@@ -157,8 +157,8 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 	return res, nil
 }
 
-func NewUsedResource() *UsedResource {
-	return &UsedResource{UsedResourceMap: make(map[string]map[string]int64)}
+func NewTrackedResource() *TrackedResource {
+	return &TrackedResource{TrackedResourceMap: make(map[string]map[string]int64)}
 }
 
 func (r *Resource) String() string {

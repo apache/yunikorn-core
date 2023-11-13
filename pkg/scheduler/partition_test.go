@@ -1815,9 +1815,28 @@ func TestRequiredNodeAllocation(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), resources.Multiply(res, 2))
 }
 
+func assertPreemptedResource(t *testing.T, appSummary *objects.ApplicationSummary, memorySeconds int64,
+	vcoresSecconds int64) {
+	detailedResource := appSummary.PreemptedResource.TrackedResourceMap["UNKNOWN"]
+	memValue, memPresent := detailedResource["memory"]
+	vcoreValue, vcorePresent := detailedResource["vcore"]
+
+	if memorySeconds != -1 {
+		assert.Equal(t, memorySeconds, memValue)
+	} else {
+		assert.Equal(t, memPresent, false)
+	}
+
+	if vcoresSecconds != -1 {
+		assert.Equal(t, vcoresSecconds, vcoreValue)
+	} else {
+		assert.Equal(t, vcorePresent, false)
+	}
+}
+
 func TestPreemption(t *testing.T) {
 	setupUGM()
-	partition, _, app2, alloc1, alloc2 := setupPreemption(t)
+	partition, app1, app2, alloc1, alloc2 := setupPreemption(t)
 
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "5"})
 	assert.NilError(t, err, "failed to create resource")
@@ -1828,7 +1847,8 @@ func TestPreemption(t *testing.T) {
 	assert.NilError(t, err, "failed to add ask alloc-3 to app-2")
 
 	// delay so that preemption delay passes
-	time.Sleep(100 * time.Millisecond)
+	// also make the delay 1 second to have a minimum non-zero resource*seconds measurement for preempted resources
+	time.Sleep(time.Second)
 
 	// third allocation should not succeed, as we are currently above capacity
 	alloc := partition.tryAllocate()
@@ -1873,6 +1893,12 @@ func TestPreemption(t *testing.T) {
 	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result should be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), allocID3, "expected ask alloc-3 to be allocated")
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000}), getExpectedQueuesLimitsForPreemption())
+
+	appSummary := app1.GetApplicationSummary("default")
+	assertPreemptedResource(t, appSummary, -1, 5000)
+
+	appSummary = app2.GetApplicationSummary("default")
+	assertPreemptedResource(t, appSummary, -1, 0)
 }
 
 // Preemption followed by a normal allocation

@@ -1067,6 +1067,13 @@ func assertResourceUsage(t *testing.T, appSummary *ApplicationSummary, memorySec
 	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
 }
 
+func assertPlaceHolderResource(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64,
+	vcoresSecconds int64) {
+	detailedResource := appSummary.PlaceHolderResource.TrackedResourceMap[instType1]
+	assert.Equal(t, memorySeconds, detailedResource["memory"])
+	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
+}
+
 func TestResourceUsageAggregation(t *testing.T) {
 	setupUGM()
 
@@ -1332,6 +1339,9 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	ph1 := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, res)
 	ph2 := newPlaceholderAlloc(appID1, "uuid-2", nodeID1, res)
 	ph3 := newPlaceholderAlloc(appID1, "uuid-3", nodeID1, res)
+	ph1.SetInstanceType(instType1)
+	ph2.SetInstanceType(instType1)
+	ph3.SetInstanceType(instType1)
 	app.AddAllocation(ph1)
 	assert.NilError(t, err, "could not add ask")
 	app.addPlaceholderDataWithLocking(ph1.GetAsk())
@@ -1342,6 +1352,9 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	app.AddAllocation(ph3)
 	assert.NilError(t, err, "could not add ask")
 	app.addPlaceholderDataWithLocking(ph3.GetAsk())
+
+	// set time to 1 second, in order to test placeholder resource usage
+	time.Sleep(1 * time.Second)
 
 	// replace placeholders
 	realAlloc1 := newAllocation(appID1, "uuid-100", nodeID1, res)
@@ -1365,6 +1378,10 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	app.RemoveAllocation("uuid-3", si.TerminationType_PLACEHOLDER_REPLACED)
 	assert.Equal(t, "uuid-3", alloc.uuid)
 	assert.Equal(t, false, app.HasPlaceholderAllocation())
+
+	// check placeholder resource usage
+	appSummary := app.GetApplicationSummary("default")
+	assertPlaceHolderResource(t, appSummary, 300, 30)
 }
 
 func TestTimeoutPlaceholderSoftStyle(t *testing.T) {

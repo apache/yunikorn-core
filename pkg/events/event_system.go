@@ -38,15 +38,44 @@ var once sync.Once
 var ev EventSystem
 
 type EventSystem interface {
+	// AddEvent adds an event record to the event system for processing:
+	// 1. It is added to a slice from where it is periodically read by the shim publisher.
+	// 2. It is added to an internal ring buffer so that clients can retrieve the event history.
+	// 3. Streaming clients are updated.
 	AddEvent(event *si.EventRecord)
+
+	// StartService starts the event system.
+	// This method does not block. Events are processed on a separate goroutine.
 	StartService()
+
+	// Stop stops the event system.
 	Stop()
+
+	// IsEventTrackingEnabled whether history tracking is currently enabled or not.
 	IsEventTrackingEnabled() bool
-	GetEventsFromID(uint64, uint64) ([]*si.EventRecord, uint64, uint64)
-	CreateEventStream(string, uint64) *EventStream
+
+	// GetEventsFromID retrieves "count" number of elements from the history buffer from "id". Every
+	// event has a unique ID inside the ring buffer.
+	// If "id" is not in the buffer, then no record is returned, but the currently available range
+	// [low..high] is set.
+	GetEventsFromID(id, count uint64) ([]*si.EventRecord, uint64, uint64)
+
+	// CreateEventStream creates an event stream (channel) for a consumer.
+	// The "name" argument is an arbitrary string for a consumer, which is used for logging. It does not need to be unique.
+	// The "count" argument defines how many historical elements should be returned on the stream. Zero is a valid value for "count".
+	// The returned type contains a read-only channel which is updated as soon as there is a new event record.
+	// It is also used as a handle to stop the streaming.
+	// Consumers must read the channel and process the event objects as soon as they can to avoid
+	// events piling up inside the channel buffers.
+	CreateEventStream(name string, count uint64) *EventStream
+
+	// RemoveStream stops streaming for a given consumer.
+	// Consumers that no longer wish to be updated (e.g., a remote client
+	// disconnected) *must* call this method to gracefully stop the streaming.
 	RemoveStream(*EventStream)
 }
 
+// EventSystemImpl main implementation of the event system which is used for history tracking.
 type EventSystemImpl struct {
 	eventSystemId string
 	Store         *EventStore // storing eventChannel
@@ -65,18 +94,22 @@ type EventSystemImpl struct {
 	sync.RWMutex
 }
 
+// CreateEventStream creates an event stream. See the interface for details.
 func (ec *EventSystemImpl) CreateEventStream(name string, count uint64) *EventStream {
 	return ec.streaming.CreateEventStream(name, count)
 }
 
+// RemoveStream graceful termination of an event streaming for a consumer. See the interface for details.
 func (ec *EventSystemImpl) RemoveStream(consumer *EventStream) {
 	ec.streaming.RemoveEventStream(consumer)
 }
 
+// GetEventsFromID retrieves historical elements. See the interface for details.
 func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord, uint64, uint64) {
 	return ec.eventBuffer.GetEventsFromID(id, count)
 }
 
+// GetEventSystem returns the event system instance. Initialization happens during the first call.
 func GetEventSystem() EventSystem {
 	once.Do(func() {
 		Init()
@@ -84,18 +117,21 @@ func GetEventSystem() EventSystem {
 	return ev
 }
 
+// IsEventTrackingEnabled whether history tracking is currently enabled or not.
 func (ec *EventSystemImpl) IsEventTrackingEnabled() bool {
 	ec.RLock()
 	defer ec.RUnlock()
 	return ec.trackingEnabled
 }
 
+// GetRequestCapacity returns the capacity of an intermediate storage which is used by the shim publisher.
 func (ec *EventSystemImpl) GetRequestCapacity() int {
 	ec.RLock()
 	defer ec.RUnlock()
 	return ec.requestCapacity
 }
 
+// GetRingBufferCapacity returns the capacity of the buffer which stores historical elements.
 func (ec *EventSystemImpl) GetRingBufferCapacity() uint64 {
 	ec.RLock()
 	defer ec.RUnlock()
@@ -118,10 +154,12 @@ func Init() {
 	}
 }
 
+// StartService starts the event processing in the background. See the interface for details.
 func (ec *EventSystemImpl) StartService() {
 	ec.StartServiceWithPublisher(true)
 }
 
+// VisibleForTesting
 func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 	ec.Lock()
 	defer ec.Unlock()
@@ -157,6 +195,7 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 	}
 }
 
+// Stop stops the event system.
 func (ec *EventSystemImpl) Stop() {
 	ec.Lock()
 	defer ec.Unlock()
@@ -176,6 +215,7 @@ func (ec *EventSystemImpl) Stop() {
 	ec.stopped = true
 }
 
+// AddEvent adds an event record to the event system. See the interface for details.
 func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	metrics.GetEventMetrics().IncEventsCreated()
 	select {
@@ -205,6 +245,7 @@ func (ec *EventSystemImpl) isRestartNeeded() bool {
 	return ec.readIsTrackingEnabled() != ec.trackingEnabled
 }
 
+// Restart restarts the event system, used during config update.
 func (ec *EventSystemImpl) Restart() {
 	ec.Stop()
 	ec.StartServiceWithPublisher(true)

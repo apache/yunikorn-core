@@ -30,6 +30,8 @@ import (
 
 const defaultChannelBufSize = 100
 
+// EventStreaming implements the event streaming logic.
+// New events are immediately forwarded to all active consumers.
 type EventStreaming struct {
 	buffer       *eventRingBuffer
 	stopCh       chan struct{}
@@ -45,12 +47,18 @@ type eventConsumerDetails struct {
 	createdAt time.Time
 }
 
-// EventStream handle type returned to the client who wants to capture the stream of events.
+// EventStream handle type returned to the client that wants to capture the stream of events.
 type EventStream struct {
 	Events <-chan *si.EventRecord
 }
 
 // PublishEvent publishes an event to all event stream consumers.
+//
+// The streaming logic uses bridging to ensure proper ordering of existing and new events.
+// Events are sent to the "local" channel from where it is forwarded to the "consumer" channel.
+//
+// If "local" is full, it means that the consumer side has not processed the events at an appropriate pace.
+// Such a consumer is removed and the related channels are closed.
 func (e *EventStreaming) PublishEvent(event *si.EventRecord) {
 	e.Lock()
 	defer e.Unlock()
@@ -68,7 +76,9 @@ func (e *EventStreaming) PublishEvent(event *si.EventRecord) {
 
 // CreateEventStream sets up event streaming for a consumer. The returned EventStream object
 // contains a channel that can be used for reading.
-// When a consumer is finished, it is supposed to call RemoveEventStream to free up resources.
+//
+// When a consumer is finished, it must call RemoveEventStream to free up resources.
+//
 // Consumers have an arbitrary name for logging purposes. The "count" parameter defines the number
 // of maximum historical events from the ring buffer.
 func (e *EventStreaming) CreateEventStream(name string, count uint64) *EventStream {
@@ -81,8 +91,12 @@ func (e *EventStreaming) CreateEventStream(name string, count uint64) *EventStre
 	history := e.createEventStreamInternal(stream, local, consumer, stop, name, count)
 
 	go func(consumer chan<- *si.EventRecord, local <-chan *si.EventRecord, stop <-chan struct{}) {
-		// store the refs of historical events; it's possible that some events are added to the
-		// ring buffer and also to "local" channel
+		// Store the refs of historical events; it's possible that some events are added to the
+		// ring buffer and also to "local" channel.
+		// It is because we use two separate locks, so event updates are not atomic.
+		// Example: an event has been just added to the ring buffer (before createEventStreamInternal()),
+		// and execution is about to enter PublishEvent(); at this point we have an updated "eventStreams"
+		// map, so "local" will also contain the new event.
 		seen := make(map[*si.EventRecord]bool)
 		for _, event := range history {
 			consumer <- event
@@ -133,6 +147,7 @@ func (e *EventStreaming) createEventStreamInternal(stream *EventStream,
 	return e.buffer.GetRecentEvents(count)
 }
 
+// RemoveEventStream stops the streaming for a given consumer. Must be called to avoid resource leaks.
 func (e *EventStreaming) RemoveEventStream(consumer *EventStream) {
 	e.Lock()
 	defer e.Unlock()
@@ -150,10 +165,12 @@ func (e *EventStreaming) removeEventStream(consumer *EventStream) {
 	}
 }
 
+// Close stops event streaming completely.
 func (e *EventStreaming) Close() {
 	close(e.stopCh)
 }
 
+// NewEventStreaming creates a new event streaming infrastructure.
 func NewEventStreaming(eventBuffer *eventRingBuffer) *EventStreaming {
 	stopCh := make(chan struct{})
 	e := &EventStreaming{

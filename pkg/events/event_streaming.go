@@ -172,12 +172,9 @@ func (e *EventStreaming) Close() {
 
 // NewEventStreaming creates a new event streaming infrastructure.
 func NewEventStreaming(eventBuffer *eventRingBuffer) *EventStreaming {
-	stopCh := make(chan struct{})
-	e := &EventStreaming{
+	return &EventStreaming{
 		buffer:       eventBuffer,
-		stopCh:       stopCh,
+		stopCh:       make(chan struct{}),
 		eventStreams: make(map[*EventStream]eventConsumerDetails),
 	}
-
-	return e
 }

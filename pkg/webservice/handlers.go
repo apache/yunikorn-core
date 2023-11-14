@@ -939,17 +939,17 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	eventSystem := events.GetEventSystem()
 	if !eventSystem.IsEventTrackingEnabled() {
-		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusInternalServerError)
 		return
 	}
 
 	f, ok := w.(http.Flusher)
 	if !ok {
-		buildJSONErrorResponse(w, "Writer does not implement http.Flusher", http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Writer does not implement http.Flusher", http.StatusInternalServerError)
 		return
 	}
 
-	count := uint64(1000)
+	count := uint64(0)
 	if countStr := r.URL.Query().Get("count"); countStr != "" {
 		c, err := strconv.ParseUint(countStr, 10, 64)
 		if err != nil {
@@ -971,19 +971,17 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 			return
 		case e, ok := <-stream.Events:
 			if !ok {
+				// the channel was closed by the event system itself
 				msg := "Event stream was closed by the producer"
+				buildJSONErrorResponse(w, msg, http.StatusOK) // status code is 200 at this point, cannot be changed
 				log.Log(log.REST).Error(msg)
-				_, err := w.Write([]byte(msg))
-				if err != nil {
-					log.Log(log.REST).Error("Could not send message to the client",
-						zap.Error(err))
-				}
 				return
 			}
 
 			if err := enc.Encode(e); err != nil {
-				log.Log(log.REST).Error("Error while sending events",
+				log.Log(log.REST).Error("Marshalling error",
 					zap.String("host", r.Host))
+				buildJSONErrorResponse(w, err.Error(), http.StatusOK) // status code is 200 at this point, cannot be changed
 				eventSystem.RemoveStream(stream)
 				return
 			}

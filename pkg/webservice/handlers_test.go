@@ -22,6 +22,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -1583,19 +1584,9 @@ func TestGetStream(t *testing.T) {
 	assert.NilError(t, err, "cannot read response body")
 
 	lines := strings.Split(string(output[:n]), "\n")
-	var evt si.EventRecord
-	err = json.Unmarshal([]byte(lines[0]), &evt)
-	assert.NilError(t, err)
-	assert.Equal(t, "app-1", evt.ObjectID)
-	assert.Equal(t, int64(111), evt.TimestampNano)
-	err = json.Unmarshal([]byte(lines[1]), &evt)
-	assert.NilError(t, err)
-	assert.Equal(t, "node-1", evt.ObjectID)
-	assert.Equal(t, int64(222), evt.TimestampNano)
-	err = json.Unmarshal([]byte(lines[2]), &evt)
-	assert.NilError(t, err)
-	assert.Equal(t, "app-2", evt.ObjectID)
-	assert.Equal(t, int64(333), evt.TimestampNano)
+	assertEvent(t, lines[0], 111, "app-1")
+	assertEvent(t, lines[1], 222, "node-1")
+	assertEvent(t, lines[2], 333, "app-2")
 }
 
 func TestGetStream_StreamClosedByProducer(t *testing.T) {
@@ -1622,14 +1613,11 @@ func TestGetStream_StreamClosedByProducer(t *testing.T) {
 
 	output := make([]byte, 256)
 	n, err := resp.Body.Read(output)
+	assert.Equal(t, http.StatusOK, resp.Code)
 	assert.NilError(t, err, "cannot read response body")
 	lines := strings.Split(string(output[:n]), "\n")
-	var evt si.EventRecord
-	err = json.Unmarshal([]byte(lines[0]), &evt)
-	assert.NilError(t, err)
-	assert.Equal(t, "app-1", evt.ObjectID)
-	assert.Equal(t, int64(111), evt.TimestampNano)
-	assert.Equal(t, "Event stream was closed by the producer", lines[1])
+	assertEvent(t, lines[0], 111, "app-1")
+	assertYunikornError(t, lines[1], "Event stream was closed by the producer")
 }
 
 func TestGetStream_NotFlusherImpl(t *testing.T) {
@@ -1645,7 +1633,117 @@ func TestGetStream_NotFlusherImpl(t *testing.T) {
 	getStream(resp, req)
 
 	assert.Assert(t, strings.Contains(string(resp.outputBytes), "Writer does not implement http.Flusher"))
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode)
+	assert.Equal(t, http.StatusInternalServerError, resp.statusCode)
+}
+
+func TestGetStream_Count(t *testing.T) {
+	events.Init()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	req = req.Clone(cancelCtx)
+	resp := httptest.NewRecorder() // MockResponseWriter does not implement http.Flusher
+
+	// add some existing events
+	ev.AddEvent(&si.EventRecord{TimestampNano: 0})
+	ev.AddEvent(&si.EventRecord{TimestampNano: 1})
+	ev.AddEvent(&si.EventRecord{TimestampNano: 2})
+	time.Sleep(100 * time.Millisecond) // let the events propagate
+
+	// case #1: "count" not set
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+	getStream(resp, req)
+	output := make([]byte, 256)
+	n, err := resp.Body.Read(output)
+	assert.Error(t, io.EOF, err.Error())
+	assert.Equal(t, 0, n)
+
+	// case #2: "count" is set to "2"
+	req, err = http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	cancelCtx, cancel = context.WithCancel(context.Background())
+	req = req.Clone(cancelCtx)
+	defer cancel()
+	req.URL.RawQuery = "count=2"
+	go func() {
+		time.Sleep(100 * time.Millisecond)
+		cancel()
+	}()
+	getStream(resp, req)
+	output = make([]byte, 256)
+	n, err = resp.Body.Read(output)
+	assert.NilError(t, err)
+	lines := strings.Split(string(output[:n]), "\n")
+	assertEvent(t, lines[0], 1, "")
+	assertEvent(t, lines[1], 2, "")
+
+	// case #3: illegal value
+	req, err = http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	cancelCtx, cancel = context.WithCancel(context.Background())
+	req = req.Clone(cancelCtx)
+	defer cancel()
+	req.URL.RawQuery = "count=xyz"
+	getStream(resp, req)
+	output = make([]byte, 256)
+	n, err = resp.Body.Read(output)
+	assert.NilError(t, err)
+	line := string(output[:n])
+	assertYunikornError(t, line, `strconv.ParseUint: parsing "xyz": invalid syntax`)
+}
+
+func TestGetStream_TrackingDisabled(t *testing.T) {
+	original := configs.GetConfigMap()
+	defer func() {
+		ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+		ev.Stop()
+		configs.SetConfigMap(original)
+	}()
+	configMap := map[string]string{
+		configs.CMEventTrackingEnabled: "false",
+	}
+	configs.SetConfigMap(configMap)
+	events.Init()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+
+	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	resp := httptest.NewRecorder()
+
+	getStream(resp, req)
+
+	output := make([]byte, 256)
+	n, err := resp.Body.Read(output)
+	assert.NilError(t, err)
+	line := string(output[:n])
+	assertYunikornError(t, line, "Event tracking is disabled")
+}
+
+func assertEvent(t *testing.T, output string, tsNano int64, objectID string) {
+	t.Helper()
+	var evt si.EventRecord
+	err := json.Unmarshal([]byte(output), &evt)
+	assert.NilError(t, err)
+	assert.Equal(t, tsNano, evt.TimestampNano)
+	assert.Equal(t, objectID, evt.ObjectID)
+}
+
+func assertYunikornError(t *testing.T, output, errMsg string) {
+	t.Helper()
+	var ykErr dao.YAPIError
+	err := json.Unmarshal([]byte(output), &ykErr)
+	assert.NilError(t, err)
+	assert.Equal(t, errMsg, ykErr.Description)
+	assert.Equal(t, errMsg, ykErr.Message)
 }
 
 func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {

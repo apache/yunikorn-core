@@ -54,12 +54,8 @@ func TestStoreAndRetrieve(t *testing.T) {
 // if we push more events to the EventStore than its
 // allowed maximum, those that couldn't fit will be omitted
 func TestStoreWithLimitedSize(t *testing.T) {
-	defaultEventStoreSize = 3
-	defer func() {
-		defaultEventStoreSize = 1000
-	}()
+	store := newEventStoreWithSize(3)
 
-	store := newEventStore()
 	for i := 0; i < 5; i++ {
 		event := &si.EventRecord{
 			Type:        si.EventRecord_REQUEST,

@@ -520,7 +520,7 @@ func (m *Manager) setUserLimits(user string, limitConfig *LimitConfig, hierarchy
 		zap.String("user", user),
 		zap.Strings("queue path", hierarchy),
 		zap.Uint64("max application", limitConfig.maxApplications),
-		zap.Any("max resources", limitConfig.maxResources))
+		zap.Stringer("max resources", limitConfig.maxResources))
 	userTracker, ok := m.userTrackers[user]
 	if !ok {
 		log.Log(log.SchedUGM).Debug("User tracker does not exist. Creating user tracker object to set the limit configuration",
@@ -540,7 +540,7 @@ func (m *Manager) setGroupLimits(group string, limitConfig *LimitConfig, hierarc
 		zap.String("group", group),
 		zap.Strings("queue path", hierarchy),
 		zap.Uint64("max application", limitConfig.maxApplications),
-		zap.Any("max resources", limitConfig.maxResources))
+		zap.Stringer("max resources", limitConfig.maxResources))
 	groupTracker, ok := m.groupTrackers[group]
 	if !ok {
 		log.Log(log.SchedUGM).Debug("Group tracker does not exist. Creating group tracker object to set the limit configuration",

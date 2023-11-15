@@ -347,7 +347,7 @@ func TestUserGroupLimits(t *testing.T) {
 			content: userGroupLimitsInvalidConfig,
 			expectedResponse: dao.ValidateConfResponse{
 				Allowed: false,
-				Reason:  "MaxResources is zero in '' limit, all resource types are zero",
+				Reason:  "MaxResources should be greater than zero in '' limit",
 			},
 		},
 		{

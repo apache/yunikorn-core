@@ -1089,6 +1089,10 @@ func TestResourceUsageAggregation(t *testing.T) {
 	assert.NilError(t, err, "failed to create resource with error")
 	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	alloc.SetInstanceType(instType1)
+	// Mock the time to be 3 seconds before
+	start := time.Now()
+	start = start.Add(-3 * time.Second)
+	alloc.SetBindTime(start)
 	app.AddAllocation(alloc)
 
 	if !resources.Equals(app.allocatedResource, res) {
@@ -1109,13 +1113,13 @@ func TestResourceUsageAggregation(t *testing.T) {
 	// add more allocations to test the removals
 	alloc = newAllocation(appID1, "uuid-2", nodeID1, res)
 	alloc.SetInstanceType(instType1)
-	app.AddAllocation(alloc)
-	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
 	// Mock the time to be 3 seconds before
-	start := time.Now()
+	start = time.Now()
 	start = start.Add(-3 * time.Second)
 	alloc.SetBindTime(start)
+	app.AddAllocation(alloc)
+	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
 	// remove one of the 2
 	if alloc = app.RemoveAllocation("uuid-2", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
@@ -1134,19 +1138,9 @@ func TestResourceUsageAggregation(t *testing.T) {
 	assert.Equal(t, len(allocs), 2)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
-	// Mock the time to be 12 seconds before
-	start = time.Now()
-	start = start.Add(-12 * time.Second)
-	alloc.SetBindTime(start)
-
 	appSummary = app.GetApplicationSummary("default")
 	appSummary.DoLogging()
 	assertResourceUsage(t, appSummary, 300, 30)
-
-	// Mock the time to be 18 seconds before
-	start = time.Now()
-	start = start.Add(-18 * time.Second)
-	alloc.SetBindTime(start)
 
 	// try to remove a non existing alloc
 	if alloc = app.RemoveAllocation("does-not-exist", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc != nil {
@@ -1166,7 +1160,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 
 	appSummary = app.GetApplicationSummary("default")
 	appSummary.DoLogging()
-	assertResourceUsage(t, appSummary, 2100, 210)
+	assertResourceUsage(t, appSummary, 600, 60)
 }
 
 func TestRejected(t *testing.T) {

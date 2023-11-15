@@ -872,6 +872,74 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 			},
 			hasError: false,
 		},
+		{
+			name: "leaf queue user maxresources exceed grandparent queue user maxresources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{
+						"test-user1": {"memory": "100"},
+						"test-user2": {"memory": "100"},
+					},
+					nil),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxResources(
+							map[string]map[string]string{
+								"test-user1": {"memory": "50"},
+							},
+							nil),
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxResources(
+									map[string]map[string]string{
+										"test-user1": {"memory": "10"},
+										"test-user2": {"memory": "150"},
+									},
+									nil),
+							},
+						},
+					},
+				},
+			},
+			hasError: true,
+		},
+		{
+			name: "leaf queue group maxresources exceed grandparent queue group maxresources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					nil,
+					map[string]map[string]string{
+						"test-group1": {"memory": "100"},
+						"test-group2": {"memory": "100"},
+					}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxResources(
+							nil,
+							map[string]map[string]string{
+								"test-group1": {"memory": "50"},
+							}),
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxResources(
+									nil,
+									map[string]map[string]string{
+										"test-group1": {"memory": "10"},
+										"test-group2": {"memory": "150"},
+									}),
+							},
+						},
+					},
+				},
+			},
+			hasError: true,
+		},
 	}
 
 	for _, testCase := range testCases {

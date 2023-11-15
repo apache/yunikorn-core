@@ -539,8 +539,8 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 				zap.Error(err))
 			return err
 		}
-		if resources.IsZero(limitResource) {
-			return fmt.Errorf("MaxResources is zero in '%s' limit, all resource types are zero", limit.Limit)
+		if !resources.StrictlyGreaterThanZero(limitResource) {
+			return fmt.Errorf("MaxResources should be greater than zero in '%s' limit", limit.Limit)
 		}
 	}
 	// at least some resource should be not null

@@ -1074,7 +1074,7 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 					},
 				},
 			},
-			errMsg: "MaxResources is zero",
+			errMsg: "MaxResources should be greater than zero",
 		},
 		{
 			name: "both maxresources and maxresources are 0",

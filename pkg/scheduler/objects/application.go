@@ -144,6 +144,7 @@ func (as *ApplicationSummary) DoLogging() {
 		zap.String("rmID", as.RmID),
 		zap.Any("resourceUsage", as.ResourceUsage.TrackedResourceMap),
 		zap.Any("preemptedResource", as.PreemptedResource.TrackedResourceMap),
+		zap.Any("placeHolderResource", as.PlaceHolderResource.TrackedResourceMap),
 	)
 }
 
@@ -2067,6 +2068,8 @@ func (sa *Application) LogAppSummary(rmID string) {
 	appSummary := sa.GetApplicationSummary(rmID)
 	appSummary.DoLogging()
 	appSummary.ResourceUsage = nil
+	appSummary.PreemptedResource = nil
+	appSummary.PlaceHolderResource = nil
 }
 
 func (sa *Application) HasPlaceholderAllocation() bool {

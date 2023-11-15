@@ -129,7 +129,7 @@ type ApplicationSummary struct {
 	RmID                string
 	ResourceUsage       *resources.TrackedResource
 	PreemptedResource   *resources.TrackedResource
-	PlaceHolderResource *resources.TrackedResource
+	PlaceholderResource *resources.TrackedResource
 }
 
 func (as *ApplicationSummary) DoLogging() {
@@ -144,7 +144,7 @@ func (as *ApplicationSummary) DoLogging() {
 		zap.String("rmID", as.RmID),
 		zap.Any("resourceUsage", as.ResourceUsage.TrackedResourceMap),
 		zap.Any("preemptedResource", as.PreemptedResource.TrackedResourceMap),
-		zap.Any("placeHolderResource", as.PlaceHolderResource.TrackedResourceMap),
+		zap.Any("placeHolderResource", as.PlaceholderResource.TrackedResourceMap),
 	)
 }
 
@@ -166,7 +166,7 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 		RmID:                rmID,
 		ResourceUsage:       resourceUsage,
 		PreemptedResource:   preemptedUsage,
-		PlaceHolderResource: placeHolderUsage,
+		PlaceholderResource: placeHolderUsage,
 	}
 	return appSummary
 }
@@ -2069,7 +2069,7 @@ func (sa *Application) LogAppSummary(rmID string) {
 	appSummary.DoLogging()
 	appSummary.ResourceUsage = nil
 	appSummary.PreemptedResource = nil
-	appSummary.PlaceHolderResource = nil
+	appSummary.PlaceholderResource = nil
 }
 
 func (sa *Application) HasPlaceholderAllocation() bool {

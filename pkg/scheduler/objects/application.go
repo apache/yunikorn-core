@@ -87,8 +87,9 @@ type Application struct {
 	user              security.UserGroup        // owner of the application
 	allocatedResource *resources.Resource       // total allocated resources
 
-	usedResource      *resources.TrackedResource // keep track of resource usage of the application
-	preemptedResource *resources.TrackedResource // keep track of preempted resource usage of the application
+	usedResource        *resources.TrackedResource // keep track of resource usage of the application
+	preemptedResource   *resources.TrackedResource // keep track of preempted resource usage of the application
+	placeholderResource *resources.TrackedResource // keep track of placeholder resource usage of the application
 
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
@@ -118,16 +119,17 @@ type Application struct {
 }
 
 type ApplicationSummary struct {
-	ApplicationID     string
-	SubmissionTime    time.Time
-	StartTime         time.Time
-	FinishTime        time.Time
-	User              string
-	Queue             string
-	State             string
-	RmID              string
-	ResourceUsage     *resources.TrackedResource
-	PreemptedResource *resources.TrackedResource
+	ApplicationID       string
+	SubmissionTime      time.Time
+	StartTime           time.Time
+	FinishTime          time.Time
+	User                string
+	Queue               string
+	State               string
+	RmID                string
+	ResourceUsage       *resources.TrackedResource
+	PreemptedResource   *resources.TrackedResource
+	PlaceholderResource *resources.TrackedResource
 }
 
 func (as *ApplicationSummary) DoLogging() {
@@ -142,6 +144,7 @@ func (as *ApplicationSummary) DoLogging() {
 		zap.String("rmID", as.RmID),
 		zap.Any("resourceUsage", as.ResourceUsage.TrackedResourceMap),
 		zap.Any("preemptedResource", as.PreemptedResource.TrackedResourceMap),
+		zap.Any("placeHolderResource", as.PlaceholderResource.TrackedResourceMap),
 	)
 }
 
@@ -149,19 +152,21 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	sa.RLock()
 	defer sa.RUnlock()
 	state := sa.stateMachine.Current()
-	ru := sa.usedResource.Clone()
-	pu := sa.preemptedResource.Clone()
+	resourceUsage := sa.usedResource.Clone()
+	preemptedUsage := sa.preemptedResource.Clone()
+	placeHolderUsage := sa.placeholderResource.Clone()
 	appSummary := &ApplicationSummary{
-		ApplicationID:     sa.ApplicationID,
-		SubmissionTime:    sa.SubmissionTime,
-		StartTime:         sa.startTime,
-		FinishTime:        sa.finishedTime,
-		User:              sa.user.User,
-		Queue:             sa.queuePath,
-		State:             state,
-		RmID:              rmID,
-		ResourceUsage:     ru,
-		PreemptedResource: pu,
+		ApplicationID:       sa.ApplicationID,
+		SubmissionTime:      sa.SubmissionTime,
+		StartTime:           sa.startTime,
+		FinishTime:          sa.finishedTime,
+		User:                sa.user.User,
+		Queue:               sa.queuePath,
+		State:               state,
+		RmID:                rmID,
+		ResourceUsage:       resourceUsage,
+		PreemptedResource:   preemptedUsage,
+		PlaceholderResource: placeHolderUsage,
 	}
 	return appSummary
 }
@@ -177,6 +182,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		allocatedResource:     resources.NewResource(),
 		usedResource:          resources.NewTrackedResource(),
 		preemptedResource:     resources.NewTrackedResource(),
+		placeholderResource:   resources.NewTrackedResource(),
 		maxAllocatedResource:  resources.NewResource(),
 		allocatedPlaceholder:  resources.NewResource(),
 		requests:              make(map[string]*AllocationAsk),
@@ -1684,6 +1690,8 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 func (sa *Application) trackCompletedResource(info *Allocation) {
 	if info.IsPreempted() {
 		sa.updatePreemptedResource(info)
+	} else if info.IsPlaceholder() {
+		sa.updatePlaceholderResource(info)
 	} else {
 		sa.updateUsedResource(info)
 	}
@@ -1693,6 +1701,13 @@ func (sa *Application) trackCompletedResource(info *Allocation) {
 // have the usedResource to aggregate the resource used by this allocation
 func (sa *Application) updateUsedResource(info *Allocation) {
 	sa.usedResource.AggregateTrackedResource(info.GetInstanceType(),
+		info.GetAllocatedResource(), info.GetBindTime())
+}
+
+// When the placeholder allocated with this allocation is to be removed,
+// have the placeholderResource to aggregate the resource used by this allocation
+func (sa *Application) updatePlaceholderResource(info *Allocation) {
+	sa.placeholderResource.AggregateTrackedResource(info.GetInstanceType(),
 		info.GetAllocatedResource(), info.GetBindTime())
 }
 
@@ -1791,6 +1806,9 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 				eventWarning = "Application state not changed while removing a placeholder allocation"
 			}
 		}
+		// Aggregate the resources used by this alloc to the application's resource tracker
+		sa.trackCompletedResource(alloc)
+
 		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
@@ -2033,6 +2051,7 @@ func (sa *Application) cleanupAsks() {
 
 func (sa *Application) cleanupTrackedResource() {
 	sa.usedResource = nil
+	sa.placeholderResource = nil
 	sa.preemptedResource = nil
 }
 
@@ -2049,6 +2068,8 @@ func (sa *Application) LogAppSummary(rmID string) {
 	appSummary := sa.GetApplicationSummary(rmID)
 	appSummary.DoLogging()
 	appSummary.ResourceUsage = nil
+	appSummary.PreemptedResource = nil
+	appSummary.PlaceholderResource = nil
 }
 
 func (sa *Application) HasPlaceholderAllocation() bool {

@@ -1067,6 +1067,13 @@ func assertResourceUsage(t *testing.T, appSummary *ApplicationSummary, memorySec
 	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
 }
 
+func assertPlaceHolderResource(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64,
+	vcoresSecconds int64) {
+	detailedResource := appSummary.PlaceholderResource.TrackedResourceMap[instType1]
+	assert.Equal(t, memorySeconds, detailedResource["memory"])
+	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
+}
+
 func TestResourceUsageAggregation(t *testing.T) {
 	setupUGM()
 
@@ -1082,7 +1089,10 @@ func TestResourceUsageAggregation(t *testing.T) {
 	assert.NilError(t, err, "failed to create resource with error")
 	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	alloc.SetInstanceType(instType1)
+	// Mock the time to be 3 seconds before
+	alloc.SetBindTime(time.Now().Add(-3 * time.Second))
 	app.AddAllocation(alloc)
+
 	if !resources.Equals(app.allocatedResource, res) {
 		t.Errorf("allocated resources is not updated correctly: %v", app.allocatedResource)
 	}
@@ -1094,8 +1104,6 @@ func TestResourceUsageAggregation(t *testing.T) {
 	err = app.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
 
-	time.Sleep(3 * time.Second)
-
 	appSummary := app.GetApplicationSummary("default")
 	appSummary.DoLogging()
 	assertResourceUsage(t, appSummary, 0, 0)
@@ -1103,10 +1111,11 @@ func TestResourceUsageAggregation(t *testing.T) {
 	// add more allocations to test the removals
 	alloc = newAllocation(appID1, "uuid-2", nodeID1, res)
 	alloc.SetInstanceType(instType1)
+
+	// Mock the time to be 3 seconds before
+	alloc.SetBindTime(time.Now().Add(-3 * time.Second))
 	app.AddAllocation(alloc)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
-
-	time.Sleep(3 * time.Second)
 
 	// remove one of the 2
 	if alloc = app.RemoveAllocation("uuid-2", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
@@ -1125,8 +1134,6 @@ func TestResourceUsageAggregation(t *testing.T) {
 	assert.Equal(t, len(allocs), 2)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
-	time.Sleep(3 * time.Second)
-
 	appSummary = app.GetApplicationSummary("default")
 	appSummary.DoLogging()
 	assertResourceUsage(t, appSummary, 300, 30)
@@ -1135,8 +1142,6 @@ func TestResourceUsageAggregation(t *testing.T) {
 	if alloc = app.RemoveAllocation("does-not-exist", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc != nil {
 		t.Errorf("returned allocations was not allocation was incorrectly removed: %v", alloc)
 	}
-
-	time.Sleep(3 * time.Second)
 
 	// remove all left over allocations
 	if allocs = app.RemoveAllAllocations(); allocs == nil || len(allocs) != 2 {
@@ -1151,7 +1156,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 
 	appSummary = app.GetApplicationSummary("default")
 	appSummary.DoLogging()
-	assertResourceUsage(t, appSummary, 2100, 210)
+	assertResourceUsage(t, appSummary, 600, 60)
 }
 
 func TestRejected(t *testing.T) {
@@ -1332,6 +1337,9 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	ph1 := newPlaceholderAlloc(appID1, "uuid-1", nodeID1, res)
 	ph2 := newPlaceholderAlloc(appID1, "uuid-2", nodeID1, res)
 	ph3 := newPlaceholderAlloc(appID1, "uuid-3", nodeID1, res)
+	ph1.SetInstanceType(instType1)
+	ph2.SetInstanceType(instType1)
+	ph3.SetInstanceType(instType1)
 	app.AddAllocation(ph1)
 	assert.NilError(t, err, "could not add ask")
 	app.addPlaceholderDataWithLocking(ph1.GetAsk())
@@ -1342,6 +1350,10 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	app.AddAllocation(ph3)
 	assert.NilError(t, err, "could not add ask")
 	app.addPlaceholderDataWithLocking(ph3.GetAsk())
+
+	ph1.SetBindTime(time.Now().Add(-10 * time.Second))
+	ph2.SetBindTime(time.Now().Add(-10 * time.Second))
+	ph3.SetBindTime(time.Now().Add(-10 * time.Second))
 
 	// replace placeholders
 	realAlloc1 := newAllocation(appID1, "uuid-100", nodeID1, res)
@@ -1365,6 +1377,10 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	app.RemoveAllocation("uuid-3", si.TerminationType_PLACEHOLDER_REPLACED)
 	assert.Equal(t, "uuid-3", alloc.uuid)
 	assert.Equal(t, false, app.HasPlaceholderAllocation())
+
+	// check placeholder resource usage
+	appSummary := app.GetApplicationSummary("default")
+	assertPlaceHolderResource(t, appSummary, 3000, 300)
 }
 
 func TestTimeoutPlaceholderSoftStyle(t *testing.T) {
@@ -1704,8 +1720,7 @@ func TestFinishedTime(t *testing.T) {
 	assert.Assert(t, app.finishedTime.IsZero())
 	assert.Assert(t, app.FinishedTime().IsZero())
 
-	// sleep 1 second to make finished time bigger than zero
-	time.Sleep(1 * time.Second)
+	// Don't need sleep here, anytime finished, we will set finishedTime for now
 	app.UnSetQueue()
 	assert.Assert(t, !app.finishedTime.IsZero())
 	assert.Assert(t, !app.FinishedTime().IsZero())

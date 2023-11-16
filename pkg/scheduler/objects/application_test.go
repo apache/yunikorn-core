@@ -1090,9 +1090,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
 	alloc.SetInstanceType(instType1)
 	// Mock the time to be 3 seconds before
-	start := time.Now()
-	start = start.Add(-3 * time.Second)
-	alloc.SetBindTime(start)
+	alloc.SetBindTime(time.Now().Add(-3 * time.Second))
 	app.AddAllocation(alloc)
 
 	if !resources.Equals(app.allocatedResource, res) {
@@ -1115,9 +1113,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 	alloc.SetInstanceType(instType1)
 
 	// Mock the time to be 3 seconds before
-	start = time.Now()
-	start = start.Add(-3 * time.Second)
-	alloc.SetBindTime(start)
+	alloc.SetBindTime(time.Now().Add(-3 * time.Second))
 	app.AddAllocation(alloc)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
@@ -1355,11 +1351,9 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	assert.NilError(t, err, "could not add ask")
 	app.addPlaceholderDataWithLocking(ph3.GetAsk())
 
-	start := time.Now()
-	start = start.Add(-10 * time.Second)
-	ph1.SetBindTime(start)
-	ph2.SetBindTime(start)
-	ph3.SetBindTime(start)
+	ph1.SetBindTime(time.Now().Add(-10 * time.Second))
+	ph2.SetBindTime(time.Now().Add(-10 * time.Second))
+	ph3.SetBindTime(time.Now().Add(-10 * time.Second))
 
 	// replace placeholders
 	realAlloc1 := newAllocation(appID1, "uuid-100", nodeID1, res)

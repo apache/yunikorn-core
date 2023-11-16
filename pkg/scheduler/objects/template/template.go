@@ -35,17 +35,7 @@ type Template struct {
 // It returns error if it fails to parse configs.
 // It returns nil value if the configs.ChildTemplate is empty
 func FromConf(template *configs.ChildTemplate) (*Template, error) {
-	// A non-empty list of empty property values is also empty
-	isMapEmpty := func(m map[string]string) bool {
-		for k, v := range m {
-			if k != "" && v != "" {
-				return false
-			}
-		}
-		return true
-	}
-
-	if template == nil || (template.MaxApplications == 0 && isMapEmpty(template.Properties) && isMapEmpty(template.Resources.Guaranteed) && isMapEmpty(template.Resources.Max)) {
+	if template == nil || isChildTemplateEmpty(template) {
 		return nil, nil
 	}
 
@@ -60,6 +50,23 @@ func FromConf(template *configs.ChildTemplate) (*Template, error) {
 	}
 
 	return newTemplate(template.MaxApplications, template.Properties, maxResource, guaranteedResource), nil
+}
+
+func isChildTemplateEmpty(template *configs.ChildTemplate) bool {
+	return template.MaxApplications == 0 &&
+		isMapEmpty(template.Properties) &&
+		isMapEmpty(template.Resources.Guaranteed) &&
+		isMapEmpty(template.Resources.Max)
+}
+
+// A non-empty list of empty property values is also empty
+func isMapEmpty(m map[string]string) bool {
+	for k, v := range m {
+		if k != "" && v != "" {
+			return false
+		}
+	}
+	return true
 }
 
 func newTemplate(maxApplications uint64, properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) *Template {

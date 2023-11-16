@@ -1726,8 +1726,7 @@ func TestFinishedTime(t *testing.T) {
 	assert.Assert(t, app.finishedTime.IsZero())
 	assert.Assert(t, app.FinishedTime().IsZero())
 
-	// sleep 1 second to make finished time bigger than zero
-	time.Sleep(1 * time.Second)
+	// Don't need sleep here, anytime finished, we will set finishedTime for now
 	app.UnSetQueue()
 	assert.Assert(t, !app.finishedTime.IsZero())
 	assert.Assert(t, !app.FinishedTime().IsZero())

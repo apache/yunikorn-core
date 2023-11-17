@@ -48,13 +48,15 @@ func getResource(t *testing.T) *resources.Resource {
 	return r
 }
 
-func checkMembers(t *testing.T, template *Template, properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) {
+func checkMembers(t *testing.T, template *Template, maxApplications uint64, properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) {
 	// test inner members
+	assert.Equal(t, template.maxApplications, maxApplications)
 	assert.DeepEqual(t, template.properties, properties)
 	assert.DeepEqual(t, template.maxResource, maxResource)
 	assert.DeepEqual(t, template.guaranteedResource, guaranteedResource)
 
 	// test all getters
+	assert.Equal(t, template.GetMaxApplications(), maxApplications)
 	assert.DeepEqual(t, template.GetProperties(), properties)
 	assert.DeepEqual(t, template.GetMaxResource(), maxResource)
 	assert.DeepEqual(t, template.GetGuaranteedResource(), guaranteedResource)
@@ -64,18 +66,21 @@ func TestNewTemplate(t *testing.T) {
 	properties := getProperties()
 	guaranteedResource := getResource(t)
 	maxResource := getResource(t)
+	maxApplications := uint64(1)
 
-	checkMembers(t, newTemplate(properties, maxResource, guaranteedResource), properties, maxResource, guaranteedResource)
+	checkMembers(t, newTemplate(maxApplications, properties, maxResource, guaranteedResource), maxApplications, properties, maxResource, guaranteedResource)
 }
 
 func TestFromConf(t *testing.T) {
+	maxApplications := uint64(1)
 	properties := getProperties()
 	guaranteedResourceConf := getResourceConf()
 	maxResourceConf := getResourceConf()
 
 	// case 0: normal case
 	template, err := FromConf(&configs.ChildTemplate{
-		Properties: properties,
+		MaxApplications: maxApplications,
+		Properties:      properties,
 		Resources: configs.Resources{
 			Max:        maxResourceConf,
 			Guaranteed: guaranteedResourceConf,
@@ -87,7 +92,7 @@ func TestFromConf(t *testing.T) {
 	assert.NilError(t, err, "failed to parse resource: %v", err)
 	guaranteedResource, err := resources.NewResourceFromConf(guaranteedResourceConf)
 	assert.NilError(t, err, "failed to parse resource: %v", err)
-	checkMembers(t, template, properties, maxResource, guaranteedResource)
+	checkMembers(t, template, maxApplications, properties, maxResource, guaranteedResource)
 
 	// case 1: empty map produces nil template
 	empty0, err := FromConf(&configs.ChildTemplate{

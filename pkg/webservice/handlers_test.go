@@ -154,6 +154,7 @@ partitions:
         properties:
           application.sort.policy: stateaware
         childtemplate:
+          maxapplications: 10
           properties:
             application.sort.policy: stateaware
           resources:
@@ -943,6 +944,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
 	assert.Equal(t, len(partitionQueuesDao.Properties), 1)
 	assert.Equal(t, partitionQueuesDao.Properties["application.sort.policy"], "stateaware")
+	assert.Equal(t, partitionQueuesDao.TemplateInfo.MaxApplications, uint64(10))
 	assert.Equal(t, len(partitionQueuesDao.TemplateInfo.Properties), 1)
 	assert.Equal(t, partitionQueuesDao.TemplateInfo.Properties["application.sort.policy"], "stateaware")
 

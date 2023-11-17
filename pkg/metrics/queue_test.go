@@ -269,7 +269,6 @@ func unregisterQueueMetrics(t *testing.T) {
 	prometheus.Unregister(qm.appMetricsLabel)
 	prometheus.Unregister(qm.appMetricsSubsystem)
 	prometheus.Unregister(qm.containerMetrics)
-	prometheus.Unregister(qm.ResourceMetricsLabel)
-	prometheus.Unregister(qm.ResourceMetricsSubsystem)
-
+	prometheus.Unregister(qm.resourceMetricsLabel)
+	prometheus.Unregister(qm.resourceMetricsSubsystem)
 }

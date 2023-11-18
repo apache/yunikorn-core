@@ -104,6 +104,26 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 	return q
 }
 
+func (m *QueueMetrics) incQueueApplications(state string) {
+	m.appMetricsLabel.With(prometheus.Labels{"state": state}).Inc()
+	m.appMetricsSubsystem.With(prometheus.Labels{"state": state}).Inc()
+}
+
+func (m *QueueMetrics) decQueueApplications(state string) {
+	m.appMetricsLabel.With(prometheus.Labels{"state": state}).Dec()
+	m.appMetricsSubsystem.With(prometheus.Labels{"state": state}).Dec()
+}
+
+func (m *QueueMetrics) addQueueResource(state string, resourceName string, value float64) {
+	m.resourceMetricsLabel.With(prometheus.Labels{"state": state, "resource": resourceName}).Add(value)
+	m.resourceMetricsSubsystem.With(prometheus.Labels{"state": state, "resource": resourceName}).Add(value)
+}
+
+func (m *QueueMetrics) setQueueResource(state string, resourceName string, value float64) {
+	m.resourceMetricsLabel.With(prometheus.Labels{"state": state, "resource": resourceName}).Set(value)
+	m.resourceMetricsSubsystem.With(prometheus.Labels{"state": state, "resource": resourceName}).Set(value)
+}
+
 func (m *QueueMetrics) Reset() {
 	m.appMetricsLabel.Reset()
 	m.appMetricsSubsystem.Reset()
@@ -111,22 +131,12 @@ func (m *QueueMetrics) Reset() {
 	m.resourceMetricsSubsystem.Reset()
 }
 
-func (m *QueueMetrics) IncQueueApplications(state string) {
-	m.appMetricsLabel.With(prometheus.Labels{"state": state}).Inc()
-	m.appMetricsSubsystem.With(prometheus.Labels{"state": state}).Inc()
-}
-
-func (m *QueueMetrics) DecQueueApplications(state string) {
-	m.appMetricsLabel.With(prometheus.Labels{"state": state}).Dec()
-	m.appMetricsSubsystem.With(prometheus.Labels{"state": state}).Dec()
-}
-
 func (m *QueueMetrics) IncQueueApplicationsRunning() {
-	m.IncQueueApplications("running")
+	m.incQueueApplications("running")
 }
 
 func (m *QueueMetrics) DecQueueApplicationsRunning() {
-	m.DecQueueApplications("running")
+	m.decQueueApplications("running")
 }
 
 func (m *QueueMetrics) GetQueueApplicationsRunning() (int, error) {
@@ -139,7 +149,7 @@ func (m *QueueMetrics) GetQueueApplicationsRunning() (int, error) {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsAccepted() {
-	m.IncQueueApplications("accepted")
+	m.incQueueApplications("accepted")
 }
 
 func (m *QueueMetrics) GetQueueApplicationsAccepted() (int, error) {
@@ -152,7 +162,7 @@ func (m *QueueMetrics) GetQueueApplicationsAccepted() (int, error) {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsRejected() {
-	m.IncQueueApplications("rejected")
+	m.incQueueApplications("rejected")
 }
 
 func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
@@ -165,7 +175,7 @@ func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsFailed() {
-	m.IncQueueApplications("failed")
+	m.incQueueApplications("failed")
 }
 
 func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
@@ -178,7 +188,7 @@ func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsCompleted() {
-	m.IncQueueApplications("completed")
+	m.incQueueApplications("completed")
 }
 
 func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {
@@ -202,44 +212,34 @@ func (m *QueueMetrics) AddReleasedContainers(value int) {
 	m.containerMetrics.With(prometheus.Labels{"state": "released"}).Add(float64(value))
 }
 
-func (m *QueueMetrics) AddQueueResource(state string, resourceName string, value float64) {
-	m.resourceMetricsLabel.With(prometheus.Labels{"state": state, "resource": resourceName}).Add(value)
-	m.resourceMetricsSubsystem.With(prometheus.Labels{"state": state, "resource": resourceName}).Add(value)
-}
-
-func (m *QueueMetrics) SetQueueResource(state string, resourceName string, value float64) {
-	m.resourceMetricsLabel.With(prometheus.Labels{"state": state, "resource": resourceName}).Set(value)
-	m.resourceMetricsSubsystem.With(prometheus.Labels{"state": state, "resource": resourceName}).Set(value)
-}
-
 func (m *QueueMetrics) SetQueueGuaranteedResourceMetrics(resourceName string, value float64) {
-	m.SetQueueResource("guaranteed", resourceName, value)
+	m.setQueueResource("guaranteed", resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueueMaxResourceMetrics(resourceName string, value float64) {
-	m.SetQueueResource("max", resourceName, value)
+	m.setQueueResource("max", resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueueAllocatedResourceMetrics(resourceName string, value float64) {
-	m.SetQueueResource("allocated", resourceName, value)
+	m.setQueueResource("allocated", resourceName, value)
 }
 
 func (m *QueueMetrics) AddQueueAllocatedResourceMetrics(resourceName string, value float64) {
-	m.AddQueueResource("allocated", resourceName, value)
+	m.addQueueResource("allocated", resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueuePendingResourceMetrics(resourceName string, value float64) {
-	m.SetQueueResource("pending", resourceName, value)
+	m.setQueueResource("pending", resourceName, value)
 }
 
 func (m *QueueMetrics) AddQueuePendingResourceMetrics(resourceName string, value float64) {
-	m.AddQueueResource("pending", resourceName, value)
+	m.addQueueResource("pending", resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueuePreemptingResourceMetrics(resourceName string, value float64) {
-	m.SetQueueResource("preempting", resourceName, value)
+	m.setQueueResource("preempting", resourceName, value)
 }
 
 func (m *QueueMetrics) AddQueuePreemptingResourceMetrics(resourceName string, value float64) {
-	m.AddQueueResource("preempting", resourceName, value)
+	m.addQueueResource("preempting", resourceName, value)
 }

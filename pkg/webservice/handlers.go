@@ -492,7 +492,9 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	if result != nil {
 		if !result.Healthy {
 			log.Log(log.SchedHealth).Error("Scheduler is not healthy", zap.Any("health check info", *result))
-			buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			}
 		} else {
 			log.Log(log.SchedHealth).Info("Scheduler is healthy", zap.Any("health check info", *result))
 			if err := json.NewEncoder(w).Encode(result); err != nil {

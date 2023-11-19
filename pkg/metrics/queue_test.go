@@ -28,109 +28,109 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-var cqm *QueueMetrics
+var qm *QueueMetrics
 
 func TestApplicationsRunning(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.IncQueueApplicationsRunning()
+	qm.IncQueueApplicationsRunning()
 	verifyAppMetrics(t, "running")
 }
 
 func TestApplicationsAccepted(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.IncQueueApplicationsAccepted()
+	qm.IncQueueApplicationsAccepted()
 	verifyAppMetrics(t, "accepted")
 }
 
 func TestApplicationsRejected(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.IncQueueApplicationsRejected()
+	qm.IncQueueApplicationsRejected()
 	verifyAppMetrics(t, "rejected")
 }
 
 func TestApplicationsFailed(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.IncQueueApplicationsFailed()
+	qm.IncQueueApplicationsFailed()
 	verifyAppMetrics(t, "failed")
 }
 
 func TestApplicationsCompleted(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.IncQueueApplicationsCompleted()
+	qm.IncQueueApplicationsCompleted()
 	verifyAppMetrics(t, "completed")
 }
 
 func TestAllocatedContainers(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.IncAllocatedContainer()
+	qm.IncAllocatedContainer()
 	verifyContainerMetrics(t, "allocated", float64(1))
 }
 
 func TestReleasedContainers(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.IncReleasedContainer()
+	qm.IncReleasedContainer()
 	verifyContainerMetrics(t, "released", float64(1))
 }
 
 func TestAddReleasedContainers(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.AddReleasedContainers(2)
+	qm.AddReleasedContainers(2)
 	verifyContainerMetrics(t, "released", float64(2))
 }
 
 func TestQueueGuaranteedResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.SetQueueGuaranteedResourceMetrics("cpu", 1)
+	qm.SetQueueGuaranteedResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "guaranteed", "cpu")
 }
 
 func TestQueueMaxResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.SetQueueMaxResourceMetrics("cpu", 1)
+	qm.SetQueueMaxResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "max", "cpu")
 }
 
 func TestQueueAllocatedResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.SetQueueAllocatedResourceMetrics("cpu", 1)
+	qm.SetQueueAllocatedResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "allocated", "cpu")
 }
 
 func TestQueuePendingResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterQueueMetrics(t)
 
-	cqm.SetQueuePendingResourceMetrics("cpu", 1)
+	qm.SetQueuePendingResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "pending", "cpu")
 }
 
 func TestQueuePreemptingResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
+	qm = getQueueMetrics()
 	defer unregisterMetrics(t)
 
-	cqm.SetQueuePreemptingResourceMetrics("cpu", 1)
+	qm.SetQueuePreemptingResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "preempting", "cpu")
 }
 
@@ -261,9 +261,9 @@ func verifyMetricsSubsytem(t *testing.T, checkLabel func(label []*dto.LabelPair)
 }
 
 func unregisterQueueMetrics(t *testing.T) {
-	prometheus.Unregister(cqm.appMetricsLabel)
-	prometheus.Unregister(cqm.appMetricsSubsystem)
-	prometheus.Unregister(cqm.containerMetrics)
-	prometheus.Unregister(cqm.resourceMetricsLabel)
-	prometheus.Unregister(cqm.resourceMetricsSubsystem)
+	prometheus.Unregister(qm.appMetricsLabel)
+	prometheus.Unregister(qm.appMetricsSubsystem)
+	prometheus.Unregister(qm.containerMetrics)
+	prometheus.Unregister(qm.resourceMetricsLabel)
+	prometheus.Unregister(qm.resourceMetricsSubsystem)
 }

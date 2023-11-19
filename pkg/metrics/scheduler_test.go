@@ -30,43 +30,43 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-var csm *SchedulerMetrics
+var sm *SchedulerMetrics
 
 func TestDrainingNodes(t *testing.T) {
-	csm = getSchedulerMetrics(t)
+	sm = getSchedulerMetrics(t)
 	defer unregisterMetrics(t)
 
-	csm.IncDrainingNodes()
+	sm.IncDrainingNodes()
 	verifyMetric(t, 1, "draining")
 
-	csm.DecDrainingNodes()
+	sm.DecDrainingNodes()
 	verifyMetric(t, 0, "draining")
 }
 
 func TestTotalDecommissionedNodes(t *testing.T) {
-	csm = getSchedulerMetrics(t)
+	sm = getSchedulerMetrics(t)
 	defer unregisterMetrics(t)
 
-	csm.IncTotalDecommissionedNodes()
+	sm.IncTotalDecommissionedNodes()
 	verifyMetric(t, 1, "decommissioned")
 }
 
 func TestUnhealthyNodes(t *testing.T) {
-	csm = getSchedulerMetrics(t)
+	sm = getSchedulerMetrics(t)
 	defer unregisterMetrics(t)
 
-	csm.IncUnhealthyNodes()
+	sm.IncUnhealthyNodes()
 	verifyMetric(t, 1, "unhealthy")
 
-	csm.DecUnhealthyNodes()
+	sm.DecUnhealthyNodes()
 	verifyMetric(t, 0, "unhealthy")
 }
 
 func TestTryPreemptionLatency(t *testing.T) {
-	csm = getSchedulerMetrics(t)
+	sm = getSchedulerMetrics(t)
 	defer unregisterMetrics(t)
 
-	csm.ObserveTryPreemptionLatency(time.Now().Add(-1 * time.Minute))
+	sm.ObserveTryPreemptionLatency(time.Now().Add(-1 * time.Minute))
 	verifyHistogram(t, "trypreemption_latency_milliseconds", 60, 1)
 }
 

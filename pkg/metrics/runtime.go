@@ -47,6 +47,8 @@ type RuntimeMetrics struct {
 	*GenericMetrics
 }
 
+// Reset all metrics that implement the Reset functionality.
+// should only be used in tests
 func (a *RuntimeMetrics) Reset() {
 	a.MStatsMetrics.Reset()
 	a.GenericMetrics.Reset()

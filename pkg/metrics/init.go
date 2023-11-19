@@ -40,15 +40,8 @@ type Metrics struct {
 	scheduler *SchedulerMetrics
 	queues    map[string]*QueueMetrics
 	event     *EventMetrics
-	runtime   GoRuntimeMetrics
+	runtime   *RuntimeMetrics
 	lock      sync.RWMutex
-}
-
-type GoRuntimeMetrics interface {
-	Collect()
-	// Reset all metrics that implement the Reset functionality.
-	// should only be used in tests
-	Reset()
 }
 
 func init() {
@@ -93,7 +86,7 @@ func GetEventMetrics() *EventMetrics {
 	return m.event
 }
 
-func GetRuntimeMetrics() GoRuntimeMetrics {
+func GetRuntimeMetrics() *RuntimeMetrics {
 	return m.runtime
 }
 

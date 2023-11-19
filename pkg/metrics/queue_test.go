@@ -28,7 +28,7 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-var cqm CoreQueueMetrics
+var cqm *QueueMetrics
 
 func TestApplicationsRunning(t *testing.T) {
 	cqm = getQueueMetrics()
@@ -134,7 +134,7 @@ func TestQueuePreemptingResourceMetrics(t *testing.T) {
 	verifyResourceMetrics(t, "preempting", "cpu")
 }
 
-func getQueueMetrics() CoreQueueMetrics {
+func getQueueMetrics() *QueueMetrics {
 	return InitQueueMetrics("root.test")
 }
 
@@ -261,14 +261,9 @@ func verifyMetricsSubsytem(t *testing.T, checkLabel func(label []*dto.LabelPair)
 }
 
 func unregisterQueueMetrics(t *testing.T) {
-	qm, ok := cqm.(*QueueMetrics)
-	if !ok {
-		t.Fatalf("Type assertion failed, metrics is not QueueMetrics")
-	}
-
-	prometheus.Unregister(qm.appMetricsLabel)
-	prometheus.Unregister(qm.appMetricsSubsystem)
-	prometheus.Unregister(qm.containerMetrics)
-	prometheus.Unregister(qm.resourceMetricsLabel)
-	prometheus.Unregister(qm.resourceMetricsSubsystem)
+	prometheus.Unregister(cqm.appMetricsLabel)
+	prometheus.Unregister(cqm.appMetricsSubsystem)
+	prometheus.Unregister(cqm.containerMetrics)
+	prometheus.Unregister(cqm.resourceMetricsLabel)
+	prometheus.Unregister(cqm.resourceMetricsSubsystem)
 }

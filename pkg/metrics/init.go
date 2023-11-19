@@ -39,35 +39,10 @@ var m *Metrics
 
 type Metrics struct {
 	scheduler CoreSchedulerMetrics
-	queues    map[string]CoreQueueMetrics
+	queues    map[string]*QueueMetrics
 	event     CoreEventMetrics
 	runtime   GoRuntimeMetrics
 	lock      sync.RWMutex
-}
-
-type CoreQueueMetrics interface {
-	IncQueueApplicationsAccepted()
-	GetQueueApplicationsAccepted() (int, error)
-	IncQueueApplicationsRejected()
-	GetQueueApplicationsRejected() (int, error)
-	IncQueueApplicationsRunning()
-	DecQueueApplicationsRunning()
-	GetQueueApplicationsRunning() (int, error)
-	IncQueueApplicationsFailed()
-	GetQueueApplicationsFailed() (int, error)
-	IncQueueApplicationsCompleted()
-	GetQueueApplicationsCompleted() (int, error)
-	IncAllocatedContainer()
-	IncReleasedContainer()
-	AddReleasedContainers(value int)
-	SetQueueGuaranteedResourceMetrics(resourceName string, value float64)
-	SetQueueMaxResourceMetrics(resourceName string, value float64)
-	SetQueueAllocatedResourceMetrics(resourceName string, value float64)
-	SetQueuePendingResourceMetrics(resourceName string, value float64)
-	SetQueuePreemptingResourceMetrics(resourceName string, value float64)
-	// Reset all metrics that implement the Reset functionality.
-	// should only be used in tests
-	Reset()
 }
 
 type GoRuntimeMetrics interface {
@@ -160,7 +135,7 @@ func init() {
 	once.Do(func() {
 		m = &Metrics{
 			scheduler: InitSchedulerMetrics(),
-			queues:    make(map[string]CoreQueueMetrics),
+			queues:    make(map[string]*QueueMetrics),
 			event:     initEventMetrics(),
 			lock:      sync.RWMutex{},
 			runtime:   initRuntimeMetrics(),
@@ -183,7 +158,7 @@ func GetSchedulerMetrics() CoreSchedulerMetrics {
 	return m.scheduler
 }
 
-func GetQueueMetrics(name string) CoreQueueMetrics {
+func GetQueueMetrics(name string) *QueueMetrics {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	if qm, ok := m.queues[name]; ok {

@@ -38,7 +38,7 @@ type QueueMetrics struct {
 }
 
 // InitQueueMetrics to initialize queue metrics
-func InitQueueMetrics(name string) CoreQueueMetrics {
+func InitQueueMetrics(name string) *QueueMetrics {
 	q := &QueueMetrics{}
 
 	replaceStr := formatMetricName(name)

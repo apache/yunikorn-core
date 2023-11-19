@@ -32,7 +32,7 @@ var qm *QueueMetrics
 
 func TestApplicationsRunning(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.IncQueueApplicationsRunning()
 	verifyAppMetrics(t, "running")
@@ -40,7 +40,7 @@ func TestApplicationsRunning(t *testing.T) {
 
 func TestApplicationsAccepted(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.IncQueueApplicationsAccepted()
 	verifyAppMetrics(t, "accepted")
@@ -48,7 +48,7 @@ func TestApplicationsAccepted(t *testing.T) {
 
 func TestApplicationsRejected(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.IncQueueApplicationsRejected()
 	verifyAppMetrics(t, "rejected")
@@ -56,7 +56,7 @@ func TestApplicationsRejected(t *testing.T) {
 
 func TestApplicationsFailed(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.IncQueueApplicationsFailed()
 	verifyAppMetrics(t, "failed")
@@ -64,7 +64,7 @@ func TestApplicationsFailed(t *testing.T) {
 
 func TestApplicationsCompleted(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.IncQueueApplicationsCompleted()
 	verifyAppMetrics(t, "completed")
@@ -72,7 +72,7 @@ func TestApplicationsCompleted(t *testing.T) {
 
 func TestAllocatedContainers(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.IncAllocatedContainer()
 	verifyContainerMetrics(t, "allocated", float64(1))
@@ -80,7 +80,7 @@ func TestAllocatedContainers(t *testing.T) {
 
 func TestReleasedContainers(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.IncReleasedContainer()
 	verifyContainerMetrics(t, "released", float64(1))
@@ -88,7 +88,7 @@ func TestReleasedContainers(t *testing.T) {
 
 func TestAddReleasedContainers(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.AddReleasedContainers(2)
 	verifyContainerMetrics(t, "released", float64(2))
@@ -96,7 +96,7 @@ func TestAddReleasedContainers(t *testing.T) {
 
 func TestQueueGuaranteedResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.SetQueueGuaranteedResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "guaranteed", "cpu")
@@ -104,7 +104,7 @@ func TestQueueGuaranteedResourceMetrics(t *testing.T) {
 
 func TestQueueMaxResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.SetQueueMaxResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "max", "cpu")
@@ -112,7 +112,7 @@ func TestQueueMaxResourceMetrics(t *testing.T) {
 
 func TestQueueAllocatedResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.SetQueueAllocatedResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "allocated", "cpu")
@@ -120,7 +120,7 @@ func TestQueueAllocatedResourceMetrics(t *testing.T) {
 
 func TestQueuePendingResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.SetQueuePendingResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "pending", "cpu")
@@ -128,7 +128,7 @@ func TestQueuePendingResourceMetrics(t *testing.T) {
 
 func TestQueuePreemptingResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	defer unregisterQueueMetrics()
 
 	qm.SetQueuePreemptingResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "preempting", "cpu")
@@ -260,7 +260,7 @@ func verifyMetricsSubsytem(t *testing.T, checkLabel func(label []*dto.LabelPair)
 	assert.Assert(t, checked, "Failed to find metric")
 }
 
-func unregisterQueueMetrics(t *testing.T) {
+func unregisterQueueMetrics() {
 	prometheus.Unregister(qm.appMetricsLabel)
 	prometheus.Unregister(qm.appMetricsSubsystem)
 	prometheus.Unregister(qm.containerMetrics)

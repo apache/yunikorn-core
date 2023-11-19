@@ -114,11 +114,6 @@ func (m *QueueMetrics) decQueueApplications(state string) {
 	m.appMetricsSubsystem.With(prometheus.Labels{"state": state}).Dec()
 }
 
-func (m *QueueMetrics) addQueueResource(state string, resourceName string, value float64) {
-	m.resourceMetricsLabel.With(prometheus.Labels{"state": state, "resource": resourceName}).Add(value)
-	m.resourceMetricsSubsystem.With(prometheus.Labels{"state": state, "resource": resourceName}).Add(value)
-}
-
 func (m *QueueMetrics) setQueueResource(state string, resourceName string, value float64) {
 	m.resourceMetricsLabel.With(prometheus.Labels{"state": state, "resource": resourceName}).Set(value)
 	m.resourceMetricsSubsystem.With(prometheus.Labels{"state": state, "resource": resourceName}).Set(value)

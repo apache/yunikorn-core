@@ -128,7 +128,7 @@ func TestQueuePendingResourceMetrics(t *testing.T) {
 
 func TestQueuePreemptingResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	defer unregisterQueueMetrics(t)
 
 	qm.SetQueuePreemptingResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "preempting", "cpu")

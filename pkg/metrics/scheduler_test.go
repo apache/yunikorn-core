@@ -34,7 +34,7 @@ var sm *SchedulerMetrics
 
 func TestDrainingNodes(t *testing.T) {
 	sm = getSchedulerMetrics(t)
-	defer unregisterMetrics(t)
+	defer unregisterMetrics()
 
 	sm.IncDrainingNodes()
 	verifyMetric(t, 1, "draining")
@@ -45,7 +45,7 @@ func TestDrainingNodes(t *testing.T) {
 
 func TestTotalDecommissionedNodes(t *testing.T) {
 	sm = getSchedulerMetrics(t)
-	defer unregisterMetrics(t)
+	defer unregisterMetrics()
 
 	sm.IncTotalDecommissionedNodes()
 	verifyMetric(t, 1, "decommissioned")
@@ -53,7 +53,7 @@ func TestTotalDecommissionedNodes(t *testing.T) {
 
 func TestUnhealthyNodes(t *testing.T) {
 	sm = getSchedulerMetrics(t)
-	defer unregisterMetrics(t)
+	defer unregisterMetrics()
 
 	sm.IncUnhealthyNodes()
 	verifyMetric(t, 1, "unhealthy")
@@ -64,14 +64,14 @@ func TestUnhealthyNodes(t *testing.T) {
 
 func TestTryPreemptionLatency(t *testing.T) {
 	sm = getSchedulerMetrics(t)
-	defer unregisterMetrics(t)
+	defer unregisterMetrics()
 
 	sm.ObserveTryPreemptionLatency(time.Now().Add(-1 * time.Minute))
 	verifyHistogram(t, "trypreemption_latency_milliseconds", 60, 1)
 }
 
 func getSchedulerMetrics(t *testing.T) *SchedulerMetrics {
-	unregisterMetrics(t)
+	unregisterMetrics()
 	return InitSchedulerMetrics()
 }
 
@@ -112,7 +112,7 @@ func verifyMetric(t *testing.T, expectedCounter float64, expectedState string) {
 	assert.Assert(t, checked, "Failed to find metric")
 }
 
-func unregisterMetrics(t *testing.T) {
+func unregisterMetrics() {
 	sm := GetSchedulerMetrics()
 	prometheus.Unregister(sm.containerAllocation)
 	prometheus.Unregister(sm.applicationSubmission)

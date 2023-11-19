@@ -224,22 +224,10 @@ func (m *QueueMetrics) SetQueueAllocatedResourceMetrics(resourceName string, val
 	m.setQueueResource("allocated", resourceName, value)
 }
 
-func (m *QueueMetrics) AddQueueAllocatedResourceMetrics(resourceName string, value float64) {
-	m.addQueueResource("allocated", resourceName, value)
-}
-
 func (m *QueueMetrics) SetQueuePendingResourceMetrics(resourceName string, value float64) {
 	m.setQueueResource("pending", resourceName, value)
 }
 
-func (m *QueueMetrics) AddQueuePendingResourceMetrics(resourceName string, value float64) {
-	m.addQueueResource("pending", resourceName, value)
-}
-
 func (m *QueueMetrics) SetQueuePreemptingResourceMetrics(resourceName string, value float64) {
 	m.setQueueResource("preempting", resourceName, value)
-}
-
-func (m *QueueMetrics) AddQueuePreemptingResourceMetrics(resourceName string, value float64) {
-	m.addQueueResource("preempting", resourceName, value)
 }

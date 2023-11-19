@@ -169,10 +169,6 @@ func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
 	m.schedulingLatency.Observe(SinceInSeconds(start))
 }
 
-func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
-	m.sortingLatency.With(prometheus.Labels{"level": "node"}).Observe(SinceInSeconds(start))
-}
-
 func (m *SchedulerMetrics) ObserveAppSortingLatency(start time.Time) {
 	m.sortingLatency.With(prometheus.Labels{"level": "app"}).Observe(SinceInSeconds(start))
 }
@@ -189,10 +185,6 @@ func (m *SchedulerMetrics) ObserveTryPreemptionLatency(start time.Time) {
 	m.tryPreemptionLatency.Observe(SinceInSeconds(start))
 }
 
-func (m *SchedulerMetrics) IncAllocatedContainer() {
-	m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Inc()
-}
-
 func (m *SchedulerMetrics) AddAllocatedContainers(value int) {
 	m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Add(float64(value))
 }
@@ -204,10 +196,6 @@ func (m *SchedulerMetrics) getAllocatedContainers() (int, error) {
 		return int(*metricDto.Counter.Value), nil
 	}
 	return -1, err
-}
-
-func (m *SchedulerMetrics) IncReleasedContainer() {
-	m.containerAllocation.With(prometheus.Labels{"state": "released"}).Inc()
 }
 
 func (m *SchedulerMetrics) AddReleasedContainers(value int) {
@@ -223,20 +211,12 @@ func (m *SchedulerMetrics) getReleasedContainers() (int, error) {
 	return -1, err
 }
 
-func (m *SchedulerMetrics) IncRejectedContainer() {
-	m.containerAllocation.With(prometheus.Labels{"state": "rejected"}).Inc()
-}
-
 func (m *SchedulerMetrics) AddRejectedContainers(value int) {
 	m.containerAllocation.With(prometheus.Labels{"state": "rejected"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) IncSchedulingError() {
 	m.containerAllocation.With(prometheus.Labels{"state": "error"}).Inc()
-}
-
-func (m *SchedulerMetrics) AddSchedulingErrors(value int) {
-	m.containerAllocation.With(prometheus.Labels{"state": "error"}).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
@@ -277,20 +257,12 @@ func (m *SchedulerMetrics) IncTotalApplicationsRunning() {
 	m.application.With(prometheus.Labels{"state": "running"}).Inc()
 }
 
-func (m *SchedulerMetrics) AddTotalApplicationsRunning(value int) {
-	m.application.With(prometheus.Labels{"state": "running"}).Add(float64(value))
-}
-
 func (m *SchedulerMetrics) DecTotalApplicationsRunning() {
 	m.application.With(prometheus.Labels{"state": "running"}).Dec()
 }
 
 func (m *SchedulerMetrics) SubTotalApplicationsRunning(value int) {
 	m.application.With(prometheus.Labels{"state": "running"}).Sub(float64(value))
-}
-
-func (m *SchedulerMetrics) SetTotalApplicationsRunning(value int) {
-	m.application.With(prometheus.Labels{"state": "running"}).Set(float64(value))
 }
 
 func (m *SchedulerMetrics) GetTotalApplicationsRunning() (int, error) {
@@ -314,18 +286,6 @@ func (m *SchedulerMetrics) AddTotalApplicationsCompleted(value int) {
 	m.application.With(prometheus.Labels{"state": "completed"}).Add(float64(value))
 }
 
-func (m *SchedulerMetrics) DecTotalApplicationsCompleted() {
-	m.application.With(prometheus.Labels{"state": "completed"}).Dec()
-}
-
-func (m *SchedulerMetrics) SubTotalApplicationsCompleted(value int) {
-	m.application.With(prometheus.Labels{"state": "completed"}).Sub(float64(value))
-}
-
-func (m *SchedulerMetrics) SetTotalApplicationsCompleted(value int) {
-	m.application.With(prometheus.Labels{"state": "completed"}).Set(float64(value))
-}
-
 func (m *SchedulerMetrics) GetTotalApplicationsCompleted() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.application.With(prometheus.Labels{"state": "completed"}).Write(metricDto)
@@ -339,41 +299,18 @@ func (m *SchedulerMetrics) IncActiveNodes() {
 	m.node.With(prometheus.Labels{"state": "active"}).Inc()
 }
 
-func (m *SchedulerMetrics) AddActiveNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "active"}).Add(float64(value))
-}
-
 func (m *SchedulerMetrics) DecActiveNodes() {
 	m.node.With(prometheus.Labels{"state": "active"}).Dec()
-}
-
-func (m *SchedulerMetrics) SubActiveNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "active"}).Sub(float64(value))
-}
-
-func (m *SchedulerMetrics) SetActiveNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "active"}).Set(float64(value))
 }
 
 func (m *SchedulerMetrics) IncFailedNodes() {
 	m.node.With(prometheus.Labels{"state": "failed"}).Inc()
 }
 
-func (m *SchedulerMetrics) AddFailedNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "failed"}).Add(float64(value))
-}
-
 func (m *SchedulerMetrics) DecFailedNodes() {
 	m.node.With(prometheus.Labels{"state": "failed"}).Dec()
 }
 
-func (m *SchedulerMetrics) SubFailedNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "failed"}).Sub(float64(value))
-}
-
-func (m *SchedulerMetrics) SetFailedNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "failed"}).Set(float64(value))
-}
 func (m *SchedulerMetrics) GetFailedNodes() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.node.With(prometheus.Labels{"state": "failed"}).Write(metricDto)

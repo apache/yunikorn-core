@@ -30,7 +30,7 @@ type eventMetrics struct {
 	totalEventsCollected    prometheus.Gauge
 }
 
-func initEventMetrics() CoreEventMetrics {
+func initEventMetrics() *eventMetrics {
 	metrics := &eventMetrics{}
 
 	metrics.totalEventsCreated = prometheus.NewGauge(
@@ -86,6 +86,8 @@ func initEventMetrics() CoreEventMetrics {
 	return metrics
 }
 
+// Reset all metrics that implement the Set functionality.
+// Should only be used in tests
 func (em *eventMetrics) Reset() {
 	em.totalEventsCollected.Set(0)
 	em.totalEventsCreated.Set(0)

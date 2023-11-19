@@ -39,7 +39,7 @@ var m *Metrics
 type Metrics struct {
 	scheduler *SchedulerMetrics
 	queues    map[string]*QueueMetrics
-	event     CoreEventMetrics
+	event     *eventMetrics
 	runtime   GoRuntimeMetrics
 	lock      sync.RWMutex
 }
@@ -48,19 +48,6 @@ type GoRuntimeMetrics interface {
 	Collect()
 	// Reset all metrics that implement the Reset functionality.
 	// should only be used in tests
-	Reset()
-}
-
-type CoreEventMetrics interface {
-	IncEventsCreated()
-	IncEventsChanneled()
-	IncEventsNotChanneled()
-	IncEventsProcessed()
-	IncEventsStored()
-	IncEventsNotStored()
-	AddEventsCollected(collectedEvents int)
-	// Reset all metrics that implement the Set functionality.
-	// Should only be used in tests
 	Reset()
 }
 
@@ -102,7 +89,7 @@ func GetQueueMetrics(name string) *QueueMetrics {
 	return queueMetrics
 }
 
-func GetEventMetrics() CoreEventMetrics {
+func GetEventMetrics() *eventMetrics {
 	return m.event
 }
 

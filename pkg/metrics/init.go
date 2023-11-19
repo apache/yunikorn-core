@@ -39,7 +39,7 @@ var m *Metrics
 type Metrics struct {
 	scheduler *SchedulerMetrics
 	queues    map[string]*QueueMetrics
-	event     *eventMetrics
+	event     *EventMetrics
 	runtime   GoRuntimeMetrics
 	lock      sync.RWMutex
 }
@@ -89,7 +89,7 @@ func GetQueueMetrics(name string) *QueueMetrics {
 	return queueMetrics
 }
 
-func GetEventMetrics() *eventMetrics {
+func GetEventMetrics() *EventMetrics {
 	return m.event
 }
 

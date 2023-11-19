@@ -30,7 +30,7 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-var csm CoreSchedulerMetrics
+var csm *SchedulerMetrics
 
 func TestDrainingNodes(t *testing.T) {
 	csm = getSchedulerMetrics(t)
@@ -113,11 +113,7 @@ func verifyMetric(t *testing.T, expectedCounter float64, expectedState string) {
 }
 
 func unregisterMetrics(t *testing.T) {
-	sm, ok := GetSchedulerMetrics().(*SchedulerMetrics)
-	if !ok {
-		t.Fatalf("Type assertion failed, metrics is not SchedulerMetrics")
-	}
-
+	sm := GetSchedulerMetrics()
 	prometheus.Unregister(sm.containerAllocation)
 	prometheus.Unregister(sm.applicationSubmission)
 	prometheus.Unregister(sm.application)

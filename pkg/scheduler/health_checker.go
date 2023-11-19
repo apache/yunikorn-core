@@ -189,7 +189,7 @@ func updateSchedulerLastHealthStatus(latest *dao.SchedulerHealthDAOInfo, schedul
 	schedulerContext.SetLastHealthCheckResult(latest)
 }
 
-func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
+func GetSchedulerHealthStatus(metrics *metrics.SchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
 	var healthInfo []dao.HealthCheckInfo
 	healthInfo = append(healthInfo, checkSchedulingErrors(metrics))
 	healthInfo = append(healthInfo, checkFailedNodes(metrics))
@@ -214,7 +214,7 @@ func CreateCheckInfo(succeeded bool, name, description, message string) dao.Heal
 		DiagnosisMessage: message,
 	}
 }
-func checkSchedulingErrors(metrics metrics.CoreSchedulerMetrics) dao.HealthCheckInfo {
+func checkSchedulingErrors(metrics *metrics.SchedulerMetrics) dao.HealthCheckInfo {
 	schedulingErrors, err := metrics.GetSchedulingErrors()
 	if err != nil {
 		return CreateCheckInfo(false, "Scheduling errors", "Check for scheduling error entries in metrics", err.Error())
@@ -223,7 +223,7 @@ func checkSchedulingErrors(metrics metrics.CoreSchedulerMetrics) dao.HealthCheck
 	return CreateCheckInfo(schedulingErrors == 0, "Scheduling errors", "Check for scheduling error entries in metrics", diagnosisMsg)
 }
 
-func checkFailedNodes(metrics metrics.CoreSchedulerMetrics) dao.HealthCheckInfo {
+func checkFailedNodes(metrics *metrics.SchedulerMetrics) dao.HealthCheckInfo {
 	failedNodes, err := metrics.GetFailedNodes()
 	if err != nil {
 		return CreateCheckInfo(false, "Failed nodes", "Check for failed nodes entries in metrics", err.Error())

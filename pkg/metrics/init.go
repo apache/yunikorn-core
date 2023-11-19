@@ -20,7 +20,6 @@ package metrics
 
 import (
 	"sync"
-	"time"
 )
 
 const (
@@ -38,7 +37,7 @@ var once sync.Once
 var m *Metrics
 
 type Metrics struct {
-	scheduler CoreSchedulerMetrics
+	scheduler *SchedulerMetrics
 	queues    map[string]*QueueMetrics
 	event     CoreEventMetrics
 	runtime   GoRuntimeMetrics
@@ -47,72 +46,6 @@ type Metrics struct {
 
 type GoRuntimeMetrics interface {
 	Collect()
-	// Reset all metrics that implement the Reset functionality.
-	// should only be used in tests
-	Reset()
-}
-
-// Declare all core metrics ops in this interface
-type CoreSchedulerMetrics interface {
-	// Metrics Ops related to ScheduledAllocationSuccesses
-	AddAllocatedContainers(value int)
-	getAllocatedContainers() (int, error)
-
-	// Metrics Ops related to ScheduledAllocationFailures
-	AddRejectedContainers(value int)
-
-	// Metrics Ops related to ScheduledAllocationErrors
-	IncSchedulingError()
-	GetSchedulingErrors() (int, error)
-
-	// Metrics Ops related to released allocations
-	AddReleasedContainers(value int)
-	getReleasedContainers() (int, error)
-	// Metrics Ops related to totalApplicationsAccepted
-	IncTotalApplicationsAccepted()
-	AddTotalApplicationsAccepted(value int)
-
-	// Metrics Ops related to TotalApplicationsRejected
-	IncTotalApplicationsRejected()
-	AddTotalApplicationsRejected(value int)
-	GetTotalApplicationsRejected() (int, error)
-
-	// Metrics Ops related to TotalApplicationsRunning
-	IncTotalApplicationsRunning()
-	DecTotalApplicationsRunning()
-	SubTotalApplicationsRunning(value int)
-	GetTotalApplicationsRunning() (int, error)
-
-	// Metrics Ops related to TotalApplicationsFailed
-	IncTotalApplicationsFailed()
-
-	// Metrics Ops related to TotalApplicationsCompleted
-	IncTotalApplicationsCompleted()
-	AddTotalApplicationsCompleted(value int)
-	GetTotalApplicationsCompleted() (int, error)
-
-	// Metrics Ops related to ActiveNodes
-	IncActiveNodes()
-	DecActiveNodes()
-	IncDrainingNodes()
-	DecDrainingNodes()
-	GetDrainingNodes() (int, error)
-	IncUnhealthyNodes()
-	DecUnhealthyNodes()
-	IncTotalDecommissionedNodes()
-
-	// Metrics Ops related to failedNodes
-	IncFailedNodes()
-	DecFailedNodes()
-	SetNodeResourceUsage(resourceName string, rangeIdx int, value float64)
-	GetFailedNodes() (int, error)
-
-	// Metrics Ops related to latency change
-	ObserveSchedulingLatency(start time.Time)
-	ObserveAppSortingLatency(start time.Time)
-	ObserveQueueSortingLatency(start time.Time)
-	ObserveTryNodeLatency(start time.Time)
-	ObserveTryPreemptionLatency(start time.Time)
 	// Reset all metrics that implement the Reset functionality.
 	// should only be used in tests
 	Reset()
@@ -154,7 +87,7 @@ func Reset() {
 	m.runtime.Reset()
 }
 
-func GetSchedulerMetrics() CoreSchedulerMetrics {
+func GetSchedulerMetrics() *SchedulerMetrics {
 	return m.scheduler
 }
 

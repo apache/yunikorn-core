@@ -154,6 +154,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 	return s
 }
 
+// Reset all metrics that implement the Reset functionality.
+// should only be used in tests
 func (m *SchedulerMetrics) Reset() {
 	m.node.Reset()
 	m.application.Reset()

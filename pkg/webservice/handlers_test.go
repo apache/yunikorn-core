@@ -1537,10 +1537,11 @@ func TestGetEvents(t *testing.T) {
 	checkSingleEvent(t, queueEvent, "start=2")
 
 	// illegal requests
-	checkIllegalBatchRequest(t, "count=xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
-	checkIllegalBatchRequest(t, "count=-100", "Illegal number of events: -100")
-	checkIllegalBatchRequest(t, "start=xyz", "strconv.ParseInt: parsing \"xyz\": invalid syntax")
-	checkIllegalBatchRequest(t, "start=-100", "Illegal id: -100")
+	checkIllegalBatchRequest(t, "count=xyz", `strconv.ParseUint: parsing "xyz": invalid syntax`)
+	checkIllegalBatchRequest(t, "count=-100", `strconv.ParseUint: parsing "-100": invalid syntax`)
+	checkIllegalBatchRequest(t, "count=0", `0 is not a valid value for "count`)
+	checkIllegalBatchRequest(t, "start=xyz", `strconv.ParseUint: parsing "xyz": invalid syntax`)
+	checkIllegalBatchRequest(t, "start=-100", `strconv.ParseUint: parsing "-100": invalid syntax`)
 }
 
 func TestGetEventsWhenTrackingDisabled(t *testing.T) {
@@ -1564,6 +1565,7 @@ func TestGetEventsWhenTrackingDisabled(t *testing.T) {
 }
 
 func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
+	t.Helper()
 	events.Init()
 	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	ev.StartServiceWithPublisher(false)
@@ -1622,12 +1624,14 @@ func checkSingleEvent(t *testing.T, event *si.EventRecord, query string) {
 }
 
 func checkIllegalBatchRequest(t *testing.T, query, msg string) {
+	t.Helper()
 	req, err := http.NewRequest("GET", "/ws/v1/events/batch?"+query, strings.NewReader(""))
 	assert.NilError(t, err)
 	readIllegalRequest(t, req, msg)
 }
 
 func readIllegalRequest(t *testing.T, req *http.Request, errMsg string) {
+	t.Helper()
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(getEvents)
 	handler.ServeHTTP(rr, req)
@@ -1638,10 +1642,11 @@ func readIllegalRequest(t *testing.T, req *http.Request, errMsg string) {
 	var errObject dao.YAPIError
 	err = json.Unmarshal(jsonBytes[:n], &errObject)
 	assert.NilError(t, err, "cannot unmarshal events dao")
-	assert.Assert(t, strings.Contains(errObject.Message, errMsg))
+	assert.Assert(t, strings.Contains(errObject.Message, errMsg), "Error message [%s] not found inside the string: [%s]", errMsg, errObject.Message)
 }
 
 func checkAllEvents(t *testing.T, events []*si.EventRecord) {
+	t.Helper()
 	req, err := http.NewRequest("GET", "/ws/v1/events/batch/", strings.NewReader(""))
 	assert.NilError(t, err)
 	eventDao := getEventRecordDao(t, req)
@@ -1652,6 +1657,7 @@ func checkAllEvents(t *testing.T, events []*si.EventRecord) {
 }
 
 func compareEvents(t *testing.T, event, eventFromDao *si.EventRecord) {
+	t.Helper()
 	assert.Equal(t, event.TimestampNano, eventFromDao.TimestampNano)
 	assert.Equal(t, event.EventChangeType, eventFromDao.EventChangeType)
 	assert.Equal(t, event.EventChangeDetail, eventFromDao.EventChangeDetail)
@@ -1664,6 +1670,7 @@ func compareEvents(t *testing.T, event, eventFromDao *si.EventRecord) {
 }
 
 func getEventRecordDao(t *testing.T, req *http.Request) dao.EventRecordDAO {
+	t.Helper()
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(getEvents)
 	handler.ServeHTTP(rr, req)

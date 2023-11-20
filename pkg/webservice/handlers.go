@@ -914,25 +914,25 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 	var start uint64
 
 	if countStr := r.URL.Query().Get("count"); countStr != "" {
-		c, err := strconv.ParseUint(countStr, 10, 64)
+		var err error
+		count, err = strconv.ParseUint(countStr, 10, 64)
 		if err != nil {
 			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if c == 0 {
+		if count == 0 {
 			buildJSONErrorResponse(w, `0 is not a valid value for "count"`, http.StatusBadRequest)
 			return
 		}
-		count = c
 	}
 
 	if startStr := r.URL.Query().Get("start"); startStr != "" {
-		i, err := strconv.ParseUint(startStr, 10, 64)
+		var err error
+		start, err = strconv.ParseUint(startStr, 10, 64)
 		if err != nil {
 			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		start = i
 	}
 
 	records, lowestID, highestID := eventSystem.GetEventsFromID(start, count)

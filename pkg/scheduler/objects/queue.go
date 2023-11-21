@@ -379,8 +379,8 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 	case resources.StrictlyGreaterThanZero(maxResource):
 		log.Log(log.SchedQueue).Debug("setting max resources",
 			zap.String("queue", sq.QueuePath),
-			zap.Stringer("current max res", sq.maxResource),
-			zap.Stringer("new max res", maxResource))
+			zap.Stringer("current", sq.maxResource),
+			zap.Stringer("new", maxResource))
 		if !resources.Equals(sq.maxResource, maxResource) && sq.queueEvents != nil {
 			sq.queueEvents.sendMaxResourceChangedEvent()
 		}
@@ -389,23 +389,24 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 	case sq.maxResource != nil:
 		log.Log(log.SchedQueue).Debug("setting max resources",
 			zap.String("queue", sq.QueuePath),
-			zap.Stringer("current max res", sq.maxResource),
-			zap.Stringer("new max res", maxResource))
+			zap.Stringer("current", sq.maxResource),
+			zap.Stringer("new", maxResource))
 		if sq.queueEvents != nil {
 			sq.queueEvents.sendMaxResourceChangedEvent()
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
 	default:
-		log.Log(log.SchedQueue).Debug("max resources setting ignored: cannot set zero max resources", zap.String("queue", sq.QueuePath))
+		log.Log(log.SchedQueue).Warn("max resources setting ignored: cannot set zero max resources",
+			zap.String("queue", sq.QueuePath))
 	}
 
 	switch {
 	case resources.StrictlyGreaterThanZero(guaranteedResource):
 		log.Log(log.SchedQueue).Debug("setting guaranteed resources",
 			zap.String("queue", sq.QueuePath),
-			zap.Stringer("current guaranteed res", sq.guaranteedResource),
-			zap.Stringer("new guaranteed res", guaranteedResource))
+			zap.Stringer("current", sq.guaranteedResource),
+			zap.Stringer("new", guaranteedResource))
 		if !resources.Equals(sq.guaranteedResource, guaranteedResource) && sq.queueEvents != nil {
 			sq.queueEvents.sendGuaranteedResourceChangedEvent()
 		}
@@ -414,15 +415,16 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 	case sq.guaranteedResource != nil:
 		log.Log(log.SchedQueue).Debug("setting guaranteed resources",
 			zap.String("queue", sq.QueuePath),
-			zap.Stringer("current guaranteed res", sq.guaranteedResource),
-			zap.Stringer("new guaranteed res", guaranteedResource))
+			zap.Stringer("current", sq.guaranteedResource),
+			zap.Stringer("new", guaranteedResource))
 		if sq.queueEvents != nil {
 			sq.queueEvents.sendGuaranteedResourceChangedEvent()
 		}
 		sq.guaranteedResource = nil
 		sq.updateGuaranteedResourceMetrics()
 	default:
-		log.Log(log.SchedQueue).Debug("guaranteed resources setting ignored: cannot set zero max resources", zap.String("queue", sq.QueuePath))
+		log.Log(log.SchedQueue).Warn("guaranteed resources setting ignored: cannot set zero guaranteed resources",
+			zap.String("queue", sq.QueuePath))
 	}
 	return nil
 }
@@ -1302,8 +1304,8 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 	case resources.StrictlyGreaterThanZero(max):
 		log.Log(log.SchedQueue).Debug("setting max resources",
 			zap.String("queue", sq.QueuePath),
-			zap.Stringer("current max res", sq.maxResource),
-			zap.Stringer("new max res", max))
+			zap.Stringer("current", sq.maxResource),
+			zap.Stringer("new", max))
 		if !resources.Equals(sq.maxResource, max) && sq.queueEvents != nil {
 			sq.queueEvents.sendMaxResourceChangedEvent()
 		}
@@ -1312,15 +1314,16 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 	case sq.maxResource != nil:
 		log.Log(log.SchedQueue).Debug("setting max resources",
 			zap.String("queue", sq.QueuePath),
-			zap.Stringer("current max res", sq.maxResource),
-			zap.Stringer("new max res", max))
+			zap.Stringer("current", sq.maxResource),
+			zap.Stringer("new", max))
 		if sq.queueEvents != nil {
 			sq.queueEvents.sendMaxResourceChangedEvent()
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
 	default:
-		log.Log(log.SchedQueue).Debug("max resources setting ignored: cannot set zero max resources", zap.String("queue", sq.QueuePath))
+		log.Log(log.SchedQueue).Warn("max resources setting ignored: cannot set zero max resources",
+			zap.String("queue", sq.QueuePath))
 	}
 }
 

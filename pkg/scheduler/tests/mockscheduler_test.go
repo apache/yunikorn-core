@@ -21,6 +21,7 @@ package tests
 import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
@@ -48,6 +49,7 @@ func (m *mockScheduler) Init(config string, autoSchedule bool, withWebapp bool) 
 	BuildInfoMap := make(map[string]string)
 	BuildInfoMap["k"] = "v"
 
+	events.Init()
 	m.serviceContext = entrypoint.StartAllServicesWithParams(!autoSchedule, withWebapp)
 
 	m.proxy = m.serviceContext.RMProxy

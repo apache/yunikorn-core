@@ -1348,6 +1348,71 @@ func TestCreateDeepQueueConfig(t *testing.T) {
 	assert.Equal(t, "root.level1.level2.level3.level4.level5", queue.GetQueuePath(), "root.level1.level2.level3.level4.level5 queue not found in partition")
 }
 
+func assertUpdateQueues(t *testing.T, resourceType string, resMap map[string]string) {
+	var resExpect *resources.Resource
+	if len(resMap) > 0 {
+		resExpect, _ = resources.NewResourceFromConf(resMap)
+		//assert.NilError(t, err, "resource from conf failed")
+	} else {
+		resExpect = nil
+	}
+
+	var res configs.Resources
+	if resourceType == "max" {
+		res = configs.Resources{Max: resMap}
+	} else if resourceType == "guaranteed" {
+		res = configs.Resources{Guaranteed: resMap}
+	} else {
+		res = configs.Resources{Max: resMap, Guaranteed: resMap}
+	}
+
+	conf := []configs.QueueConfig{
+		{
+			Name:      "parent",
+			Parent:    true,
+			Resources: res,
+			Queues: []configs.QueueConfig{
+				{
+					Name:   "leaf",
+					Parent: false,
+					Queues: nil,
+				},
+			},
+		},
+	}
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	// There is a queue setup as the config must be valid when we run
+	root := partition.GetQueue("root")
+	if root == nil {
+		t.Error("root queue not found in partition")
+	}
+
+	err = partition.updateQueues(conf, root)
+	assert.NilError(t, err, "queue update from config failed")
+	parent := partition.GetQueue("root.parent")
+	if parent == nil {
+		t.Fatal("parent queue should still exist")
+	}
+	if resourceType == "max" {
+		assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
+		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), nil), "parent queue guaranteed resource should have been updated")
+	} else if resourceType == "guaranteed" {
+		assert.Assert(t, resources.Equals(parent.GetMaxResource(), nil), "parent queue max resource should have been updated")
+		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
+	} else {
+		assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
+		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
+	}
+	leaf := partition.GetQueue("root.parent.leaf")
+	if leaf == nil {
+		t.Fatal("leaf queue should have been created")
+	}
+
+}
+
 func TestUpdateQueues(t *testing.T) {
 	conf := []configs.QueueConfig{
 		{
@@ -1372,36 +1437,16 @@ func TestUpdateQueues(t *testing.T) {
 	}
 	assert.Assert(t, def.IsDraining(), "'root.default' queue should have been marked for removal")
 
-	var resExpect *resources.Resource
-	resMap := map[string]string{"vcore": "1"}
-	resExpect, err = resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err, "resource from conf failed")
-
-	conf = []configs.QueueConfig{
-		{
-			Name:      "parent",
-			Parent:    true,
-			Resources: configs.Resources{Max: resMap},
-			Queues: []configs.QueueConfig{
-				{
-					Name:   "leaf",
-					Parent: false,
-					Queues: nil,
-				},
-			},
-		},
-	}
-	err = partition.updateQueues(conf, root)
-	assert.NilError(t, err, "queue update from config failed")
-	parent := partition.GetQueue("root.parent")
-	if parent == nil {
-		t.Fatal("parent queue should still exist")
-	}
-	assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
-	leaf := partition.GetQueue("root.parent.leaf")
-	if leaf == nil {
-		t.Fatal("leaf queue should have been created")
-	}
+	assertUpdateQueues(t, "max", map[string]string{"vcore": "2"})
+	assertUpdateQueues(t, "max", map[string]string{"vcore": "5"})
+	assertUpdateQueues(t, "max", map[string]string{"memory": "5"})
+	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "2", "memory": "5"})
+	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "4", "memory": "3"})
+	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "10"})
+	assertUpdateQueues(t, "both", map[string]string{"vcore": "2", "memory": "5"})
+	assertUpdateQueues(t, "both", map[string]string{"vcore": "5", "memory": "2"})
+	assertUpdateQueues(t, "both", map[string]string{"vcore": "5"})
+	assertUpdateQueues(t, "both", map[string]string{})
 }
 
 func TestGetQueue(t *testing.T) {

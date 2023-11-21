@@ -38,7 +38,7 @@ type QueueMetrics struct {
 }
 
 // InitQueueMetrics to initialize queue metrics
-func InitQueueMetrics(name string) CoreQueueMetrics {
+func InitQueueMetrics(name string) *QueueMetrics {
 	q := &QueueMetrics{}
 
 	replaceStr := formatMetricName(name)
@@ -112,11 +112,6 @@ func (m *QueueMetrics) incQueueApplications(state string) {
 func (m *QueueMetrics) decQueueApplications(state string) {
 	m.appMetricsLabel.With(prometheus.Labels{"state": state}).Dec()
 	m.appMetricsSubsystem.With(prometheus.Labels{"state": state}).Dec()
-}
-
-func (m *QueueMetrics) addQueueResource(state string, resourceName string, value float64) {
-	m.resourceMetricsLabel.With(prometheus.Labels{"state": state, "resource": resourceName}).Add(value)
-	m.resourceMetricsSubsystem.With(prometheus.Labels{"state": state, "resource": resourceName}).Add(value)
 }
 
 func (m *QueueMetrics) setQueueResource(state string, resourceName string, value float64) {
@@ -224,22 +219,10 @@ func (m *QueueMetrics) SetQueueAllocatedResourceMetrics(resourceName string, val
 	m.setQueueResource("allocated", resourceName, value)
 }
 
-func (m *QueueMetrics) AddQueueAllocatedResourceMetrics(resourceName string, value float64) {
-	m.addQueueResource("allocated", resourceName, value)
-}
-
 func (m *QueueMetrics) SetQueuePendingResourceMetrics(resourceName string, value float64) {
 	m.setQueueResource("pending", resourceName, value)
 }
 
-func (m *QueueMetrics) AddQueuePendingResourceMetrics(resourceName string, value float64) {
-	m.addQueueResource("pending", resourceName, value)
-}
-
 func (m *QueueMetrics) SetQueuePreemptingResourceMetrics(resourceName string, value float64) {
 	m.setQueueResource("preempting", resourceName, value)
-}
-
-func (m *QueueMetrics) AddQueuePreemptingResourceMetrics(resourceName string, value float64) {
-	m.addQueueResource("preempting", resourceName, value)
 }

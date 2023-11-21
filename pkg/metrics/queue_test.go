@@ -28,113 +28,113 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-var cqm CoreQueueMetrics
+var qm *QueueMetrics
 
 func TestApplicationsRunning(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.IncQueueApplicationsRunning()
+	qm.IncQueueApplicationsRunning()
 	verifyAppMetrics(t, "running")
 }
 
 func TestApplicationsAccepted(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.IncQueueApplicationsAccepted()
+	qm.IncQueueApplicationsAccepted()
 	verifyAppMetrics(t, "accepted")
 }
 
 func TestApplicationsRejected(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.IncQueueApplicationsRejected()
+	qm.IncQueueApplicationsRejected()
 	verifyAppMetrics(t, "rejected")
 }
 
 func TestApplicationsFailed(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.IncQueueApplicationsFailed()
+	qm.IncQueueApplicationsFailed()
 	verifyAppMetrics(t, "failed")
 }
 
 func TestApplicationsCompleted(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.IncQueueApplicationsCompleted()
+	qm.IncQueueApplicationsCompleted()
 	verifyAppMetrics(t, "completed")
 }
 
 func TestAllocatedContainers(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.IncAllocatedContainer()
+	qm.IncAllocatedContainer()
 	verifyContainerMetrics(t, "allocated", float64(1))
 }
 
 func TestReleasedContainers(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.IncReleasedContainer()
+	qm.IncReleasedContainer()
 	verifyContainerMetrics(t, "released", float64(1))
 }
 
 func TestAddReleasedContainers(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.AddReleasedContainers(2)
+	qm.AddReleasedContainers(2)
 	verifyContainerMetrics(t, "released", float64(2))
 }
 
 func TestQueueGuaranteedResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.SetQueueGuaranteedResourceMetrics("cpu", 1)
+	qm.SetQueueGuaranteedResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "guaranteed", "cpu")
 }
 
 func TestQueueMaxResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.SetQueueMaxResourceMetrics("cpu", 1)
+	qm.SetQueueMaxResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "max", "cpu")
 }
 
 func TestQueueAllocatedResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.SetQueueAllocatedResourceMetrics("cpu", 1)
+	qm.SetQueueAllocatedResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "allocated", "cpu")
 }
 
 func TestQueuePendingResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterQueueMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.SetQueuePendingResourceMetrics("cpu", 1)
+	qm.SetQueuePendingResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "pending", "cpu")
 }
 
 func TestQueuePreemptingResourceMetrics(t *testing.T) {
-	cqm = getQueueMetrics()
-	defer unregisterMetrics(t)
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
 
-	cqm.SetQueuePreemptingResourceMetrics("cpu", 1)
+	qm.SetQueuePreemptingResourceMetrics("cpu", 1)
 	verifyResourceMetrics(t, "preempting", "cpu")
 }
 
-func getQueueMetrics() CoreQueueMetrics {
+func getQueueMetrics() *QueueMetrics {
 	return InitQueueMetrics("root.test")
 }
 
@@ -260,12 +260,7 @@ func verifyMetricsSubsytem(t *testing.T, checkLabel func(label []*dto.LabelPair)
 	assert.Assert(t, checked, "Failed to find metric")
 }
 
-func unregisterQueueMetrics(t *testing.T) {
-	qm, ok := cqm.(*QueueMetrics)
-	if !ok {
-		t.Fatalf("Type assertion failed, metrics is not QueueMetrics")
-	}
-
+func unregisterQueueMetrics() {
 	prometheus.Unregister(qm.appMetricsLabel)
 	prometheus.Unregister(qm.appMetricsSubsystem)
 	prometheus.Unregister(qm.containerMetrics)

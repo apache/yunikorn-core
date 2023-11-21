@@ -19,6 +19,10 @@
 package tests
 
 import (
+	"fmt"
+	"net"
+	"time"
+
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
@@ -54,6 +58,20 @@ func (m *mockScheduler) Init(config string, autoSchedule bool, withWebapp bool) 
 	m.scheduler = m.serviceContext.Scheduler
 
 	m.mockRM = newMockRMCallbackHandler()
+
+	if withWebapp {
+		err := common.WaitFor(500*time.Millisecond, 2*time.Second, func() bool {
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", "9080"), time.Second)
+			if err == nil {
+				defer conn.Close()
+				return true
+			}
+			return false
+		})
+		if err != nil {
+			return fmt.Errorf("webapp failed to start in 2 seconds")
+		}
+	}
 
 	_, err := m.proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{

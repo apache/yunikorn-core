@@ -1773,8 +1773,7 @@ func TestSetResources(t *testing.T) {
 	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 
 	// case 1: empty resource would set the queue resources to 'nil' if it has been set already
-	var nilResource *resources.Resource
-	nilResource = nil
+	var nilResource *resources.Resource = nil
 	err = queue.setResources(configs.Resources{
 		Guaranteed: make(map[string]string),
 		Max:        make(map[string]string),

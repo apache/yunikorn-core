@@ -375,7 +375,8 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		return err
 	}
 
-	if resources.StrictlyGreaterThanZero(maxResource) {
+	switch {
+	case resources.StrictlyGreaterThanZero(maxResource):
 		log.Log(log.SchedQueue).Debug("setting max resources",
 			zap.String("queue", sq.QueuePath),
 			zap.Stringer("current max res", sq.maxResource),
@@ -385,7 +386,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		}
 		sq.maxResource = maxResource
 		sq.updateMaxResourceMetrics()
-	} else if sq.maxResource != nil {
+	case sq.maxResource != nil:
 		log.Log(log.SchedQueue).Debug("setting max resources",
 			zap.String("queue", sq.QueuePath),
 			zap.Stringer("current max res", sq.maxResource),
@@ -395,11 +396,12 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
-	} else {
+	default:
 		log.Log(log.SchedQueue).Debug("max resources setting ignored: cannot set zero max resources", zap.String("queue", sq.QueuePath))
 	}
 
-	if resources.StrictlyGreaterThanZero(guaranteedResource) {
+	switch {
+	case resources.StrictlyGreaterThanZero(guaranteedResource):
 		log.Log(log.SchedQueue).Debug("setting guaranteed resources",
 			zap.String("queue", sq.QueuePath),
 			zap.Stringer("current guaranteed res", sq.guaranteedResource),
@@ -409,7 +411,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		}
 		sq.guaranteedResource = guaranteedResource
 		sq.updateGuaranteedResourceMetrics()
-	} else if sq.guaranteedResource != nil {
+	case sq.guaranteedResource != nil:
 		log.Log(log.SchedQueue).Debug("setting guaranteed resources",
 			zap.String("queue", sq.QueuePath),
 			zap.Stringer("current guaranteed res", sq.guaranteedResource),
@@ -419,7 +421,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		}
 		sq.guaranteedResource = nil
 		sq.updateGuaranteedResourceMetrics()
-	} else {
+	default:
 		log.Log(log.SchedQueue).Debug("guaranteed resources setting ignored: cannot set zero max resources", zap.String("queue", sq.QueuePath))
 	}
 	return nil
@@ -1296,7 +1298,8 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 		zap.Stringer("current max", sq.maxResource),
 		zap.Stringer("new max", max))
 
-	if resources.StrictlyGreaterThanZero(max) {
+	switch {
+	case resources.StrictlyGreaterThanZero(max):
 		log.Log(log.SchedQueue).Debug("setting max resources",
 			zap.String("queue", sq.QueuePath),
 			zap.Stringer("current max res", sq.maxResource),
@@ -1306,7 +1309,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 		}
 		sq.maxResource = max.Clone()
 		sq.updateMaxResourceMetrics()
-	} else if sq.maxResource != nil {
+	case sq.maxResource != nil:
 		log.Log(log.SchedQueue).Debug("setting max resources",
 			zap.String("queue", sq.QueuePath),
 			zap.Stringer("current max res", sq.maxResource),
@@ -1316,7 +1319,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
-	} else {
+	default:
 		log.Log(log.SchedQueue).Debug("max resources setting ignored: cannot set zero max resources", zap.String("queue", sq.QueuePath))
 	}
 }

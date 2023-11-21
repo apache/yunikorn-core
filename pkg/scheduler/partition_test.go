@@ -1350,19 +1350,21 @@ func TestCreateDeepQueueConfig(t *testing.T) {
 
 func assertUpdateQueues(t *testing.T, resourceType string, resMap map[string]string) {
 	var resExpect *resources.Resource
+	var err error
 	if len(resMap) > 0 {
-		resExpect, _ = resources.NewResourceFromConf(resMap)
-		//assert.NilError(t, err, "resource from conf failed")
+		resExpect, err = resources.NewResourceFromConf(resMap)
+		assert.NilError(t, err, "resource from conf failed")
 	} else {
 		resExpect = nil
 	}
 
 	var res configs.Resources
-	if resourceType == "max" {
+	switch resourceType {
+	case "max":
 		res = configs.Resources{Max: resMap}
-	} else if resourceType == "guaranteed" {
+	case "guaranteed":
 		res = configs.Resources{Guaranteed: resMap}
-	} else {
+	default:
 		res = configs.Resources{Max: resMap, Guaranteed: resMap}
 	}
 
@@ -1396,13 +1398,14 @@ func assertUpdateQueues(t *testing.T, resourceType string, resMap map[string]str
 	if parent == nil {
 		t.Fatal("parent queue should still exist")
 	}
-	if resourceType == "max" {
+	switch resourceType {
+	case "max":
 		assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
 		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), nil), "parent queue guaranteed resource should have been updated")
-	} else if resourceType == "guaranteed" {
+	case "guaranteed":
 		assert.Assert(t, resources.Equals(parent.GetMaxResource(), nil), "parent queue max resource should have been updated")
 		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
-	} else {
+	default:
 		assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
 		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
 	}
@@ -1410,7 +1413,6 @@ func assertUpdateQueues(t *testing.T, resourceType string, resMap map[string]str
 	if leaf == nil {
 		t.Fatal("leaf queue should have been created")
 	}
-
 }
 
 func TestUpdateQueues(t *testing.T) {

@@ -1312,7 +1312,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 			}
 			alloc := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
 			if alloc != nil {
-				log.Log(log.SchedQueue).Debug("allocation found on queue",
+				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("allocation", alloc))
@@ -1348,7 +1348,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 		for _, app := range sq.sortApplications(true, true) {
 			alloc := app.tryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
-				log.Log(log.SchedQueue).Debug("allocation found on queue",
+				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("allocation", alloc))
@@ -1419,7 +1419,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 				}
 				alloc := app.tryReservedAllocate(headRoom, iterator)
 				if alloc != nil {
-					log.Log(log.SchedQueue).Debug("reservation found for allocation found on queue",
+					log.Log(log.SchedQueue).Info("reservation found for allocation found on queue",
 						zap.String("queueName", sq.QueuePath),
 						zap.String("appID", appID),
 						zap.Stringer("allocation", alloc),

@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"testing"
 	"time"
 
@@ -55,7 +56,7 @@ func TestSendAppDoesNotFitEvent(t *testing.T) {
 	}
 	mock := newEventSystemMockDisabled()
 	appEvents := newApplicationEvents(app, mock)
-	appEvents.sendAppDoesNotFitEvent(&AllocationAsk{})
+	appEvents.sendAppDoesNotFitEvent(&AllocationAsk{}, &resources.Resource{})
 	assert.Equal(t, 0, len(mock.events), "unexpected event")
 
 	mock = newEventSystemMock()
@@ -63,7 +64,7 @@ func TestSendAppDoesNotFitEvent(t *testing.T) {
 	appEvents.sendAppDoesNotFitEvent(&AllocationAsk{
 		applicationID: appID0,
 		allocationKey: aKey,
-	})
+	}, &resources.Resource{})
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 }
 
@@ -82,7 +83,7 @@ func TestSendAppDoesNotFitEventWithRateLimiter(t *testing.T) {
 		appEvents.sendAppDoesNotFitEvent(&AllocationAsk{
 			applicationID: appID0,
 			allocationKey: aKey,
-		})
+		}, &resources.Resource{})
 		time.Sleep(10 * time.Millisecond)
 	}
 	assert.Equal(t, 1, len(mock.events), "event was not generated")

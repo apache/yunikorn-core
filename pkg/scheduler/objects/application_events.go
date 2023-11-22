@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -35,11 +36,11 @@ type applicationEvents struct {
 	limiter     *rate.Limiter
 }
 
-func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk) {
+func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk, headroom *resources.Resource) {
 	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.limiter.Allow() {
 		return
 	}
-	message := fmt.Sprintf("Application %s does not fit into %s queue", request.GetApplicationID(), evt.app.queuePath)
+	message := fmt.Sprintf("Application %s does not fit into %s queue, request resoure %s can't fit headroom %s", request.GetApplicationID(), evt.app.queuePath, request.GetAllocatedResource().String(), headroom.String())
 	event := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }

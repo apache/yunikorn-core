@@ -1772,23 +1772,24 @@ func TestSetResources(t *testing.T) {
 	assert.NilError(t, err, "failed to parse resource: %v", err)
 	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 
-	// case 1: empty resource won't change the resources
+	// case 1: empty resource would set the queue resources to 'nil' if it has been set already
+	var nilResource *resources.Resource = nil
 	err = queue.setResources(configs.Resources{
 		Guaranteed: make(map[string]string),
 		Max:        make(map[string]string),
 	})
 	assert.NilError(t, err, "failed to set resources: %v", err)
-	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
-	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
+	assert.DeepEqual(t, queue.guaranteedResource, nilResource)
+	assert.DeepEqual(t, queue.maxResource, nilResource)
 
-	// case 2: zero resource won't change the resources
+	// case 2: zero resource won't change the queue resources as it is 'nil' already
 	err = queue.setResources(configs.Resources{
 		Guaranteed: getZeroResourceConf(),
 		Max:        getZeroResourceConf(),
 	})
 	assert.NilError(t, err, "failed to set resources: %v", err)
-	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
-	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
+	assert.DeepEqual(t, queue.guaranteedResource, nilResource)
+	assert.DeepEqual(t, queue.maxResource, nilResource)
 }
 
 func TestPreemptingResource(t *testing.T) {

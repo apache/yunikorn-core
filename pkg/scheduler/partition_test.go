@@ -1348,6 +1348,73 @@ func TestCreateDeepQueueConfig(t *testing.T) {
 	assert.Equal(t, "root.level1.level2.level3.level4.level5", queue.GetQueuePath(), "root.level1.level2.level3.level4.level5 queue not found in partition")
 }
 
+func assertUpdateQueues(t *testing.T, resourceType string, resMap map[string]string) {
+	var resExpect *resources.Resource
+	var err error
+	if len(resMap) > 0 {
+		resExpect, err = resources.NewResourceFromConf(resMap)
+		assert.NilError(t, err, "resource from conf failed")
+	} else {
+		resExpect = nil
+	}
+
+	var res configs.Resources
+	switch resourceType {
+	case "max":
+		res = configs.Resources{Max: resMap}
+	case "guaranteed":
+		res = configs.Resources{Guaranteed: resMap}
+	default:
+		res = configs.Resources{Max: resMap, Guaranteed: resMap}
+	}
+
+	conf := []configs.QueueConfig{
+		{
+			Name:      "parent",
+			Parent:    true,
+			Resources: res,
+			Queues: []configs.QueueConfig{
+				{
+					Name:   "leaf",
+					Parent: false,
+					Queues: nil,
+				},
+			},
+		},
+	}
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	// There is a queue setup as the config must be valid when we run
+	root := partition.GetQueue("root")
+	if root == nil {
+		t.Error("root queue not found in partition")
+	}
+
+	err = partition.updateQueues(conf, root)
+	assert.NilError(t, err, "queue update from config failed")
+	parent := partition.GetQueue("root.parent")
+	if parent == nil {
+		t.Fatal("parent queue should still exist")
+	}
+	switch resourceType {
+	case "max":
+		assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
+		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), nil), "parent queue guaranteed resource should have been updated")
+	case "guaranteed":
+		assert.Assert(t, resources.Equals(parent.GetMaxResource(), nil), "parent queue max resource should have been updated")
+		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
+	default:
+		assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
+		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
+	}
+	leaf := partition.GetQueue("root.parent.leaf")
+	if leaf == nil {
+		t.Fatal("leaf queue should have been created")
+	}
+}
+
 func TestUpdateQueues(t *testing.T) {
 	conf := []configs.QueueConfig{
 		{
@@ -1372,36 +1439,16 @@ func TestUpdateQueues(t *testing.T) {
 	}
 	assert.Assert(t, def.IsDraining(), "'root.default' queue should have been marked for removal")
 
-	var resExpect *resources.Resource
-	resMap := map[string]string{"vcore": "1"}
-	resExpect, err = resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err, "resource from conf failed")
-
-	conf = []configs.QueueConfig{
-		{
-			Name:      "parent",
-			Parent:    true,
-			Resources: configs.Resources{Max: resMap},
-			Queues: []configs.QueueConfig{
-				{
-					Name:   "leaf",
-					Parent: false,
-					Queues: nil,
-				},
-			},
-		},
-	}
-	err = partition.updateQueues(conf, root)
-	assert.NilError(t, err, "queue update from config failed")
-	parent := partition.GetQueue("root.parent")
-	if parent == nil {
-		t.Fatal("parent queue should still exist")
-	}
-	assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
-	leaf := partition.GetQueue("root.parent.leaf")
-	if leaf == nil {
-		t.Fatal("leaf queue should have been created")
-	}
+	assertUpdateQueues(t, "max", map[string]string{"vcore": "2"})
+	assertUpdateQueues(t, "max", map[string]string{"vcore": "5"})
+	assertUpdateQueues(t, "max", map[string]string{"memory": "5"})
+	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "2", "memory": "5"})
+	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "4", "memory": "3"})
+	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "10"})
+	assertUpdateQueues(t, "both", map[string]string{"vcore": "2", "memory": "5"})
+	assertUpdateQueues(t, "both", map[string]string{"vcore": "5", "memory": "2"})
+	assertUpdateQueues(t, "both", map[string]string{"vcore": "5"})
+	assertUpdateQueues(t, "both", map[string]string{})
 }
 
 func TestGetQueue(t *testing.T) {
@@ -2512,6 +2559,31 @@ func TestUpdateRootQueue(t *testing.T) {
 	// make sure the update went through
 	assert.Equal(t, partition.GetQueue("root.leaf").CurrentState(), objects.Draining.String(), "leaf queue should have been marked for removal")
 	assert.Equal(t, partition.GetQueue("root.parent").CurrentState(), objects.Draining.String(), "parent queue should have been marked for removal")
+
+	// add new node, node 3 with 'memory' resource type
+	res1, err1 := resources.NewResourceFromConf(map[string]string{"vcore": "20", "memory": "50"})
+	assert.NilError(t, err1, "resource creation failed")
+	err = partition.AddNode(newNodeMaxResource("node-3", res1), nil)
+	assert.NilError(t, err, "test node3 add failed unexpected")
+
+	// root max resource gets updated with 'memory' resource type
+	expRes, err1 := resources.NewResourceFromConf(map[string]string{"vcore": "40", "memory": "50"})
+	assert.NilError(t, err1, "resource creation failed")
+	assert.Assert(t, resources.Equals(expRes, partition.root.GetMaxResource()), "root max resource not set as expected")
+
+	// remove node, node 3. root max resource won't have 'memory' resource type and updated with less 'vcore'
+	partition.removeNode("node-3")
+	assert.Assert(t, resources.Equals(res, partition.root.GetMaxResource()), "root max resource not set as expected")
+
+	// remove node, node 2. root max resource gets updated with less 'vcores'
+	partition.removeNode("node-2")
+	expRes1, err1 := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err1, "resource creation failed")
+	assert.Assert(t, resources.Equals(expRes1, partition.root.GetMaxResource()), "root max resource not set as expected")
+
+	// remove node, node 1. root max resource should set to nil
+	partition.removeNode("node-1")
+	assert.Assert(t, resources.Equals(nil, partition.root.GetMaxResource()), "root max resource not set as expected")
 }
 
 // transition an application to completed state and wait for it to be processed into the completedApplications map

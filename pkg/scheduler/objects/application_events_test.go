@@ -19,13 +19,13 @@
 package objects
 
 import (
-	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 

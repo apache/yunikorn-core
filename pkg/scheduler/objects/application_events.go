@@ -20,12 +20,12 @@ package objects
 
 import (
 	"fmt"
-	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"time"
 
 	"golang.org/x/time/rate"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )

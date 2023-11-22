@@ -45,10 +45,17 @@ var (
 		"memory": "50",
 		"vcores": "50",
 	}
+	mediumResourceWithMemOnly = map[string]string{
+		"memory": "50",
+	}
+	mediumResourceWithVcoresOnly = map[string]string{
+		"vcores": "50",
+	}
 	tinyResource = map[string]string{
 		"memory": "25",
 		"vcores": "25",
 	}
+	nilResource = map[string]string{}
 )
 
 func TestUserManagerOnceInitialization(t *testing.T) {
@@ -1112,6 +1119,93 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 
 			increased = manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
 			assert.Equal(t, increased, false, "should not increase tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
+		})
+	}
+}
+
+func TestUserGroupMaxResourcesChange(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name      string
+		user      security.UserGroup
+		limits    []configs.Limit
+		newLimits []configs.Limit
+	}{
+		{
+			name: "Updated specific user & group max resources",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResource, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with mem only",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with vcores only",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithVcoresOnly, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with nil resource",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, nilResource, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with nil",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, nil, 2),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUGM()
+
+			manager := GetUserManager()
+			conf := createConfigWithLimits(tc.limits)
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			expectedResource, err := resources.NewResourceFromConf(tc.limits[0].MaxResources)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedResource)
+			}
+			assert.Equal(t, resources.Equals(manager.GetUserTracker("user1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+			assert.Equal(t, resources.Equals(manager.GetGroupTracker("group1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+
+			conf.Queues[0].Queues[0].Limits = tc.newLimits
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			expectedResource, err = resources.NewResourceFromConf(tc.newLimits[0].MaxResources)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedResource)
+			}
+			assert.Equal(t, resources.Equals(manager.GetUserTracker("user1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+			assert.Equal(t, resources.Equals(manager.GetGroupTracker("group1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
 		})
 	}
 }

@@ -642,6 +642,7 @@ func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
 	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOMap()
 	queueInfo.AllocatedResource = sq.allocatedResource.DAOMap()
 	queueInfo.PreemptingResource = sq.preemptingResource.DAOMap()
+	queueInfo.HeadRoom = sq.getHeadRoom().DAOMap()
 	queueInfo.IsLeaf = sq.isLeaf
 	queueInfo.IsManaged = sq.isManaged
 	queueInfo.CurrentPriority = sq.getCurrentPriority()

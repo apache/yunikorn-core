@@ -994,8 +994,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 					}
 				}
 			}
-
-			sa.appEvents.sendAppDoesNotFitEvent(request)
+			sa.appEvents.sendAppDoesNotFitEvent(request, headRoom)
 			continue
 		}
 

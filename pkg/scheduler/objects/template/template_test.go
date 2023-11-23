@@ -19,9 +19,9 @@
 package template
 
 import (
+	"math/rand"
 	"strconv"
 	"testing"
-	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -31,14 +31,14 @@ import (
 
 func getResourceConf() map[string]string {
 	resource := make(map[string]string)
-	resource["memory"] = strconv.Itoa(time.Now().Second()%1000 + 10)
-	resource["vcore"] = strconv.Itoa(time.Now().Second()%1000 + 10)
+	resource["memory"] = strconv.Itoa(rand.Intn(10000) + 10)
+	resource["vcore"] = strconv.Itoa(rand.Intn(10000) + 10)
 	return resource
 }
 
 func getProperties() map[string]string {
 	properties := make(map[string]string)
-	properties[strconv.Itoa(time.Now().Second()%1000)] = strconv.Itoa(time.Now().Second() % 1000)
+	properties[strconv.Itoa(rand.Intn(10000))] = strconv.Itoa(rand.Intn(10000))
 	return properties
 }
 

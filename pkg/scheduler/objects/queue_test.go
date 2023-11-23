@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -1728,7 +1729,7 @@ func getAllocatingAcceptedApps() map[string]bool {
 
 func getResourceConf() map[string]string {
 	resource := make(map[string]string)
-	resource["memory"] = strconv.Itoa(time.Now().Second()%1000 + 100)
+	resource["memory"] = strconv.Itoa(rand.Intn(10000) + 100)
 	return resource
 }
 
@@ -1747,7 +1748,7 @@ func getZeroResourceConf() map[string]string {
 
 func getProperties() map[string]string {
 	properties := make(map[string]string)
-	properties[strconv.Itoa(time.Now().Second())] = strconv.Itoa(time.Now().Second())
+	properties[strconv.Itoa(rand.Intn(10000))] = strconv.Itoa(rand.Intn(10000))
 	return properties
 }
 

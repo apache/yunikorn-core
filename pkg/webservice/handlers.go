@@ -949,19 +949,22 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count := uint64(0)
+	var count uint64
 	if countStr := r.URL.Query().Get("count"); countStr != "" {
-		c, err := strconv.ParseUint(countStr, 10, 64)
+		var err error
+		count, err = strconv.ParseUint(countStr, 10, 64)
 		if err != nil {
 			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		count = c
 	}
 
 	enc := json.NewEncoder(w)
 	stream := eventSystem.CreateEventStream(r.Host, count)
 
+	// Reading events in an infinite loop until either the client disconnects or Yunikorn closes the channel.
+	// This results in a persistent HTTP connection where the message body is never closed.
+	// We don't use timeouts and since HTTP 1.1 clients are expected to handle persistent connections by default.
 	for {
 		select {
 		case <-r.Context().Done():

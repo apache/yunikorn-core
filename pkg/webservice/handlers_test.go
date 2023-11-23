@@ -386,9 +386,9 @@ func TestApplicationHistory(t *testing.T) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusNotImplemented, resp.statusCode, "app history handler returned wrong status")
+	assert.Equal(t, http.StatusInternalServerError, resp.statusCode, "app history handler returned wrong status")
 	assert.Equal(t, errInfo.Message, "Internal metrics collection is not enabled.", jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusNotImplemented)
+	assert.Equal(t, errInfo.StatusCode, http.StatusInternalServerError)
 
 	// init should return null and thus no records
 	imHistory = history.NewInternalMetricsHistory(5)
@@ -441,9 +441,9 @@ func TestContainerHistory(t *testing.T) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusNotImplemented, resp.statusCode, "container history handler returned wrong status")
+	assert.Equal(t, http.StatusInternalServerError, resp.statusCode, "container history handler returned wrong status")
 	assert.Equal(t, errInfo.Message, "Internal metrics collection is not enabled.", jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusNotImplemented)
+	assert.Equal(t, errInfo.StatusCode, http.StatusInternalServerError)
 
 	// init should return null and thus no records
 	imHistory = history.NewInternalMetricsHistory(5)
@@ -548,25 +548,6 @@ func TestGetConfigJSON(t *testing.T) {
 
 	// reset extra config map
 	configs.SetConfigMap(map[string]string{})
-}
-
-func TestBuildUpdateResponseSuccess(t *testing.T) {
-	resp := &MockResponseWriter{}
-	buildUpdateResponse(nil, resp)
-	assert.Equal(t, http.StatusOK, resp.statusCode, "Response should be OK")
-}
-
-func TestBuildUpdateResponseFailure(t *testing.T) {
-	resp := &MockResponseWriter{}
-	err := fmt.Errorf("ConfigMapUpdate failed")
-	buildUpdateResponse(err, resp)
-
-	var errInfo dao.YAPIError
-	err1 := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err1, unmarshalError)
-	assert.Equal(t, http.StatusConflict, resp.statusCode, "Status code is wrong")
-	assert.Assert(t, strings.Contains(string(errInfo.Message), err.Error()), "Error message should contain the reason")
-	assert.Equal(t, errInfo.StatusCode, http.StatusConflict)
 }
 
 func TestGetClusterUtilJSON(t *testing.T) {
@@ -1308,36 +1289,36 @@ func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, PartitionDoesNotExists, jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
 func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, QueueDoesNotExists, jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
 func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, ApplicationDoesNotExists, jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
 func assertUserExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, UserDoesNotExists, jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
 func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
@@ -1353,9 +1334,9 @@ func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, GroupDoesNotExists, jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
 func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
@@ -1371,9 +1352,9 @@ func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, NodeDoesNotExists, jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
 func TestValidateQueue(t *testing.T) {
@@ -1561,7 +1542,7 @@ func TestGetEventsWhenTrackingDisabled(t *testing.T) {
 
 	req, err := http.NewRequest("GET", "/ws/v1/events/batch", strings.NewReader(""))
 	assert.NilError(t, err)
-	readIllegalRequest(t, req, "Event tracking is disabled")
+	readIllegalRequest(t, req, http.StatusInternalServerError, "Event tracking is disabled")
 }
 
 func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
@@ -1627,15 +1608,15 @@ func checkIllegalBatchRequest(t *testing.T, query, msg string) {
 	t.Helper()
 	req, err := http.NewRequest("GET", "/ws/v1/events/batch?"+query, strings.NewReader(""))
 	assert.NilError(t, err)
-	readIllegalRequest(t, req, msg)
+	readIllegalRequest(t, req, http.StatusBadRequest, msg)
 }
 
-func readIllegalRequest(t *testing.T, req *http.Request, errMsg string) {
+func readIllegalRequest(t *testing.T, req *http.Request, statusCode int, errMsg string) {
 	t.Helper()
 	rr := httptest.NewRecorder()
 	handler := http.HandlerFunc(getEvents)
 	handler.ServeHTTP(rr, req)
-	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Equal(t, statusCode, rr.Code)
 	jsonBytes := make([]byte, 256)
 	n, err := rr.Body.Read(jsonBytes)
 	assert.NilError(t, err, "cannot read response body")

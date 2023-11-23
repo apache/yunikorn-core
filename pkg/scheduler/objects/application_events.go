@@ -40,7 +40,7 @@ func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk, hea
 	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.limiter.Allow() {
 		return
 	}
-	message := fmt.Sprintf("Application %s does not fit into %s queue, request resoure %s can't fit headroom %s", request.GetApplicationID(), evt.app.queuePath, request.GetAllocatedResource().String(), headroom.String())
+	message := fmt.Sprintf("Application %s does not fit into %s queue (request resoure %s, headroom %s)", request.GetApplicationID(), evt.app.queuePath, request.GetAllocatedResource(), headroom)
 	event := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
@@ -49,7 +49,7 @@ func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource().String(), ph.GetAllocatedResource().String(), ph.GetAllocationKey())
+	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource(), ph.GetAllocatedResource(), ph.GetAllocationKey())
 	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }

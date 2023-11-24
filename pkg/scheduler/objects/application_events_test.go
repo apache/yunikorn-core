@@ -354,17 +354,33 @@ func TestSendStateChangeEvent(t *testing.T) {
 	}
 	mock := newEventSystemMockDisabled()
 	appEvents := newApplicationEvents(app, mock)
-	appEvents.sendStateChangeEvent(si.EventRecord_APP_RUNNING)
+	appEvents.sendStateChangeEvent(si.EventRecord_APP_RUNNING, "")
 	assert.Equal(t, 0, len(mock.events), "unexpected event")
 
 	mock = newEventSystemMock()
 	appEvents = newApplicationEvents(app, mock)
-	appEvents.sendStateChangeEvent(si.EventRecord_APP_RUNNING)
+	appEvents.sendStateChangeEvent(si.EventRecord_APP_RUNNING, "The application is running")
 	event := mock.events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_RUNNING, event.EventChangeDetail)
 	assert.Equal(t, "app-0", event.ObjectID)
 	assert.Equal(t, "", event.ReferenceID)
-	assert.Equal(t, "", event.Message)
+	assert.Equal(t, "The application is running", event.Message)
+
+	mock = newEventSystemMockDisabled()
+	appEvents = newApplicationEvents(app, mock)
+	appEvents.sendStateChangeEvent(si.EventRecord_APP_RUNNING, "ResourceReservationTimeout")
+	assert.Equal(t, 0, len(mock.events), "unexpected event")
+
+	mock = newEventSystemMock()
+	appEvents = newApplicationEvents(app, mock)
+	appEvents.sendStateChangeEvent(si.EventRecord_APP_REJECT, "Failed to add application to partition (placement rejected)")
+	event = mock.events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_REJECT, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
+	assert.Equal(t, "Failed to add application to partition (placement rejected)", event.Message)
 }

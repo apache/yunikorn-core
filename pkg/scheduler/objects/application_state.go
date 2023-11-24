@@ -149,8 +149,10 @@ func NewAppState() *fsm.FSM {
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),
 					zap.String("event", event.Event))
+
+				eventInfo := ""
 				if len(event.Args) == 2 {
-					eventInfo := event.Args[1].(string) //nolint:errcheck
+					eventInfo = event.Args[1].(string) //nolint:errcheck
 					app.OnStateChange(event, eventInfo)
 				} else {
 					app.OnStateChange(event, "")
@@ -161,7 +163,7 @@ func NewAppState() *fsm.FSM {
 						zap.String("state", event.Dst))
 					return
 				}
-				app.appEvents.sendStateChangeEvent(eventDetails)
+				app.appEvents.sendStateChangeEvent(eventDetails, eventInfo)
 			},
 			"leave_state": func(_ context.Context, event *fsm.Event) {
 				event.Args[0].(*Application).clearStateTimer() //nolint:errcheck

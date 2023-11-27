@@ -22,8 +22,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
@@ -44,7 +42,7 @@ type ApplicationSummary struct {
 
 func (as *ApplicationSummary) String() string {
 	return fmt.Sprintf("ApplicationID: %s, SubmissionTime: %d, StartTime: %d, FinishTime: %d, User: %s, "+
-		"Queue: %s, State: %s, RmID: %s, ResourceUsage: %v, PreemptedResource: %v, PlaceholderResource: %v",
+		"Queue: %s, State: %s, RmID: %s, ResourceUsage: %s, PreemptedResource: %s, PlaceholderResource: %s",
 		as.ApplicationID,
 		as.SubmissionTime.UnixMilli(),
 		as.StartTime.UnixMilli(),
@@ -53,11 +51,11 @@ func (as *ApplicationSummary) String() string {
 		as.Queue,
 		as.State,
 		as.RmID,
-		as.ResourceUsage.TrackedResourceMap,
-		as.PreemptedResource.TrackedResourceMap,
-		as.PlaceholderResource.TrackedResourceMap)
+		as.ResourceUsage,
+		as.PreemptedResource,
+		as.PlaceholderResource)
 }
 
 func (as *ApplicationSummary) DoLogging() {
-	log.Log(log.SchedAppUsage).Info("YK_APP_SUMMARY:", zap.Stringer("ApplicationSummary", as))
+	log.Log(log.SchedAppUsage).Info(fmt.Sprintf("YK_APP_SUMMARY: {%s}", as))
 }

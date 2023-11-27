@@ -1265,13 +1265,6 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		log.Log(log.SchedPartition).Info("remove all allocations",
 			zap.String("appID", appID))
 		released = append(released, app.RemoveAllAllocations()...)
-		total := 0
-		for _, r := range released {
-			if r.IsPlaceholder() {
-				total++
-			}
-		}
-		pc.decPhAllocationCount(total)
 	} else {
 		// if we have an uuid the termination type is important
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
@@ -1280,9 +1273,6 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				zap.String("allocationId", uuid))
 			if alloc := app.ReplaceAllocation(uuid); alloc != nil {
 				released = append(released, alloc)
-				if alloc.IsPlaceholder() {
-					pc.decPhAllocationCount(1)
-				}
 			}
 		} else {
 			log.Log(log.SchedPartition).Info("removing allocation from application",
@@ -1293,6 +1283,18 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 				released = append(released, alloc)
 			}
 		}
+	}
+
+	// all releases are collected: placeholder count needs updating for all placeholder releases
+	// regardless of what happens later
+	phReleases := 0
+	for _, r := range released {
+		if r.IsPlaceholder() {
+			phReleases++
+		}
+	}
+	if phReleases > 0 {
+		pc.decPhAllocationCount(phReleases)
 	}
 
 	// for each allocation to release, update the node and queue.
@@ -1365,11 +1367,13 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		released = nil
 	}
 	// track the number of allocations, when we replace the result is no change
-	pc.updateAllocationCount(-len(released))
-	metrics.GetQueueMetrics(queue.GetQueuePath()).AddReleasedContainers(len(released))
+	if allocReleases := len(released); allocReleases > 0 {
+		pc.updateAllocationCount(-allocReleases)
+		metrics.GetQueueMetrics(queue.GetQueuePath()).AddReleasedContainers(allocReleases)
+	}
 
 	// if the termination type is TIMEOUT/PREEMPTED_BY_SCHEDULER, we don't notify the shim,
-	// because it's originated from that side
+	// because the release that is processed now is a confirmation returned by the shim to the core
 	if release.TerminationType == si.TerminationType_TIMEOUT || release.TerminationType == si.TerminationType_PREEMPTED_BY_SCHEDULER {
 		released = nil
 	}

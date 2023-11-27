@@ -31,14 +31,14 @@ import (
 
 func getResourceConf() map[string]string {
 	resource := make(map[string]string)
-	resource["memory"] = strconv.Itoa(rand.Intn(10000) + 10)
-	resource["vcore"] = strconv.Itoa(rand.Intn(10000) + 10)
+	resource["memory"] = strconv.Itoa(rand.Intn(10000) + 10) //nolint:gosec
+	resource["vcore"] = strconv.Itoa(rand.Intn(10000) + 10)  //nolint:gosec
 	return resource
 }
 
 func getProperties() map[string]string {
 	properties := make(map[string]string)
-	properties[strconv.Itoa(rand.Intn(10000))] = strconv.Itoa(rand.Intn(10000))
+	properties[strconv.Itoa(rand.Intn(10000))] = strconv.Itoa(rand.Intn(10000)) //nolint:gosec
 	return properties
 }
 

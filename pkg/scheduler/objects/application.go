@@ -118,36 +118,6 @@ type Application struct {
 	sync.RWMutex
 }
 
-type ApplicationSummary struct {
-	ApplicationID       string
-	SubmissionTime      time.Time
-	StartTime           time.Time
-	FinishTime          time.Time
-	User                string
-	Queue               string
-	State               string
-	RmID                string
-	ResourceUsage       *resources.TrackedResource
-	PreemptedResource   *resources.TrackedResource
-	PlaceholderResource *resources.TrackedResource
-}
-
-func (as *ApplicationSummary) DoLogging() {
-	log.Log(log.SchedAppUsage).Info("YK_APP_SUMMARY:",
-		zap.String("appID", as.ApplicationID),
-		zap.Int64("submissionTime", as.SubmissionTime.UnixMilli()),
-		zap.Int64("startTime", as.StartTime.UnixMilli()),
-		zap.Int64("finishTime", as.FinishTime.UnixMilli()),
-		zap.String("user", as.User),
-		zap.String("queue", as.Queue),
-		zap.String("state", as.State),
-		zap.String("rmID", as.RmID),
-		zap.Stringer("resourceUsage", as.ResourceUsage),
-		zap.Stringer("preemptedResource", as.PreemptedResource),
-		zap.Stringer("placeHolderResource", as.PlaceholderResource),
-	)
-}
-
 func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 	sa.RLock()
 	defer sa.RUnlock()

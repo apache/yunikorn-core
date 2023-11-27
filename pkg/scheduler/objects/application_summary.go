@@ -22,9 +22,10 @@ import (
 	"fmt"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
-	"go.uber.org/zap"
 )
 
 type ApplicationSummary struct {
@@ -42,9 +43,6 @@ type ApplicationSummary struct {
 }
 
 func (as *ApplicationSummary) String() string {
-	if as == nil {
-		return "nil ApplicationSummary"
-	}
 	return fmt.Sprintf("ApplicationID: %s, SubmissionTime: %d, StartTime: %d, FinishTime: %d, User: %s, "+
 		"Queue: %s, State: %s, RmID: %s, ResourceUsage: %v, PreemptedResource: %v, PlaceholderResource: %v",
 		as.ApplicationID,

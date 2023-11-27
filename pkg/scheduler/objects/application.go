@@ -142,9 +142,9 @@ func (as *ApplicationSummary) DoLogging() {
 		zap.String("queue", as.Queue),
 		zap.String("state", as.State),
 		zap.String("rmID", as.RmID),
-		zap.Any("resourceUsage", as.ResourceUsage.TrackedResourceMap),
-		zap.Any("preemptedResource", as.PreemptedResource.TrackedResourceMap),
-		zap.Any("placeHolderResource", as.PlaceholderResource.TrackedResourceMap),
+		zap.Stringer("resourceUsage", as.ResourceUsage),
+		zap.Stringer("preemptedResource", as.PreemptedResource),
+		zap.Stringer("placeHolderResource", as.PlaceholderResource),
 	)
 }
 

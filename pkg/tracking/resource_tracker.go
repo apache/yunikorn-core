@@ -1,15 +1,15 @@
 package tracking
 
 import (
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/events"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
-	"go.uber.org/atomic"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"go.uber.org/zap"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
-
-var resourceTracker ResourceTracker
 
 // Util struct to keep track of application resource usage
 type TrackedResource struct {
@@ -24,12 +24,22 @@ type TrackedResource struct {
 
 // Aggregate the resource usage to UsedResourceMap[instType]
 // The time the given resource used is the delta between the resource createTime and currentTime
-func (ur *TrackedResource) AggregateTrackedResource(instType string,
-	resource *resources.Resource, releaseTime time.Time, bindTime time.Time) {
+func (ur *TrackedResource) AggregateTrackedResource(resource *resources.Resource, releaseTime time.Time, message string) {
 	ur.Lock()
 	defer ur.Unlock()
+	// The message is in the format of "instanceType:timestamp"
+	// Split the message to get the instance type and the timestamp for bind time
+	// Convert the string to an int64
+	unixNano, err := strconv.ParseInt(strings.Split(message, common.Separator)[1], 10, 64)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse the timestamp", zap.Error(err), zap.String("message", message))
+		return
+	}
 
+	// Convert Unix timestamp in nanoseconds to a time.Time object
+	bindTime := time.Unix(0, unixNano)
 	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
+	instType := strings.Split(message, common.Separator)[0]
 	aggregatedResourceTime, ok := ur.TrackedResourceMap[instType]
 	if !ok {
 		aggregatedResourceTime = map[string]int64{}
@@ -43,49 +53,4 @@ func (ur *TrackedResource) AggregateTrackedResource(instType string,
 		aggregatedResourceTime[key] = curUsage
 	}
 	ur.TrackedResourceMap[instType] = aggregatedResourceTime
-}
-
-type ResourceTracker interface {
-	AddEvent(event *si.EventRecord)
-	StartService()
-	Stop()
-	IsResourceTrackerEnabled() bool
-	GetEventsFromID(uint64, uint64) ([]*si.EventRecord, uint64, uint64)
-}
-
-type ResourceTrackerImpl struct {
-	store          *events.EventStore          // storing eventChannel
-	trackingAppMap map[string]*TrackedResource // storing eventChannel
-	channel        chan *si.EventRecord        // channelling input eventChannel
-	stop           atomic.Bool
-	stopped        bool
-
-	trackingEnabled  bool
-	trackingInterval time.Duration
-	sync.RWMutex
-}
-
-func (rt *ResourceTrackerImpl) StartService() {
-	go func() {
-		for {
-			if rt.stop.Load() {
-				break
-			}
-			messages := rt.store.CollectEvents()
-			if len(messages) > 0 {
-				for _, message := range messages {
-					if message.Type == si.EventRecord_APP {
-						if _, ok := rt.trackingAppMap[message.ObjectID]; !ok {
-							rt.trackingAppMap[message.ObjectID] = &TrackedResource{
-								TrackedResourceMap: make(map[string]map[string]int64),
-							}
-						} else {
-							rt.trackingAppMap[message.ObjectID].AggregateTrackedResource("", resources.NewResourceFromProto(message.Resource), time.Unix(0, message.TimestampNano), time.Unix(0, strings.)
-						}
-					}
-				}
-			}
-			time.Sleep(rt.trackingInterval)
-		}
-	}()
 }

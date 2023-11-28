@@ -592,10 +592,6 @@ func (m *Manager) Headroom(queuePath, applicationID string, user security.UserGr
 	hierarchy := strings.Split(queuePath, configs.DOT)
 	userTracker := m.getUserTracker(user.User)
 	userHeadroom := userTracker.headroom(hierarchy)
-	log.Log(log.SchedUGM).Debug("Calculated headroom for user",
-		zap.String("user", user.User),
-		zap.String("queue path", queuePath),
-		zap.Stringer("user headroom", userHeadroom))
 	// make sure the user has a groupTracker for this application, if not yet there add it
 	if !userTracker.hasGroupForApp(applicationID) {
 		m.ensureGroupTrackerForApp(queuePath, applicationID, user)
@@ -610,10 +606,6 @@ func (m *Manager) Headroom(queuePath, applicationID string, user security.UserGr
 		return userHeadroom
 	}
 	groupHeadroom := groupTracker.headroom(hierarchy)
-	log.Log(log.SchedUGM).Debug("Calculated headroom for group",
-		zap.String("group", appGroup),
-		zap.String("queue path", queuePath),
-		zap.Stringer("group headroom", groupHeadroom))
 	return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
 }
 
@@ -622,10 +614,6 @@ func (m *Manager) CanRunApp(queuePath, applicationID string, user security.UserG
 	hierarchy := strings.Split(queuePath, configs.DOT)
 	userTracker := m.getUserTracker(user.User)
 	userCanRunApp := userTracker.canRunApp(hierarchy, applicationID)
-	log.Log(log.SchedUGM).Debug("Check whether user can run app",
-		zap.String("user", user.User),
-		zap.String("queue path", queuePath),
-		zap.Bool("can run app", userCanRunApp))
 	// make sure the user has a groupTracker for this application, if not yet there add it
 	if !userTracker.hasGroupForApp(applicationID) {
 		m.ensureGroupTrackerForApp(queuePath, applicationID, user)
@@ -640,10 +628,6 @@ func (m *Manager) CanRunApp(queuePath, applicationID string, user security.UserG
 		return userCanRunApp
 	}
 	groupCanRunApp := groupTracker.canRunApp(hierarchy, applicationID)
-	log.Log(log.SchedUGM).Debug("Check whether group can run app",
-		zap.String("group", appGroup),
-		zap.String("queue path", queuePath),
-		zap.Bool("can run app", groupCanRunApp))
 	return userCanRunApp && groupCanRunApp
 }
 

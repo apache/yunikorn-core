@@ -1798,6 +1798,7 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		}
 	}
 	delete(sa.allocations, uuid)
+	sa.trackCompletedResource(alloc)
 	sa.appEvents.sendRemoveAllocationEvent(alloc, releaseType)
 	return alloc
 }
@@ -1831,6 +1832,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
 		sa.appEvents.sendRemoveAllocationEvent(alloc, si.TerminationType_STOPPED_BY_RM)
+		sa.trackCompletedResource(alloc)
 	}
 
 	if resources.IsZero(sa.pending) {

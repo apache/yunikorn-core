@@ -36,7 +36,7 @@ import (
 )
 
 // stores the push event internal
-var defaultPushEventInterval = 2 * time.Second
+var defaultPushEventInterval = 1 * time.Second
 
 // Util struct to keep track of application resource usage
 type TrackedResource struct {
@@ -93,6 +93,7 @@ func CreateShimPublisher(store *EventStore) *EventPublisher {
 	publisher := &EventPublisher{
 		store:             store,
 		pushEventInterval: defaultPushEventInterval,
+		trackingAppMap:    make(map[string]*TrackedResource),
 	}
 	publisher.stop.Store(false)
 	return publisher
@@ -111,25 +112,28 @@ func (sp *EventPublisher) StartService() {
 					eventPlugin.SendEvent(messages)
 				}
 				for _, message := range messages {
-					log.Log(log.Events).Debug("aggregate resource usage", zap.String("message", fmt.Sprintf("%+v", message)))
 					if message.Type == si.EventRecord_APP && message.EventChangeType == si.EventRecord_REMOVE {
+						log.Log(log.Events).Debug("aggregate resource usage", zap.String("message", fmt.Sprintf("%+v", message)))
 						// We need to clean up the trackingAppMap when an application is removed
 						if message.ReferenceID == "" {
-							// This is an application removal event, remove the application from the trackingAppMap
-							delete(sp.trackingAppMap, message.ObjectID)
 							log.Log(log.Events).Info("YK_APP_SUMMARY:",
 								zap.String("appID", message.ObjectID),
 								zap.Any("resourceUsage", sp.trackingAppMap[message.ObjectID].TrackedResourceMap),
 							)
+							// This is an application removal event, remove the application from the trackingAppMap
+							delete(sp.trackingAppMap, message.ObjectID)
 						} else {
 							// This is an allocation removal event, aggregate the resources used by the allocation
 							if _, ok := sp.trackingAppMap[message.ObjectID]; !ok {
 								sp.trackingAppMap[message.ObjectID] = &TrackedResource{
 									TrackedResourceMap: make(map[string]map[string]int64),
 								}
-							} else {
-								sp.trackingAppMap[message.ObjectID].AggregateTrackedResource(resources.NewResourceFromProto(message.Resource), time.Unix(0, message.TimestampNano), message.Message)
 							}
+							sp.trackingAppMap[message.ObjectID].AggregateTrackedResource(resources.NewResourceFromProto(message.Resource), time.Unix(0, message.TimestampNano), message.Message)
+							//log.Log(log.Events).Info("YK_APP_SUMMARY:",
+							//	zap.String("appID", message.ObjectID),
+							//	zap.Any("resourceUsage", sp.trackingAppMap[message.ObjectID].TrackedResourceMap),
+							//)
 						}
 					}
 				}

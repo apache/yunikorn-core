@@ -241,11 +241,6 @@ func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Reso
 }
 
 func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *resources.Resource {
-	log.Log(log.SchedUGM).Debug("Calculating headroom",
-		zap.String("queue path", qt.queuePath),
-		zap.Strings("hierarchy", hierarchy),
-		zap.Int("tracking type", int(trackType)),
-	)
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
 	var headroom, childHeadroom *resources.Resource
@@ -261,11 +256,6 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 	if !resources.IsZero(qt.maxResources) {
 		headroom = qt.maxResources.Clone()
 		headroom.SubOnlyExisting(qt.resourceUsage)
-		log.Log(log.SchedUGM).Debug("Calculated headroom",
-			zap.String("queue path", qt.queuePath),
-			zap.Int("tracking type", int(trackType)),
-			zap.Stringer("max resource", qt.maxResources),
-			zap.Stringer("headroom", headroom))
 	} else if resources.IsZero(childHeadroom) {
 		// If childHeadroom is not nil, it means there is an user or wildcard limit config in child queue,
 		// so we don't check wildcard limit config in current queue.
@@ -277,11 +267,6 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 			if config := m.getUserWildCardLimitsConfig(qt.queuePath); config != nil {
 				headroom = config.maxResources.Clone()
 				headroom.SubOnlyExisting(qt.resourceUsage)
-				log.Log(log.SchedUGM).Debug("Calculated headroom",
-					zap.String("queue path", qt.queuePath),
-					zap.Int("tracking type", int(trackType)),
-					zap.Stringer("wildcard max resource", config.maxResources),
-					zap.Stringer("headroom", headroom))
 			}
 		}
 	}
@@ -427,11 +412,6 @@ func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(hierarchy []string
 }
 
 func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trackType trackingType) bool {
-	log.Log(log.SchedUGM).Debug("Checking can run app",
-		zap.Int("tracking type", int(trackType)),
-		zap.String("queue path", qt.queuePath),
-		zap.String("application", applicationID),
-		zap.Strings("hierarchy", hierarchy))
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
 	childCanRunApp := true
@@ -457,11 +437,6 @@ func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trac
 
 	// apply user/group specific limit settings set if configured, otherwise use wild card limit settings
 	if qt.maxRunningApps != 0 && running > int(qt.maxRunningApps) {
-		log.Log(log.SchedUGM).Warn("can't run app as allowing new application to run would exceed configured max applications limit of specific user/group",
-			zap.Int("tracking type", int(trackType)),
-			zap.String("queue path", qt.queuePath),
-			zap.Int("current running applications", len(qt.runningApplications)),
-			zap.Uint64("max running applications", qt.maxRunningApps))
 		return false
 	}
 
@@ -474,11 +449,6 @@ func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trac
 			config = m.getGroupWildCardLimitsConfig(qt.queuePath)
 		}
 		if config != nil && config.maxApplications != 0 && running > int(config.maxApplications) {
-			log.Log(log.SchedUGM).Warn("can't run app as allowing new application to run would exceed configured max applications limit of wildcard user/group",
-				zap.Int("tracking type", int(trackType)),
-				zap.String("queue path", qt.queuePath),
-				zap.Int("current running applications", len(qt.runningApplications)),
-				zap.Uint64("max running applications", config.maxApplications))
 			return false
 		}
 	}

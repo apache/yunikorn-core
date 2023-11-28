@@ -20,9 +20,11 @@ package events
 
 import (
 	"fmt"
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/tracking"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -39,14 +41,14 @@ type EventPublisher struct {
 	store             *EventStore
 	pushEventInterval time.Duration
 	stop              atomic.Bool
-	trackingAppMap    map[string]*tracking.TrackedResource // storing eventChannel
+	trackingAppMap    map[string]*resources.TrackedResource // storing eventChannel
 }
 
 func CreateShimPublisher(store *EventStore) *EventPublisher {
 	publisher := &EventPublisher{
 		store:             store,
 		pushEventInterval: defaultPushEventInterval,
-		trackingAppMap:    make(map[string]*tracking.TrackedResource),
+		trackingAppMap:    make(map[string]*resources.TrackedResource),
 	}
 	publisher.stop.Store(false)
 	return publisher
@@ -64,28 +66,7 @@ func (sp *EventPublisher) StartService() {
 					log.Log(log.Events).Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
 					eventPlugin.SendEvent(messages)
 				}
-				for _, message := range messages {
-					if message.Type == si.EventRecord_APP && message.EventChangeType == si.EventRecord_REMOVE {
-						log.Log(log.Events).Debug("aggregate resource usage", zap.String("message", fmt.Sprintf("%+v", message)))
-						// We need to clean up the trackingAppMap when an application is removed
-						if message.ReferenceID == "" {
-							log.Log(log.Events).Info("YK_APP_SUMMARY:",
-								zap.String("appID", message.ObjectID),
-								zap.Any("resourceUsage", sp.trackingAppMap[message.ObjectID].TrackedResourceMap),
-							)
-							// This is an application removal event, remove the application from the trackingAppMap
-							delete(sp.trackingAppMap, message.ObjectID)
-						} else {
-							// This is an allocation removal event, aggregate the resources used by the allocation
-							if _, ok := sp.trackingAppMap[message.ObjectID]; !ok {
-								sp.trackingAppMap[message.ObjectID] = &tracking.TrackedResource{
-									TrackedResourceMap: make(map[string]map[string]int64),
-								}
-							}
-							sp.trackingAppMap[message.ObjectID].AggregateTrackedResource(resources.NewResourceFromProto(message.Resource), time.Unix(0, message.TimestampNano), message.Message)
-						}
-					}
-				}
+				sp.AggregateAppTrackedResourceFromEvents(messages)
 			}
 			time.Sleep(sp.pushEventInterval)
 		}
@@ -94,6 +75,43 @@ func (sp *EventPublisher) StartService() {
 
 func (sp *EventPublisher) Stop() {
 	sp.stop.Store(true)
+}
+
+func (sp *EventPublisher) AggregateAppTrackedResourceFromEvents(messages []*si.EventRecord) {
+	for _, message := range messages {
+		if message.Type == si.EventRecord_APP && message.EventChangeType == si.EventRecord_REMOVE {
+			log.Log(log.Events).Debug("aggregate resource usage", zap.String("message", fmt.Sprintf("%+v", message)))
+			// We need to clean up the trackingAppMap when an application is removed
+			if message.ReferenceID == "" {
+				log.Log(log.Events).Info("YK_APP_SUMMARY:",
+					zap.String("appID", message.ObjectID),
+					zap.Any("resourceUsage", sp.trackingAppMap[message.ObjectID].TrackedResourceMap),
+				)
+				// This is an application removal event, remove the application from the trackingAppMap
+				delete(sp.trackingAppMap, message.ObjectID)
+			} else {
+				// This is an allocation removal event, aggregate the resources used by the allocation
+				if _, ok := sp.trackingAppMap[message.ObjectID]; !ok {
+					sp.trackingAppMap[message.ObjectID] = &resources.TrackedResource{
+						TrackedResourceMap: make(map[string]map[string]int64),
+					}
+				}
+
+				// The message is in the format of "instanceType:timestamp"
+				// Split the message to get the instance type and the timestamp for bind time
+				// Convert the string to an int64
+				unixNano, err := strconv.ParseInt(strings.Split(message.Message, common.Separator)[1], 10, 64)
+				if err != nil {
+					log.Log(log.Events).Warn("Failed to parse the timestamp", zap.Error(err), zap.String("message", message.Message))
+					return
+				}
+				instType := strings.Split(message.Message, common.Separator)[0]
+				// Convert Unix timestamp in nanoseconds to a time.Time object
+				bindTime := time.Unix(0, unixNano)
+				sp.trackingAppMap[message.ObjectID].AggregateTrackedResource(instType, resources.NewResourceFromProto(message.Resource), bindTime, time.Unix(0, message.TimestampNano))
+			}
+		}
+	}
 }
 
 func (sp *EventPublisher) getEventStore() *EventStore {

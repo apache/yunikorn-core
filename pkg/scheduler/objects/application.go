@@ -78,19 +78,14 @@ type Application struct {
 	tags           map[string]string // application tags used in scheduling
 
 	// Private mutable fields need protection
-	queuePath         string
-	queue             *Queue                    // queue the application is running in
-	pending           *resources.Resource       // pending resources from asks for the app
-	reservations      map[string]*reservation   // a map of reservations
-	requests          map[string]*AllocationAsk // a map of asks
-	sortedRequests    sortedRequests            // list of requests pre-sorted
-	user              security.UserGroup        // owner of the application
-	allocatedResource *resources.Resource       // total allocated resources
-
-	usedResource        *resources.TrackedResource // keep track of resource usage of the application
-	preemptedResource   *resources.TrackedResource // keep track of preempted resource usage of the application
-	placeholderResource *resources.TrackedResource // keep track of placeholder resource usage of the application
-
+	queuePath            string
+	queue                *Queue                      // queue the application is running in
+	pending              *resources.Resource         // pending resources from asks for the app
+	reservations         map[string]*reservation     // a map of reservations
+	requests             map[string]*AllocationAsk   // a map of asks
+	sortedRequests       sortedRequests              // list of requests pre-sorted
+	user                 security.UserGroup          // owner of the application
+	allocatedResource    *resources.Resource         // total allocated resources
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
 	allocations          map[string]*Allocation      // list of all allocations
@@ -118,29 +113,6 @@ type Application struct {
 	sync.RWMutex
 }
 
-func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
-	sa.RLock()
-	defer sa.RUnlock()
-	state := sa.stateMachine.Current()
-	resourceUsage := sa.usedResource.Clone()
-	preemptedUsage := sa.preemptedResource.Clone()
-	placeHolderUsage := sa.placeholderResource.Clone()
-	appSummary := &ApplicationSummary{
-		ApplicationID:       sa.ApplicationID,
-		SubmissionTime:      sa.SubmissionTime,
-		StartTime:           sa.startTime,
-		FinishTime:          sa.finishedTime,
-		User:                sa.user.User,
-		Queue:               sa.queuePath,
-		State:               state,
-		RmID:                rmID,
-		ResourceUsage:       resourceUsage,
-		PreemptedResource:   preemptedUsage,
-		PlaceholderResource: placeHolderUsage,
-	}
-	return appSummary
-}
-
 func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
 		ApplicationID:         siApp.ApplicationID,
@@ -150,9 +122,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		tags:                  siApp.Tags,
 		pending:               resources.NewResource(),
 		allocatedResource:     resources.NewResource(),
-		usedResource:          resources.NewTrackedResource(),
-		preemptedResource:     resources.NewTrackedResource(),
-		placeholderResource:   resources.NewTrackedResource(),
 		maxAllocatedResource:  resources.NewResource(),
 		allocatedPlaceholder:  resources.NewResource(),
 		requests:              make(map[string]*AllocationAsk),
@@ -1655,39 +1624,6 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 	ugm.GetUserManager().DecreaseTrackedResource(sa.queuePath, sa.ApplicationID, resource, sa.user, removeApp)
 }
 
-// Track used and preempted resources
-func (sa *Application) trackCompletedResource(info *Allocation) {
-	switch {
-	case info.IsPreempted():
-		sa.updatePreemptedResource(info)
-	case info.IsPlaceholder():
-		sa.updatePlaceholderResource(info)
-	default:
-		sa.updateUsedResource(info)
-	}
-}
-
-// When the resource allocated with this allocation is to be removed,
-// have the usedResource to aggregate the resource used by this allocation
-func (sa *Application) updateUsedResource(info *Allocation) {
-	sa.usedResource.AggregateTrackedResource(info.GetInstanceType(),
-		info.GetAllocatedResource(), info.GetBindTime())
-}
-
-// When the placeholder allocated with this allocation is to be removed,
-// have the placeholderResource to aggregate the resource used by this allocation
-func (sa *Application) updatePlaceholderResource(info *Allocation) {
-	sa.placeholderResource.AggregateTrackedResource(info.GetInstanceType(),
-		info.GetAllocatedResource(), info.GetBindTime())
-}
-
-// When the resource allocated with this allocation is to be preempted,
-// have the preemptedResource to aggregate the resource used by this allocation
-func (sa *Application) updatePreemptedResource(info *Allocation) {
-	sa.preemptedResource.AggregateTrackedResource(info.GetInstanceType(),
-		info.GetAllocatedResource(), info.GetBindTime())
-}
-
 func (sa *Application) ReplaceAllocation(uuid string) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
@@ -1798,7 +1734,6 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 		}
 	}
 	delete(sa.allocations, uuid)
-	sa.trackCompletedResource(alloc)
 	sa.appEvents.sendRemoveAllocationEvent(alloc, releaseType)
 	return alloc
 }
@@ -1832,7 +1767,6 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
 		sa.appEvents.sendRemoveAllocationEvent(alloc, si.TerminationType_STOPPED_BY_RM)
-		sa.trackCompletedResource(alloc)
 	}
 
 	if resources.IsZero(sa.pending) {
@@ -2012,29 +1946,6 @@ func (sa *Application) GetAskMaxPriority() int32 {
 func (sa *Application) cleanupAsks() {
 	sa.requests = make(map[string]*AllocationAsk)
 	sa.sortedRequests = nil
-}
-
-func (sa *Application) cleanupTrackedResource() {
-	sa.usedResource = nil
-	sa.placeholderResource = nil
-	sa.preemptedResource = nil
-}
-
-func (sa *Application) CleanupTrackedResource() {
-	sa.Lock()
-	defer sa.Unlock()
-	sa.cleanupTrackedResource()
-}
-
-func (sa *Application) LogAppSummary(rmID string) {
-	if sa.startTime.IsZero() {
-		return
-	}
-	appSummary := sa.GetApplicationSummary(rmID)
-	appSummary.DoLogging()
-	appSummary.ResourceUsage = nil
-	appSummary.PreemptedResource = nil
-	appSummary.PlaceholderResource = nil
 }
 
 func (sa *Application) HasPlaceholderAllocation() bool {

@@ -84,14 +84,13 @@ func (tr *TrackedResource) Clone() *TrackedResource {
 // AggregateTrackedResource aggregates resource usage to TrackedResourceMap[instType].
 // The time the given resource used is the delta between the resource createTime and currentTime.
 func (tr *TrackedResource) AggregateTrackedResource(instType string,
-	resource *Resource, bindTime time.Time) {
+	resource *Resource, bindTime time.Time, releaseTime time.Time) {
 	if resource == nil {
 		return
 	}
 	tr.Lock()
 	defer tr.Unlock()
 
-	releaseTime := time.Now()
 	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
 	aggregatedResourceTime, ok := tr.TrackedResourceMap[instType]
 	if !ok {

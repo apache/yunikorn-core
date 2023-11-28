@@ -468,6 +468,7 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	if _, err = w.Write(marshalledConf); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)

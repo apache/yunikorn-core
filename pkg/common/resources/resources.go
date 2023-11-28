@@ -25,8 +25,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"go.uber.org/zap"
 
@@ -44,58 +42,6 @@ type Quantity int64
 
 func (q Quantity) string() string {
 	return strconv.FormatInt(int64(q), 10)
-}
-
-// Util struct to keep track of application resource usage
-type TrackedResource struct {
-	// Two level map for aggregated resource usage
-	// With instance type being the top level key, the mapped value is a map:
-	//   resource type (CPU, memory etc) -> the aggregated used time (in seconds) of the resource type
-	//
-	TrackedResourceMap map[string]map[string]int64
-
-	sync.RWMutex
-}
-
-func (ur *TrackedResource) Clone() *TrackedResource {
-	if ur == nil {
-		return nil
-	}
-	ret := NewTrackedResource()
-	ur.RLock()
-	defer ur.RUnlock()
-	for k, v := range ur.TrackedResourceMap {
-		dest := make(map[string]int64)
-		for key, element := range v {
-			dest[key] = element
-		}
-		ret.TrackedResourceMap[k] = dest
-	}
-	return ret
-}
-
-// Aggregate the resource usage to UsedResourceMap[instType]
-// The time the given resource used is the delta between the resource createTime and currentTime
-func (ur *TrackedResource) AggregateTrackedResource(instType string,
-	resource *Resource, bindTime time.Time) {
-	ur.Lock()
-	defer ur.Unlock()
-
-	releaseTime := time.Now()
-	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
-	aggregatedResourceTime, ok := ur.TrackedResourceMap[instType]
-	if !ok {
-		aggregatedResourceTime = map[string]int64{}
-	}
-	for key, element := range resource.Resources {
-		curUsage, ok := aggregatedResourceTime[key]
-		if !ok {
-			curUsage = 0
-		}
-		curUsage += int64(element) * timeDiff // resource size times timeDiff
-		aggregatedResourceTime[key] = curUsage
-	}
-	ur.TrackedResourceMap[instType] = aggregatedResourceTime
 }
 
 // Never update value of Zero
@@ -155,10 +101,6 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 		res.Resources[key] = intValue
 	}
 	return res, nil
-}
-
-func NewTrackedResource() *TrackedResource {
-	return &TrackedResource{TrackedResourceMap: make(map[string]map[string]int64)}
 }
 
 func (r *Resource) String() string {

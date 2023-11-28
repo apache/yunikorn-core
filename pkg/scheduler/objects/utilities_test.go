@@ -208,18 +208,18 @@ func newProto(nodeID string, totalResource, occupiedResource *resources.Resource
 }
 
 // Create a new Allocation with a random ask key
-func newAllocation(appID, uuid, nodeID string, res *resources.Resource) *Allocation {
+func newAllocation(appID, nodeID string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
-	return NewAllocation(uuid, nodeID, ask)
+	return NewAllocation(nodeID, ask)
 }
 
 // Create a new Allocation with a random ask key
-func newPlaceholderAlloc(appID, uuid, nodeID string, res *resources.Resource) *Allocation {
+func newPlaceholderAlloc(appID, nodeID string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
 	ask.placeholder = true
-	return NewAllocation(uuid, nodeID, ask)
+	return NewAllocation(nodeID, ask)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {

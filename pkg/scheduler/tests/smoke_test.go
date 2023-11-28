@@ -556,7 +556,7 @@ partitions:
 				ApplicationID:  app1ID,
 			},
 			{
-				AllocationKey: "alloc-1",
+				AllocationKey: "alloc-2",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
@@ -678,7 +678,7 @@ partitions:
 				ApplicationID:  app1ID,
 			},
 			{
-				AllocationKey: "alloc-1",
+				AllocationKey: "alloc-2",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},

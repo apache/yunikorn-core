@@ -248,8 +248,8 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	node := newNodeMaxResource(nodeID1, nodeRes)
 
 	// fail with an unknown app
-	ask := newAllocationAsk("alloc-1", "unknown", appRes)
-	alloc := objects.NewAllocation("alloc-1-uuid", nodeID1, ask)
+	ask := newAllocationAsk("alloc-1-uuid", "unknown", appRes)
+	alloc := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{alloc}
 	err = partition.AddNode(node, allocs)
 	if err == nil {
@@ -258,8 +258,10 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	assert.Equal(t, partition.nodes.GetNodeCount(), 0, "error returned but node still added to the partition (app)")
 
 	// fail with a broken alloc
-	ask = newAllocationAsk("alloc-1", appID1, appRes)
-	alloc = objects.NewAllocation("", nodeID1, ask)
+	ask = newAllocationAsk("alloc-1-uuid", appID1, appRes)
+	alloc = objects.NewAllocation(nodeID1, ask)
+	// reset uuid to empty
+	alloc.SetUUID("")
 	allocs = []*objects.Allocation{alloc}
 	err = partition.AddNode(node, allocs)
 	if err == nil {
@@ -269,7 +271,7 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), nil)
 
 	// fix the alloc add the node will work now
-	alloc = objects.NewAllocation("alloc-1-uuid", nodeID1, ask)
+	alloc = objects.NewAllocation(nodeID1, ask)
 	allocs = []*objects.Allocation{alloc}
 	// add a node this must work
 	err = partition.AddNode(node, allocs)
@@ -317,8 +319,8 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	node := newNodeMaxResource(nodeID1, nodeRes)
 	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
 	ask := newAllocationAsk("alloc-1", appID1, appRes)
-	allocUUID := "alloc-1-uuid"
-	alloc := objects.NewAllocation(allocUUID, nodeID1, ask)
+	alloc := objects.NewAllocation(nodeID1, ask)
+	allocUUID := alloc.GetUUID()
 	allocs := []*objects.Allocation{alloc}
 	err = partition.AddNode(node, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -329,10 +331,10 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 
 	// add broken allocations
 	ask = newAllocationAsk("alloc-na", "not-an-app", appRes)
-	alloc = objects.NewAllocation("alloc-na-uuid", nodeID1, ask)
+	alloc = objects.NewAllocation(nodeID1, ask)
 	node.AddAllocation(alloc)
 	ask = newAllocationAsk("alloc-2", appID1, appRes)
-	alloc = objects.NewAllocation("alloc-2-uuid", nodeID1, ask)
+	alloc = objects.NewAllocation(nodeID1, ask)
 	node.AddAllocation(alloc)
 	assertLimits(t, getTestUserGroup(), appRes)
 
@@ -363,7 +365,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	node1 := newNodeMaxResource(nodeID1, nodeRes)
 	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAskTG("placeholder", appID1, taskGroup, appRes, true)
-	ph := objects.NewAllocation(phID, nodeID1, ask)
+	ph := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{ph}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node1 to partition should not have failed")
@@ -384,7 +386,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), appRes)
 
 	// add real allocation that is replacing the placeholder
-	alloc := objects.NewAllocation(allocID, nodeID1, ask)
+	alloc := objects.NewAllocation(nodeID1, ask)
 	alloc.SetRelease(ph)
 	// double link as if the replacement is ongoing
 	ph.SetRelease(alloc)
@@ -399,7 +401,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Equal(t, 0, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
 	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node removal should not have confirmed allocation")
-	assert.Equal(t, phID, released[0].GetUUID(), "uuid returned by release not the same as the placeholder")
+	assert.Equal(t, ph.GetUUID(), released[0].GetUUID(), "uuid returned by release not the same as the placeholder")
 	assert.Equal(t, 0, partition.getPhAllocationCount(), "number of active placeholders")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 0, len(allocs), "expected no allocations for the app")
@@ -418,14 +420,14 @@ func TestCalculateNodesResourceUsage(t *testing.T) {
 	assert.NilError(t, err)
 
 	occupiedResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
-	alloc := objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))
+	alloc := objects.NewAllocation(nodeID1, newAllocationAsk("key", "appID", occupiedResources))
 	node.AddAllocation(alloc)
 	usageMap := partition.calculateNodesResourceUsage()
 	assert.Equal(t, node.GetAvailableResource().Resources["first"], resources.Quantity(50))
 	assert.Equal(t, usageMap["first"][4], 1)
 
 	occupiedResources = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
-	alloc = objects.NewAllocation(allocID, nodeID1, newAllocationAsk("key", "appID", occupiedResources))
+	alloc = objects.NewAllocation(nodeID1, newAllocationAsk("key", "appID", occupiedResources))
 	node.AddAllocation(alloc)
 	usageMap = partition.calculateNodesResourceUsage()
 	assert.Equal(t, node.GetAvailableResource().Resources["first"], resources.Quantity(0))
@@ -470,7 +472,7 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 	phRes.MultiplyTo(7)
 
 	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
-	alloc := objects.NewAllocation(allocID, nodeID1, ask)
+	alloc := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{alloc}
 
 	node1 := newNodeMaxResource(nodeID1, newRes)
@@ -596,7 +598,7 @@ func TestPlaceholderDataWithNodeRemoval(t *testing.T) {
 
 	// add a node with allocation: must have the correct app1 added already
 	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
-	alloc := objects.NewAllocation(allocID, nodeID1, ask)
+	alloc := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{alloc}
 
 	node1 := newNodeMaxResource(nodeID1, newRes)
@@ -679,7 +681,7 @@ func TestPlaceholderDataWithRemoval(t *testing.T) {
 
 	// add a node with allocation: must have the correct app1 added already
 	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
-	alloc := objects.NewAllocation(allocID, nodeID1, ask)
+	alloc := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{alloc}
 
 	node1 := newNodeMaxResource(nodeID1, newRes)
@@ -764,7 +766,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	node1 := newNodeMaxResource(nodeID1, nodeRes)
 	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAskAll("placeholder", appID1, taskGroup, appRes, 0, 1, true)
-	ph := objects.NewAllocation(phID, nodeID1, ask)
+	ph := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{ph}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node1 to partition should not have failed")
@@ -786,7 +788,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 
 	// add real allocation that is replacing the placeholder on the 2nd node
-	alloc := objects.NewAllocation(allocID, nodeID2, ask)
+	alloc := objects.NewAllocation(nodeID2, ask)
 	alloc.SetRelease(ph)
 	alloc.SetResult(objects.Replaced)
 	node2.AddAllocation(alloc)
@@ -808,13 +810,13 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Equal(t, 1, len(node2.GetAllAllocations()), "remaining node should have allocation")
 	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
 	assert.Equal(t, 1, len(confirmed), "node removal did not confirm correct allocation")
-	assert.Equal(t, phID, released[0].GetUUID(), "uuid returned by release not the same as the placeholder")
-	assert.Equal(t, allocID, confirmed[0].GetUUID(), "uuid returned by confirmed not the same as the real allocation")
+	assert.Equal(t, ph.GetUUID(), released[0].GetUUID(), "uuid returned by release not the same as the placeholder")
+	assert.Equal(t, alloc.GetUUID(), confirmed[0].GetUUID(), "uuid returned by confirmed not the same as the real allocation")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 	assert.Assert(t, !app.IsCompleting(), "app should not be COMPLETING after confirming allocation")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 1, len(allocs), "expected one allocation for the app (real)")
-	assert.Equal(t, allocID, allocs[0].GetUUID(), "uuid for the app is not the same as the real allocation")
+	assert.Equal(t, alloc.GetUUID(), allocs[0].GetUUID(), "uuid for the app is not the same as the real allocation")
 	assert.Equal(t, objects.Allocated, allocs[0].GetResult(), "allocation state should be allocated")
 	assert.Equal(t, 0, allocs[0].GetReleaseCount(), "real allocation should have no releases linked anymore")
 	assertLimits(t, getTestUserGroup(), appRes)
@@ -836,7 +838,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	node1 := newNodeMaxResource(nodeID1, nodeRes)
 	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAskAll("placeholder", appID1, taskGroup, appRes, 0, 1, true)
-	ph := objects.NewAllocation(phID, nodeID1, ask)
+	ph := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{ph}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node1 to partition should not have failed")
@@ -858,7 +860,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 
 	// add real allocation that is replacing the placeholder on the 2nd node
-	alloc := objects.NewAllocation(allocID, nodeID2, ask)
+	alloc := objects.NewAllocation(nodeID2, ask)
 	alloc.SetRelease(ph)
 	alloc.SetResult(objects.Replaced)
 	node2.AddAllocation(alloc)
@@ -881,7 +883,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), appRes), "app should have updated pending resources")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 1, len(allocs), "expected one allocation for the app (placeholder")
-	assert.Equal(t, phID, allocs[0].GetUUID(), "uuid for the app is not the same as the real allocation")
+	assert.Equal(t, ph.GetUUID(), allocs[0].GetUUID(), "uuid for the app is not the same as the real allocation")
 	assert.Equal(t, 0, ph.GetReleaseCount(), "no inflight replacements linked")
 	assertLimits(t, getTestUserGroup(), appRes)
 }
@@ -1102,8 +1104,7 @@ func TestRemoveApp(t *testing.T) {
 
 	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
 	ask := newAllocationAsk("alloc-nr", appNotRemoved, appRes)
-	uuid := "alloc-nr-uuid"
-	alloc := objects.NewAllocation(uuid, nodeID1, ask)
+	alloc := objects.NewAllocation(nodeID1, ask)
 	err = partition.addAllocation(alloc)
 	assert.NilError(t, err, "add allocation to partition should not have failed")
 	assertLimits(t, getTestUserGroup(), appRes)
@@ -1130,7 +1131,7 @@ func TestRemoveApp(t *testing.T) {
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	ask = newAllocationAsk("alloc-1", appID1, appRes)
-	alloc = objects.NewAllocation("alloc-1-uuid", nodeID1, ask)
+	alloc = objects.NewAllocation(nodeID1, ask)
 	err = partition.addAllocation(alloc)
 	assert.NilError(t, err, "add allocation to partition should not have failed")
 	assertLimits(t, getTestUserGroup(), resources.Multiply(appRes, 2))
@@ -1164,14 +1165,14 @@ func TestRemoveAppAllocs(t *testing.T) {
 
 	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000})
 	ask := newAllocationAsk("alloc-nr", appNotRemoved, appRes)
-	alloc := objects.NewAllocation("alloc-nr-uuid", nodeID1, ask)
+	alloc := objects.NewAllocation(nodeID1, ask)
 	err = partition.addAllocation(alloc)
 	assert.NilError(t, err, "add allocation to partition should not have failed")
 	assertLimits(t, getTestUserGroup(), appRes)
 
 	ask = newAllocationAsk("alloc-1", appNotRemoved, appRes)
-	uuid := "alloc-1-uuid"
-	alloc = objects.NewAllocation(uuid, nodeID1, ask)
+	uuid := "alloc-1-0"
+	alloc = objects.NewAllocation(nodeID1, ask)
 	err = partition.addAllocation(alloc)
 	assert.NilError(t, err, "add allocation to partition should not have failed")
 	assertLimits(t, getTestUserGroup(), resources.Multiply(appRes, 2))
@@ -1225,11 +1226,11 @@ func TestRemoveAllPlaceholderAllocs(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	phAsk1 := newAllocationAskTG(phID, appID1, taskGroup, res, true)
-	phAlloc1 := objects.NewAllocation("tg-alloc-1-uuid", nodeID1, phAsk1)
+	phAlloc1 := objects.NewAllocation(nodeID1, phAsk1)
 	err = partition.addAllocation(phAlloc1)
 	assert.NilError(t, err, "could not add allocation to partition")
 	phAsk2 := newAllocationAskTG(phID2, appID1, taskGroup, res, true)
-	phAlloc2 := objects.NewAllocation("tg-alloc-2-uuid", nodeID1, phAsk2)
+	phAlloc2 := objects.NewAllocation(nodeID1, phAsk2)
 	err = partition.addAllocation(phAlloc2)
 	assert.NilError(t, err, "could not add allocation to partition")
 	partition.removeAllocation(&si.AllocationRelease{

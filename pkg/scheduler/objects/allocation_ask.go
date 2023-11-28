@@ -291,3 +291,10 @@ func (aa *AllocationAsk) LessThan(other *AllocationAsk) bool {
 
 	return aa.priority < other.priority
 }
+
+// completedPendingAsk How many pending asks has been completed or processed so far?
+func (aa *AllocationAsk) completedPendingAsk() int {
+	aa.RLock()
+	defer aa.RUnlock()
+	return int(aa.maxAllocations - aa.pendingAskRepeat)
+}

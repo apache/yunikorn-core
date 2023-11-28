@@ -152,6 +152,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	ms.scheduler.MultiStepSchedule(5)
 
 	ms.mockRM.waitForAllocations(t, 2, 1000)
+	assert.Equal(t, len(part.GetApplications()[0].GetAllAllocations()), 2)
 
 	// Make sure pending resource updated to 0
 	waitForPendingQueueResource(t, queue, 0, 1000)
@@ -221,6 +222,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	assert.Equal(t, queue.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120))
 	assert.Equal(t, rootQ.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120))
 	assert.Equal(t, app.GetAllocatedResource().Resources[common.Memory], resources.Quantity(120))
+	assert.Equal(t, len(part.GetApplications()[0].GetAllAllocations()), 4)
 
 	// Check allocated resources of nodes
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",

@@ -77,7 +77,7 @@ type Allocation struct {
 	sync.RWMutex
 }
 
-func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
+func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 	var createTime time.Time
 	if ask.GetTag(siCommon.CreationTime) == "" {
 		createTime = time.Now()
@@ -92,7 +92,7 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 		bindTime:          time.Now(),
 		nodeID:            nodeID,
 		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
-		uuid:              uuid,
+		uuid:              ask.allocationKey + "-" + strconv.Itoa(ask.completedPendingAsk()),
 		tags:              ask.GetTagsClone(),
 		priority:          ask.GetPriority(),
 		allocatedResource: ask.GetAllocatedResource().Clone(),
@@ -103,14 +103,16 @@ func NewAllocation(uuid, nodeID string, ask *AllocationAsk) *Allocation {
 }
 
 func newReservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
-	alloc := NewAllocation("", nodeID, ask)
+	alloc := NewAllocation(nodeID, ask)
+	alloc.uuid = ""
 	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(Reserved)
 	return alloc
 }
 
 func newUnreservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
-	alloc := NewAllocation("", nodeID, ask)
+	alloc := NewAllocation(nodeID, ask)
+	alloc.uuid = ""
 	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(Unreserved)
 	return alloc
@@ -152,7 +154,9 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		createTime:        time.Unix(creationTime, 0),
 		allocLog:          make(map[string]*AllocationLogEntry),
 	}
-	return NewAllocation(alloc.UUID, alloc.NodeID, ask)
+	newAlloc := NewAllocation(alloc.NodeID, ask)
+	newAlloc.uuid = alloc.UUID
+	return newAlloc
 }
 
 // Convert the Allocation into a SI object. This is a limited set of values that gets copied into the SI.
@@ -293,6 +297,12 @@ func (a *Allocation) GetInstanceType() string {
 // GetUUID returns the uuid for this allocation
 func (a *Allocation) GetUUID() string {
 	return a.uuid
+}
+
+// SetUUID set the uuid for this allocation
+// only for tests
+func (a *Allocation) SetUUID(uuid string) {
+	a.uuid = uuid
 }
 
 // GetPriority returns the priority of this allocation

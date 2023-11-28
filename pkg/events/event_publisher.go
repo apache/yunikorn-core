@@ -19,6 +19,13 @@
 package events
 
 import (
+	"fmt"
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+	"strconv"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -31,10 +38,55 @@ import (
 // stores the push event internal
 var defaultPushEventInterval = 2 * time.Second
 
+// Util struct to keep track of application resource usage
+type TrackedResource struct {
+	// Two level map for aggregated resource usage
+	// With instance type being the top level key, the mapped value is a map:
+	//   resource type (CPU, memory etc) -> the aggregated used time (in seconds) of the resource type
+	//
+	TrackedResourceMap map[string]map[string]int64
+
+	sync.RWMutex
+}
+
+// Aggregate the resource usage to UsedResourceMap[instType]
+// The time the given resource used is the delta between the resource createTime and currentTime
+func (ur *TrackedResource) AggregateTrackedResource(resource *resources.Resource, releaseTime time.Time, message string) {
+	ur.Lock()
+	defer ur.Unlock()
+	// The message is in the format of "instanceType:timestamp"
+	// Split the message to get the instance type and the timestamp for bind time
+	// Convert the string to an int64
+	unixNano, err := strconv.ParseInt(strings.Split(message, common.Separator)[1], 10, 64)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse the timestamp", zap.Error(err), zap.String("message", message))
+		return
+	}
+
+	// Convert Unix timestamp in nanoseconds to a time.Time object
+	bindTime := time.Unix(0, unixNano)
+	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
+	instType := strings.Split(message, common.Separator)[0]
+	aggregatedResourceTime, ok := ur.TrackedResourceMap[instType]
+	if !ok {
+		aggregatedResourceTime = map[string]int64{}
+	}
+	for key, element := range resource.Resources {
+		curUsage, ok := aggregatedResourceTime[key]
+		if !ok {
+			curUsage = 0
+		}
+		curUsage += int64(element) * timeDiff // resource size times timeDiff
+		aggregatedResourceTime[key] = curUsage
+	}
+	ur.TrackedResourceMap[instType] = aggregatedResourceTime
+}
+
 type EventPublisher struct {
 	store             *EventStore
 	pushEventInterval time.Duration
 	stop              atomic.Bool
+	trackingAppMap    map[string]*TrackedResource // storing eventChannel
 }
 
 func CreateShimPublisher(store *EventStore) *EventPublisher {
@@ -57,6 +109,29 @@ func (sp *EventPublisher) StartService() {
 				if eventPlugin := plugins.GetResourceManagerCallbackPlugin(); eventPlugin != nil {
 					log.Log(log.Events).Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
 					eventPlugin.SendEvent(messages)
+				}
+				for _, message := range messages {
+					log.Log(log.Events).Debug("aggregate resource usage", zap.String("message", fmt.Sprintf("%+v", message)))
+					if message.Type == si.EventRecord_APP && message.EventChangeType == si.EventRecord_REMOVE {
+						// We need to clean up the trackingAppMap when an application is removed
+						if message.ReferenceID == "" {
+							// This is an application removal event, remove the application from the trackingAppMap
+							delete(sp.trackingAppMap, message.ObjectID)
+							log.Log(log.Events).Info("YK_APP_SUMMARY:",
+								zap.String("appID", message.ObjectID),
+								zap.Any("resourceUsage", sp.trackingAppMap[message.ObjectID].TrackedResourceMap),
+							)
+						} else {
+							// This is an allocation removal event, aggregate the resources used by the allocation
+							if _, ok := sp.trackingAppMap[message.ObjectID]; !ok {
+								sp.trackingAppMap[message.ObjectID] = &TrackedResource{
+									TrackedResourceMap: make(map[string]map[string]int64),
+								}
+							} else {
+								sp.trackingAppMap[message.ObjectID].AggregateTrackedResource(resources.NewResourceFromProto(message.Resource), time.Unix(0, message.TimestampNano), message.Message)
+							}
+						}
+					}
 				}
 			}
 			time.Sleep(sp.pushEventInterval)

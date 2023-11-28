@@ -1806,15 +1806,10 @@ func (sa *Application) removeAllocationInternal(uuid string, releaseType si.Term
 				eventWarning = "Application state not changed while removing a placeholder allocation"
 			}
 		}
-		// Aggregate the resources used by this alloc to the application's resource tracker
-		sa.trackCompletedResource(alloc)
 
 		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
-
-		// Aggregate the resources used by this alloc to the application's resource tracker
-		sa.trackCompletedResource(alloc)
 
 		// When the resource trackers are zero we should not expect anything to come in later.
 		if sa.hasZeroAllocations() {
@@ -1865,8 +1860,6 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	allocationsToRelease := make([]*Allocation, 0)
 	for _, alloc := range sa.allocations {
 		allocationsToRelease = append(allocationsToRelease, alloc)
-		// Aggregate the resources used by this alloc to the application's user resource tracker
-		sa.trackCompletedResource(alloc)
 		sa.appEvents.sendRemoveAllocationEvent(alloc, si.TerminationType_STOPPED_BY_RM)
 	}
 

@@ -919,23 +919,13 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 		if child.isManaged {
 			return nil
 		}
-		// this is a story about compatibility. the template is a new feature, and we want to keep old behavior.
-		// 1) try to use template if it is not nil
-		// 2) otherwise, child leaf copy the configs.ApplicationSortPolicy from parent (old behavior)
+		// try to use template if it is not nil
 		if sq.template != nil {
 			log.Log(log.SchedQueue).Debug("applying child template to new leaf queue",
 				zap.String("child queue", child.QueuePath),
 				zap.String("parent queue", sq.QueuePath),
 				zap.Any("template", sq.template))
 			child.applyTemplate(sq.template)
-		} else {
-			policyValue, ok := sq.properties[configs.ApplicationSortPolicy]
-			if ok {
-				log.Log(log.Deprecation).Warn("inheriting application sort policy is deprecated, use child templates",
-					zap.String("child queue", child.QueuePath),
-					zap.String("parent queue", sq.QueuePath))
-				child.properties[configs.ApplicationSortPolicy] = policyValue
-			}
 		}
 		return nil
 	}

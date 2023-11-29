@@ -260,8 +260,10 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	// fail with a broken alloc
 	ask = newAllocationAsk("alloc-1-uuid", appID1, appRes)
 	alloc = objects.NewAllocation(nodeID1, ask)
+	assert.Equal(t, alloc.GetAllocationID(), "alloc-1-uuid-0")
 	// reset uuid to empty
 	alloc.SetAllocationID("")
+	assert.Equal(t, alloc.GetAllocationID(), "")
 	allocs = []*objects.Allocation{alloc}
 	err = partition.AddNode(node, allocs)
 	if err == nil {

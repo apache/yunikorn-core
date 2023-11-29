@@ -54,6 +54,7 @@ func TestNewAlloc(t *testing.T) {
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
+	assert.Equal(t, alloc.GetAllocationID(), "ask-1-0")
 	assert.Equal(t, alloc.GetResult(), Allocated, "New alloc should default to result Allocated")
 	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
 	assert.Assert(t, !alloc.IsPlaceholder(), "ask should not have been a placeholder")

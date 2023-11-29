@@ -65,7 +65,6 @@ func loggingHandler(inner http.Handler, name string) http.HandlerFunc {
 // TODO we need the port to be configurable
 func (m *WebService) StartWebApp() {
 	router := newRouter()
-	// Important: do not use ReadTimeout, WriteTimeout or IdleTimeout because those can break the event streaming
 	m.httpServer = &http.Server{Addr: ":9080", Handler: router}
 
 	log.Log(log.REST).Info("web-app started", zap.Int("port", 9080))

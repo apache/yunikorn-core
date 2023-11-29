@@ -961,9 +961,15 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rc := http.NewResponseController(w)
-	err := rc.SetWriteDeadline(time.Time{})
-	if err != nil {
+	// make sure both deadlines can be set
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
 		buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if err := rc.SetReadDeadline(time.Time{}); err != nil {
+		log.Log(log.REST).Error("Cannot set read deadline", zap.Error(err))
+		buildJSONErrorResponse(w, fmt.Sprintf("Cannot set read deadline: %v", err), http.StatusInternalServerError)
 		return
 	}
 	enc := json.NewEncoder(w)
@@ -983,6 +989,7 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 			err := rc.SetWriteDeadline(time.Now().Add(5 * time.Second))
 			if err != nil {
 				// should not fail at this point
+				log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
 				buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
 				eventSystem.RemoveStream(stream)
 				return

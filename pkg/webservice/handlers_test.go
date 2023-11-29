@@ -1548,13 +1548,8 @@ func TestGetEventsWhenTrackingDisabled(t *testing.T) {
 }
 
 func TestGetStream(t *testing.T) {
-	events.Init()
-	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	ev.StartServiceWithPublisher(false)
-
-	var req *http.Request
-	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
-	assert.NilError(t, err)
+	ev, req := initEventsAndCreateRequest(t)
+	defer ev.Stop()
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req = req.Clone(cancelCtx)
@@ -1591,13 +1586,8 @@ func TestGetStream(t *testing.T) {
 }
 
 func TestGetStream_StreamClosedByProducer(t *testing.T) {
-	events.Init()
-	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	ev.StartServiceWithPublisher(false)
-
-	var req *http.Request
-	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
-	assert.NilError(t, err)
+	ev, req := initEventsAndCreateRequest(t)
+	defer ev.Stop()
 	resp := NewResponseRecorderWithDeadline() // MockResponseWriter does not implement http.Flusher
 
 	go func() {
@@ -1634,13 +1624,8 @@ func TestGetStream_NotFlusherImpl(t *testing.T) {
 }
 
 func TestGetStream_Count(t *testing.T) {
-	events.Init()
-	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	ev.StartServiceWithPublisher(false)
-
-	var req *http.Request
-	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
-	assert.NilError(t, err)
+	ev, req := initEventsAndCreateRequest(t)
+	defer ev.Stop()
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req = req.Clone(cancelCtx)
@@ -1708,44 +1693,78 @@ func TestGetStream_TrackingDisabled(t *testing.T) {
 		configs.CMEventTrackingEnabled: "false",
 	}
 	configs.SetConfigMap(configMap)
-	events.Init()
-	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	ev.StartServiceWithPublisher(false)
-
-	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
-	assert.NilError(t, err)
+	_, req := initEventsAndCreateRequest(t)
 	resp := httptest.NewRecorder()
 
-	getStream(resp, req)
-
-	output := make([]byte, 256)
-	n, err := resp.Body.Read(output)
-	assert.NilError(t, err)
-	line := string(output[:n])
-	assertYunikornError(t, line, "Event tracking is disabled")
+	assertGetStreamError(t, req, resp, "Event tracking is disabled")
 }
 
 func TestGetStream_NoWriteDeadline(t *testing.T) {
-	events.Init()
-	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	ev.StartServiceWithPublisher(false)
-
-	var req *http.Request
-	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
-	assert.NilError(t, err)
+	ev, req := initEventsAndCreateRequest(t)
+	defer ev.Stop()
 	resp := httptest.NewRecorder() // does not have SetWriteDeadline()
 
-	getStream(resp, req)
-
-	output := make([]byte, 256)
-	n, err := resp.Body.Read(output)
-	assert.NilError(t, err)
-	line := string(output[:n])
-	assertYunikornError(t, line, "Cannot set write deadline: feature not supported")
-	assert.Equal(t, http.StatusInternalServerError, resp.Code)
+	assertGetStreamError(t, req, resp, "Cannot set write deadline: feature not supported")
 }
 
 func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
+	ev, req := initEventsAndCreateRequest(t)
+	defer ev.Stop()
+	resp := NewResponseRecorderWithDeadline()
+	resp.setWriteFailsAt = 2 // only the second SetWriteDeadline() will fail
+	resp.setWriteFails = true
+
+	go func() {
+		time.Sleep(200 * time.Millisecond)
+		ev.AddEvent(&si.EventRecord{
+			TimestampNano: 111,
+			ObjectID:      "app-1",
+		})
+	}()
+
+	getStream(resp, req)
+	checkGetStreamErrorResult(t, resp.Result(), "Cannot set write deadline: SetWriteDeadline failed")
+}
+
+func TestGetStream_SetReadDeadlineFails(t *testing.T) {
+	_, req := initEventsAndCreateRequest(t)
+	resp := NewResponseRecorderWithDeadline()
+	resp.setReadFails = true
+
+	assertGetStreamError(t, req, resp, "Cannot set read deadline: SetReadDeadline failed")
+}
+
+func assertGetStreamError(t *testing.T, req *http.Request, resp interface{},
+	expectedMsg string) {
+	t.Helper()
+	var response *http.Response
+
+	switch rec := resp.(type) {
+	case *ResponseRecorderWithDeadline:
+		getStream(rec, req)
+		response = rec.Result()
+	case *httptest.ResponseRecorder:
+		getStream(rec, req)
+		response = rec.Result()
+	default:
+		t.Fatalf("unknown response recorder type")
+	}
+
+	checkGetStreamErrorResult(t, response, expectedMsg)
+}
+
+func checkGetStreamErrorResult(t *testing.T, response *http.Response, expectedMsg string) {
+	t.Helper()
+	output := make([]byte, 256)
+	n, err := response.Body.Read(output)
+	assert.NilError(t, err)
+	line := string(output[:n])
+	assertYunikornError(t, line, expectedMsg)
+	assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
+}
+
+func initEventsAndCreateRequest(t *testing.T) (*events.EventSystemImpl, *http.Request) {
+	t.Helper()
 	events.Init()
 	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	ev.StartServiceWithPublisher(false)
@@ -1753,17 +1772,8 @@ func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
 	assert.NilError(t, err)
-	resp := NewResponseRecorderWithDeadline()
-	resp.setWriteFails = true
 
-	getStream(resp, req)
-
-	output := make([]byte, 256)
-	n, err := resp.Body.Read(output)
-	assert.NilError(t, err)
-	line := string(output[:n])
-	assertYunikornError(t, line, "Cannot set write deadline: SetWriteDeadline failed")
-	assert.Equal(t, http.StatusInternalServerError, resp.Code)
+	return ev, req
 }
 
 func assertEvent(t *testing.T, output string, tsNano int64, objectID string) {
@@ -2025,12 +2035,23 @@ func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
 
 type ResponseRecorderWithDeadline struct {
 	*httptest.ResponseRecorder
-	setWriteFails bool
+	setWriteFails   bool
+	setWriteFailsAt int
+	setWriteCalls   int
+	setReadFails    bool
 }
 
 func (rrd *ResponseRecorderWithDeadline) SetWriteDeadline(_ time.Time) error {
-	if rrd.setWriteFails {
+	rrd.setWriteCalls++
+	if rrd.setWriteFails && rrd.setWriteCalls == rrd.setWriteFailsAt {
 		return errors.New("SetWriteDeadline failed")
+	}
+	return nil
+}
+
+func (rrd *ResponseRecorderWithDeadline) SetReadDeadline(_ time.Time) error {
+	if rrd.setReadFails {
+		return errors.New("SetReadDeadline failed")
 	}
 	return nil
 }

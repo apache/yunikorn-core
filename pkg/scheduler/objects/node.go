@@ -284,10 +284,14 @@ func (sn *Node) GetUtilizedResource() *resources.Resource {
 	return &resources.Resource{Resources: utilizedResource}
 }
 
+// FitInNode checks if the request fits in the node.
+// All resources types requested must match the resource types provided by the nodes.
+// A request may ask for only a subset of the types, but the node must provide at least the
+// resource types requested in a larger or equal quantity as requested.
 func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
-	return sn.totalResource.FitInMaxUndef(resRequest)
+	return sn.totalResource.FitIn(resRequest)
 }
 
 // Remove the allocation to the node.
@@ -311,8 +315,8 @@ func (sn *Node) RemoveAllocation(uuid string) *Allocation {
 	return nil
 }
 
-// Add the allocation to the node. Used resources will increase available will decrease.
-// A nil Allocation makes no changes. Pre-empted resources must have been released already.
+// AddAllocation adds the allocation to the node. Used resources will increase available will decrease.
+// A nil Allocation makes no changes. Preempted resources must have been released already.
 // Do a sanity check to make sure it still fits in the node and nothing has changed
 func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	if alloc == nil {
@@ -321,9 +325,9 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
-	// check if this still fits: it might have changed since pre check
+	// check if this still fits: it might have changed since pre-check
 	res := alloc.GetAllocatedResource()
-	if sn.availableResource.FitInMaxUndef(res) {
+	if sn.availableResource.FitIn(res) {
 		sn.allocations[alloc.GetUUID()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
@@ -349,7 +353,7 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 	// The allocatedResource and availableResource should be updated in the same way
 	sn.allocatedResource.AddTo(delta)
 	sn.availableResource.SubFrom(delta)
-	if !resources.FitIn(before, sn.allocatedResource) {
+	if !before.FitIn(sn.allocatedResource) {
 		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",
 			zap.String("placeholder uuid", uuid),
 			zap.String("allocation uuid", replace.GetUUID()),
@@ -357,12 +361,12 @@ func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resou
 	}
 }
 
-// Check if the proposed allocation fits in the available resources.
+// CanAllocate checks if the proposed allocation fits in the available resources.
 // If the proposed allocation does not fit false is returned.
 func (sn *Node) CanAllocate(res *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
-	return sn.availableResource.FitInMaxUndef(res)
+	return sn.availableResource.FitIn(res)
 }
 
 // Checking pre-conditions in the shim for an allocation.
@@ -405,8 +409,8 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 	return true
 }
 
-// Check if the node should be considered as a possible node to allocate on.
-// This is a lock free call. No updates are made this only performs a pre allocate checks
+// preAllocateCheck checks if the node should be considered as a possible node to allocate on.
+// No updates are made this only performs a pre allocate checks
 func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
@@ -427,7 +431,7 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	sn.RLock()
 	defer sn.RUnlock()
 	// returns true/false based on if the request fits in what we have calculated
-	return sn.availableResource.FitInMaxUndef(res)
+	return sn.availableResource.FitIn(res)
 }
 
 // Return if the node has been reserved by any application
@@ -479,7 +483,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
 	}
 	// reservation must fit on the empty node
-	if !resources.FitIn(sn.totalResource, ask.GetAllocatedResource()) {
+	if !sn.totalResource.FitIn(ask.GetAllocatedResource()) {
 		log.Log(log.SchedNode).Debug("reservation does not fit on the node",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("appID", app.ApplicationID),

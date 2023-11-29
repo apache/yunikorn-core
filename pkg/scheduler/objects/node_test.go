@@ -130,6 +130,10 @@ func TestPreAllocateCheck(t *testing.T) {
 	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted on node")
 	assert.Assert(t, !node.preAllocateCheck(resLarge, ""), "too large resource should not have fitted on node")
 
+	// unknown resource type in request is rejected always
+	resOther := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	assert.Assert(t, !node.preAllocateCheck(resOther, ""), "unknown resource type should not have fitted on node")
+
 	// set allocated resource
 	node.AddAllocation(newAllocation(appID1, "UUID1", nodeID, resSmall))
 	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted in available allocation")
@@ -156,19 +160,30 @@ func TestPreAllocateCheck(t *testing.T) {
 
 // Only test the CanAllocate code, the used logic in preAllocateCheck has its own test
 func TestCanAllocate(t *testing.T) {
-	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != nodeID1 {
-		t.Fatalf("node create failed which should not have %v", node)
+	available := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	request := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+	other := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	tests := []struct {
+		name      string
+		available *resources.Resource
+		request   *resources.Resource
+		want      bool
+	}{
+		{"all nils", nil, nil, true},
+		{"nil node available", nil, request, false},
+		{"all matching, req smaller", available, request, true},
+		{"partial match request", available, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), true},
+		{"all matching, req larger", available, resources.Add(request, available), false},
+		{"partial match available", available, resources.Add(request, other), false},
+		{"unmatched request", available, other, false},
 	}
-	// normal alloc
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	if !node.CanAllocate(res) {
-		t.Error("node should have accepted allocation")
-	}
-	// check one that pushes node over its size
-	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})
-	if node.CanAllocate(res) {
-		t.Error("node should have rejected allocation (oversize)")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sn := &Node{
+				availableResource: tt.available,
+			}
+			assert.Equal(t, sn.CanAllocate(tt.request), tt.want, "unexpected node can run result")
+		})
 	}
 }
 
@@ -193,14 +208,22 @@ func TestNodeReservation(t *testing.T) {
 		t.Errorf("illegal reservation requested but did not fail: error %v", err)
 	}
 
+	// too large for node
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
 	ask := newAllocationAsk(aKey, appID1, res)
 	app := newApplication(appID1, "default", "root.unknown")
-
-	// too large for node
 	err = node.Reserve(app, ask)
 	if err == nil {
 		t.Errorf("requested reservation does not fit in node resource but did not fail: error %v", err)
+	}
+
+	// resource type not available on node
+	res = resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	ask = newAllocationAsk(aKey, appID1, res)
+	app = newApplication(appID1, "default", "root.unknown")
+	err = node.Reserve(app, ask)
+	if err == nil {
+		t.Errorf("requested reservation does not match node resource types but did not fail: error %v", err)
 	}
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
@@ -364,13 +387,14 @@ func TestAddAllocation(t *testing.T) {
 	}
 
 	// check nil alloc
-	node.AddAllocation(nil)
-	if len(node.GetAllAllocations()) > 0 {
-		t.Fatalf("nil allocation should not have been added: %v", node)
-	}
+	assert.Assert(t, !node.AddAllocation(nil), "nil allocation should not have been added: %v", node)
+	// check alloc that does not match
+	unknown := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	assert.Assert(t, !node.AddAllocation(newAllocation(appID1, "1", nodeID1, unknown)), "unmatched resource type in allocation should not have been added: %v", node)
+
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, half))
+	assert.Assert(t, node.AddAllocation(newAllocation(appID1, "1", nodeID1, half)), "add allocation 1 should not have failed")
 	if node.GetAllocation("1") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -386,7 +410,7 @@ func TestAddAllocation(t *testing.T) {
 	}
 	// second and check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, piece))
+	assert.Assert(t, node.AddAllocation(newAllocation(appID1, "2", nodeID1, piece)), "add allocation 2 should not have failed")
 	if node.GetAllocation("2") == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -746,4 +770,32 @@ func TestNodeEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
+}
+
+func TestNode_FitInNode(t *testing.T) {
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	request := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+	other := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	tests := []struct {
+		name       string
+		totalRes   *resources.Resource
+		resRequest *resources.Resource
+		want       bool
+	}{
+		{"all nils", nil, nil, true},
+		{"nil node size", nil, request, false},
+		{"all matching, req smaller", total, request, true},
+		{"partial match request", total, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), true},
+		{"all matching, req larger", total, resources.Add(request, total), false},
+		{"partial match total", total, resources.Add(request, other), false},
+		{"unmatched request", total, other, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sn := &Node{
+				totalResource: tt.totalRes,
+			}
+			assert.Equal(t, sn.FitInNode(tt.resRequest), tt.want, "unexpected node fit result")
+		})
+	}
 }

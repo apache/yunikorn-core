@@ -1034,42 +1034,27 @@ func TestEqualsOrEmpty(t *testing.T) {
 }
 
 func TestFitIn(t *testing.T) {
-	// simple case (nil checks)
-	empty := NewResource()
-	if !FitIn(nil, empty) {
-		t.Error("fitin empty in nil resource failed")
+	tests := []struct {
+		name    string
+		larger  *Resource
+		smaller *Resource
+		want    bool
+	}{
+		{"nil larger", nil, NewResource(), true},
+		{"nil smaller", NewResource(), nil, true},
+		{"zero set", NewResource(), NewResourceFromMap(map[string]Quantity{"a": 1}), false},
+		{"same type", NewResourceFromMap(map[string]Quantity{"a": 5}), NewResourceFromMap(map[string]Quantity{"a": 1}), true},
+		{"not in smaller", NewResourceFromMap(map[string]Quantity{"not-in-smaller": 1}), NewResourceFromMap(map[string]Quantity{"a": 1}), false},
+		{"not in larger", NewResourceFromMap(map[string]Quantity{"not-in-smaller": 1}), NewResourceFromMap(map[string]Quantity{"not-in-larger": 1}), false},
+		{"negative larger", NewResourceFromMap(map[string]Quantity{"a": -10}), NewResourceFromMap(map[string]Quantity{"a": 0, "b": -10}), true},
+		{"negative smaller", NewResourceFromMap(map[string]Quantity{"a": -5}), NewResourceFromMap(map[string]Quantity{"a": 0, "b": 10}), false},
 	}
-	if !FitIn(empty, nil) {
-		t.Error("fitin nil in empty resource failed")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, FitIn(tt.larger, tt.smaller), tt.want, "unexpected FitIn result (parameter method)")
+			assert.Equal(t, tt.larger.FitIn(tt.smaller), tt.want, "unexpected FitIn result (receiver method)")
+		})
 	}
-	// zero set resources
-	smaller := &Resource{Resources: map[string]Quantity{"a": 1}}
-	if FitIn(empty, smaller) {
-		t.Errorf("fitin resource with value %v should not fit in empty", smaller)
-	}
-
-	// simple resources, same type
-	larger := NewResourceFromMap(map[string]Quantity{"a": 5})
-	if !FitIn(larger, smaller) {
-		t.Errorf("fitin smaller resource with value %v should fit in larger %v", smaller, larger)
-	}
-
-	// check undefined in larger
-	larger = &Resource{Resources: map[string]Quantity{"not-in-smaller": 1}}
-	assert.Assert(t, !FitIn(larger, smaller), "different type in smaller %v should not fit in larger %v", smaller, larger)
-
-	// check undefined in smaller
-	smaller = &Resource{Resources: map[string]Quantity{"not-in-larger": 1}}
-	assert.Assert(t, !FitIn(larger, smaller), "different type in smaller %v should not fit in larger %v", smaller, larger)
-
-	// complex case: just checking the resource merge with negative values, positive is already tested above
-	larger = &Resource{Resources: map[string]Quantity{"a": -10}}
-	smaller = &Resource{Resources: map[string]Quantity{"a": 0, "b": -10}}
-	assert.Assert(t, FitIn(larger, smaller), "fitin smaller resource with zero or neg value %v should fit in larger %v", smaller, larger)
-
-	larger = &Resource{Resources: map[string]Quantity{"a": -5}}
-	smaller = &Resource{Resources: map[string]Quantity{"a": 0, "b": 10}}
-	assert.Assert(t, !FitIn(larger, smaller), "fitin smaller resource with value %v should not fit in larger %v", smaller, larger)
 }
 
 // simple cases (nil checks)

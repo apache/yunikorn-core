@@ -1524,15 +1524,6 @@ func TestQueueProps(t *testing.T) {
 	assert.Assert(t, leaf.isLeaf && leaf.isManaged, "leaf queue is not marked as managed leaf")
 	assert.Equal(t, len(leaf.properties), 2, "leaf queue properties size incorrect")
 
-	props = map[string]string{"first": "not inherited", configs.ApplicationSortPolicy: "stateaware"}
-	parent, err = createManagedQueueWithProps(root, "parent2", true, nil, props)
-	assert.NilError(t, err, "failed to create parent queue")
-	assert.Equal(t, len(parent.properties), 2, "parent queue properties size incorrect")
-	leaf, err = createDynamicQueue(parent, "leaf", false)
-	assert.NilError(t, err, "failed to create leaf queue")
-	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
-	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
-
 	props = map[string]string{}
 	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
 	assert.NilError(t, err, "failed to create leaf queue")

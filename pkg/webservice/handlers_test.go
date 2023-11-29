@@ -21,6 +21,7 @@ package webservice
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -1558,7 +1559,7 @@ func TestGetStream(t *testing.T) {
 	defer cancel()
 	req = req.Clone(cancelCtx)
 
-	resp := httptest.NewRecorder() // MockResponseWriter does not implement http.Flusher
+	resp := NewResponseRecorderWithDeadline() // MockResponseWriter does not implement http.Flusher
 
 	go func() {
 		time.Sleep(200 * time.Millisecond)
@@ -1597,7 +1598,7 @@ func TestGetStream_StreamClosedByProducer(t *testing.T) {
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
 	assert.NilError(t, err)
-	resp := httptest.NewRecorder() // MockResponseWriter does not implement http.Flusher
+	resp := NewResponseRecorderWithDeadline() // MockResponseWriter does not implement http.Flusher
 
 	go func() {
 		time.Sleep(200 * time.Millisecond)
@@ -1621,10 +1622,6 @@ func TestGetStream_StreamClosedByProducer(t *testing.T) {
 }
 
 func TestGetStream_NotFlusherImpl(t *testing.T) {
-	events.Init()
-	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	ev.StartServiceWithPublisher(false)
-
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
 	assert.NilError(t, err)
@@ -1647,7 +1644,7 @@ func TestGetStream_Count(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req = req.Clone(cancelCtx)
-	resp := httptest.NewRecorder() // MockResponseWriter does not implement http.Flusher
+	resp := NewResponseRecorderWithDeadline() // MockResponseWriter does not implement http.Flusher
 
 	// add some existing events
 	ev.AddEvent(&si.EventRecord{TimestampNano: 0})
@@ -1726,6 +1723,47 @@ func TestGetStream_TrackingDisabled(t *testing.T) {
 	assert.NilError(t, err)
 	line := string(output[:n])
 	assertYunikornError(t, line, "Event tracking is disabled")
+}
+
+func TestGetStream_NoWriteDeadline(t *testing.T) {
+	events.Init()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	resp := httptest.NewRecorder() // does not have SetWriteDeadline()
+
+	getStream(resp, req)
+
+	output := make([]byte, 256)
+	n, err := resp.Body.Read(output)
+	assert.NilError(t, err)
+	line := string(output[:n])
+	assertYunikornError(t, line, "Cannot set write deadline: feature not supported")
+	assert.Equal(t, http.StatusInternalServerError, resp.Code)
+}
+
+func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
+	events.Init()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	ev.StartServiceWithPublisher(false)
+
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
+	assert.NilError(t, err)
+	resp := NewResponseRecorderWithDeadline()
+	resp.setWriteFails = true
+
+	getStream(resp, req)
+
+	output := make([]byte, 256)
+	n, err := resp.Body.Read(output)
+	assert.NilError(t, err)
+	line := string(output[:n])
+	assertYunikornError(t, line, "Cannot set write deadline: SetWriteDeadline failed")
+	assert.Equal(t, http.StatusInternalServerError, resp.Code)
 }
 
 func assertEvent(t *testing.T, output string, tsNano int64, objectID string) {
@@ -1982,5 +2020,23 @@ func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
 		assert.Equal(t, expectedHealthCheck.Succeeded, actualHealthCheck.Succeeded)
 		assert.Equal(t, expectedHealthCheck.Description, actualHealthCheck.Description)
 		assert.Equal(t, expectedHealthCheck.DiagnosisMessage, actualHealthCheck.DiagnosisMessage)
+	}
+}
+
+type ResponseRecorderWithDeadline struct {
+	*httptest.ResponseRecorder
+	setWriteFails bool
+}
+
+func (rrd *ResponseRecorderWithDeadline) SetWriteDeadline(_ time.Time) error {
+	if rrd.setWriteFails {
+		return errors.New("SetWriteDeadline failed")
+	}
+	return nil
+}
+
+func NewResponseRecorderWithDeadline() *ResponseRecorderWithDeadline {
+	return &ResponseRecorderWithDeadline{
+		ResponseRecorder: httptest.NewRecorder(),
 	}
 }

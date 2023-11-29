@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -959,12 +960,18 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rc := http.NewResponseController(w)
+	err := rc.SetWriteDeadline(time.Time{})
+	if err != nil {
+		buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
+		return
+	}
 	enc := json.NewEncoder(w)
 	stream := eventSystem.CreateEventStream(r.Host, count)
 
 	// Reading events in an infinite loop until either the client disconnects or Yunikorn closes the channel.
 	// This results in a persistent HTTP connection where the message body is never closed.
-	// We don't use timeouts and since HTTP 1.1 clients are expected to handle persistent connections by default.
+	// Write deadline is adjusted before sending data to the client.
 	for {
 		select {
 		case <-r.Context().Done():
@@ -973,6 +980,14 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 			eventSystem.RemoveStream(stream)
 			return
 		case e, ok := <-stream.Events:
+			err := rc.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if err != nil {
+				// should not fail at this point
+				buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
+				eventSystem.RemoveStream(stream)
+				return
+			}
+
 			if !ok {
 				// the channel was closed by the event system itself
 				msg := "Event stream was closed by the producer"

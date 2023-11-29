@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -89,7 +90,8 @@ func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, termi
 		eventChangeDetail = si.EventRecord_ALLOC_REPLACED
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
+	// add bind time and instanceType to the event in the message field
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, alloc.GetInstanceType()+common.Separator+strconv.FormatInt(alloc.bindTime.UnixNano(), 10), alloc.GetUUID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 

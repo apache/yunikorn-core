@@ -201,7 +201,7 @@ func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			original := NewTrackedResourceFromMap(tt.input.trackedResource)
-			original.AggregateTrackedResource(tt.input.instType, &Resource{tt.input.otherResource}, tt.input.bindTime)
+			original.AggregateTrackedResource(tt.input.instType, &Resource{tt.input.otherResource}, tt.input.bindTime, time.Now())
 			expected := NewTrackedResourceFromMap(tt.expectedTrackedResource)
 
 			if !reflect.DeepEqual(original.TrackedResourceMap, expected.TrackedResourceMap) {

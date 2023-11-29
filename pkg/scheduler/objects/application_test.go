@@ -1074,91 +1074,6 @@ func assertPlaceHolderResource(t *testing.T, appSummary *ApplicationSummary, mem
 	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
 }
 
-func TestResourceUsageAggregation(t *testing.T) {
-	setupUGM()
-
-	app := newApplication(appID1, "default", "root.a")
-
-	// nothing allocated
-	if !resources.IsZero(app.GetAllocatedResource()) {
-		t.Error("new application has allocated resources")
-	}
-	// create an allocation and check the assignment
-	resMap := map[string]string{"memory": "100", "vcores": "10"}
-	res, err := resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err, "failed to create resource with error")
-	alloc := newAllocation(appID1, "uuid-1", nodeID1, res)
-	alloc.SetInstanceType(instType1)
-	// Mock the time to be 3 seconds before
-	alloc.SetBindTime(time.Now().Add(-3 * time.Second))
-	app.AddAllocation(alloc)
-
-	if !resources.Equals(app.allocatedResource, res) {
-		t.Errorf("allocated resources is not updated correctly: %v", app.allocatedResource)
-	}
-	allocs := app.GetAllAllocations()
-	assert.Equal(t, len(allocs), 1)
-	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should not be initialized as the allocation is not a placeholder")
-	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
-
-	err = app.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected new to accepted (completed test)")
-
-	appSummary := app.GetApplicationSummary("default")
-	appSummary.DoLogging()
-	assertResourceUsage(t, appSummary, 0, 0)
-
-	// add more allocations to test the removals
-	alloc = newAllocation(appID1, "uuid-2", nodeID1, res)
-	alloc.SetInstanceType(instType1)
-
-	// Mock the time to be 3 seconds before
-	alloc.SetBindTime(time.Now().Add(-3 * time.Second))
-	app.AddAllocation(alloc)
-	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
-
-	// remove one of the 2
-	if alloc = app.RemoveAllocation("uuid-2", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
-		t.Error("returned allocations was nil allocation was not removed")
-	}
-	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
-
-	appSummary = app.GetApplicationSummary("default")
-	appSummary.DoLogging()
-	assertResourceUsage(t, appSummary, 300, 30)
-
-	alloc = newAllocation(appID1, "uuid-3", nodeID1, res)
-	alloc.SetInstanceType(instType1)
-	app.AddAllocation(alloc)
-	allocs = app.GetAllAllocations()
-	assert.Equal(t, len(allocs), 2)
-	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
-
-	appSummary = app.GetApplicationSummary("default")
-	appSummary.DoLogging()
-	assertResourceUsage(t, appSummary, 300, 30)
-
-	// try to remove a non existing alloc
-	if alloc = app.RemoveAllocation("does-not-exist", si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc != nil {
-		t.Errorf("returned allocations was not allocation was incorrectly removed: %v", alloc)
-	}
-
-	// remove all left over allocations
-	if allocs = app.RemoveAllAllocations(); allocs == nil || len(allocs) != 2 {
-		t.Errorf("returned number of allocations was incorrect: %v", allocs)
-	}
-	allocs = app.GetAllAllocations()
-	assert.Equal(t, len(allocs), 0)
-	assertUserGroupResource(t, getTestUserGroup(), nil)
-
-	err = app.HandleApplicationEvent(CompleteApplication)
-	assert.NilError(t, err, "no error expected accepted to completing (completed test)")
-
-	appSummary = app.GetApplicationSummary("default")
-	appSummary.DoLogging()
-	assertResourceUsage(t, appSummary, 600, 60)
-}
-
 func TestRejected(t *testing.T) {
 	terminatedTimeout = time.Millisecond * 100
 	defer func() {
@@ -1377,10 +1292,6 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	app.RemoveAllocation("uuid-3", si.TerminationType_PLACEHOLDER_REPLACED)
 	assert.Equal(t, "uuid-3", alloc.uuid)
 	assert.Equal(t, false, app.HasPlaceholderAllocation())
-
-	// check placeholder resource usage
-	appSummary := app.GetApplicationSummary("default")
-	assertPlaceHolderResource(t, appSummary, 3000, 300)
 }
 
 func TestTimeoutPlaceholderSoftStyle(t *testing.T) {

@@ -125,7 +125,7 @@ func TestSendNewAllocationEvent(t *testing.T) {
 	appEvents.sendNewAllocationEvent(&Allocation{
 		applicationID: appID0,
 		allocationKey: aKey,
-		uuid:          aUUID,
+		allocationID:  aUUID,
 	})
 	assert.Equal(t, 1, len(mock.events), "event was not generated")
 	assert.Equal(t, si.EventRecord_APP, mock.events[0].Type, "event type is not expected")
@@ -188,7 +188,7 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 			name:                 "remove allocation cause of node removal",
 			eventSystemMock:      newEventSystemMock(),
 			terminationType:      si.TerminationType_UNKNOWN_TERMINATION_TYPE,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, uuid: aUUID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aUUID},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
@@ -200,7 +200,7 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 			name:                 "remove allocation cause of resource manager cancel",
 			eventSystemMock:      newEventSystemMock(),
 			terminationType:      si.TerminationType_STOPPED_BY_RM,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, uuid: aUUID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aUUID},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
@@ -212,7 +212,7 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 			name:                 "remove allocation cause of timeout",
 			eventSystemMock:      newEventSystemMock(),
 			terminationType:      si.TerminationType_TIMEOUT,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, uuid: aUUID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aUUID},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
@@ -224,7 +224,7 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 			name:                 "remove allocation cause of preemption",
 			eventSystemMock:      newEventSystemMock(),
 			terminationType:      si.TerminationType_PREEMPTED_BY_SCHEDULER,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, uuid: aUUID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aUUID},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
@@ -236,7 +236,7 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 			name:                 "remove allocation cause of replacement",
 			eventSystemMock:      newEventSystemMock(),
 			terminationType:      si.TerminationType_PLACEHOLDER_REPLACED,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, uuid: aUUID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aUUID},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,

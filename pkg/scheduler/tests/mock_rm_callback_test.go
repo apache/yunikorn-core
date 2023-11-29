@@ -71,7 +71,6 @@ func (m *mockRMCallback) UpdateApplication(response *si.ApplicationResponse) err
 func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error {
 	m.Lock()
 	defer m.Unlock()
-
 	for _, alloc := range response.New {
 		m.Allocations[alloc.UUID] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
@@ -80,7 +79,6 @@ func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error
 		} else {
 			nodeAllocations := make([]*si.Allocation, 0)
 			nodeAllocations = append(nodeAllocations, alloc)
-
 			m.nodeAllocations[alloc.NodeID] = nodeAllocations
 		}
 	}

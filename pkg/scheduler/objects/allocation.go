@@ -57,7 +57,7 @@ type Allocation struct {
 	taskGroupName     string // task group this allocation belongs to
 	placeholder       bool   // is this a placeholder allocation
 	nodeID            string
-	uuid              string
+	allocationID      string
 	priority          int32
 	tags              map[string]string
 	allocatedResource *resources.Resource
@@ -92,7 +92,7 @@ func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 		bindTime:          time.Now(),
 		nodeID:            nodeID,
 		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
-		uuid:              ask.allocationKey + "-" + strconv.Itoa(ask.completedPendingAsk()),
+		allocationID:      ask.allocationKey + "-" + strconv.Itoa(ask.completedPendingAsk()),
 		tags:              ask.GetTagsClone(),
 		priority:          ask.GetPriority(),
 		allocatedResource: ask.GetAllocatedResource().Clone(),
@@ -104,7 +104,7 @@ func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 
 func newReservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(nodeID, ask)
-	alloc.uuid = ""
+	alloc.allocationID = ""
 	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(Reserved)
 	return alloc
@@ -112,7 +112,7 @@ func newReservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 
 func newUnreservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(nodeID, ask)
-	alloc.uuid = ""
+	alloc.allocationID = ""
 	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(Unreserved)
 	return alloc
@@ -155,7 +155,7 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		allocLog:          make(map[string]*AllocationLogEntry),
 	}
 	newAlloc := NewAllocation(alloc.NodeID, ask)
-	newAlloc.uuid = alloc.UUID
+	newAlloc.allocationID = alloc.UUID
 	return newAlloc
 }
 
@@ -184,11 +184,11 @@ func (a *Allocation) String() string {
 	}
 	a.RLock()
 	defer a.RUnlock()
-	uuid := a.uuid
+	allocationID := a.allocationID
 	if a.result == Reserved || a.result == Unreserved {
-		uuid = "N/A"
+		allocationID = "N/A"
 	}
-	return fmt.Sprintf("applicationID=%s, uuid=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, uuid, a.allocationKey, a.nodeID, a.result.String())
+	return fmt.Sprintf("applicationID=%s, uuid=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, allocationID, a.allocationKey, a.nodeID, a.result.String())
 }
 
 // GetAsk returns the ask associated with this allocation
@@ -294,15 +294,20 @@ func (a *Allocation) GetInstanceType() string {
 	return a.instType
 }
 
-// GetUUID returns the uuid for this allocation
-func (a *Allocation) GetUUID() string {
-	return a.uuid
+// GetAllocationID returns the allocationID for this allocation
+func (a *Allocation) GetAllocationID() string {
+	return a.allocationID
 }
 
-// SetUUID set the uuid for this allocation
+// GetUUID returns the allocationID for this allocation
+func (a *Allocation) GetUUID() string {
+	return a.allocationID
+}
+
+// SetAllocationID set the allocationID for this allocation
 // only for tests
-func (a *Allocation) SetUUID(uuid string) {
-	a.uuid = uuid
+func (a *Allocation) SetAllocationID(allocationID string) {
+	a.allocationID = allocationID
 }
 
 // GetPriority returns the priority of this allocation

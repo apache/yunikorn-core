@@ -261,7 +261,7 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	ask = newAllocationAsk("alloc-1-uuid", appID1, appRes)
 	alloc = objects.NewAllocation(nodeID1, ask)
 	// reset uuid to empty
-	alloc.SetUUID("")
+	alloc.SetAllocationID("")
 	allocs = []*objects.Allocation{alloc}
 	err = partition.AddNode(node, allocs)
 	if err == nil {

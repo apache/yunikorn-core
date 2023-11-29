@@ -1521,7 +1521,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
 			assert.Equal(t, len(allocRelease.ReleasedAllocations), 1, "one allocation should have been released")
-			assert.Equal(t, allocRelease.ReleasedAllocations[0].UUID, ph.uuid, "wrong placeholder allocation released on timeout")
+			assert.Equal(t, allocRelease.ReleasedAllocations[0].UUID, ph.allocationID, "wrong placeholder allocation released on timeout")
 			found = true
 		}
 		if _, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {

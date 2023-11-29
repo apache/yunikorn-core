@@ -719,7 +719,7 @@ func TestNodeEvents(t *testing.T) {
 	node.AddAllocation(&Allocation{
 		allocatedResource: resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 1, "memory": 1}),
 		allocationKey:     aKey,
-		uuid:              "uuid-0",
+		allocationID:      "uuid-0",
 	})
 	assert.Equal(t, 1, len(mockEvents.events))
 	event = mockEvents.events[0]

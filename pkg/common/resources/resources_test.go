@@ -1126,73 +1126,81 @@ func TestFitInSkip(t *testing.T) {
 }
 
 func TestGetShares(t *testing.T) {
-	// simple cases nil or empty resources
-	shares := getShares(nil, nil)
-	if len(shares) > 0 {
-		t.Error("nil resources gave shares list longer than 0")
-	}
-	res := NewResource()
-	shares = getShares(res, nil)
-	if len(shares) > 0 {
-		t.Error("empty resource with total nil gave shares list longer than 0")
-	}
-	total := NewResource()
-	shares = getShares(res, total)
-	if len(shares) > 0 {
-		t.Error("empty resources gave shares list longer than 0")
+	tests := []struct {
+		res      *Resource
+		total    *Resource
+		expected []float64
+		message  string
+	}{
+		{
+			res:      nil,
+			total:    nil,
+			expected: []float64{},
+			message:  "nil resources",
+		},
+		{
+			res:      NewResource(),
+			total:    nil,
+			expected: []float64{},
+			message:  "empty resource with total nil",
+		},
+		{
+			res:      NewResource(),
+			total:    NewResource(),
+			expected: []float64{},
+			message:  "empty resources",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"zero": 0}},
+			total:    nil,
+			expected: []float64{0},
+			message:  "zero valued resource",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}},
+			total:    nil,
+			expected: []float64{-5, 0, 5},
+			message:  "negative valued resource",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"zero": 0}},
+			total:    NewResource(),
+			expected: []float64{0},
+			message:  "zero valued resource with total",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}},
+			total:    &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}},
+			expected: []float64{0, 1, 1},
+			message:  "same resource and total",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}},
+			total:    &Resource{Resources: map[string]Quantity{"large": 10, "zero": 10, "small": 10}},
+			expected: []float64{-0.5, 0, 0.5},
+			message:  "negative share set to 0",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 10, "small": 15}},
+			total:    &Resource{Resources: map[string]Quantity{"large": 15, "small": 10}},
+			expected: []float64{10.0 / 15.0, 1.5},
+			message:  "resource larger than total",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 5, "notintotal": 10}},
+			total:    &Resource{Resources: map[string]Quantity{"large": 15}},
+			expected: []float64{5.0 / 15.0, 10},
+			message:  "resource not in total",
+		},
 	}
 
-	// simple case nil or empty total resource
-	res = &Resource{Resources: map[string]Quantity{"zero": 0}}
-	shares = getShares(res, nil)
-	if len(shares) != 1 && shares[0] != 0 {
-		t.Errorf("incorrect share with zero valued resource: %v", shares)
-	}
-	res = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
-	expected := []float64{-5, 0, 5}
-	shares = getShares(res, nil)
-	if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares with negative valued resource, expected %v got: %v", expected, shares)
-	}
-	total = NewResource()
-	expected = []float64{-5, 0, 5}
-	shares = getShares(res, total)
-	if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares with zero valued resource, expected %v got: %v", expected, shares)
-	}
-
-	// total resource set same as usage (including signs)
-	total = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
-	expected = []float64{0, 1, 1}
-	shares = getShares(res, total)
-	if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares with same resource, expected %v got: %v", expected, shares)
-	}
-
-	// negative share gets set to 0
-	res = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
-	total = &Resource{Resources: map[string]Quantity{"large": 10, "zero": 10, "small": 10}}
-	expected = []float64{-0.5, 0, 0.5}
-	shares = getShares(res, total)
-	if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares negative share not set to 0, expected %v got: %v", expected, shares)
-	}
-
-	// resource quantity larger than total
-	res = &Resource{Resources: map[string]Quantity{"large": 10, "small": 15}}
-	total = &Resource{Resources: map[string]Quantity{"large": 15, "small": 10}}
-	expected = []float64{10.0 / 15.0, 1.5}
-	shares = getShares(res, total)
-	if len(shares) != 2 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares larger than total, expected %v got: %v", expected, shares)
-	}
-	// resource quantity not in total
-	res = &Resource{Resources: map[string]Quantity{"large": 5, "notintotal": 10}}
-	total = &Resource{Resources: map[string]Quantity{"large": 15}}
-	expected = []float64{5.0 / 15.0, 10}
-	shares = getShares(res, total)
-	if len(shares) != 2 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares not in total, expected %v got: %v", expected, shares)
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			shares := getShares(tc.res, tc.total)
+			if !reflect.DeepEqual(shares, tc.expected) {
+				t.Errorf("incorrect shares for %s, expected %v got: %v", tc.message, tc.expected, shares)
+			}
+		})
 	}
 }
 

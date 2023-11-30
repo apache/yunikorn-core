@@ -28,7 +28,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const defaultChannelBufSize = 100
+const defaultChannelBufSize = 1000
 
 // EventStreaming implements the event streaming logic.
 // New events are immediately forwarded to all active consumers.

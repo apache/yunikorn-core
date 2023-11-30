@@ -127,7 +127,7 @@ func TestEventStreaming_SlowConsumer(t *testing.T) {
 	defer streaming.Close()
 	streaming.CreateEventStream("test", 10000)
 
-	for i := 0; i < 300; i++ {
+	for i := 0; i < 2500; i++ {
 		streaming.PublishEvent(&si.EventRecord{TimestampNano: int64(i)})
 	}
 

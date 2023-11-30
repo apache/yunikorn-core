@@ -29,17 +29,3 @@ type HealthCheckInfo struct {
 	Description      string `json:",omitempty"`
 	DiagnosisMessage string `json:",omitempty"`
 }
-
-func (s *SchedulerHealthDAOInfo) SetHealthStatus() {
-	s.Healthy = len(s.HealthChecks) == 0
-}
-
-func (s *SchedulerHealthDAOInfo) AddHealthCheckInfo(succeeded bool, name, description, diagnosis string) {
-	info := HealthCheckInfo{
-		Name:             name,
-		Succeeded:        succeeded,
-		Description:      description,
-		DiagnosisMessage: diagnosis,
-	}
-	s.HealthChecks = append(s.HealthChecks, info)
-}

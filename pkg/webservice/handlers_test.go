@@ -1719,3 +1719,67 @@ func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
 	assert.Check(t, len(aggregated.Config.SchedulerConfig.Partitions) > 0)
 	assert.Check(t, len(aggregated.Config.Extra) > 0)
 }
+
+func TestCheckHealthStatusNotFound(t *testing.T) {
+	NewWebApp(&scheduler.ClusterContext{}, nil)
+	req, err := http.NewRequest("GET", "/ws/v1/scheduler/healthcheck", strings.NewReader(""))
+	assert.NilError(t, err, "Error while creating the healthcheck request")
+	resp := &MockResponseWriter{}
+	checkHealthStatus(resp, req)
+
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusNotFound, errInfo.StatusCode, statusCodeError)
+	assert.Equal(t, "Health check is not available", errInfo.Message, jsonMessageError)
+}
+
+func TestCheckHealthStatus(t *testing.T) {
+	runHealthCheckTest(t, &dao.SchedulerHealthDAOInfo{
+		Healthy: true,
+		HealthChecks: []dao.HealthCheckInfo{
+			{
+				Name:             "Scheduling errors",
+				Succeeded:        true,
+				Description:      "Check for scheduling error entries in metrics",
+				DiagnosisMessage: "There were 0 scheduling errors logged in the metrics",
+			},
+		},
+	})
+
+	runHealthCheckTest(t, &dao.SchedulerHealthDAOInfo{
+		Healthy: false,
+		HealthChecks: []dao.HealthCheckInfo{
+			{
+				Name:             "Failed nodes",
+				Succeeded:        false,
+				Description:      "Check for failed nodes entries in metrics",
+				DiagnosisMessage: "There were 1 failed nodes logged in the metrics",
+			},
+		},
+	})
+}
+
+func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
+	schedulerContext := &scheduler.ClusterContext{}
+	schedulerContext.SetLastHealthCheckResult(expected)
+	NewWebApp(schedulerContext, nil)
+
+	req, err := http.NewRequest("GET", "/ws/v1/scheduler/healthcheck", strings.NewReader(""))
+	assert.NilError(t, err, "Error while creating the healthcheck request")
+	resp := &MockResponseWriter{}
+	checkHealthStatus(resp, req)
+
+	var actual dao.SchedulerHealthDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &actual)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, expected.Healthy, actual.Healthy)
+	assert.Equal(t, len(expected.HealthChecks), len(actual.HealthChecks))
+	for i, expectedHealthCheck := range expected.HealthChecks {
+		actualHealthCheck := actual.HealthChecks[i]
+		assert.Equal(t, expectedHealthCheck.Name, actualHealthCheck.Name)
+		assert.Equal(t, expectedHealthCheck.Succeeded, actualHealthCheck.Succeeded)
+		assert.Equal(t, expectedHealthCheck.Description, actualHealthCheck.Description)
+		assert.Equal(t, expectedHealthCheck.DiagnosisMessage, actualHealthCheck.DiagnosisMessage)
+	}
+}

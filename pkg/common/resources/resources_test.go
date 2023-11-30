@@ -1298,67 +1298,112 @@ func TestCompareShares(t *testing.T) {
 // This tests just the special code in the FairnessRatio.
 // This does not check the share calculation see TestGetShares for that.
 func TestFairnessRatio(t *testing.T) {
-	// simple case all empty or nil behaviour
-	left := NewResource()
-	right := NewResource()
-	total := NewResource()
-	fairRatio := FairnessRatio(left, right, total)
-	if fairRatio != 1 {
-		t.Errorf("zero resources should return 1, %f", fairRatio)
-	}
-	// right is zero should give +Inf or -Inf
-	total = &Resource{Resources: map[string]Quantity{"first": 10}}
-	left = &Resource{Resources: map[string]Quantity{"first": 1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if !math.IsInf(fairRatio, 1) {
-		t.Errorf("positive left, zero right resources should return +Inf got: %f", fairRatio)
-	}
-	left = &Resource{Resources: map[string]Quantity{"first": -1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if !math.IsInf(fairRatio, -1) {
-		t.Errorf("negative left, zero right resources should return -Inf got: %f", fairRatio)
+	tests := []struct {
+		left           *Resource
+		right          *Resource
+		total          *Resource
+		expectedRatio  float64
+		expectedIsInf  bool
+		expectedInfSign int
+		message        string
+	}{
+		{
+			left:           NewResource(),
+			right:          NewResource(),
+			total:          NewResource(),
+			expectedRatio:  1,
+			expectedIsInf:  false,
+			expectedInfSign: 0,
+			message:        "all empty or nil",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": 1}},
+			right:          NewResource(),
+			total:          &Resource{Resources: map[string]Quantity{"first": 10}},
+			expectedRatio:  math.Inf(1),
+			expectedIsInf:  true,
+			expectedInfSign: 1,
+			message:        "positive left, zero right",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": -1}},
+			right:          NewResource(),
+			total:          &Resource{Resources: map[string]Quantity{"first": 10}},
+			expectedRatio:  math.Inf(-1),
+			expectedIsInf:  true,
+			expectedInfSign: -1,
+			message:        "negative left, zero right",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:          &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			expectedRatio:  float64(math.MaxInt64),
+			expectedIsInf:  false,
+			expectedInfSign: 0,
+			message:        "max quantaties on left, 1 on right",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			right:          &Resource{Resources: map[string]Quantity{"first": -1}},
+			total:          &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			expectedRatio:  float64(math.MinInt64),
+			expectedIsInf:  false,
+			expectedInfSign: 0,
+			message:        "max quantaties on left, -1 on right",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": 90}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:          &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:  90,
+			expectedIsInf:  false,
+			expectedInfSign: 0,
+			message:        "left > right",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": -90}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:          &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:  -90,
+			expectedIsInf:  false,
+			expectedInfSign: 0,
+			message:        "left > right (negative values)",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": 1}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 90}},
+			total:          &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:  (1.0 / 100.0) / (90.0 / 100.0),
+			expectedIsInf:  false,
+			expectedInfSign: 0,
+			message:        "right > left",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": -1}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 90}},
+			total:          &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:  -(1.0 / 100.0) / (90.0 / 100.0),
+			expectedIsInf:  false,
+			expectedInfSign: 0,
+			message:        "right > left (negative values)",
+		},
 	}
 
-	// largest possible cluster: all resources used by left gives MaxInt or MinInt
-	total = &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}}
-	left = &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}}
-	right = &Resource{Resources: map[string]Quantity{"first": 1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != math.MaxInt64 {
-		t.Errorf("maximum quantaties on left, 1 on right should get MaxInt got: %f", fairRatio)
-	}
-	right = &Resource{Resources: map[string]Quantity{"first": -1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != math.MinInt64 {
-		t.Errorf("maximum quantaties on left, -1 on right should get MinInt got: %f", fairRatio)
-	}
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			fairRatio := FairnessRatio(tc.left, tc.right, tc.total)
 
-	// normal cluster size (left > right)
-	total = &Resource{Resources: map[string]Quantity{"first": 100}}
-	left = &Resource{Resources: map[string]Quantity{"first": 90}}
-	right = &Resource{Resources: map[string]Quantity{"first": 1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != 90 {
-		t.Errorf("expected ratio 90 got: %f", fairRatio)
-	}
-	right = &Resource{Resources: map[string]Quantity{"first": -1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != -90 {
-		t.Errorf("expected ratio -90 got: %f", fairRatio)
-	}
-	// normal cluster size (right > left)
-	total = &Resource{Resources: map[string]Quantity{"first": 100}}
-	left = &Resource{Resources: map[string]Quantity{"first": 1}}
-	right = &Resource{Resources: map[string]Quantity{"first": 90}}
-	expectedRatio := (1.0 / 100.0) / (90.0 / 100.0)
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != expectedRatio {
-		t.Errorf("expected ratio 90 got: %f", fairRatio)
-	}
-	left = &Resource{Resources: map[string]Quantity{"first": -1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != -expectedRatio {
-		t.Errorf("expected ratio -90 got: %f", fairRatio)
+			if tc.expectedIsInf {
+				if !math.IsInf(fairRatio, tc.expectedInfSign) {
+					t.Errorf("%s: expected Inf with sign %d, got: %f", tc.message, tc.expectedInfSign, fairRatio)
+				}
+			} else {
+				if fairRatio != tc.expectedRatio {
+					t.Errorf("%s: expected ratio %f, got: %f", tc.message, tc.expectedRatio, fairRatio)
+				}
+			}
+		})
 	}
 }
 

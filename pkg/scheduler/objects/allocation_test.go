@@ -50,10 +50,11 @@ func TestNewAlloc(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := NewAllocation("test-uuid", "node-1", ask)
+	alloc := NewAllocation("node-1", ask)
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
+	assert.Equal(t, alloc.GetAllocationID(), "ask-1-0")
 	assert.Equal(t, alloc.GetResult(), Allocated, "New alloc should default to result Allocated")
 	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
 	assert.Assert(t, !alloc.IsPlaceholder(), "ask should not have been a placeholder")
@@ -62,7 +63,7 @@ func TestNewAlloc(t *testing.T) {
 	alloc.SetInstanceType(instType1)
 	assert.Equal(t, alloc.GetInstanceType(), instType1, "Instance type not set as expected")
 	allocStr := alloc.String()
-	expected := "applicationID=app-1, uuid=test-uuid, allocationKey=ask-1, Node=node-1, result=Allocated"
+	expected := "applicationID=app-1, uuid=ask-1-0, allocationKey=ask-1, Node=node-1, result=Allocated"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
 	assert.Assert(t, !alloc.IsPlaceholderUsed(), fmt.Sprintf("Alloc should not be placeholder replacement by default: got %t, expected %t", alloc.IsPlaceholderUsed(), false))
 	created := alloc.GetCreateTime()
@@ -77,7 +78,7 @@ func TestNewAlloc(t *testing.T) {
 	tags[siCommon.CreationTime] = strconv.FormatInt(past, 10)
 	ask.tags = CloneAllocationTags(tags)
 	ask.createTime = time.Unix(past, 0)
-	alloc = NewAllocation("test-uuid", "node-1", ask)
+	alloc = NewAllocation("node-1", ask)
 	assert.Equal(t, alloc.GetCreateTime(), ask.GetCreateTime(), "createTime was not copied from the ask")
 }
 
@@ -131,13 +132,13 @@ func TestSIFromAlloc(t *testing.T) {
 	assert.NilError(t, err, "Resource creation failed")
 	expectedSI := &si.Allocation{
 		AllocationKey:    "ask-1",
-		UUID:             "test-uuid",
+		UUID:             "ask-1-0",
 		NodeID:           "node-1",
 		ApplicationID:    "app-1",
 		ResourcePerAlloc: res.ToProto(),
 	}
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := NewAllocation("test-uuid", "node-1", ask)
+	alloc := NewAllocation("node-1", ask)
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}

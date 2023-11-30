@@ -200,7 +200,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 
 	// add orphan allocation to a node
 	node := schedulerContext.partitions[partName].nodes.GetNode("node")
-	alloc := objects.NewAllocation(allocID, "node", newAllocationAsk("key", "appID", resources.NewResource()))
+	alloc := objects.NewAllocation("node", newAllocationAsk("key", "appID", resources.NewResource()))
 	node.AddAllocation(alloc)
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
@@ -216,7 +216,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
 
 	// remove the allocation from the node, so we will have an orphan allocation assigned to the app
-	node.RemoveAllocation(allocID)
+	node.RemoveAllocation("key-0")
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
 	assert.Assert(t, !healthInfo.HealthChecks[10].Succeeded, "The orphan allocation check on the app should not be successful")

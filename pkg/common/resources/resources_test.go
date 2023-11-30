@@ -1205,99 +1205,93 @@ func TestGetShares(t *testing.T) {
 }
 
 func TestCompareShares(t *testing.T) {
-	// simple cases nil or empty shares
-	comp := compareShares(nil, nil)
-	if comp != 0 {
-		t.Error("nil shares not equal")
-	}
-	left := make([]float64, 0)
-	right := make([]float64, 0)
-	comp = compareShares(left, right)
-	if comp != 0 {
-		t.Error("empty shares not equal")
-	}
-	// simple case same shares
-	left = []float64{0, 5}
-	comp = compareShares(left, left)
-	if comp != 0 {
-		t.Error("same shares are not equal")
-	}
-	// highest same, less shares on one side, zero values
-	left = []float64{0, 10.0}
-	right = []float64{10.0}
-	comp = compareShares(left, right)
-	if comp != 0 {
-		t.Error("same shares are not equal")
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != 0 {
-		t.Error("same shares are not equal")
-	}
-
-	// highest is same, less shares on one side, positive values
-	left = []float64{1, 10}
-	right = []float64{10}
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("left should have been larger: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("right should have been larger: left %v, right %v", left, right)
-	}
-
-	// highest is same, less shares on one side, negative values
-	left = []float64{-10, 10}
-	right = []float64{10}
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("left should have been smaller: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("right should have been smaller: left %v, right %v", left, right)
-	}
-
-	// highest is smaller, less shares on one side, values are not important
-	left = []float64{0, 10}
-	right = []float64{5}
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("left should have been larger: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("right should have been larger: left %v, right %v", left, right)
-	}
-
-	// highest is +Inf, less shares on one side, zeros before -Inf value
-	left = []float64{math.Inf(-1), 0, 0, math.Inf(1)}
-	right = []float64{math.Inf(1)}
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("left should have been smaller: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("right should have been smaller: left %v, right %v", left, right)
+	tests := []struct {
+		left     []float64
+		right    []float64
+		expected int
+		message  string
+	}{
+		{
+			left:     nil,
+			right:    nil,
+			expected: 0,
+			message:  "nil shares",
+		},
+		{
+			left:     []float64{},
+			right:    []float64{},
+			expected: 0,
+			message:  "empty shares",
+		},
+		{
+			left:     []float64{0, 5},
+			right:    []float64{0, 5},
+			expected: 0,
+			message:  "same shares",
+		},
+		{
+			left:     []float64{0, 10.0},
+			right:    []float64{10.0},
+			expected: 0,
+			message:  "highest same, less shares on one side, zero values",
+		},
+		{
+			left:     []float64{10.0},
+			right:    []float64{0, 10.0},
+			expected: 0,
+			message:  "highest same, less shares on one side, zero values",
+		},
+		{
+			left:     []float64{1, 10},
+			right:    []float64{10},
+			expected: 1,
+			message:  "highest same, less shares on one side, positive values",
+		},
+		{
+			left:     []float64{10},
+			right:    []float64{1, 10},
+			expected: -1,
+			message:  "highest same, less shares on one side, positive values",
+		},
+		{
+			left:     []float64{-10, 10},
+			right:    []float64{10},
+			expected: -1,
+			message:  "highest same, less shares on one side, negative values",
+		},
+		{
+			left:     []float64{10},
+			right:    []float64{-10, 10},
+			expected: 1,
+			message:  "highest same, less shares on one side, negative values",
+		},
+		{
+			left:     []float64{0, 10},
+			right:    []float64{5},
+			expected: 1,
+			message:  "highest is smaller, less shares on one side, values are not important",
+		},
+		{
+			left:     []float64{math.Inf(-1), 0, 0, math.Inf(1)},
+			right:    []float64{math.Inf(1)},
+			expected: -1,
+			message:  "highest is +Inf, less shares on one side, zeros before -Inf value",
+		},
+		{
+			left:     []float64{-100, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)},
+			right:    []float64{-99.99, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)},
+			expected: -1,
+			message:  "longer list of values",
+		},
 	}
 
-	// longer list of values (does not cover any new case)
-	left = []float64{-100, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)}
-	right = []float64{-99.99, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)}
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("left should have been smaller: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("right should have been smaller: left %v, right %v", left, right)
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			comp := compareShares(tc.left, tc.right)
+			if comp != tc.expected {
+				t.Errorf("incorrect comparison for %s: expected %d got: %d", tc.message, tc.expected, comp)
+			}
+		})
 	}
 }
 

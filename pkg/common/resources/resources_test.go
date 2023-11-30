@@ -1299,94 +1299,94 @@ func TestCompareShares(t *testing.T) {
 // This does not check the share calculation see TestGetShares for that.
 func TestFairnessRatio(t *testing.T) {
 	tests := []struct {
-		left           *Resource
-		right          *Resource
-		total          *Resource
-		expectedRatio  float64
-		expectedIsInf  bool
+		left            *Resource
+		right           *Resource
+		total           *Resource
+		expectedRatio   float64
+		expectedIsInf   bool
 		expectedInfSign int
-		message        string
+		message         string
 	}{
 		{
-			left:           NewResource(),
-			right:          NewResource(),
-			total:          NewResource(),
-			expectedRatio:  1,
-			expectedIsInf:  false,
+			left:            NewResource(),
+			right:           NewResource(),
+			total:           NewResource(),
+			expectedRatio:   1,
+			expectedIsInf:   false,
 			expectedInfSign: 0,
-			message:        "all empty or nil",
+			message:         "all empty or nil",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": 1}},
-			right:          NewResource(),
-			total:          &Resource{Resources: map[string]Quantity{"first": 10}},
-			expectedRatio:  math.Inf(1),
-			expectedIsInf:  true,
+			left:            &Resource{Resources: map[string]Quantity{"first": 1}},
+			right:           NewResource(),
+			total:           &Resource{Resources: map[string]Quantity{"first": 10}},
+			expectedRatio:   math.Inf(1),
+			expectedIsInf:   true,
 			expectedInfSign: 1,
-			message:        "positive left, zero right",
+			message:         "positive left, zero right",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": -1}},
-			right:          NewResource(),
-			total:          &Resource{Resources: map[string]Quantity{"first": 10}},
-			expectedRatio:  math.Inf(-1),
-			expectedIsInf:  true,
+			left:            &Resource{Resources: map[string]Quantity{"first": -1}},
+			right:           NewResource(),
+			total:           &Resource{Resources: map[string]Quantity{"first": 10}},
+			expectedRatio:   math.Inf(-1),
+			expectedIsInf:   true,
 			expectedInfSign: -1,
-			message:        "negative left, zero right",
+			message:         "negative left, zero right",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 1}},
-			total:          &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
-			expectedRatio:  float64(math.MaxInt64),
-			expectedIsInf:  false,
+			left:            &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:           &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			expectedRatio:   float64(math.MaxInt64),
+			expectedIsInf:   false,
 			expectedInfSign: 0,
-			message:        "max quantaties on left, 1 on right",
+			message:         "max quantaties on left, 1 on right",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
-			right:          &Resource{Resources: map[string]Quantity{"first": -1}},
-			total:          &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
-			expectedRatio:  float64(math.MinInt64),
-			expectedIsInf:  false,
+			left:            &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			right:           &Resource{Resources: map[string]Quantity{"first": -1}},
+			total:           &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			expectedRatio:   float64(math.MinInt64),
+			expectedIsInf:   false,
 			expectedInfSign: 0,
-			message:        "max quantaties on left, -1 on right",
+			message:         "max quantaties on left, -1 on right",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": 90}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 1}},
-			total:          &Resource{Resources: map[string]Quantity{"first": 100}},
-			expectedRatio:  90,
-			expectedIsInf:  false,
+			left:            &Resource{Resources: map[string]Quantity{"first": 90}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:           &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:   90,
+			expectedIsInf:   false,
 			expectedInfSign: 0,
-			message:        "left > right",
+			message:         "left > right",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": -90}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 1}},
-			total:          &Resource{Resources: map[string]Quantity{"first": 100}},
-			expectedRatio:  -90,
-			expectedIsInf:  false,
+			left:            &Resource{Resources: map[string]Quantity{"first": -90}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:           &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:   -90,
+			expectedIsInf:   false,
 			expectedInfSign: 0,
-			message:        "left > right (negative values)",
+			message:         "left > right (negative values)",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": 1}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 90}},
-			total:          &Resource{Resources: map[string]Quantity{"first": 100}},
-			expectedRatio:  (1.0 / 100.0) / (90.0 / 100.0),
-			expectedIsInf:  false,
+			left:            &Resource{Resources: map[string]Quantity{"first": 1}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 90}},
+			total:           &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:   (1.0 / 100.0) / (90.0 / 100.0),
+			expectedIsInf:   false,
 			expectedInfSign: 0,
-			message:        "right > left",
+			message:         "right > left",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": -1}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 90}},
-			total:          &Resource{Resources: map[string]Quantity{"first": 100}},
-			expectedRatio:  -(1.0 / 100.0) / (90.0 / 100.0),
-			expectedIsInf:  false,
+			left:            &Resource{Resources: map[string]Quantity{"first": -1}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 90}},
+			total:           &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:   -(1.0 / 100.0) / (90.0 / 100.0),
+			expectedIsInf:   false,
 			expectedInfSign: 0,
-			message:        "right > left (negative values)",
+			message:         "right > left (negative values)",
 		},
 	}
 
@@ -1411,67 +1411,67 @@ func TestFairnessRatio(t *testing.T) {
 // This does not check the share calculation and share comparison see TestGetShares and TestCompShares for that.
 func TestCompUsage(t *testing.T) {
 	tests := []struct {
-		left          *Resource
-		right         *Resource
-		leftTotal     *Resource
-		rightTotal    *Resource
+		left           *Resource
+		right          *Resource
+		leftTotal      *Resource
+		rightTotal     *Resource
 		expectedShares int
 		expectedRatio  int
-		message       string
+		message        string
 	}{
 		{
-			left:          NewResource(),
-			right:         NewResource(),
-			leftTotal:     NewResource(),
-			rightTotal:    NewResource(),
+			left:           NewResource(),
+			right:          NewResource(),
+			leftTotal:      NewResource(),
+			rightTotal:     NewResource(),
 			expectedShares: 0,
 			expectedRatio:  0,
-			message:       "empty resources",
+			message:        "empty resources",
 		},
 		{
-			left:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			right:         &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			leftTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:    &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
 			expectedShares: 1,
 			expectedRatio:  1,
-			message:       "left larger than right",
+			message:        "left larger than right",
 		},
 		{
-			left:          &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			right:         &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			leftTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:    &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			left:           &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
 			expectedShares: -1,
 			expectedRatio:  -1,
-			message:       "right larger than left",
+			message:        "right larger than left",
 		},
 		{
-			left:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			right:         &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			leftTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:    &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
 			expectedShares: 1,
 			expectedRatio:  1,
-			message:       "CompUsageRatioSeparately - left larger than right",
+			message:        "CompUsageRatioSeparately - left larger than right",
 		},
 		{
-			left:          &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			right:         &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			leftTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:    &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			left:           &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
 			expectedShares: -1,
 			expectedRatio:  -1,
-			message:       "CompUsageRatioSeparately - right larger than left",
+			message:        "CompUsageRatioSeparately - right larger than left",
 		},
 		{
-			left:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			right:         &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			leftTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:    &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
 			expectedShares: 0,
 			expectedRatio:  0,
-			message:       "CompUsageRatioSeparately - equal values",
+			message:        "CompUsageRatioSeparately - equal values",
 		},
 	}
 

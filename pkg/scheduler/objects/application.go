@@ -898,13 +898,15 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 		return
 	}
 	for _, request := range sa.sortedRequests {
-		if request.GetPendingAskRepeat() == 0 {
+		if request.GetPendingAskRepeat() == 0 || !request.IsSchedulingAttempted() {
 			continue
 		}
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
-			// if headroom is still enough for the resources
-			*total = append(*total, request)
+			if !request.HasTriggeredScaleUp() {
+				// if headroom is still enough for the resources
+				*total = append(*total, request)
+			}
 			headRoom.SubOnlyExisting(request.GetAllocatedResource())
 			userHeadRoom.SubOnlyExisting(request.GetAllocatedResource())
 		}
@@ -936,6 +938,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
+		request.SetSchedulingAttempted(true)
+
 		if request.GetPendingAskRepeat() == 0 {
 			continue
 		}

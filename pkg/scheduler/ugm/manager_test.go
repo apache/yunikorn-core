@@ -1123,7 +1123,32 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 		limits    []configs.Limit
 		newLimits []configs.Limit
 	}{
+		// user limit only
 		{
+
+			name: "maxresources with an updated specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, mediumResource, 2),
+			},
+		},
+		{
+			name: "maxapplications with an updated specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 1),
+			},
+		},
+
+		// group limit only
+		{
+
 			name: "maxresources with an updated specific group limit",
 			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
 			limits: []configs.Limit{
@@ -1131,6 +1156,151 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 			},
 			newLimits: []configs.Limit{
 				createLimit(nil, []string{"group1"}, mediumResource, 2),
+			},
+		},
+		{
+			name: "maxapplications with an updated specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 1),
+			},
+		},
+
+		// user wilcard limit
+		{
+			name: "maxresources with an updated wildcard user limit",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, tinyResource, 2),
+				createLimit([]string{"*"}, nil, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit([]string{"*"}, nil, mediumResource, 2),
+			},
+		},
+		{
+			name: "maxapplications with an updated wildcard user limit",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, tinyResource, 1),
+				createLimit([]string{"*"}, nil, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit([]string{"*"}, nil, largeResource, 1),
+			},
+		},
+
+		// group wilcard limit
+		{
+
+			name: "maxresources with an updated wildcard group limit",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			limits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, tinyResource, 2),
+				createLimit(nil, []string{"*"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+				createLimit(nil, []string{"*"}, mediumResource, 2),
+			},
+		},
+		{
+			name: "maxapplications with an updated wildcard group limit",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			limits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, tinyResource, 1),
+				createLimit(nil, []string{"*"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+				createLimit(nil, []string{"*"}, largeResource, 1),
+			},
+		},
+
+		// in a different limit
+		{
+			name: "maxresources with a new specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				{
+					Limit:           "parent queue limit for specific user",
+					Users:           []string{"user1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 2,
+				},
+			},
+			newLimits: []configs.Limit{
+				{
+					Limit:           "new parent queue limit for specific user",
+					Users:           []string{"user1"},
+					MaxResources:    map[string]string{"memory": "50", "vcores": "50"},
+					MaxApplications: 2,
+				},
+			},
+		},
+		{
+			name: "maxapplications with a new specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				{
+					Limit:           "parent queue limit for specific user",
+					Users:           []string{"user1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 2,
+				},
+			},
+			newLimits: []configs.Limit{
+				{
+					Limit:           "new parent queue limit for specific user",
+					Users:           []string{"user1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 1,
+				},
+			},
+		},
+		{
+			name: "maxresources with a new specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				{
+					Limit:           "parent queue limit for specific group",
+					Groups:          []string{"group1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 2,
+				},
+			},
+			newLimits: []configs.Limit{
+				{
+					Limit:           "new parent queue limit for specific group",
+					Groups:          []string{"group1"},
+					MaxResources:    map[string]string{"memory": "50", "vcores": "50"},
+					MaxApplications: 2,
+				},
+			},
+		},
+		{
+			name: "maxapplications with a new specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				{
+					Limit:           "parent queue limit for specific group",
+					Groups:          []string{"group1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 2,
+				},
+			},
+			newLimits: []configs.Limit{
+				{
+					Limit:           "new parent queue limit for specific group",
+					Groups:          []string{"group1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 1,
+				},
 			},
 		},
 	}

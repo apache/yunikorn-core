@@ -80,7 +80,7 @@ func (e *EventStreaming) PublishEvent(event *si.EventRecord) {
 // When a consumer is finished, it must call RemoveEventStream to free up resources.
 //
 // Consumers have an arbitrary name for logging purposes. The "count" parameter defines the number
-// of maximum historical events from the ring buffer.
+// of maximum historical events from the ring buffer. "0" is a valid value and means no past events.
 func (e *EventStreaming) CreateEventStream(name string, count uint64) *EventStream {
 	consumer := make(chan *si.EventRecord, defaultChannelBufSize)
 	stream := &EventStream{
@@ -88,7 +88,8 @@ func (e *EventStreaming) CreateEventStream(name string, count uint64) *EventStre
 	}
 	local := make(chan *si.EventRecord, defaultChannelBufSize)
 	stop := make(chan struct{})
-	history := e.createEventStreamInternal(stream, local, consumer, stop, name, count)
+	e.createEventStreamInternal(stream, local, consumer, stop, name, count)
+	history := e.buffer.GetRecentEvents(count)
 
 	go func(consumer chan<- *si.EventRecord, local <-chan *si.EventRecord, stop <-chan struct{}) {
 		// Store the refs of historical events; it's possible that some events are added to the
@@ -131,7 +132,7 @@ func (e *EventStreaming) createEventStreamInternal(stream *EventStream,
 	consumer chan *si.EventRecord,
 	stop chan struct{},
 	name string,
-	count uint64) []*si.EventRecord {
+	count uint64) {
 	// stuff that needs locking
 	e.Lock()
 	defer e.Unlock()
@@ -143,8 +144,6 @@ func (e *EventStreaming) createEventStreamInternal(stream *EventStream,
 		name:      name,
 		createdAt: time.Now(),
 	}
-
-	return e.buffer.GetRecentEvents(count)
 }
 
 // RemoveEventStream stops the streaming for a given consumer. Must be called to avoid resource leaks.

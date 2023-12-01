@@ -160,13 +160,13 @@ func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resour
 	})
 }
 
-func (m *mockScheduler) releaseAllocRequest(appID, uuid string) error {
+func (m *mockScheduler) releaseAllocRequest(appID, allocationID string) error {
 	return m.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationsToRelease: []*si.AllocationRelease{
 				{
 					ApplicationID: appID,
-					UUID:          uuid,
+					AllocationID:  allocationID,
 					PartitionName: m.partitionName,
 				},
 			},

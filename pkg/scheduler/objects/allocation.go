@@ -155,7 +155,7 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		allocLog:          make(map[string]*AllocationLogEntry),
 	}
 	newAlloc := NewAllocation(alloc.NodeID, ask)
-	newAlloc.allocationID = alloc.UUID
+	newAlloc.allocationID = alloc.AllocationID
 	return newAlloc
 }
 
@@ -171,7 +171,7 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		NodeID:           a.GetNodeID(),
 		ApplicationID:    a.GetApplicationID(),
 		AllocationKey:    a.GetAllocationKey(),
-		UUID:             a.GetUUID(),
+		AllocationID:     a.GetAllocationID(),
 		ResourcePerAlloc: a.GetAllocatedResource().ToProto(), // needed in tests for restore
 		TaskGroupName:    a.GetTaskGroup(),
 		Placeholder:      a.IsPlaceholder(),
@@ -188,7 +188,7 @@ func (a *Allocation) String() string {
 	if a.result == Reserved || a.result == Unreserved {
 		allocationID = "N/A"
 	}
-	return fmt.Sprintf("applicationID=%s, uuid=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, allocationID, a.allocationKey, a.nodeID, a.result.String())
+	return fmt.Sprintf("applicationID=%s, allocationID=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, allocationID, a.allocationKey, a.nodeID, a.result.String())
 }
 
 // GetAsk returns the ask associated with this allocation
@@ -296,11 +296,6 @@ func (a *Allocation) GetInstanceType() string {
 
 // GetAllocationID returns the allocationID for this allocation
 func (a *Allocation) GetAllocationID() string {
-	return a.allocationID
-}
-
-// GetUUID returns the allocationID for this allocation
-func (a *Allocation) GetUUID() string {
 	return a.allocationID
 }
 

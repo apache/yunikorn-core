@@ -857,7 +857,7 @@ func TestAllocations(t *testing.T) {
 	assert.Equal(t, len(allocs), 3)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 3))
 	// remove one of the 3
-	if alloc = app.RemoveAllocation(alloc.GetUUID(), si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
+	if alloc = app.RemoveAllocation(alloc.GetAllocationID(), si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
 		t.Error("returned allocations was nil allocation was not removed")
 	}
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
@@ -1116,7 +1116,7 @@ func TestResourceUsageAggregation(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
 	// remove one of the 2
-	if alloc = app.RemoveAllocation(alloc.GetUUID(), si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
+	if alloc = app.RemoveAllocation(alloc.GetAllocationID(), si.TerminationType_UNKNOWN_TERMINATION_TYPE); alloc == nil {
 		t.Error("returned allocations was nil allocation was not removed")
 	}
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
@@ -1268,7 +1268,7 @@ func TestReplaceAllocation(t *testing.T) {
 		t.Fatalf("placeholder allocation not updated as expected: got %s, expected %s", app.allocatedPlaceholder, res)
 	}
 	assertUserGroupResource(t, getTestUserGroup(), res)
-	alloc = app.ReplaceAllocation(ph.GetUUID())
+	alloc = app.ReplaceAllocation(ph.GetAllocationID())
 	assert.Equal(t, alloc, nilAlloc, "placeholder without releases expected nil to be returned got a real alloc: %s", alloc)
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(0))
 	assertUserGroupResource(t, getTestUserGroup(), nil)
@@ -1283,7 +1283,7 @@ func TestReplaceAllocation(t *testing.T) {
 	realAlloc := newAllocation(appID1, nodeID1, res)
 	realAlloc.SetResult(Replaced)
 	ph.AddRelease(realAlloc)
-	alloc = app.ReplaceAllocation(ph.GetUUID())
+	alloc = app.ReplaceAllocation(ph.GetAllocationID())
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
 	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
 	if !resources.Equals(app.allocatedResource, res) {
@@ -1308,7 +1308,7 @@ func TestReplaceAllocation(t *testing.T) {
 	realAllocNoAdd := newAllocation(appID1, nodeID1, res)
 	realAllocNoAdd.SetResult(Replaced)
 	ph.AddRelease(realAlloc)
-	alloc = app.ReplaceAllocation(ph.GetUUID())
+	alloc = app.ReplaceAllocation(ph.GetAllocationID())
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
 	assert.Assert(t, resources.IsZero(app.allocatedPlaceholder), "real allocation counted as placeholder")
 	assert.Equal(t, app.placeholderData[""].Replaced, int64(2))
@@ -1357,23 +1357,23 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	realAlloc1 := newAllocation(appID1, nodeID1, res)
 	realAlloc1.SetResult(Replaced)
 	ph1.AddRelease(realAlloc1)
-	alloc1 := app.ReplaceAllocation(ph1.GetUUID())
-	app.RemoveAllocation(ph1.GetUUID(), si.TerminationType_PLACEHOLDER_REPLACED)
-	assert.Equal(t, ph1.GetUUID(), alloc1.GetUUID())
+	alloc1 := app.ReplaceAllocation(ph1.GetAllocationID())
+	app.RemoveAllocation(ph1.GetAllocationID(), si.TerminationType_PLACEHOLDER_REPLACED)
+	assert.Equal(t, ph1.GetAllocationID(), alloc1.GetAllocationID())
 	assert.Equal(t, true, app.HasPlaceholderAllocation())
 	realAlloc2 := newAllocation(appID1, nodeID1, res)
 	realAlloc2.SetResult(Replaced)
 	ph2.AddRelease(realAlloc2)
-	alloc2 := app.ReplaceAllocation(ph2.GetUUID())
-	app.RemoveAllocation(ph2.GetUUID(), si.TerminationType_PLACEHOLDER_REPLACED)
-	assert.Equal(t, ph2.GetUUID(), alloc2.GetUUID())
+	alloc2 := app.ReplaceAllocation(ph2.GetAllocationID())
+	app.RemoveAllocation(ph2.GetAllocationID(), si.TerminationType_PLACEHOLDER_REPLACED)
+	assert.Equal(t, ph2.GetAllocationID(), alloc2.GetAllocationID())
 	assert.Equal(t, true, app.HasPlaceholderAllocation())
 	realAlloc3 := newAllocation(appID1, nodeID1, res)
 	realAlloc3.SetResult(Replaced)
 	ph3.AddRelease(realAlloc3)
-	alloc3 := app.ReplaceAllocation(ph3.GetUUID())
-	app.RemoveAllocation(ph3.GetUUID(), si.TerminationType_PLACEHOLDER_REPLACED)
-	assert.Equal(t, ph3.GetUUID(), alloc3.GetUUID())
+	alloc3 := app.ReplaceAllocation(ph3.GetAllocationID())
+	app.RemoveAllocation(ph3.GetAllocationID(), si.TerminationType_PLACEHOLDER_REPLACED)
+	assert.Equal(t, ph3.GetAllocationID(), alloc3.GetAllocationID())
 	assert.Equal(t, false, app.HasPlaceholderAllocation())
 
 	// check placeholder resource usage
@@ -1521,7 +1521,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
 			assert.Equal(t, len(allocRelease.ReleasedAllocations), 1, "one allocation should have been released")
-			assert.Equal(t, allocRelease.ReleasedAllocations[0].UUID, ph.allocationID, "wrong placeholder allocation released on timeout")
+			assert.Equal(t, allocRelease.ReleasedAllocations[0].AllocationID, ph.allocationID, "wrong placeholder allocation released on timeout")
 			found = true
 		}
 		if _, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
@@ -1560,7 +1560,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	app.SetState(Running.String())
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 	// remove allocation to trigger state change
-	app.RemoveAllocation(alloc.GetUUID(), si.TerminationType_UNKNOWN_TERMINATION_TYPE)
+	app.RemoveAllocation(alloc.GetAllocationID(), si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 	// make sure the placeholders time out
@@ -2111,8 +2111,8 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	// add + remove
 	app.AddAllocation(alloc1)
 	app.AddAllocation(alloc2)
-	app.RemoveAllocation(alloc1.GetUUID(), si.TerminationType_STOPPED_BY_RM)
-	app.RemoveAllocation(alloc2.GetUUID(), si.TerminationType_PLACEHOLDER_REPLACED)
+	app.RemoveAllocation(alloc1.GetAllocationID(), si.TerminationType_STOPPED_BY_RM)
+	app.RemoveAllocation(alloc2.GetAllocationID(), si.TerminationType_PLACEHOLDER_REPLACED)
 	noEvents := 0
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
@@ -2125,28 +2125,28 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	assert.Equal(t, si.EventRecord_APP, records[1].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[1].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_ALLOC, records[1].EventChangeDetail)
-	assert.Equal(t, alloc1.GetUUID(), records[1].ReferenceID)
+	assert.Equal(t, alloc1.GetAllocationID(), records[1].ReferenceID)
 	assert.Equal(t, "app-1", records[1].ObjectID)
 	assert.Equal(t, si.EventRecord_APP, records[2].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[2].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_ALLOC, records[2].EventChangeDetail)
-	assert.Equal(t, alloc2.GetUUID(), records[2].ReferenceID)
+	assert.Equal(t, alloc2.GetAllocationID(), records[2].ReferenceID)
 	assert.Equal(t, "app-1", records[2].ObjectID)
 	assert.Equal(t, si.EventRecord_APP, records[3].Type)
 	assert.Equal(t, si.EventRecord_REMOVE, records[3].EventChangeType)
 	assert.Equal(t, si.EventRecord_ALLOC_CANCEL, records[3].EventChangeDetail)
-	assert.Equal(t, alloc1.GetUUID(), records[3].ReferenceID)
+	assert.Equal(t, alloc1.GetAllocationID(), records[3].ReferenceID)
 	assert.Equal(t, "app-1", records[3].ObjectID)
 	assert.Equal(t, si.EventRecord_APP, records[4].Type)
 	assert.Equal(t, si.EventRecord_REMOVE, records[4].EventChangeType)
 	assert.Equal(t, si.EventRecord_ALLOC_REPLACED, records[4].EventChangeDetail)
-	assert.Equal(t, alloc2.GetUUID(), records[4].ReferenceID)
+	assert.Equal(t, alloc2.GetAllocationID(), records[4].ReferenceID)
 	assert.Equal(t, "app-1", records[4].ObjectID)
 
 	// add + replace
 	alloc1.placeholder = true
 	app.AddAllocation(alloc1)
-	app.ReplaceAllocation(alloc1.GetUUID())
+	app.ReplaceAllocation(alloc1.GetAllocationID())
 	noEvents = 0
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
@@ -2158,12 +2158,12 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	assert.Equal(t, si.EventRecord_APP, records[0].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_ALLOC, records[0].EventChangeDetail)
-	assert.Equal(t, alloc1.GetUUID(), records[0].ReferenceID)
+	assert.Equal(t, alloc1.GetAllocationID(), records[0].ReferenceID)
 	assert.Equal(t, "app-1", records[0].ObjectID)
 	assert.Equal(t, si.EventRecord_APP, records[1].Type)
 	assert.Equal(t, si.EventRecord_REMOVE, records[1].EventChangeType)
 	assert.Equal(t, si.EventRecord_ALLOC_REPLACED, records[1].EventChangeDetail)
-	assert.Equal(t, alloc1.GetUUID(), records[0].ReferenceID)
+	assert.Equal(t, alloc1.GetAllocationID(), records[0].ReferenceID)
 	assert.Equal(t, "app-1", records[0].ObjectID)
 
 	// add + remove all
@@ -2181,12 +2181,12 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	assert.Equal(t, si.EventRecord_APP, records[0].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_ALLOC, records[0].EventChangeDetail)
-	assert.Equal(t, alloc1.GetUUID(), records[0].ReferenceID)
+	assert.Equal(t, alloc1.GetAllocationID(), records[0].ReferenceID)
 	assert.Equal(t, "app-1", records[0].ObjectID)
 	assert.Equal(t, si.EventRecord_APP, records[1].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[1].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_ALLOC, records[1].EventChangeDetail)
-	assert.Equal(t, alloc2.GetUUID(), records[1].ReferenceID)
+	assert.Equal(t, alloc2.GetAllocationID(), records[1].ReferenceID)
 	assert.Equal(t, "app-1", records[1].ObjectID)
 	assert.Equal(t, si.EventRecord_APP, records[2].Type)
 	assert.Equal(t, si.EventRecord_REMOVE, records[2].EventChangeType)
@@ -2198,8 +2198,8 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	assert.Equal(t, si.EventRecord_ALLOC_CANCEL, records[3].EventChangeDetail)
 	refIdsRemoved[records[3].ReferenceID]++
 	assert.Equal(t, "app-1", records[3].ObjectID)
-	assert.Equal(t, 1, refIdsRemoved[alloc1.GetUUID()])
-	assert.Equal(t, 1, refIdsRemoved[alloc2.GetUUID()])
+	assert.Equal(t, 1, refIdsRemoved[alloc1.GetAllocationID()])
+	assert.Equal(t, 1, refIdsRemoved[alloc2.GetAllocationID()])
 }
 
 func TestPlaceholderLargerEvent(t *testing.T) {

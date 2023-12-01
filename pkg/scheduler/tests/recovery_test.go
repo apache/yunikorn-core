@@ -473,7 +473,7 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
-						UUID:          "UUID01",
+						AllocationID:  "ALLOCATIONID01",
 						ApplicationID: "app-01",
 						PartitionName: "default",
 						NodeID:        "node-1:1234",
@@ -541,7 +541,7 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
-						UUID:          "UUID01",
+						AllocationID:  "ALLOCATIONID01",
 						ApplicationID: "app-01",
 						PartitionName: "default",
 						NodeID:        "node-1:1234",
@@ -843,7 +843,7 @@ partitions:
 			existingAllocations = append(existingAllocations, &si.Allocation{
 				AllocationKey:    alloc.AllocationKey,
 				AllocationTags:   alloc.AllocationTags,
-				UUID:             alloc.UUID,
+				AllocationID:     alloc.AllocationID,
 				ResourcePerAlloc: alloc.ResourcePerAlloc,
 				Priority:         alloc.Priority,
 				NodeID:           alloc.NodeID,

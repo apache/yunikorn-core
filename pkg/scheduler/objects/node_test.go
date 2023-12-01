@@ -719,7 +719,7 @@ func TestNodeEvents(t *testing.T) {
 	node.AddAllocation(&Allocation{
 		allocatedResource: resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 1, "memory": 1}),
 		allocationKey:     aKey,
-		allocationID:      "uuid-0",
+		allocationID:      "allocationid-0",
 	})
 	assert.Equal(t, 1, len(mockEvents.events))
 	event = mockEvents.events[0]
@@ -728,7 +728,7 @@ func TestNodeEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
 
 	mockEvents.Reset()
-	node.RemoveAllocation("uuid-0")
+	node.RemoveAllocation("allocationid-0")
 	event = mockEvents.events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)

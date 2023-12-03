@@ -702,56 +702,60 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, resources.Zero), true)
 }
 
-func TestIncreaseDifferentAppResourceToDiffGroup(t *testing.T) {
-	// Increase resource to different applications each with different group linkage
+func TestIncreaseDifferentAppResourceToDiffGroupLinkage(t *testing.T) {
+	// Increase app rsources to different leaf queue, which have different group linkage
+	// Queue setup:
+	// root.parent with group1 limit
+	// root.parent.leaf1 with group2 limit
+	// root.parent.leaf2 with no limit
+
+	// Increase TestApp1 resource to root.parent.leaf1, it should be tracked by group2's groupTracker
+	// Increase TestApp2 resource to root.parent.leaf2, it should be tracked by group1's groupTracker
+
 	setupUGM()
 	user := "user"
 	groups := []string{"group1", "group2"}
-	// Queue setup: root->parent->leaf
-	conf := createConfig(user, groups, "memory", "50", 50, 5)
+	conf := createConfigWithDifferentGroupsLinkage(groups[0], groups[1], "50", 50, 5)
 	assert.NilError(t, m.UpdateConfig(conf.Queues[0], "root"))
 
 	// Assert inital ugm state
-	assert.Equal(t, len(m.userTrackers), 1)
-	assert.Equal(t, len(m.groupTrackers), 2)
+	assert.Equal(t, len(m.userTrackers), 0, "Initial ugm state shouldn't have no user Tracker created.")
+	assert.Equal(t, len(m.groupTrackers), 2, "Initial ugm state should have 2 groupTracker created.")
 
-	userTracker := m.userTrackers[user]
 	groupTracker1 := m.groupTrackers["group1"]
 	groupTracker2 := m.groupTrackers["group2"]
 
-	// Assert inital UserTracker/GroupTracker state
-	assert.Equal(t, len(userTracker.appGroupTrackers), 0, "Inital state shouldn't hold any group tracker object in UserTracker.")
+	// Assert inital GroupTracker state
 	assert.Equal(t, len(groupTracker1.applications), 0, "Initial state shouldn't have any application in GroupTracker.")
 	assert.Equal(t, len(groupTracker2.applications), 0, "Initial state shouldn't have any application in GroupTracker.")
-	assert.Assert(t, userTracker.queueTracker.resourceUsage.IsEmpty(), "Initial state shouldn't have any resources tracked in UserTracker.")
 	assert.Assert(t, groupTracker1.queueTracker.resourceUsage.IsEmpty(), "Initial state shouldn't have any resources tracked in GroupTracker.")
 	assert.Assert(t, groupTracker2.queueTracker.resourceUsage.IsEmpty(), "Initial state shouldn't have any resources tracked in GroupTracker.")
 
-	// Increase resources to different application, different group, same user
-	userGroup1 := security.UserGroup{User: user, Groups: []string{"group1"}}
-	userGroup2 := security.UserGroup{User: user, Groups: []string{"group2"}}
+	// Increase resources to different application, different queue
+	userGroup := security.UserGroup{User: user, Groups: groups}
 	usage, err := resources.NewResourceFromConf(map[string]string{"memory": "10", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
 	}
-	m.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage, userGroup1)
-	m.IncreaseTrackedResource("root.parent.leaf", TestApp2, usage, userGroup2)
+	m.IncreaseTrackedResource("root.parent.leaf1", TestApp1, usage, userGroup)
+	m.IncreaseTrackedResource("root.parent.leaf2", TestApp2, usage, userGroup)
 
 	// Assert ugm post state
-	assert.Equal(t, len(m.userTrackers), 1, "userTrackers in ugm should still be the same.")
+	assert.Equal(t, len(m.userTrackers), 1, "Should have new userTrackers in ugm.")
 	assert.Equal(t, len(m.groupTrackers), 2, "groupTrackers in ugm should still be the same.")
 
 	// Assert UserTracker post state
+	userTracker := m.userTrackers[user]
 	assert.Assert(t, resources.Equals(userTracker.queueTracker.resourceUsage, resources.Multiply(usage, 2)), "The new increased resources should be tracked by UserTracker.")
 	assert.Equal(t, len(userTracker.appGroupTrackers), 2, "The two different GroupTracker should be referenced by userTracker.")
-	assert.Equal(t, userTracker.appGroupTrackers[TestApp1], groupTracker1, "In UserTracker, the referenced GroupTracker of application should be the same one held by ugm.")
-	assert.Equal(t, userTracker.appGroupTrackers[TestApp2], groupTracker2, "In UserTracker, the referenced GroupTracker of application should be the same one held by ugm.")
+	assert.Equal(t, userTracker.appGroupTrackers[TestApp1], groupTracker2, "UserTracker should hold application/GroupTracker mapping.")
+	assert.Equal(t, userTracker.appGroupTrackers[TestApp2], groupTracker1, "UserTracker should hold application/GroupTracker mapping.")
 
 	// Assert GroupTracker post state
 	assert.Assert(t, resources.Equals(groupTracker1.queueTracker.resourceUsage, usage), "Should have new resource tracked in GroupTracker.")
 	assert.Assert(t, resources.Equals(groupTracker2.queueTracker.resourceUsage, usage), "Should have new resource tracked in GroupTracker.")
-	assert.Equal(t, groupTracker1.applications[TestApp1], userGroup1.User, "GroupTracker should hold applications/user mapping.")
-	assert.Equal(t, groupTracker2.applications[TestApp2], userGroup2.User, "GroupTracker should hold applications/user mapping.")
+	assert.Equal(t, groupTracker1.applications[TestApp2], userGroup.User, "GroupTracker should hold applications/user mapping.")
+	assert.Equal(t, groupTracker2.applications[TestApp1], userGroup.User, "GroupTracker should hold applications/user mapping.")
 	assert.Assert(t, resources.Equals(groupTracker1.queueTracker.resourceUsage, usage), "The new increased resource should be tracked by GroupTracker.")
 	assert.Assert(t, resources.Equals(groupTracker2.queueTracker.resourceUsage, usage), "The new increased resource should be tracked by GroupTracker.")
 }
@@ -1493,6 +1497,70 @@ func createConfigWithDifferentGroups(user string, group string, resourceKey stri
 							"vcores": strconv.Itoa(mem * 2),
 						},
 						MaxApplications: maxApps * 2,
+					},
+				},
+			},
+		},
+	}
+	return conf
+}
+
+func createConfigWithDifferentGroupsLinkage(group1 string, group2 string, resourceValue string, mem int, maxApps uint64) configs.PartitionConfig {
+	// root.parent with group1 limit
+	// root.parent.leaf1 with group2 limit
+	// root.parent.leaf2 with no limit
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "parent",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:      "leaf1",
+								Parent:    false,
+								SubmitACL: "*",
+								Queues:    nil,
+								Limits: []configs.Limit{
+									{
+										Limit: "leaf queue with group2 limit",
+										Groups: []string{
+											group2,
+										},
+										MaxResources: map[string]string{
+											"memory": strconv.Itoa(mem),
+											"vcores": strconv.Itoa(mem),
+										},
+										MaxApplications: maxApps,
+									},
+								},
+							},
+							{
+								Name:      "leaf2",
+								Parent:    false,
+								SubmitACL: "*",
+								Queues:    nil,
+							},
+						},
+						Limits: []configs.Limit{
+							{
+								Limit: "parent queue with group1 limit",
+								Groups: []string{
+									group1,
+								},
+								MaxResources: map[string]string{
+									"memory": strconv.Itoa(mem),
+									"vcores": strconv.Itoa(mem),
+								},
+								MaxApplications: maxApps,
+							},
+						},
 					},
 				},
 			},

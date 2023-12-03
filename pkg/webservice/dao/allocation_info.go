@@ -24,7 +24,8 @@ type AllocationDAOInfo struct {
 	RequestTime      int64             `json:"requestTime,omitempty"`     // Allocation ask's createTime if PlaceholderUsed is false, otherwise equivalent to placeholder allocation's createTime
 	AllocationTime   int64             `json:"allocationTime,omitempty"`  // Allocation's createTime
 	AllocationDelay  int64             `json:"allocationDelay,omitempty"` // Difference between AllocationTime and RequestTime
-	UUID             string            `json:"uuid,omitempty"`
+	UUID             string            `json:"uuid,omitempty"`            // Deprecated. Need to remove this in next major release
+	AllocationID     string            `json:"allocationID,omitempty"`    // Added to replace UUID.
 	ResourcePerAlloc map[string]int64  `json:"resource,omitempty"`
 	Priority         string            `json:"priority,omitempty"`
 	NodeID           string            `json:"nodeId,omitempty"`

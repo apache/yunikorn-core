@@ -114,9 +114,9 @@ func TestApplicationHistoryTracking(t *testing.T) {
 
 	allocations := ms.mockRM.getAllocations()
 	assert.Equal(t, 1, len(allocations), "number of allocations")
-	var uuid string
+	var allocationID string
 	for key := range allocations {
-		uuid = key
+		allocationID = key
 	}
 
 	// terminate allocation & check events
@@ -126,7 +126,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 				{
 					ApplicationID:   appID1,
 					PartitionName:   "default",
-					UUID:            uuid,
+					AllocationID:    allocationID,
 					TerminationType: si.TerminationType_STOPPED_BY_RM,
 				},
 			},

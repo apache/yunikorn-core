@@ -338,7 +338,7 @@ func TestBasicScheduler(t *testing.T) {
 	// Release all allocations
 	for _, v := range ms.mockRM.getAllocations() {
 		updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationRelease{
-			UUID:          v.UUID,
+			AllocationID:  v.AllocationID,
 			ApplicationID: v.ApplicationID,
 			PartitionName: v.PartitionName,
 		})
@@ -905,7 +905,7 @@ partitions:
 				allocReleases = append(allocReleases, &si.AllocationRelease{
 					PartitionName: "default",
 					ApplicationID: appID1,
-					UUID:          alloc.UUID,
+					AllocationID:  alloc.AllocationID,
 					Message:       "",
 				})
 			}
@@ -1409,7 +1409,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				{
 					PartitionName:   "default",
 					ApplicationID:   appID1,
-					UUID:            placeholderAlloc.GetUUID(),
+					AllocationID:    placeholderAlloc.GetAllocationID(),
 					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},
@@ -1438,7 +1438,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				{
 					PartitionName:   "default",
 					ApplicationID:   appID1,
-					UUID:            placeholderAlloc.GetUUID(),
+					AllocationID:    placeholderAlloc.GetAllocationID(),
 					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},
@@ -1594,7 +1594,7 @@ partitions:
 	// Release all allocations
 	for _, v := range ms.mockRM.getAllocations() {
 		updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationRelease{
-			UUID:          v.UUID,
+			AllocationID:  v.AllocationID,
 			ApplicationID: v.ApplicationID,
 			PartitionName: v.PartitionName,
 		})

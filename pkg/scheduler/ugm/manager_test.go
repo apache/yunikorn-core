@@ -704,9 +704,7 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 
 func TestIncreaseDifferentAppResourceToDiffGroup(t *testing.T) {
 	// Increase resource to different applications each with different group linkage
-	GetUserManager()
-	m.ClearUserTrackers()
-	m.ClearGroupTrackers()
+	setupUGM()
 	user := "user"
 	groups := []string{"group1", "group2"}
 	// Queue setup: root->parent->leaf

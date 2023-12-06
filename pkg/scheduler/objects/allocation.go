@@ -264,10 +264,10 @@ func (a *Allocation) GetPlaceholderCreateTime() time.Time {
 }
 
 // SetPlaceholderCreateTime updates the placeholder's creation time
-func (a *Allocation) SetPlaceholderCreateTime(placeholdereCreateTime time.Time) {
+func (a *Allocation) SetPlaceholderCreateTime(placeholderCreateTime time.Time) {
 	a.Lock()
 	defer a.Unlock()
-	a.placeholderCreateTime = placeholdereCreateTime
+	a.placeholderCreateTime = placeholderCreateTime
 }
 
 // IsPlaceholder returns whether the allocation is a placeholder

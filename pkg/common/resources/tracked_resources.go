@@ -98,12 +98,7 @@ func (tr *TrackedResource) AggregateTrackedResource(instType string,
 		aggregatedResourceTime = map[string]int64{}
 	}
 	for key, element := range resource.Resources {
-		curUsage, ok := aggregatedResourceTime[key]
-		if !ok {
-			curUsage = 0
-		}
-		curUsage += int64(element) * timeDiff // resource size times timeDiff
-		aggregatedResourceTime[key] = curUsage
+		aggregatedResourceTime[key] += int64(element) * timeDiff
 	}
 	tr.TrackedResourceMap[instType] = aggregatedResourceTime
 }

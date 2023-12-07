@@ -33,6 +33,7 @@ func GetUserGroupNoResolve() *UserGroupCache {
 		lookup:        noLookupUser,
 		lookupGroupID: noLookupGroupID,
 		groupIds:      noLookupGroupIds,
+		stop:          make(chan struct{}),
 	}
 }
 

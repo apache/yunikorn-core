@@ -68,6 +68,7 @@ func (manager *partitionManager) Run() {
 }
 
 func (manager *partitionManager) cleanRoot() {
+	log.Log(log.SchedPartition).Info("Starting partition queue cleaner")
 	// exit only when the partition this manager belongs to exits
 	for {
 		cleanRootInterval := manager.cleanRootInterval
@@ -89,11 +90,11 @@ func (manager *partitionManager) cleanRoot() {
 // Set the flag that the will allow the manager to exit.
 // No locking needed as there is just one place where this is called which is already locked.
 func (manager *partitionManager) Stop() {
-	go func() {
-		manager.stopCleanExpiredApps <- struct{}{}
-		manager.stopCleanRoot <- struct{}{}
-		manager.remove()
-	}()
+	log.Log(log.SchedPartition).Info("Stopping partition manager",
+		zap.String("partition", manager.pc.Name))
+	close(manager.stopCleanExpiredApps)
+	close(manager.stopCleanRoot)
+	manager.remove()
 }
 
 // Remove drained managed and empty unmanaged queues. Perform the action recursively.
@@ -137,6 +138,7 @@ func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 // - applications
 // - nodes
 // last action is to remove the cluster links
+//
 //nolint:errcheck
 func (manager *partitionManager) remove() {
 	log.Log(log.SchedPartition).Info("marking all queues for removal",
@@ -168,6 +170,7 @@ func (manager *partitionManager) remove() {
 }
 
 func (manager *partitionManager) cleanExpiredApps() {
+	log.Log(log.SchedPartition).Info("Starting partition expired apps cleaner")
 	for {
 		cleanExpiredAppsInterval := manager.cleanExpiredAppsInterval
 		if cleanExpiredAppsInterval <= 0 {

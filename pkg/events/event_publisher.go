@@ -19,7 +19,6 @@
 package events
 
 import (
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -34,38 +33,41 @@ var defaultPushEventInterval = 2 * time.Second
 type EventPublisher struct {
 	store             *EventStore
 	pushEventInterval time.Duration
-	stop              atomic.Bool
+	stop              chan struct{}
 }
 
 func CreateShimPublisher(store *EventStore) *EventPublisher {
 	publisher := &EventPublisher{
 		store:             store,
 		pushEventInterval: defaultPushEventInterval,
+		stop:              make(chan struct{}),
 	}
-	publisher.stop.Store(false)
 	return publisher
 }
 
 func (sp *EventPublisher) StartService() {
+	log.Log(log.Events).Info("Starting shim event publisher")
 	go func() {
 		for {
-			if sp.stop.Load() {
-				break
-			}
-			messages := sp.store.CollectEvents()
-			if len(messages) > 0 {
-				if eventPlugin := plugins.GetResourceManagerCallbackPlugin(); eventPlugin != nil {
-					log.Log(log.Events).Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
-					eventPlugin.SendEvent(messages)
+			select {
+			case <-sp.stop:
+				return
+			case <-time.After(sp.pushEventInterval):
+				messages := sp.store.CollectEvents()
+				if len(messages) > 0 {
+					if eventPlugin := plugins.GetResourceManagerCallbackPlugin(); eventPlugin != nil {
+						log.Log(log.Events).Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
+						eventPlugin.SendEvent(messages)
+					}
 				}
 			}
-			time.Sleep(sp.pushEventInterval)
 		}
 	}()
 }
 
 func (sp *EventPublisher) Stop() {
-	sp.stop.Store(true)
+	log.Log(log.Events).Info("Stopping shim event publisher")
+	close(sp.stop)
 }
 
 func (sp *EventPublisher) getEventStore() *EventStore {

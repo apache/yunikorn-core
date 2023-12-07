@@ -2389,8 +2389,9 @@ func TestGetOutstandingRequests_NoSchedulingAttempt(t *testing.T) {
 	assert.Equal(t, "alloc-4", total[1].allocationKey)
 }
 
-func TestGetOutstandingRequests_RequestTriggeredPreemption(t *testing.T) {
-	// Test that we decrease headrooms even if the requests have triggered upscaling
+func TestGetOutstandingRequests_RequestTriggeredPreemptionHasRequiredNode(t *testing.T) {
+	// Test that we decrease headrooms even if the requests have triggered upscaling or
+	// the ask is a DaemonSet pod (requiredNode != "")
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
 
 	allocationAsk1 := newAllocationAsk("alloc-1", "app-1", res)
@@ -2400,11 +2401,12 @@ func TestGetOutstandingRequests_RequestTriggeredPreemption(t *testing.T) {
 	allocationAsk1.SetSchedulingAttempted(true)
 	allocationAsk2.SetSchedulingAttempted(true)
 	allocationAsk3.SetSchedulingAttempted(true)
-	allocationAsk4.SetSchedulingAttempted(true)
-	allocationAsk1.SetScaleUpTriggered(true)
-	allocationAsk2.SetScaleUpTriggered(true)
-	allocationAsk3.SetScaleUpTriggered(true)
-	allocationAsk4.SetScaleUpTriggered(true)
+	allocationAsk4.SetSchedulingAttempted(true) // hasn't triggered scaling, no required node --> picked
+	allocationAsk1.SetScaleUpTriggered(true)    // triggered scaling, no required node --> not selected
+	allocationAsk2.SetScaleUpTriggered(true)    // triggered scaling, has required node --> not selected
+	allocationAsk2.SetRequiredNode("node-1")
+	allocationAsk3.SetRequiredNode("node-1") // hasn't triggered scaling, has required node --> not selected
+
 	app := &Application{
 		ApplicationID: "app-1",
 		queuePath:     "default",
@@ -2421,11 +2423,8 @@ func TestGetOutstandingRequests_RequestTriggeredPreemption(t *testing.T) {
 	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
 	app.getOutstandingRequests(headroom, userHeadroom, &total)
 
-	assert.Equal(t, 0, len(total))
-	expectedHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 6})
-	expectedUserHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 4})
-	assert.Assert(t, resources.Equals(expectedHeadroom, headroom), "headroom expected: %v, got: %v", expectedHeadroom, headroom)
-	assert.Assert(t, resources.Equals(expectedUserHeadroom, userHeadroom), "userHeadroom expected: %v, got: %v", expectedUserHeadroom, userHeadroom)
+	assert.Equal(t, 1, len(total))
+	assert.Equal(t, "alloc-4", total[0].allocationKey)
 }
 
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {

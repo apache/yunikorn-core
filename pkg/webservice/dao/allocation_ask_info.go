@@ -40,4 +40,6 @@ type AllocationAskDAOInfo struct {
 	AllocationLog       []*AllocationAskLogDAOInfo `json:"allocationLog,omitempty"`
 	TriggeredPreemption bool                       `json:"triggeredPreemption,omitempty"`
 	Originator          bool                       `json:"originator,omitempty"`
+	SchedulingAttempted bool                       `json:"schedulingAttempted,omitempty"`
+	TriggeredScaleUp    bool                       `json:"triggeredScaleUp,omitempty"`
 }

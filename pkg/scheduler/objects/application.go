@@ -901,9 +901,10 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 		if request.GetPendingAskRepeat() == 0 || !request.IsSchedulingAttempted() {
 			continue
 		}
+
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
-			if !request.HasTriggeredScaleUp() {
+			if !request.HasTriggeredScaleUp() && request.requiredNode == common.Empty {
 				// if headroom is still enough for the resources
 				*total = append(*total, request)
 			}
@@ -938,8 +939,6 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
-		request.SetSchedulingAttempted(true)
-
 		if request.GetPendingAskRepeat() == 0 {
 			continue
 		}
@@ -947,12 +946,15 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		if sa.canReplace(request) {
 			continue
 		}
+
 		// check if this fits in the users' headroom first, if that fits check the queues' headroom
 		// NOTE: preemption most likely will not help in this case. The chance that preemption helps is mall
 		// as the preempted allocation must be for the same user in a different queue in the hierarchy...
 		if !userHeadroom.FitInMaxUndef(request.GetAllocatedResource()) {
 			continue
 		}
+
+		request.SetSchedulingAttempted(true)
 
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
 		if !headRoom.FitInMaxUndef(request.GetAllocatedResource()) {

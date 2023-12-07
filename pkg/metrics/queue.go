@@ -26,6 +26,23 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
+const (
+	AppAccepted  = "accepted"
+	AppRunning   = "running"
+	AppFailed    = "failed"
+	AppRejected  = "rejected"
+	AppCompleted = "completed"
+
+	ContainerReleased  = "released"
+	ContainerAllocated = "allocated"
+	ContainerRejected  = "rejected"
+
+	QueueGuaranteed = "guaranteed"
+	QueueMax        = "max"
+	QueuePending    = "pending"
+	QueuePreempting = "preempting"
+)
+
 // QueueMetrics to declare queue metrics
 type QueueMetrics struct {
 	appMetricsLabel *prometheus.GaugeVec
@@ -105,18 +122,18 @@ func InitQueueMetrics(name string) *QueueMetrics {
 }
 
 func (m *QueueMetrics) incQueueApplications(state string) {
-	m.appMetricsLabel.With(prometheus.Labels{"state": state}).Inc()
-	m.appMetricsSubsystem.With(prometheus.Labels{"state": state}).Inc()
+	m.appMetricsLabel.WithLabelValues(state).Inc()
+	m.appMetricsSubsystem.WithLabelValues(state).Inc()
 }
 
 func (m *QueueMetrics) decQueueApplications(state string) {
-	m.appMetricsLabel.With(prometheus.Labels{"state": state}).Dec()
-	m.appMetricsSubsystem.With(prometheus.Labels{"state": state}).Dec()
+	m.appMetricsLabel.WithLabelValues(state).Dec()
+	m.appMetricsSubsystem.WithLabelValues(state).Dec()
 }
 
 func (m *QueueMetrics) setQueueResource(state string, resourceName string, value float64) {
-	m.resourceMetricsLabel.With(prometheus.Labels{"state": state, "resource": resourceName}).Set(value)
-	m.resourceMetricsSubsystem.With(prometheus.Labels{"state": state, "resource": resourceName}).Set(value)
+	m.resourceMetricsLabel.WithLabelValues(state, resourceName).Set(value)
+	m.resourceMetricsSubsystem.WithLabelValues(state, resourceName).Set(value)
 }
 
 func (m *QueueMetrics) Reset() {
@@ -127,16 +144,16 @@ func (m *QueueMetrics) Reset() {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsRunning() {
-	m.incQueueApplications("running")
+	m.incQueueApplications(AppRunning)
 }
 
 func (m *QueueMetrics) DecQueueApplicationsRunning() {
-	m.decQueueApplications("running")
+	m.decQueueApplications(AppRunning)
 }
 
 func (m *QueueMetrics) GetQueueApplicationsRunning() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.With(prometheus.Labels{"state": "running"}).Write(metricDto)
+	err := m.appMetricsLabel.WithLabelValues(AppRunning).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -144,12 +161,12 @@ func (m *QueueMetrics) GetQueueApplicationsRunning() (int, error) {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsAccepted() {
-	m.incQueueApplications("accepted")
+	m.incQueueApplications(AppAccepted)
 }
 
 func (m *QueueMetrics) GetQueueApplicationsAccepted() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.With(prometheus.Labels{"state": "accepted"}).Write(metricDto)
+	err := m.appMetricsLabel.WithLabelValues(AppAccepted).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -157,12 +174,12 @@ func (m *QueueMetrics) GetQueueApplicationsAccepted() (int, error) {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsRejected() {
-	m.incQueueApplications("rejected")
+	m.incQueueApplications(AppRejected)
 }
 
 func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.With(prometheus.Labels{"state": "rejected"}).Write(metricDto)
+	err := m.appMetricsLabel.WithLabelValues(AppRejected).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -170,12 +187,12 @@ func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsFailed() {
-	m.incQueueApplications("failed")
+	m.incQueueApplications(AppFailed)
 }
 
 func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.With(prometheus.Labels{"state": "failed"}).Write(metricDto)
+	err := m.appMetricsLabel.WithLabelValues(AppFailed).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -183,12 +200,12 @@ func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
 }
 
 func (m *QueueMetrics) IncQueueApplicationsCompleted() {
-	m.incQueueApplications("completed")
+	m.incQueueApplications(AppCompleted)
 }
 
 func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.With(prometheus.Labels{"state": "completed"}).Write(metricDto)
+	err := m.appMetricsLabel.WithLabelValues(AppCompleted).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -196,33 +213,33 @@ func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {
 }
 
 func (m *QueueMetrics) IncAllocatedContainer() {
-	m.containerMetrics.With(prometheus.Labels{"state": "allocated"}).Inc()
+	m.containerMetrics.WithLabelValues(ContainerAllocated).Inc()
 }
 
 func (m *QueueMetrics) IncReleasedContainer() {
-	m.containerMetrics.With(prometheus.Labels{"state": "released"}).Inc()
+	m.containerMetrics.WithLabelValues(ContainerReleased).Inc()
 }
 
 func (m *QueueMetrics) AddReleasedContainers(value int) {
-	m.containerMetrics.With(prometheus.Labels{"state": "released"}).Add(float64(value))
+	m.containerMetrics.WithLabelValues(ContainerReleased).Add(float64(value))
 }
 
 func (m *QueueMetrics) SetQueueGuaranteedResourceMetrics(resourceName string, value float64) {
-	m.setQueueResource("guaranteed", resourceName, value)
+	m.setQueueResource(QueueGuaranteed, resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueueMaxResourceMetrics(resourceName string, value float64) {
-	m.setQueueResource("max", resourceName, value)
+	m.setQueueResource(QueueMax, resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueueAllocatedResourceMetrics(resourceName string, value float64) {
-	m.setQueueResource("allocated", resourceName, value)
+	m.setQueueResource(ContainerAllocated, resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueuePendingResourceMetrics(resourceName string, value float64) {
-	m.setQueueResource("pending", resourceName, value)
+	m.setQueueResource(QueuePending, resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueuePreemptingResourceMetrics(resourceName string, value float64) {
-	m.setQueueResource("preempting", resourceName, value)
+	m.setQueueResource(QueuePreempting, resourceName, value)
 }

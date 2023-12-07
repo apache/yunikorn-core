@@ -125,6 +125,18 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
+		"/ws/v1/partition/:partition/application/:application",
+		getApplication,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/:partition/applications/:state",
+		getPartitionApplicationsByState,
+	},
+	route{
+		"Scheduler",
+		"GET",
 		"/ws/v1/partition/:partition/usage/users",
 		getUsersResourceUsage,
 	},

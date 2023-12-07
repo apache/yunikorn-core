@@ -1088,8 +1088,14 @@ func addAppWithUserGroup(t *testing.T, id string, part *scheduler.PartitionConte
 	assert.Equal(t, 1+initSize, len(part.GetApplications()))
 	if isCompleted {
 		app.SetState(objects.Completing.String())
+		currentCount := len(part.GetCompletedApplications())
 		err = app.HandleApplicationEvent(objects.CompleteApplication)
 		assert.NilError(t, err, "The app should have completed")
+		err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+			newCount := len(part.GetCompletedApplications())
+			return newCount == currentCount+1
+		})
+		assert.NilError(t, err, "the completed application should have been processed")
 	}
 	return app
 }
@@ -1193,6 +1199,90 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assertParamsMissing(t, resp)
 }
 
+func checkLegalGetAppsRequest(t *testing.T, url string, params httprouter.Params, expected []*dao.ApplicationDAOInfo) {
+	req, err := http.NewRequest("GET", url, strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, params))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+	var appsDao []*dao.ApplicationDAOInfo
+	getPartitionApplicationsByState(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, len(appsDao), len(expected))
+}
+
+func checkIllegalGetAppsRequest(t *testing.T, url string, params httprouter.Params, assertFunc func(t *testing.T, resp *MockResponseWriter)) {
+	req, err := http.NewRequest("GET", url, strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, params))
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+	getPartitionApplicationsByState(resp, req)
+	assertFunc(t, resp)
+}
+
+func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
+	defaultPartition := setup(t, configDefault, 1)
+	NewWebApp(schedulerContext, nil)
+
+	// add a new application
+	app1 := addApp(t, "app-1", defaultPartition, "root.default", false)
+	app1.SetState(objects.New.String())
+
+	// add a running application
+	app2 := addApp(t, "app-2", defaultPartition, "root.default", false)
+	app2.SetState(objects.Running.String())
+
+	// add a completed application
+	app3 := addApp(t, "app-3", defaultPartition, "root.default", true)
+
+	// add a rejected application
+	app4 := newApplication("app-4", defaultPartition.Name, "root.default", rmID, security.UserGroup{})
+	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", app3.ApplicationID)
+	defaultPartition.AddRejectedApplication(app3, rejectedMessage)
+
+	// test get active app
+	expectedActiveDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app1), getApplicationDAO(app2)}
+	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "state", Value: "Active"}}, expectedActiveDao)
+
+	// test get active app with running state
+	expectedRunningDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app2)}
+	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active?status=Running", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "state", Value: "Active"}}, expectedRunningDao)
+
+	// test get completed app
+	expectedCompletedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app3)}
+	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Completed", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "state", Value: "Completed"}}, expectedCompletedDao)
+
+	// test get rejected app
+	expectedRejectedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app4)}
+	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Rejected", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "state", Value: "Rejected"}}, expectedRejectedDao)
+
+	// test nonexistent partition
+	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: "notexists"},
+		httprouter.Param{Key: "state", Value: "Active"}}, assertPartitionExists)
+
+	// test disallow state
+	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Accepted", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "state", Value: "Accepted"}}, assertAppStateAllow)
+
+	// test disallow active state
+	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active?status=invalid", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "state", Value: "Active"}}, assertActiveStateAllow)
+
+	// test missing params name
+	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", nil, assertParamsMissing)
+}
+
 func TestGetApplicationHandler(t *testing.T) {
 	part := setup(t, configDefault, 1)
 
@@ -1269,6 +1359,20 @@ func TestGetApplicationHandler(t *testing.T) {
 	resp3 := &MockResponseWriter{}
 	getApplication(resp3, req3)
 	assertApplicationExists(t, resp3)
+
+	// test without queue
+	var req4 *http.Request
+	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/application/app-1", strings.NewReader(""))
+	req4 = req4.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	resp4 := &MockResponseWriter{}
+	var appsDao4 *dao.ApplicationDAOInfo
+	getApplication(resp4, req4)
+	err = json.Unmarshal(resp4.outputBytes, &appsDao4)
+	assert.NilError(t, err, unmarshalError)
 
 	// test missing params name
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
@@ -1357,6 +1461,24 @@ func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, NodeDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
+}
+
+func assertAppStateAllow(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, allowedStatesMsg, jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertActiveStateAllow(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, allowedActiveStatesMsg, jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func TestValidateQueue(t *testing.T) {

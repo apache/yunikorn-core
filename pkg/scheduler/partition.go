@@ -425,6 +425,10 @@ func (pc *PartitionContext) removeAppInternal(appID string) *objects.Application
 	return app
 }
 
+func (pc *PartitionContext) GetApplication(appID string) *objects.Application {
+	return pc.getApplication(appID)
+}
+
 func (pc *PartitionContext) getApplication(appID string) *objects.Application {
 	pc.RLock()
 	defer pc.RUnlock()

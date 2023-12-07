@@ -58,7 +58,42 @@ const (
 	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
+	ActiveState              = "Active"
 )
+
+var allowedStatesMsg string
+var allowedActiveStatesMsg string
+var allowedAppStates map[string]bool
+var allowedAppActiveStates map[string]bool
+
+func init() {
+	allowedAppStates = make(map[string]bool)
+	allowedAppActiveStates = make(map[string]bool)
+
+	allowedAppStates[ActiveState] = true
+	allowedAppStates[objects.Rejected.String()] = true
+	allowedAppStates[objects.Completed.String()] = true
+
+	var states []string
+	for k := range allowedAppStates {
+		states = append(states, k)
+	}
+	allowedStatesMsg = fmt.Sprintf("Only following application states are allowed: %s", strings.Join(states, ","))
+
+	allowedAppActiveStates[objects.New.String()] = true
+	allowedAppActiveStates[objects.Accepted.String()] = true
+	allowedAppActiveStates[objects.Starting.String()] = true
+	allowedAppActiveStates[objects.Running.String()] = true
+	allowedAppActiveStates[objects.Completing.String()] = true
+	allowedAppActiveStates[objects.Failing.String()] = true
+	allowedAppActiveStates[objects.Resuming.String()] = true
+
+	var activeStates []string
+	for k := range allowedAppActiveStates {
+		activeStates = append(activeStates, k)
+	}
+	allowedActiveStatesMsg = fmt.Sprintf("Only following active states are allowed: %s", strings.Join(activeStates, ","))
+}
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -619,6 +654,55 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	appState := vars.ByName("state")
+
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+	if !allowedAppStates[appState] {
+		buildJSONErrorResponse(w, allowedStatesMsg, http.StatusBadRequest)
+		return
+	}
+	var appList []*objects.Application
+	switch appState {
+	case ActiveState:
+		if status := r.URL.Query().Get("status"); status != "" {
+			if !allowedAppActiveStates[status] {
+				buildJSONErrorResponse(w, allowedActiveStatesMsg, http.StatusBadRequest)
+				return
+			}
+			for _, app := range partitionContext.GetApplications() {
+				if app.CurrentState() == status {
+					appList = append(appList, app)
+				}
+			}
+		} else {
+			appList = partitionContext.GetApplications()
+		}
+	case objects.Rejected.String():
+		appList = partitionContext.GetRejectedApplications()
+	case objects.Completed.String():
+		appList = partitionContext.GetCompletedApplications()
+	}
+	appsDao := make([]*dao.ApplicationDAOInfo, 0)
+	for _, app := range appList {
+		appsDao = append(appsDao, getApplicationDAO(app))
+	}
+	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func getApplication(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
@@ -629,22 +713,27 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
 	application := vars.ByName("application")
-	queueErr := validateQueue(queueName)
-	if queueErr != nil {
-		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
-		return
-	}
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	queue := partitionContext.GetQueue(queueName)
-	if queue == nil {
-		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
-		return
+	var app *objects.Application
+	if len(queueName) == 0 {
+		app = partitionContext.GetApplication(application)
+	} else {
+		queueErr := validateQueue(queueName)
+		if queueErr != nil {
+			buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+			return
+		}
+		queue := partitionContext.GetQueue(queueName)
+		if queue == nil {
+			buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
+			return
+		}
+		app = queue.GetApplication(application)
 	}
-	app := queue.GetApplication(application)
 	if app == nil {
 		buildJSONErrorResponse(w, ApplicationDoesNotExists, http.StatusNotFound)
 		return

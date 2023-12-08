@@ -1059,7 +1059,7 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	defer sq.Unlock()
 
 	// check this queue: failure stops checks
-	if alloc != nil && !resources.FitIn(sq.allocatedResource, alloc) {
+	if alloc != nil && !sq.allocatedResource.FitIn(alloc) {
 		return fmt.Errorf("released allocation (%v) is larger than '%s' queue allocation (%v)",
 			alloc, sq.QueuePath, sq.allocatedResource)
 	}

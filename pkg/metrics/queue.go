@@ -65,7 +65,7 @@ func InitQueueMetrics(name string) *QueueMetrics {
 			Namespace:   Namespace,
 			Name:        "queue_app",
 			ConstLabels: prometheus.Labels{"queue": name},
-			Help:        "Queue application metrics. State of the application includes `running`, `accepted`, `rejected`, `failed`, `completed`.",
+			Help:        "Queue application metrics. State of the application includes `accepted`, `rejected`, `running`, `failed`, `completed`.",
 		}, []string{"state"})
 
 	q.appMetricsSubsystem = prometheus.NewGaugeVec(

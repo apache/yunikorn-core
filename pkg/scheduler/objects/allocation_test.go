@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/go-cmp/cmp/cmpopts"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -136,14 +135,37 @@ func TestSIFromAlloc(t *testing.T) {
 		NodeID:           "node-1",
 		ApplicationID:    "app-1",
 		ResourcePerAlloc: res.ToProto(),
+		Originator:       true,
+		PreemptionPolicy: &si.PreemptionPolicy{
+			AllowPreemptSelf:  true,
+			AllowPreemptOther: false,
+		},
 	}
 	ask := newAllocationAsk("ask-1", "app-1", res)
 	alloc := NewAllocation("node-1", ask)
+	ask.originator = true
+	ask.allowPreemptSelf = false
+	ask.allowPreemptOther = true
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
+
 	allocSI := alloc.NewSIFromAllocation()
-	assert.DeepEqual(t, allocSI, expectedSI, cmpopts.IgnoreUnexported(si.Allocation{}, si.Resource{}, si.Quantity{}))
+	assert.Equal(t, expectedSI.AllocationKey, allocSI.AllocationKey, "wrong AllocationKey")
+	assert.Equal(t, expectedSI.AllocationID, allocSI.AllocationID, "wrong AllocationID")
+	assert.Equal(t, expectedSI.NodeID, allocSI.NodeID, "wrong NodeID")
+	assert.Equal(t, expectedSI.ApplicationID, allocSI.ApplicationID, "wrong ApplicationID")
+	assert.Check(t, allocSI.Originator, "originator flag should be set")
+	assert.Check(t, !allocSI.PreemptionPolicy.AllowPreemptSelf, "allowPreemptSelf flag should not be set")
+	assert.Check(t, allocSI.PreemptionPolicy.AllowPreemptOther, "aloowPreemptOther flag should be set")
+
+	alloc.ask.originator = false
+	alloc.ask.allowPreemptSelf = true
+	alloc.ask.allowPreemptOther = false
+	allocSI = alloc.NewSIFromAllocation()
+	assert.Check(t, !allocSI.Originator, "originator flag should not be set")
+	assert.Check(t, allocSI.PreemptionPolicy.AllowPreemptSelf, "allowPreemptSelf flag should be set")
+	assert.Check(t, !allocSI.PreemptionPolicy.AllowPreemptOther, "aloowPreemptOther flag should not be set")
 }
 
 func TestNewAllocFromNilSI(t *testing.T) {
@@ -171,6 +193,11 @@ func TestNewAllocFromSI(t *testing.T) {
 		TaskGroupName:    "",
 		Placeholder:      true,
 		AllocationTags:   tags,
+		Originator:       true,
+		PreemptionPolicy: &si.PreemptionPolicy{
+			AllowPreemptSelf:  false,
+			AllowPreemptOther: true,
+		},
 	}
 	var nilAlloc *Allocation
 	alloc := NewAllocationFromSI(allocSI)
@@ -181,8 +208,22 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, alloc.IsPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, alloc.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 	assert.Equal(t, alloc.GetAsk().GetCreateTime(), time.Unix(past, 0)) //nolint:staticcheck
+	assert.Assert(t, alloc.GetAsk().IsOriginator(), "ask should have been an originator")
+	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptSelf(), "ask should not have allow-preempt-self set")
+	assert.Assert(t, alloc.GetAsk().IsAllowPreemptOther(), "ask should have allow-preempt-other set")
 
+	allocSI.Originator = false
+	allocSI.PreemptionPolicy.AllowPreemptSelf = true
+	allocSI.PreemptionPolicy.AllowPreemptOther = false
 	allocSI.AllocationTags[siCommon.CreationTime] = "xyz"
 	alloc = NewAllocationFromSI(allocSI)
 	assert.Equal(t, alloc.GetAsk().GetCreateTime().Unix(), int64(-1)) //nolint:staticcheck
+	assert.Assert(t, !alloc.GetAsk().IsOriginator(), "ask should not have been an originator")
+	assert.Assert(t, alloc.GetAsk().IsAllowPreemptSelf(), "ask should have allow-preempt-self set")
+	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptOther(), "ask should not have allow-preempt-other set")
+
+	allocSI.PreemptionPolicy = nil
+	alloc = NewAllocationFromSI(allocSI)
+	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptSelf(), "ask should not have allow-preempt-self set")
+	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptOther(), "ask should not have allow-preempt-other set")
 }

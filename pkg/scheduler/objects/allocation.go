@@ -153,6 +153,9 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		placeholder:       alloc.Placeholder,
 		createTime:        time.Unix(creationTime, 0),
 		allocLog:          make(map[string]*AllocationLogEntry),
+		originator:        alloc.Originator,
+		allowPreemptSelf:  alloc.PreemptionPolicy.GetAllowPreemptSelf(),
+		allowPreemptOther: alloc.PreemptionPolicy.GetAllowPreemptOther(),
 	}
 	newAlloc := NewAllocation(alloc.NodeID, ask)
 	newAlloc.allocationID = alloc.AllocationID
@@ -175,6 +178,11 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		ResourcePerAlloc: a.GetAllocatedResource().ToProto(), // needed in tests for restore
 		TaskGroupName:    a.GetTaskGroup(),
 		Placeholder:      a.IsPlaceholder(),
+		Originator:       a.GetAsk().IsOriginator(),
+		PreemptionPolicy: &si.PreemptionPolicy{
+			AllowPreemptSelf:  a.GetAsk().IsAllowPreemptSelf(),
+			AllowPreemptOther: a.GetAsk().IsAllowPreemptOther(),
+		},
 	}
 }
 

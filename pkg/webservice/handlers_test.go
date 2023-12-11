@@ -1500,7 +1500,7 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
 
 	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
-	var expGroupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
+	expGroupsResourceUsageDao := []*dao.GroupResourceUsageDAOInfo{}
 	getGroupsResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
 	assert.NilError(t, err, unmarshalError)
@@ -1508,6 +1508,32 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 
 	// Assert existing groups
 	assert.Equal(t, len(groupsResourceUsageDao), 0)
+}
+
+func TestEmptyUsersResourceUsageHandler(t *testing.T) {
+	prepareEmptyUserGroupContext()
+
+	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
+	assert.NilError(t, err, "Get Users Resource Usage Handler request failed")
+	resp := &MockResponseWriter{}
+	getUsersResourceUsage(resp, req)
+	var userResourceUsageDao []*dao.UserResourceUsageDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &userResourceUsageDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.DeepEqual(t, userResourceUsageDao, []*dao.UserResourceUsageDAOInfo{})
+}
+
+func TestEmptyGroupsResourceUsageHandler(t *testing.T) {
+	prepareEmptyUserGroupContext()
+
+	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/groups", strings.NewReader(""))
+	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
+	resp := &MockResponseWriter{}
+	getGroupsResourceUsage(resp, req)
+	var groupResourceUsageDao []*dao.GroupResourceUsageDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.DeepEqual(t, groupResourceUsageDao, []*dao.GroupResourceUsageDAOInfo{})
 }
 
 func TestGetEvents(t *testing.T) {
@@ -1683,9 +1709,7 @@ func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.Cluste
 
 func prepareUserAndGroupContext(t *testing.T) {
 	part := setup(t, configDefault, 1)
-	userManager := ugm.GetUserManager()
-	userManager.ClearUserTrackers()
-	userManager.ClearGroupTrackers()
+	clearUserManager()
 
 	// add 1 application
 	app := addAppWithUserGroup(t, "app-1", part, "root.default", false, security.UserGroup{
@@ -1709,6 +1733,17 @@ func prepareUserAndGroupContext(t *testing.T) {
 	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
 
 	NewWebApp(schedulerContext, nil)
+}
+
+func prepareEmptyUserGroupContext() {
+	clearUserManager()
+	NewWebApp(&scheduler.ClusterContext{}, nil)
+}
+
+func clearUserManager() {
+	userManager := ugm.GetUserManager()
+	userManager.ClearUserTrackers()
+	userManager.ClearGroupTrackers()
 }
 
 func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {

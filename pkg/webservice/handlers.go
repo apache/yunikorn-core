@@ -823,7 +823,7 @@ func getUsersResourceUsage(w http.ResponseWriter, _ *http.Request) {
 	writeHeaders(w)
 	userManager := ugm.GetUserManager()
 	usersResources := userManager.GetUsersResources()
-	var result []*dao.UserResourceUsageDAOInfo
+	result := []*dao.UserResourceUsageDAOInfo{}
 	for _, tracker := range usersResources {
 		result = append(result, tracker.GetUserResourceUsageDAOInfo())
 	}
@@ -859,7 +859,7 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	userManager := ugm.GetUserManager()
 	groupsResources := userManager.GetGroupsResources()
-	var result []*dao.GroupResourceUsageDAOInfo
+	result := []*dao.GroupResourceUsageDAOInfo{}
 	for _, tracker := range groupsResources {
 		result = append(result, tracker.GetGroupResourceUsageDAOInfo())
 	}

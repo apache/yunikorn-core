@@ -378,6 +378,34 @@ func getNodeUtilisation(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getPartitionNodeUtilisation(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusInternalServerError)
+		return
+	}
+
+	var result []*dao.NodesUtilDAOInfo
+	if partitionContext.GetTotalPartitionResource() != nil { // if have resource in partition
+		for name := range partitionContext.GetTotalPartitionResource().Resources {
+			nodesUtil := getNodesUtilJSON(partitionContext, name)
+			result = append(result, nodesUtil)
+		}
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 // getNodesUtilJSON loads the nodes utilisation for a partition for a specific resource type.
 func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.NodesUtilDAOInfo {
 	mapResult := make([]int, 10)

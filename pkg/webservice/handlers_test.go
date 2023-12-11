@@ -727,17 +727,10 @@ func TestGetNodeUtilisation(t *testing.T) {
 	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 0), "unexpected number of nodes returned should be 0")
 
 	// create test nodes
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}).ToProto()
-	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5}).ToProto()
 	node1ID := "node-1"
-	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
 	node2ID := "node-2"
-	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes2})
-
-	err = partition.AddNode(node1, nil)
-	assert.NilError(t, err, "add node to partition should not have failed")
-	err = partition.AddNode(node2, nil)
-	assert.NilError(t, err, "add node to partition should not have failed")
+	node1 := addNode(t, partition, node1ID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
+	node2 := addNode(t, partition, node2ID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5}))
 
 	// get nodes utilization
 	getNodeUtilisation(resp, req)
@@ -781,6 +774,14 @@ func TestGetNodeUtilisation(t *testing.T) {
 	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 1), "unexpected number of nodes returned should be 1")
 }
 
+func addNode(t *testing.T, partition *scheduler.PartitionContext, nodeId string, resource *resources.Resource) *objects.Node {
+	nodeRes := resource.ToProto()
+	node := objects.NewNode(&si.NodeInfo{NodeID: nodeId, SchedulableResource: nodeRes})
+	err := partition.AddNode(node, nil)
+	assert.NilError(t, err, "adding node to partition should not fail")
+	return node
+}
+
 func confirmNodeCount(info []*dao.NodeUtilDAOInfo, count int64) bool {
 	var total int64
 	for _, node := range info {
@@ -796,6 +797,84 @@ func addAndConfirmApplicationExists(t *testing.T, partitionName string, partitio
 	assert.NilError(t, err, "Failed to add Application to Partition.")
 	assert.Equal(t, app.CurrentState(), objects.New.String())
 	return app
+}
+
+func TestGetPartitionNodeUtilisation(t *testing.T) {
+	// setup
+	NewWebApp(&scheduler.ClusterContext{}, nil)
+	req, err := http.NewRequest("GET", "/ws/v1/partition/default/node-utilization", strings.NewReader(""))
+	assert.NilError(t, err, "Get partition node utilisation Handler request failed")
+	resp := &MockResponseWriter{}
+
+	// test missing params name
+	getPartitionNodeUtilisation(resp, req)
+	assertParamsMissing(t, resp)
+
+	// set ParamsKey in context
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+	}))
+
+	// get nodes utilization from a non-existent partition.
+	getPartitionNodeUtilisation(resp, req)
+	assertPartitionDoesNotExists(t, resp)
+
+	// add partition
+	partition := setup(t, configDefault, 1)
+
+	// get nodes utilization from a partition that contains no node
+	getPartitionNodeUtilisation(resp, req)
+	assertResponseResourceTypeCount(t, resp, 0)
+
+	// add 3 nodes to partition (with 2 resource types)
+	addNode(t, partition, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10}))
+	addNode(t, partition, "node-2", resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcore": 5}))
+	addNode(t, partition, "node-3", resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 20, "vcore": 15}))
+
+	// get nodes utilization from a partition that contains 2 resource types, each with 3 nodes
+	getPartitionNodeUtilisation(resp, req)
+	assertResponseResourceTypeCount(t, resp, 2)
+	assertResponseContent(t, resp, "memory", 3)
+	assertResponseContent(t, resp, "vcore", 2)
+}
+
+func assertPartitionDoesNotExists(t *testing.T, resp *MockResponseWriter) {
+	t.Helper()
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, "should have returned a dao.YAPIError object")
+	assert.Equal(t, errInfo.StatusCode, http.StatusInternalServerError, fmt.Sprintf("should have returned '%d', but got '%d'", http.StatusInternalServerError, errInfo.StatusCode))
+	assert.Equal(t, errInfo.Message, PartitionDoesNotExists, fmt.Sprintf("should have returned '%s', but got '%s'", PartitionDoesNotExists, errInfo.Message))
+}
+
+func assertResponseResourceTypeCount(t *testing.T, resp *MockResponseWriter, expectedResourceTypeCount int) {
+	t.Helper()
+	var partitionNodeUtilisation []*dao.NodesUtilDAOInfo
+	err := json.Unmarshal(resp.outputBytes, &partitionNodeUtilisation)
+	assert.NilError(t, err, "should have returned an list of *dao.NodesUtilDAOInfo")
+	assert.Equal(t, len(partitionNodeUtilisation), expectedResourceTypeCount, fmt.Sprintf("the count of the resource utilization types should be %d, but got %d", expectedResourceTypeCount, len(partitionNodeUtilisation)))
+}
+
+func assertResponseContent(t *testing.T, resp *MockResponseWriter, resourceType string, expectedNodeCount int64) {
+	t.Helper()
+	nodeUtilisation, err := getNodeUtilisationByType(t, resp, resourceType)
+	assert.NilError(t, err, "should have returned a *dao.NodesUtilDAOInfo")
+	assert.Equal(t, nodeUtilisation.ResourceType, resourceType, fmt.Sprintf("should have returned '%s', but got '%s'", resourceType, nodeUtilisation.ResourceType))
+	assert.Equal(t, len(nodeUtilisation.NodesUtil), 10, fmt.Sprintf("should have 10 bucket, but got %d", len(nodeUtilisation.NodesUtil)))
+	assert.Assert(t, confirmNodeCount(nodeUtilisation.NodesUtil, expectedNodeCount), fmt.Sprintf("unexpected number of nodes returned, should be %d", expectedNodeCount))
+}
+
+func getNodeUtilisationByType(t *testing.T, resp *MockResponseWriter, resourceType string) (*dao.NodesUtilDAOInfo, error) {
+	t.Helper()
+	var partitionNodeUtilisation []*dao.NodesUtilDAOInfo
+	err := json.Unmarshal(resp.outputBytes, &partitionNodeUtilisation)
+	assert.NilError(t, err, "should decode a list of *dao.NodesUtilDAOInfo")
+	for _, nodeUtilisation := range partitionNodeUtilisation {
+		if nodeUtilisation.ResourceType == resourceType {
+			return nodeUtilisation, nil
+		}
+	}
+	return nil, fmt.Errorf("should have returned a *dao.NodesUtilDAOInfo with resourceType %s", resourceType)
 }
 
 func TestPartitions(t *testing.T) {

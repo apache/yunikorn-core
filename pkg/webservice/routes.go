@@ -259,4 +259,10 @@ var webRoutes = routes{
 		"/ws/v1/scheduler/node-utilization",
 		getNodeUtilisation,
 	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/:partition/node-utilization",
+		getPartitionNodeUtilisation,
+	},
 }

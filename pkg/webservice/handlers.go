@@ -19,6 +19,8 @@
 package webservice
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -612,6 +614,33 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
 	for _, app := range queue.GetCopyOfApps() {
 		appsDao = append(appsDao, getApplicationDAO(app))
+	}
+
+	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+		w.Header().Set("Content-Encoding", "gzip")
+
+		response, err := json.Marshal(appsDao)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		var comp bytes.Buffer
+		writer := gzip.NewWriter(&comp)
+		_, err = writer.Write(response)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		err = writer.Close()
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if _, err = w.Write(comp.Bytes()); err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {

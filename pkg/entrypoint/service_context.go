@@ -24,7 +24,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
-	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/webservice"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
@@ -49,8 +48,6 @@ func (s *ServiceContext) StopAll() {
 		s.MetricsCollector.Stop()
 	}
 	s.Scheduler.Stop()
-	if proxyImpl, ok := s.RMProxy.(*rmproxy.RMProxy); ok {
-		proxyImpl.Stop()
-	}
+	s.RMProxy.Stop()
 	events.GetEventSystem().Stop()
 }

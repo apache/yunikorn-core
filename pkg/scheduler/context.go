@@ -984,3 +984,11 @@ func (cc *ClusterContext) SetLastHealthCheckResult(c *dao.SchedulerHealthDAOInfo
 func (cc *ClusterContext) GetUUID() string {
 	return cc.uuid
 }
+
+func (cc *ClusterContext) Stop() {
+	log.Log(log.SchedContext).Info("Stopping background services of partitions")
+	for _, part := range cc.GetPartitionMapClone() {
+		part.partitionManager.Stop()
+		part.userGroupCache.Stop()
+	}
+}

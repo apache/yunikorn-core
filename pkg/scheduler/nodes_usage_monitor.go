@@ -21,24 +21,26 @@ package scheduler
 import (
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 )
 
 type nodesResourceUsageMonitor struct {
-	done   chan bool
+	done   chan struct{}
 	ticker *time.Ticker
 	cc     *ClusterContext
 }
 
 func newNodesResourceUsageMonitor(scheduler *ClusterContext) *nodesResourceUsageMonitor {
 	return &nodesResourceUsageMonitor{
-		done:   make(chan bool),
+		done:   make(chan struct{}),
 		ticker: time.NewTicker(1 * time.Second),
 		cc:     scheduler,
 	}
 }
 
 func (m *nodesResourceUsageMonitor) start() {
+	log.Log(log.SchedNodesUsage).Info("Starting node resource monitor")
 	go func() {
 		for {
 			select {
@@ -66,7 +68,7 @@ func (m *nodesResourceUsageMonitor) runOnce() {
 }
 
 // Stop the node usage monitor.
-//nolint:unused
 func (m *nodesResourceUsageMonitor) stop() {
-	m.done <- true
+	log.Log(log.SchedNodesUsage).Info("Stopping node resource usage monitor")
+	close(m.done)
 }

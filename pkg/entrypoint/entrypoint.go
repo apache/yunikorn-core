@@ -103,6 +103,7 @@ func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 		imHistory = history.NewInternalMetricsHistory(opts.metricsHistorySize)
 		metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
 		metricsCollector.StartService()
+		context.MetricsCollector = metricsCollector
 	}
 
 	if opts.startWebAppFlag {

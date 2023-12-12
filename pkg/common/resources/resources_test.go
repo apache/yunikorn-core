@@ -1051,7 +1051,7 @@ func TestFitIn(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, FitIn(tt.larger, tt.smaller), tt.want, "unexpected FitIn result (parameter method)")
+			assert.Equal(t, tt.larger.FitIn(tt.smaller), tt.want, "unexpected FitIn result (parameter method)")
 			assert.Equal(t, tt.larger.FitIn(tt.smaller), tt.want, "unexpected FitIn result (receiver method)")
 		})
 	}
@@ -1073,312 +1073,420 @@ func TestFinInNil(t *testing.T) {
 }
 
 func TestFitInSkip(t *testing.T) {
-	larger := NewResource()
-	// zero set resources
-	smaller := &Resource{Resources: map[string]Quantity{"a": 1}}
-	assert.Assert(t, larger.FitInMaxUndef(smaller), "defined resource %v should fit in empty (skip undefined)", smaller)
+	tests := []struct {
+		larger   *Resource
+		smaller  *Resource
+		expected bool
+		message  string
+	}{
+		{
+			larger:   NewResource(),
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 1}},
+			expected: true,
+			message:  "defined resource %+v should fit in empty (skip undefined)",
+		},
+		{
+			larger:   NewResourceFromMap(map[string]Quantity{"a": 5}),
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 1}},
+			expected: true,
+			message:  "fitin smaller resource with value %+v should fit in larger %+v (skip undefined)",
+		},
+		{
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 1}},
+			larger:   &Resource{Resources: map[string]Quantity{"not-in-smaller": 1}},
+			expected: true,
+			message:  "different type in smaller %+v should fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"not-in-smaller": 1}},
+			smaller:  &Resource{Resources: map[string]Quantity{"not-in-larger": 1}},
+			expected: true,
+			message:  "different type in smaller %+v should fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"a": -10}},
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 0, "b": -10}},
+			expected: true,
+			message:  "fitin smaller resource with zero or neg values %+v should fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"a": -5}},
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 0, "b": 10}},
+			expected: true,
+			message:  "fitin smaller resource with value %+v should fit in larger %+v (skip undefined)",
+		},
+	}
 
-	larger = NewResourceFromMap(map[string]Quantity{"a": 5})
-	assert.Assert(t, larger.FitInMaxUndef(smaller), "fitin smaller resource with value %v should fit in larger %v (skip undefined)", smaller, larger)
-
-	// check undefined in larger
-	larger = &Resource{Resources: map[string]Quantity{"not-in-smaller": 1}}
-	assert.Assert(t, larger.FitInMaxUndef(smaller), "different type in smaller %v should fit in larger %v (skip undefined)", smaller, larger)
-
-	// check undefined in smaller
-	smaller = &Resource{Resources: map[string]Quantity{"not-in-larger": 1}}
-	assert.Assert(t, larger.FitInMaxUndef(smaller), "different type in smaller %v should fit in larger %v (skip undefined)", smaller, larger)
-
-	// complex case: just checking the resource merge, values check is secondary
-	larger = &Resource{Resources: map[string]Quantity{"a": -10}}
-	smaller = &Resource{Resources: map[string]Quantity{"a": 0, "b": -10}}
-	assert.Assert(t, larger.FitInMaxUndef(smaller), "fitin smaller resource with zero or neg values %v should fit in larger %v (skip undefined)", smaller, larger)
-
-	larger = &Resource{Resources: map[string]Quantity{"a": -5}}
-	smaller = &Resource{Resources: map[string]Quantity{"a": 0, "b": 10}}
-	assert.Assert(t, larger.FitInMaxUndef(smaller), "fitin smaller resource with value %v should fit in larger %v (skip undefined)", smaller, larger)
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			result := tc.larger.FitInMaxUndef(tc.smaller)
+			assert.Equal(t, result, tc.expected, tc.message, tc.smaller, tc.larger)
+		})
+	}
 }
 
 func TestGetShares(t *testing.T) {
-	// simple cases nil or empty resources
-	shares := getShares(nil, nil)
-	if len(shares) > 0 {
-		t.Error("nil resources gave shares list longer than 0")
-	}
-	res := NewResource()
-	shares = getShares(res, nil)
-	if len(shares) > 0 {
-		t.Error("empty resource with total nil gave shares list longer than 0")
-	}
-	total := NewResource()
-	shares = getShares(res, total)
-	if len(shares) > 0 {
-		t.Error("empty resources gave shares list longer than 0")
+	tests := []struct {
+		res      *Resource
+		total    *Resource
+		expected []float64
+		message  string
+	}{
+		{
+			res:      nil,
+			total:    nil,
+			expected: []float64{},
+			message:  "nil resources",
+		},
+		{
+			res:      NewResource(),
+			total:    nil,
+			expected: []float64{},
+			message:  "empty resource with total nil",
+		},
+		{
+			res:      NewResource(),
+			total:    NewResource(),
+			expected: []float64{},
+			message:  "empty resources",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"zero": 0}},
+			total:    nil,
+			expected: []float64{0},
+			message:  "zero valued resource",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}},
+			total:    nil,
+			expected: []float64{-5, 0, 5},
+			message:  "negative valued resource",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"zero": 0}},
+			total:    NewResource(),
+			expected: []float64{0},
+			message:  "zero valued resource with total",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}},
+			total:    &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}},
+			expected: []float64{0, 1, 1},
+			message:  "same resource and total",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}},
+			total:    &Resource{Resources: map[string]Quantity{"large": 10, "zero": 10, "small": 10}},
+			expected: []float64{-0.5, 0, 0.5},
+			message:  "negative share set to 0",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 10, "small": 15}},
+			total:    &Resource{Resources: map[string]Quantity{"large": 15, "small": 10}},
+			expected: []float64{10.0 / 15.0, 1.5},
+			message:  "resource larger than total",
+		},
+		{
+			res:      &Resource{Resources: map[string]Quantity{"large": 5, "notintotal": 10}},
+			total:    &Resource{Resources: map[string]Quantity{"large": 15}},
+			expected: []float64{5.0 / 15.0, 10},
+			message:  "resource not in total",
+		},
 	}
 
-	// simple case nil or empty total resource
-	res = &Resource{Resources: map[string]Quantity{"zero": 0}}
-	shares = getShares(res, nil)
-	if len(shares) != 1 && shares[0] != 0 {
-		t.Errorf("incorrect share with zero valued resource: %v", shares)
-	}
-	res = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
-	expected := []float64{-5, 0, 5}
-	shares = getShares(res, nil)
-	if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares with negative valued resource, expected %v got: %v", expected, shares)
-	}
-	total = NewResource()
-	expected = []float64{-5, 0, 5}
-	shares = getShares(res, total)
-	if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares with zero valued resource, expected %v got: %v", expected, shares)
-	}
-
-	// total resource set same as usage (including signs)
-	total = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
-	expected = []float64{0, 1, 1}
-	shares = getShares(res, total)
-	if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares with same resource, expected %v got: %v", expected, shares)
-	}
-
-	// negative share gets set to 0
-	res = &Resource{Resources: map[string]Quantity{"large": 5, "zero": 0, "small": -5}}
-	total = &Resource{Resources: map[string]Quantity{"large": 10, "zero": 10, "small": 10}}
-	expected = []float64{-0.5, 0, 0.5}
-	shares = getShares(res, total)
-	if len(shares) != 3 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares negative share not set to 0, expected %v got: %v", expected, shares)
-	}
-
-	// resource quantity larger than total
-	res = &Resource{Resources: map[string]Quantity{"large": 10, "small": 15}}
-	total = &Resource{Resources: map[string]Quantity{"large": 15, "small": 10}}
-	expected = []float64{10.0 / 15.0, 1.5}
-	shares = getShares(res, total)
-	if len(shares) != 2 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares larger than total, expected %v got: %v", expected, shares)
-	}
-	// resource quantity not in total
-	res = &Resource{Resources: map[string]Quantity{"large": 5, "notintotal": 10}}
-	total = &Resource{Resources: map[string]Quantity{"large": 15}}
-	expected = []float64{5.0 / 15.0, 10}
-	shares = getShares(res, total)
-	if len(shares) != 2 || !reflect.DeepEqual(shares, expected) {
-		t.Errorf("incorrect shares not in total, expected %v got: %v", expected, shares)
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			shares := getShares(tc.res, tc.total)
+			if !reflect.DeepEqual(shares, tc.expected) {
+				t.Errorf("incorrect shares for %s, expected %v got: %v", tc.message, tc.expected, shares)
+			}
+		})
 	}
 }
 
 func TestCompareShares(t *testing.T) {
-	// simple cases nil or empty shares
-	comp := compareShares(nil, nil)
-	if comp != 0 {
-		t.Error("nil shares not equal")
-	}
-	left := make([]float64, 0)
-	right := make([]float64, 0)
-	comp = compareShares(left, right)
-	if comp != 0 {
-		t.Error("empty shares not equal")
-	}
-	// simple case same shares
-	left = []float64{0, 5}
-	comp = compareShares(left, left)
-	if comp != 0 {
-		t.Error("same shares are not equal")
-	}
-	// highest same, less shares on one side, zero values
-	left = []float64{0, 10.0}
-	right = []float64{10.0}
-	comp = compareShares(left, right)
-	if comp != 0 {
-		t.Error("same shares are not equal")
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != 0 {
-		t.Error("same shares are not equal")
-	}
-
-	// highest is same, less shares on one side, positive values
-	left = []float64{1, 10}
-	right = []float64{10}
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("left should have been larger: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("right should have been larger: left %v, right %v", left, right)
-	}
-
-	// highest is same, less shares on one side, negative values
-	left = []float64{-10, 10}
-	right = []float64{10}
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("left should have been smaller: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("right should have been smaller: left %v, right %v", left, right)
-	}
-
-	// highest is smaller, less shares on one side, values are not important
-	left = []float64{0, 10}
-	right = []float64{5}
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("left should have been larger: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("right should have been larger: left %v, right %v", left, right)
-	}
-
-	// highest is +Inf, less shares on one side, zeros before -Inf value
-	left = []float64{math.Inf(-1), 0, 0, math.Inf(1)}
-	right = []float64{math.Inf(1)}
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("left should have been smaller: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("right should have been smaller: left %v, right %v", left, right)
+	tests := []struct {
+		left     []float64
+		right    []float64
+		expected int
+		message  string
+	}{
+		{
+			left:     nil,
+			right:    nil,
+			expected: 0,
+			message:  "nil shares",
+		},
+		{
+			left:     []float64{},
+			right:    []float64{},
+			expected: 0,
+			message:  "empty shares",
+		},
+		{
+			left:     []float64{0, 5},
+			right:    []float64{0, 5},
+			expected: 0,
+			message:  "same shares",
+		},
+		{
+			left:     []float64{0, 10.0},
+			right:    []float64{10.0},
+			expected: 0,
+			message:  "highest same, less shares on one side, zero values",
+		},
+		{
+			left:     []float64{10.0},
+			right:    []float64{0, 10.0},
+			expected: 0,
+			message:  "highest same, less shares on one side, zero values",
+		},
+		{
+			left:     []float64{1, 10},
+			right:    []float64{10},
+			expected: 1,
+			message:  "highest same, less shares on one side, positive values",
+		},
+		{
+			left:     []float64{10},
+			right:    []float64{1, 10},
+			expected: -1,
+			message:  "highest same, less shares on one side, positive values",
+		},
+		{
+			left:     []float64{-10, 10},
+			right:    []float64{10},
+			expected: -1,
+			message:  "highest same, less shares on one side, negative values",
+		},
+		{
+			left:     []float64{10},
+			right:    []float64{-10, 10},
+			expected: 1,
+			message:  "highest same, less shares on one side, negative values",
+		},
+		{
+			left:     []float64{0, 10},
+			right:    []float64{5},
+			expected: 1,
+			message:  "highest is smaller, less shares on one side, values are not important",
+		},
+		{
+			left:     []float64{math.Inf(-1), 0, 0, math.Inf(1)},
+			right:    []float64{math.Inf(1)},
+			expected: -1,
+			message:  "highest is +Inf, less shares on one side, zeros before -Inf value",
+		},
+		{
+			left:     []float64{-100, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)},
+			right:    []float64{-99.99, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)},
+			expected: -1,
+			message:  "longer list of values",
+		},
 	}
 
-	// longer list of values (does not cover any new case)
-	left = []float64{-100, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)}
-	right = []float64{-99.99, -10, 0, 1.1, 2.2, 3.3, 5, math.Inf(1)}
-	comp = compareShares(left, right)
-	if comp != -1 {
-		t.Errorf("left should have been smaller: left %v, right %v", left, right)
-	}
-	left, right = right, left
-	comp = compareShares(left, right)
-	if comp != 1 {
-		t.Errorf("right should have been smaller: left %v, right %v", left, right)
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			comp := compareShares(tc.left, tc.right)
+			if comp != tc.expected {
+				t.Errorf("incorrect comparison for %s: expected %d got: %d", tc.message, tc.expected, comp)
+			}
+		})
 	}
 }
 
 // This tests just the special code in the FairnessRatio.
 // This does not check the share calculation see TestGetShares for that.
 func TestFairnessRatio(t *testing.T) {
-	// simple case all empty or nil behaviour
-	left := NewResource()
-	right := NewResource()
-	total := NewResource()
-	fairRatio := FairnessRatio(left, right, total)
-	if fairRatio != 1 {
-		t.Errorf("zero resources should return 1, %f", fairRatio)
-	}
-	// right is zero should give +Inf or -Inf
-	total = &Resource{Resources: map[string]Quantity{"first": 10}}
-	left = &Resource{Resources: map[string]Quantity{"first": 1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if !math.IsInf(fairRatio, 1) {
-		t.Errorf("positive left, zero right resources should return +Inf got: %f", fairRatio)
-	}
-	left = &Resource{Resources: map[string]Quantity{"first": -1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if !math.IsInf(fairRatio, -1) {
-		t.Errorf("negative left, zero right resources should return -Inf got: %f", fairRatio)
+	tests := []struct {
+		left            *Resource
+		right           *Resource
+		total           *Resource
+		expectedRatio   float64
+		expectedIsInf   bool
+		expectedInfSign int
+		message         string
+	}{
+		{
+			left:            NewResource(),
+			right:           NewResource(),
+			total:           NewResource(),
+			expectedRatio:   1,
+			expectedIsInf:   false,
+			expectedInfSign: 0,
+			message:         "all empty or nil",
+		},
+		{
+			left:            &Resource{Resources: map[string]Quantity{"first": 1}},
+			right:           NewResource(),
+			total:           &Resource{Resources: map[string]Quantity{"first": 10}},
+			expectedRatio:   math.Inf(1),
+			expectedIsInf:   true,
+			expectedInfSign: 1,
+			message:         "positive left, zero right",
+		},
+		{
+			left:            &Resource{Resources: map[string]Quantity{"first": -1}},
+			right:           NewResource(),
+			total:           &Resource{Resources: map[string]Quantity{"first": 10}},
+			expectedRatio:   math.Inf(-1),
+			expectedIsInf:   true,
+			expectedInfSign: -1,
+			message:         "negative left, zero right",
+		},
+		{
+			left:            &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:           &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			expectedRatio:   float64(math.MaxInt64),
+			expectedIsInf:   false,
+			expectedInfSign: 0,
+			message:         "max quantaties on left, 1 on right",
+		},
+		{
+			left:            &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			right:           &Resource{Resources: map[string]Quantity{"first": -1}},
+			total:           &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}},
+			expectedRatio:   float64(math.MinInt64),
+			expectedIsInf:   false,
+			expectedInfSign: 0,
+			message:         "max quantaties on left, -1 on right",
+		},
+		{
+			left:            &Resource{Resources: map[string]Quantity{"first": 90}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:           &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:   90,
+			expectedIsInf:   false,
+			expectedInfSign: 0,
+			message:         "left > right",
+		},
+		{
+			left:            &Resource{Resources: map[string]Quantity{"first": -90}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 1}},
+			total:           &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:   -90,
+			expectedIsInf:   false,
+			expectedInfSign: 0,
+			message:         "left > right (negative values)",
+		},
+		{
+			left:            &Resource{Resources: map[string]Quantity{"first": 1}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 90}},
+			total:           &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:   (1.0 / 100.0) / (90.0 / 100.0),
+			expectedIsInf:   false,
+			expectedInfSign: 0,
+			message:         "right > left",
+		},
+		{
+			left:            &Resource{Resources: map[string]Quantity{"first": -1}},
+			right:           &Resource{Resources: map[string]Quantity{"first": 90}},
+			total:           &Resource{Resources: map[string]Quantity{"first": 100}},
+			expectedRatio:   -(1.0 / 100.0) / (90.0 / 100.0),
+			expectedIsInf:   false,
+			expectedInfSign: 0,
+			message:         "right > left (negative values)",
+		},
 	}
 
-	// largest possible cluster: all resources used by left gives MaxInt or MinInt
-	total = &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}}
-	left = &Resource{Resources: map[string]Quantity{"first": math.MaxInt64}}
-	right = &Resource{Resources: map[string]Quantity{"first": 1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != math.MaxInt64 {
-		t.Errorf("maximum quantaties on left, 1 on right should get MaxInt got: %f", fairRatio)
-	}
-	right = &Resource{Resources: map[string]Quantity{"first": -1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != math.MinInt64 {
-		t.Errorf("maximum quantaties on left, -1 on right should get MinInt got: %f", fairRatio)
-	}
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			fairRatio := FairnessRatio(tc.left, tc.right, tc.total)
 
-	// normal cluster size (left > right)
-	total = &Resource{Resources: map[string]Quantity{"first": 100}}
-	left = &Resource{Resources: map[string]Quantity{"first": 90}}
-	right = &Resource{Resources: map[string]Quantity{"first": 1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != 90 {
-		t.Errorf("expected ratio 90 got: %f", fairRatio)
-	}
-	right = &Resource{Resources: map[string]Quantity{"first": -1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != -90 {
-		t.Errorf("expected ratio -90 got: %f", fairRatio)
-	}
-	// normal cluster size (right > left)
-	total = &Resource{Resources: map[string]Quantity{"first": 100}}
-	left = &Resource{Resources: map[string]Quantity{"first": 1}}
-	right = &Resource{Resources: map[string]Quantity{"first": 90}}
-	expectedRatio := (1.0 / 100.0) / (90.0 / 100.0)
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != expectedRatio {
-		t.Errorf("expected ratio 90 got: %f", fairRatio)
-	}
-	left = &Resource{Resources: map[string]Quantity{"first": -1}}
-	fairRatio = FairnessRatio(left, right, total)
-	if fairRatio != -expectedRatio {
-		t.Errorf("expected ratio -90 got: %f", fairRatio)
+			if tc.expectedIsInf {
+				if !math.IsInf(fairRatio, tc.expectedInfSign) {
+					t.Errorf("%s: expected Inf with sign %d, got: %f", tc.message, tc.expectedInfSign, fairRatio)
+				}
+			} else {
+				if fairRatio != tc.expectedRatio {
+					t.Errorf("%s: expected ratio %f, got: %f", tc.message, tc.expectedRatio, fairRatio)
+				}
+			}
+		})
 	}
 }
 
 // This tests just to cover code in the CompUsageRatio, CompUsageRatioSeparately and CompUsageShare.
 // This does not check the share calculation and share comparison see TestGetShares and TestCompShares for that.
 func TestCompUsage(t *testing.T) {
-	// simple case all empty or nil behaviour
-	left := NewResource()
-	right := NewResource()
-	if CompUsageShares(left, right) != 0 {
-		t.Error("empty resources not equal usage")
-	}
-	total := NewResource()
-	if CompUsageRatio(left, right, total) != 0 {
-		t.Error("empty resources not equal share ratio")
-	}
-	// left larger than right
-	left = &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}}
-	right = &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}}
-	if CompUsageShares(left, right) != 1 {
-		t.Errorf("left resources should have been larger left %v, right %v", left, right)
-	}
-	total = &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}}
-	if CompUsageRatio(left, right, total) != 1 {
-		t.Errorf("left resources ratio should have been larger left %v, right %v", left, right)
-	}
-	// swap for a smaller than outcome
-	left, right = right, left
-	if CompUsageShares(left, right) != -1 {
-		t.Errorf("right resources should have been larger left %v, right %v", left, right)
-	}
-	if CompUsageRatio(left, right, total) != -1 {
-		t.Errorf("right resources ratio should have been larger left %v, right %v", left, right)
+	tests := []struct {
+		left           *Resource
+		right          *Resource
+		leftTotal      *Resource
+		rightTotal     *Resource
+		expectedShares int
+		expectedRatio  int
+		message        string
+	}{
+		{
+			left:           NewResource(),
+			right:          NewResource(),
+			leftTotal:      NewResource(),
+			rightTotal:     NewResource(),
+			expectedShares: 0,
+			expectedRatio:  0,
+			message:        "empty resources",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			expectedShares: 1,
+			expectedRatio:  1,
+			message:        "left larger than right",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			expectedShares: -1,
+			expectedRatio:  -1,
+			message:        "right larger than left",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			expectedShares: 1,
+			expectedRatio:  1,
+			message:        "CompUsageRatioSeparately - left larger than right",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
+			expectedShares: -1,
+			expectedRatio:  -1,
+			message:        "CompUsageRatioSeparately - right larger than left",
+		},
+		{
+			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
+			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
+			expectedShares: 0,
+			expectedRatio:  0,
+			message:        "CompUsageRatioSeparately - equal values",
+		},
 	}
 
-	// test for CompUsageRatioSeparately
-	left = &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}}
-	right = &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}}
-	leftTotal := &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}}
-	rightTotal := leftTotal
-	if CompUsageRatioSeparately(left, leftTotal, right, rightTotal) != 1 {
-		t.Errorf("left resources ratio should have been larger left %v, left-total %v right %v right-total %v",
-			left, total, right, rightTotal)
-	}
-	rightTotal = &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}}
-	if CompUsageRatioSeparately(left, leftTotal, right, rightTotal) != -1 {
-		t.Errorf("right resources ratio should have been larger left %v, left-total %v right %v right-total %v",
-			left, rightTotal, right, total)
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			shares := CompUsageShares(tc.left, tc.right)
+			if shares != tc.expectedShares {
+				t.Errorf("%s: expected shares %d, got: %d", tc.message, tc.expectedShares, shares)
+			}
+
+			ratio := CompUsageRatioSeparately(tc.left, tc.leftTotal, tc.right, tc.rightTotal)
+			if ratio != tc.expectedRatio {
+				t.Errorf("%s: expected ratio %d, got: %d", tc.message, tc.expectedRatio, ratio)
+			}
+		})
 	}
 }
 
@@ -1401,51 +1509,42 @@ func TestFitInScoreNil(t *testing.T) {
 }
 
 func TestFitInScore(t *testing.T) {
-	fit := NewResourceFromMap(map[string]Quantity{"first": 0})
-	empty := NewResource()
-	assert.Equal(t, empty.FitInScore(nil), 0.0, "FitInScore with nil input failed")
-	// zero checks
-	assert.Equal(t, empty.FitInScore(Zero), 0.0, "FitInScore on zero resource failed")
-	assert.Equal(t, empty.FitInScore(fit), 0.0, "FitInScore on resource with zero quantities failed")
-	// simple score checks
-	fit = NewResourceFromMap(map[string]Quantity{"first": 10})
-	assert.Equal(t, empty.FitInScore(fit), 1.0, "FitInScore on resource with one quantity failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10})
-	assert.Equal(t, empty.FitInScore(fit), 2.0, "FitInScore on resource with two quantities failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": -10})
-	assert.Equal(t, empty.FitInScore(fit), 0.0, "FitInScore on resource with negative quantity failed")
-	// fit checks, non empty receiver with one quantity
-	res := NewResourceFromMap(map[string]Quantity{"first": 10})
-	fit = NewResourceFromMap(map[string]Quantity{"first": 10})
-	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on exact resource failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": -10})
-	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on negative quantity resource failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": 5})
-	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on smaller resource failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10})
-	assert.Equal(t, res.FitInScore(fit), 1.0, "FitInScore on resource with undefined fit quantity failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": 100})
-	assert.Equal(t, res.FitInScore(fit), 0.9, "FitInScore on one larger value failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": 20, "second": 100})
-	assert.Equal(t, res.FitInScore(fit), 1.5, "FitInScore on resource with defined and undefined quantity failed")
-	// fit checks, non empty receiver with multiple quantities
-	res = NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10})
-	fit = NewResourceFromMap(map[string]Quantity{"first": 100})
-	assert.Equal(t, res.FitInScore(fit), 0.9, "FitInScore on larger resource missing quantity failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1})
-	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on smaller resource multiple quantities failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10})
-	assert.Equal(t, res.FitInScore(fit), 0.0, "FitInScore on exact resource multiple quantities failed")
-	fit = NewResourceFromMap(map[string]Quantity{"first": 100, "second": 100})
-	assert.Equal(t, res.FitInScore(fit), 1.8, "FitInScore on larger resource with defined quantities failed")
-	// fit checks, non empty receiver with one negative quantity
-	res = NewResourceFromMap(map[string]Quantity{"first": -1})
-	fit = NewResourceFromMap(map[string]Quantity{"first": 1})
-	assert.Equal(t, res.FitInScore(fit), 1.0, "FitInScore on negative receiver quantity failed")
-	// fit checks, non empty receiver with negative quantities
-	res = NewResourceFromMap(map[string]Quantity{"first": -10, "second": -10})
-	fit = NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1})
-	assert.Equal(t, res.FitInScore(fit), 2.0, "FitInScore on resource with multiple negative quantities failed")
+	testCases := []struct {
+		message      string
+		receiver     *Resource
+		fit          *Resource
+		expected     float64
+		errorMessage string
+	}{
+		{
+			message:      "Nil input",
+			receiver:     NewResource(),
+			fit:          nil,
+			expected:     0.0,
+			errorMessage: "FitInScore with nil input failed",
+		},
+		{
+			message:      "Zero resource",
+			receiver:     NewResource(),
+			fit:          NewResourceFromMap(map[string]Quantity{"first": 0}),
+			expected:     0.0,
+			errorMessage: "FitInScore on zero resource failed",
+		},
+		{
+			message:      "Resource with one quantity",
+			receiver:     NewResourceFromMap(map[string]Quantity{"first": 10}),
+			fit:          NewResourceFromMap(map[string]Quantity{"first": 10}),
+			expected:     0.0,
+			errorMessage: "FitInScore on resource with one quantity failed",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.message, func(t *testing.T) {
+			result := tc.receiver.FitInScore(tc.fit)
+			assert.Equal(t, tc.expected, result, tc.errorMessage)
+		})
+	}
 }
 
 func TestCalculateAbsUsedCapacity(t *testing.T) {

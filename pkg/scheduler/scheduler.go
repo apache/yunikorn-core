@@ -37,6 +37,9 @@ type Scheduler struct {
 	clusterContext  *ClusterContext  // main context
 	pendingEvents   chan interface{} // queue for events
 	activityPending chan bool        // activity pending channel
+	stop            chan struct{}    // channel to signal stop request
+	healthChecker   *HealthChecker
+	nodesMonitor    *nodesResourceUsageMonitor
 }
 
 func NewScheduler() *Scheduler {
@@ -44,6 +47,7 @@ func NewScheduler() *Scheduler {
 	m.clusterContext = newClusterContext()
 	m.pendingEvents = make(chan interface{}, 1024*1024)
 	m.activityPending = make(chan bool, 1)
+	m.stop = make(chan struct{})
 	return m
 }
 
@@ -56,12 +60,12 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	go s.handleRMEvent()
 
 	// Start resource monitor if necessary (majorly for testing)
-	monitor := newNodesResourceUsageMonitor(s.clusterContext)
-	monitor.start()
+	s.nodesMonitor = newNodesResourceUsageMonitor(s.clusterContext)
+	s.nodesMonitor.start()
 
 	// Start health check periodically
-	c := NewHealthChecker(s.clusterContext)
-	c.Start()
+	s.healthChecker = NewHealthChecker(s.clusterContext)
+	s.healthChecker.Start()
 
 	if !manualSchedule {
 		go s.internalSchedule()
@@ -72,7 +76,15 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 // Internal start scheduling service
 func (s *Scheduler) internalSchedule() {
 	for {
-		s.awaitActivity()
+		select {
+		case <-s.stop:
+			return
+		case <-s.activityPending:
+			// activity pending
+		case <-time.After(100 * time.Millisecond):
+			// timeout, run scheduler anyway
+		}
+
 		if s.clusterContext.schedule() {
 			s.registerActivity()
 		}
@@ -81,11 +93,15 @@ func (s *Scheduler) internalSchedule() {
 
 func (s *Scheduler) internalInspectOutstandingRequests() {
 	for {
-		time.Sleep(1000 * time.Millisecond)
-		if noRequests, totalResources := s.inspectOutstandingRequests(); noRequests > 0 {
-			log.Log(log.Scheduler).Info("Found outstanding requests that will trigger autoscaling",
-				zap.Int("number of requests", noRequests),
-				zap.Stringer("total resources", totalResources))
+		select {
+		case <-s.stop:
+			return
+		case <-time.After(time.Second):
+			if noRequests, totalResources := s.inspectOutstandingRequests(); noRequests > 0 {
+				log.Log(log.Scheduler).Info("Found outstanding requests that will trigger autoscaling",
+					zap.Int("number of requests", noRequests),
+					zap.Stringer("total resources", totalResources))
+			}
 		}
 	}
 }
@@ -110,25 +126,29 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 
 func (s *Scheduler) handleRMEvent() {
 	for {
-		ev := <-s.pendingEvents
-		switch v := ev.(type) {
-		case *rmevent.RMUpdateAllocationEvent:
-			s.clusterContext.handleRMUpdateAllocationEvent(v)
-		case *rmevent.RMUpdateApplicationEvent:
-			s.clusterContext.handleRMUpdateApplicationEvent(v)
-		case *rmevent.RMUpdateNodeEvent:
-			s.clusterContext.handleRMUpdateNodeEvent(v)
-		case *rmevent.RMPartitionsRemoveEvent:
-			s.clusterContext.removePartitionsByRMID(v)
-		case *rmevent.RMRegistrationEvent:
-			s.clusterContext.processRMRegistrationEvent(v)
-		case *rmevent.RMConfigUpdateEvent:
-			s.clusterContext.processRMConfigUpdateEvent(v)
-		default:
-			log.Log(log.Scheduler).Error("Received type is not an acceptable type for RM event.",
-				zap.Stringer("received type", reflect.TypeOf(v)))
+		select {
+		case ev := <-s.pendingEvents:
+			switch v := ev.(type) {
+			case *rmevent.RMUpdateAllocationEvent:
+				s.clusterContext.handleRMUpdateAllocationEvent(v)
+			case *rmevent.RMUpdateApplicationEvent:
+				s.clusterContext.handleRMUpdateApplicationEvent(v)
+			case *rmevent.RMUpdateNodeEvent:
+				s.clusterContext.handleRMUpdateNodeEvent(v)
+			case *rmevent.RMPartitionsRemoveEvent:
+				s.clusterContext.removePartitionsByRMID(v)
+			case *rmevent.RMRegistrationEvent:
+				s.clusterContext.processRMRegistrationEvent(v)
+			case *rmevent.RMConfigUpdateEvent:
+				s.clusterContext.processRMConfigUpdateEvent(v)
+			default:
+				log.Log(log.Scheduler).Error("Received type is not an acceptable type for RM event.",
+					zap.Stringer("received type", reflect.TypeOf(v)))
+			}
+			s.registerActivity()
+		case <-s.stop:
+			return
 		}
-		s.registerActivity()
 	}
 }
 
@@ -139,16 +159,6 @@ func (s *Scheduler) registerActivity() {
 		// activity registered
 	default:
 		// buffer is full, activity will be processed at the next available opportunity
-	}
-}
-
-// awaitActivity waits for scheduler activity to occur.
-func (s *Scheduler) awaitActivity() {
-	select {
-	case <-s.activityPending:
-		// activity pending
-	case <-time.After(100 * time.Millisecond):
-		// timeout, run scheduler anyway
 	}
 }
 
@@ -209,4 +219,12 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		// Note, this sleep only works in tests.
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+func (s *Scheduler) Stop() {
+	log.Log(log.Scheduler).Info("Stopping scheduler & background services")
+	s.healthChecker.Stop()
+	s.nodesMonitor.stop()
+	s.clusterContext.Stop()
+	close(s.stop)
 }

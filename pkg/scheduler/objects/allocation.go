@@ -153,9 +153,12 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		placeholder:       alloc.Placeholder,
 		createTime:        time.Unix(creationTime, 0),
 		allocLog:          make(map[string]*AllocationLogEntry),
+		originator:        alloc.Originator,
+		allowPreemptSelf:  alloc.PreemptionPolicy.GetAllowPreemptSelf(),
+		allowPreemptOther: alloc.PreemptionPolicy.GetAllowPreemptOther(),
 	}
 	newAlloc := NewAllocation(alloc.NodeID, ask)
-	newAlloc.allocationID = alloc.UUID
+	newAlloc.allocationID = alloc.AllocationID
 	return newAlloc
 }
 
@@ -171,10 +174,15 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		NodeID:           a.GetNodeID(),
 		ApplicationID:    a.GetApplicationID(),
 		AllocationKey:    a.GetAllocationKey(),
-		UUID:             a.GetUUID(),
+		AllocationID:     a.GetAllocationID(),
 		ResourcePerAlloc: a.GetAllocatedResource().ToProto(), // needed in tests for restore
 		TaskGroupName:    a.GetTaskGroup(),
 		Placeholder:      a.IsPlaceholder(),
+		Originator:       a.GetAsk().IsOriginator(),
+		PreemptionPolicy: &si.PreemptionPolicy{
+			AllowPreemptSelf:  a.GetAsk().IsAllowPreemptSelf(),
+			AllowPreemptOther: a.GetAsk().IsAllowPreemptOther(),
+		},
 	}
 }
 
@@ -188,7 +196,7 @@ func (a *Allocation) String() string {
 	if a.result == Reserved || a.result == Unreserved {
 		allocationID = "N/A"
 	}
-	return fmt.Sprintf("applicationID=%s, uuid=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, allocationID, a.allocationKey, a.nodeID, a.result.String())
+	return fmt.Sprintf("applicationID=%s, allocationID=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, allocationID, a.allocationKey, a.nodeID, a.result.String())
 }
 
 // GetAsk returns the ask associated with this allocation
@@ -264,10 +272,10 @@ func (a *Allocation) GetPlaceholderCreateTime() time.Time {
 }
 
 // SetPlaceholderCreateTime updates the placeholder's creation time
-func (a *Allocation) SetPlaceholderCreateTime(placeholdereCreateTime time.Time) {
+func (a *Allocation) SetPlaceholderCreateTime(placeholderCreateTime time.Time) {
 	a.Lock()
 	defer a.Unlock()
-	a.placeholderCreateTime = placeholdereCreateTime
+	a.placeholderCreateTime = placeholderCreateTime
 }
 
 // IsPlaceholder returns whether the allocation is a placeholder
@@ -296,11 +304,6 @@ func (a *Allocation) GetInstanceType() string {
 
 // GetAllocationID returns the allocationID for this allocation
 func (a *Allocation) GetAllocationID() string {
-	return a.allocationID
-}
-
-// GetUUID returns the allocationID for this allocation
-func (a *Allocation) GetUUID() string {
 	return a.allocationID
 }
 

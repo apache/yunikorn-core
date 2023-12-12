@@ -100,11 +100,11 @@ func (ms *MStatsMetrics) Collect() {
 	ms.gauge("GCCPUFraction").Set(memStats.GCCPUFraction)
 
 	for i, v := range memStats.PauseNs {
-		ms.pauseNsTimes.With(prometheus.Labels{PauseNsLabel: strconv.Itoa(i)}).Set(float64(v))
+		ms.pauseNsTimes.WithLabelValues(strconv.Itoa(i)).Set(float64(v))
 	}
 
 	for i, v := range memStats.PauseEnd {
-		ms.pauseEndTimes.With(prometheus.Labels{PauseEndLabel: strconv.Itoa(i)}).Set(float64(v))
+		ms.pauseEndTimes.WithLabelValues(strconv.Itoa(i)).Set(float64(v))
 	}
 
 	for _, v := range memStats.BySize {
@@ -115,7 +115,7 @@ func (ms *MStatsMetrics) Collect() {
 }
 
 func (ms *MStatsMetrics) gauge(name string) prometheus.Gauge {
-	return ms.mstats.With(prometheus.Labels{MemStatsLabel: name})
+	return ms.mstats.WithLabelValues(name)
 }
 
 func (ms *MStatsMetrics) Reset() {
@@ -162,7 +162,7 @@ func (gm *GenericMetrics) Reset() {
 
 func (gm *GenericMetrics) gauge(name string) prometheus.Gauge {
 	formattedName := formatMetricName(name)
-	return gm.genericMetrics.With(prometheus.Labels{GenericLabel: formattedName})
+	return gm.genericMetrics.WithLabelValues(formattedName)
 }
 
 func initRuntimeMetrics() *RuntimeMetrics {

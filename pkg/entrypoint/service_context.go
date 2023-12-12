@@ -21,25 +21,36 @@ package entrypoint
 import (
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/webservice"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
 )
 
 type ServiceContext struct {
-	RMProxy   api.SchedulerAPI
-	Scheduler *scheduler.Scheduler
-	WebApp    *webservice.WebService
+	RMProxy          api.SchedulerAPI
+	Scheduler        *scheduler.Scheduler
+	WebApp           *webservice.WebService
+	MetricsCollector metrics.InternalMetricsCollector
 }
 
 func (s *ServiceContext) StopAll() {
 	log.Log(log.Entrypoint).Info("ServiceContext stop all services")
-	// TODO implement stop for services
 	if s.WebApp != nil {
 		if err := s.WebApp.StopWebApp(); err != nil {
 			log.Log(log.Entrypoint).Error("failed to stop web-app",
 				zap.Error(err))
 		}
 	}
+	if s.MetricsCollector != nil {
+		s.MetricsCollector.Stop()
+	}
+	s.Scheduler.Stop()
+	if proxyImpl, ok := s.RMProxy.(*rmproxy.RMProxy); ok {
+		proxyImpl.Stop()
+	}
+	events.GetEventSystem().Stop()
 }

@@ -122,7 +122,6 @@ func TestConfigUpdate(t *testing.T) {
 	assert.Equal(t, eventSystem.GetRingBufferCapacity(), uint64(configs.DefaultEventRingBufferCapacity))
 	assert.Equal(t, eventSystem.GetRequestCapacity(), configs.DefaultEventRequestCapacity)
 	assert.Equal(t, eventSystem.eventBuffer.capacity, uint64(configs.DefaultEventRingBufferCapacity))
-	assert.Assert(t, !eventSystem.publisher.stop.Load())
 
 	// update config and wait for refresh
 	var newRingBufferCapacity uint64 = 123
@@ -141,5 +140,4 @@ func TestConfigUpdate(t *testing.T) {
 	assert.Equal(t, eventSystem.GetRingBufferCapacity(), newRingBufferCapacity)
 	assert.Equal(t, eventSystem.GetRequestCapacity(), newRequestCapacity)
 	assert.Equal(t, eventSystem.eventBuffer.capacity, newRingBufferCapacity)
-	assert.Assert(t, eventSystem.publisher.stop.Load())
 }

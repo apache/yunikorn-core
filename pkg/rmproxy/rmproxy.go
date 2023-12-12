@@ -40,6 +40,7 @@ import (
 // Gateway to talk to ResourceManager (behind grpc/API of scheduler-interface)
 type RMProxy struct {
 	EventHandlers handler.EventHandlers
+	stop          chan struct{}
 
 	// Internal fields
 	pendingRMEvents chan interface{}
@@ -74,6 +75,7 @@ func NewRMProxy() *RMProxy {
 	rm := &RMProxy{
 		rmIDToCallback:  make(map[string]api.ResourceManagerCallback),
 		pendingRMEvents: make(chan interface{}, 1024*1024),
+		stop:            make(chan struct{}),
 	}
 	return rm
 }
@@ -228,24 +230,28 @@ func (rmp *RMProxy) processRMNodeUpdateEvent(event *rmevent.RMNodeUpdateEvent) {
 
 func (rmp *RMProxy) handleRMEvents() {
 	for {
-		ev := <-rmp.pendingRMEvents
-		switch v := ev.(type) {
-		case *rmevent.RMNewAllocationsEvent:
-			rmp.processAllocationUpdateEvent(v)
-		case *rmevent.RMApplicationUpdateEvent:
-			rmp.processApplicationUpdateEvent(v)
-		case *rmevent.RMReleaseAllocationEvent:
-			rmp.processRMReleaseAllocationEvent(v)
-		case *rmevent.RMRejectedAllocationAskEvent:
-			rmp.processRMRejectedAllocationAskEvent(v)
-		case *rmevent.RMRejectedAllocationEvent:
-			rmp.processRMRejectedAllocationEvent(v)
-		case *rmevent.RMNodeUpdateEvent:
-			rmp.processRMNodeUpdateEvent(v)
-		case *rmevent.RMReleaseAllocationAskEvent:
-			rmp.processRMReleaseAllocationAskEvent(v)
-		default:
-			panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
+		select {
+		case ev := <-rmp.pendingRMEvents:
+			switch v := ev.(type) {
+			case *rmevent.RMNewAllocationsEvent:
+				rmp.processAllocationUpdateEvent(v)
+			case *rmevent.RMApplicationUpdateEvent:
+				rmp.processApplicationUpdateEvent(v)
+			case *rmevent.RMReleaseAllocationEvent:
+				rmp.processRMReleaseAllocationEvent(v)
+			case *rmevent.RMRejectedAllocationAskEvent:
+				rmp.processRMRejectedAllocationAskEvent(v)
+			case *rmevent.RMRejectedAllocationEvent:
+				rmp.processRMRejectedAllocationEvent(v)
+			case *rmevent.RMNodeUpdateEvent:
+				rmp.processRMNodeUpdateEvent(v)
+			case *rmevent.RMReleaseAllocationAskEvent:
+				rmp.processRMReleaseAllocationAskEvent(v)
+			default:
+				panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
+			}
+		case <-rmp.stop:
+			return
 		}
 	}
 }
@@ -406,4 +412,9 @@ func (rmp *RMProxy) UpdateConfiguration(request *si.UpdateConfigurationRequest) 
 		return fmt.Errorf("update of configuration failed: %v", result.Reason)
 	}
 	return nil
+}
+
+func (rmp *RMProxy) Stop() {
+	log.Log(log.RMProxy).Info("Stopping RMProxy")
+	close(rmp.stop)
 }

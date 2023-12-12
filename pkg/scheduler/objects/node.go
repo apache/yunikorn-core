@@ -113,6 +113,11 @@ func (sn *Node) String() string {
 func (sn *Node) initializeAttribute(newAttributes map[string]string) {
 	sn.attributes = newAttributes
 
+	// Avoid passing empty nodeAttributes in initializeAttribute
+	if len(sn.attributes) == 0 {
+		sn.attributes = map[string]string{}
+	}
+
 	sn.Hostname = sn.attributes[common.HostName]
 	sn.Rackname = sn.attributes[common.RackName]
 	sn.Partition = sn.attributes[common.NodePartition]
@@ -208,13 +213,13 @@ func (sn *Node) refreshAvailableResource() {
 	}
 }
 
-// Return the allocation based on the uuid of the allocation.
+// Return the allocation based on the allocationID of the allocation.
 // returns nil if the allocation is not found
-func (sn *Node) GetAllocation(uuid string) *Allocation {
+func (sn *Node) GetAllocation(allocationID string) *Allocation {
 	sn.RLock()
 	defer sn.RUnlock()
 
-	return sn.allocations[uuid]
+	return sn.allocations[allocationID]
 }
 
 // Get a copy of the allocations on this node
@@ -298,14 +303,14 @@ func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 // Returns nil if the allocation was not found and no changes are made. If the allocation
 // is found the Allocation removed is returned. Used resources will decrease available
 // will increase as per the allocation removed.
-func (sn *Node) RemoveAllocation(uuid string) *Allocation {
+func (sn *Node) RemoveAllocation(allocationID string) *Allocation {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
-	alloc := sn.allocations[uuid]
+	alloc := sn.allocations[allocationID]
 	if alloc != nil {
-		delete(sn.allocations, uuid)
+		delete(sn.allocations, allocationID)
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.nodeEvents.sendAllocationRemovedEvent(alloc.allocationKey, alloc.allocatedResource)
@@ -328,7 +333,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	// check if this still fits: it might have changed since pre-check
 	res := alloc.GetAllocatedResource()
 	if sn.availableResource.FitIn(res) {
-		sn.allocations[alloc.GetUUID()] = alloc
+		sn.allocations[alloc.GetAllocationID()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
 		sn.nodeEvents.sendAllocationAddedEvent(alloc.allocationKey, res)
@@ -340,23 +345,23 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 // ReplaceAllocation replaces the placeholder with the real allocation on the node.
 // The delta passed in is the difference in resource usage between placeholder and real allocation.
 // It should always be a negative value or zero: it is a decrease in usage or no change
-func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resources.Resource) {
+func (sn *Node) ReplaceAllocation(allocationID string, replace *Allocation, delta *resources.Resource) {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
-	replace.SetPlaceholderCreateTime(sn.allocations[uuid].GetCreateTime())
-	delete(sn.allocations, uuid)
+	replace.SetPlaceholderCreateTime(sn.allocations[allocationID].GetCreateTime())
+	delete(sn.allocations, allocationID)
 	replace.SetPlaceholderUsed(true)
-	sn.allocations[replace.GetUUID()] = replace
+	sn.allocations[replace.GetAllocationID()] = replace
 	before := sn.allocatedResource.Clone()
 	// The allocatedResource and availableResource should be updated in the same way
 	sn.allocatedResource.AddTo(delta)
 	sn.availableResource.SubFrom(delta)
 	if !before.FitIn(sn.allocatedResource) {
 		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",
-			zap.String("placeholder uuid", uuid),
-			zap.String("allocation uuid", replace.GetUUID()),
+			zap.String("placeholder allocationid", allocationID),
+			zap.String("allocation allocationid", replace.GetAllocationID()),
 			zap.Stringer("delta", delta))
 	}
 }

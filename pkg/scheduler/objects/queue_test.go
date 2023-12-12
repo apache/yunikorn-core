@@ -2661,7 +2661,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	_, err = app.updateAskRepeatInternal(ask, -1)
 	assert.NilError(t, err, "failed to decrease pending resources")
 
-	app.RemoveAllocation(alloc.GetUUID(), si.TerminationType_STOPPED_BY_RM)
+	app.RemoveAllocation(alloc.GetAllocationID(), si.TerminationType_STOPPED_BY_RM)
 	assert.Equal(t, app.CurrentState(), Completing.String(), "app state should be completing")
 	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
 }

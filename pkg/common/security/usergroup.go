@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os/user"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -40,7 +41,8 @@ const (
 // global variables
 var now time.Time            // One clock to access
 var instance *UserGroupCache // The instance of the cache
-var once sync.Once           // Make sure we can only create the cache once
+var once = &sync.Once{}      // Make sure we can only create the cache once
+var stopped atomic.Bool      // whether UserGroupCache is stopped (needed for multiple partitions)
 
 // Cache for the user entries.
 type UserGroupCache struct {
@@ -51,6 +53,7 @@ type UserGroupCache struct {
 	lookup        func(userName string) (*user.User, error)
 	lookupGroupID func(gid string) (*user.Group, error)
 	groupIds      func(osUser *user.User) ([]string, error)
+	stop          chan struct{}
 }
 
 // The structure of the entry in the cache.
@@ -84,18 +87,24 @@ func GetUserGroupCache(resolver string) *UserGroupCache {
 		log.Log(log.Security).Info("starting UserGroupCache cleaner",
 			zap.Stringer("cleanerInterval", instance.interval))
 		go instance.run()
+		stopped.Store(false)
 	})
 	return instance
 }
 
 // Run the cleanup in a separate routine
 func (c *UserGroupCache) run() {
+	log.Log(log.Security).Info("Starting user/group cache cleaner")
 	for {
-		time.Sleep(instance.interval)
-		runStart := time.Now()
-		c.cleanUpCache()
-		log.Log(log.Security).Debug("time consumed cleaning the UserGroupCache",
-			zap.Stringer("duration", time.Since(runStart)))
+		select {
+		case <-c.stop:
+			return
+		case <-time.After(c.interval):
+			runStart := time.Now()
+			c.cleanUpCache()
+			log.Log(log.Security).Debug("time consumed cleaning the UserGroupCache",
+				zap.Stringer("duration", time.Since(runStart)))
+		}
 	}
 }
 
@@ -208,6 +217,20 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 	defer c.lock.Unlock()
 	c.ugs[userName] = ug
 	return *ug, err
+}
+
+func (c *UserGroupCache) Stop() {
+	// make sure that in case of multiple partitions, we call Stop() only once (the instance is shared)
+	// see ClusterContext.Stop()
+	if !stopped.Load() {
+		log.Log(log.Security).Info("Stopping UserGroupCache background cleanup")
+		close(c.stop)
+		once = &sync.Once{} // re-init so that GetUserGroupCache() can create a new instance again
+		instance = nil
+		stopped.Store(true)
+		return
+	}
+	log.Log(log.Security).Info("UserGroupCache already stopped")
 }
 
 // Resolve the groups for the user if the user exists

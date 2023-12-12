@@ -35,13 +35,13 @@ import (
 )
 
 const (
-	appID0    = "app-0"
-	appID1    = "app-1"
-	appID2    = "app-2"
-	aKey      = "alloc-1"
-	aUUID     = "alloc-uuid-1"
-	nodeID1   = "node-1"
-	instType1 = "itype-1"
+	appID0        = "app-0"
+	appID1        = "app-1"
+	appID2        = "app-2"
+	aKey          = "alloc-1"
+	aAllocationID = "alloc-allocationid-1"
+	nodeID1       = "node-1"
+	instType1     = "itype-1"
 )
 
 // Create the root queue, base for all testing

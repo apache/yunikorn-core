@@ -194,7 +194,8 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 		RequestTime:      requestTime,
 		AllocationTime:   allocTime,
 		AllocationDelay:  allocTime - requestTime,
-		UUID:             alloc.GetUUID(),
+		UUID:             alloc.GetAllocationID(),
+		AllocationID:     alloc.GetAllocationID(),
 		ResourcePerAlloc: alloc.GetAllocatedResource().DAOMap(),
 		PlaceholderUsed:  alloc.IsPlaceholderUsed(),
 		Placeholder:      alloc.IsPlaceholder(),
@@ -505,8 +506,8 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	} else {
-		log.Log(log.SchedHealth).Info("The healthy status of scheduler is not found", zap.Any("health check info", ""))
-		buildJSONErrorResponse(w, "The healthy status of scheduler is not found", http.StatusNotFound)
+		log.Log(log.SchedHealth).Info("Health check is not available")
+		buildJSONErrorResponse(w, "Health check is not available", http.StatusNotFound)
 	}
 }
 

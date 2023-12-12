@@ -213,7 +213,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 
 	// Initial check: Will allocation fit on node without preemption? This is possible if preemption was triggered due
 	// to queue limits and not node resource limits.
-	if resources.FitIn(nodeCurrentAvailable, p.ask.GetAllocatedResource()) {
+	if nodeCurrentAvailable.FitIn(p.ask.GetAllocatedResource()) {
 		// return empty list so this node is considered for preemption
 		return -1, make([]*Allocation, 0)
 	}
@@ -713,7 +713,7 @@ func (qps *QueuePreemptionSnapshot) IsAtOrAboveGuaranteedResource() bool {
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
 
 	// if we don't fit, we're clearly above
-	if !resources.FitIn(absGuaranteed, used) {
+	if !absGuaranteed.FitIn(used) {
 		return true
 	}
 
@@ -739,7 +739,7 @@ func (qps *QueuePreemptionSnapshot) IsWithinGuaranteedResource() bool {
 	max := qps.GetMaxResource()
 	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
-	return resources.FitIn(absGuaranteed, used)
+	return absGuaranteed.FitIn(used)
 }
 
 func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteed() *resources.Resource {

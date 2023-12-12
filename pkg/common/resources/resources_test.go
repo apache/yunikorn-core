@@ -1051,7 +1051,7 @@ func TestFitIn(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, FitIn(tt.larger, tt.smaller), tt.want, "unexpected FitIn result (parameter method)")
+			assert.Equal(t, tt.larger.FitIn(tt.smaller), tt.want, "unexpected FitIn result (parameter method)")
 			assert.Equal(t, tt.larger.FitIn(tt.smaller), tt.want, "unexpected FitIn result (receiver method)")
 		})
 	}

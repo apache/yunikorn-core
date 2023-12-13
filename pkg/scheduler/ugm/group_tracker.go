@@ -75,7 +75,7 @@ func (gt *GroupTracker) getTrackedApplications() map[string]string {
 func (gt *GroupTracker) setLimits(hierarchy []string, resource *resources.Resource, maxApps uint64) {
 	gt.Lock()
 	defer gt.Unlock()
-	gt.queueTracker.setLimit(hierarchy, resource, maxApps)
+	gt.queueTracker.setLimit(hierarchy, resource, maxApps, false)
 }
 
 func (gt *GroupTracker) headroom(hierarchy []string) *resources.Resource {

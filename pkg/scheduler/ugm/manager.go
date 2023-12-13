@@ -311,6 +311,9 @@ func (m *Manager) UpdateConfig(config configs.QueueConfig, queuePath string) err
 	// compare existing config with new configs stored in above temporary maps
 	m.clearEarlierSetLimits(userLimits, groupLimits)
 
+	// compare existing wild card user config with new configs stored in above temporary maps
+	m.clearEarlierSetUserWildCardLimits(userWildCardLimitsConfig)
+
 	// switch over - replace the existing config with new configs
 	m.replaceLimitConfigs(userLimits, groupLimits, userWildCardLimitsConfig, groupWildCardLimitsConfig, configuredGroups)
 
@@ -399,6 +402,27 @@ func (m *Manager) clearEarlierSetLimits(newUserLimits map[string]map[string]*Lim
 
 	// Clear already configured limits of user for which limits have been configured before but not now
 	m.clearEarlierSetUserLimits(newUserLimits)
+}
+
+// clearEarlierSetUserWildCardLimits Traverse new wild card user config and decide whether earlier usage needs to be cleared or not
+// by comparing with the existing config. If config set earlier not now, then traverse all users, check whether wild card limit has been applied/used or not.
+// Reset earlier settings for the users only when wild card user limit has been applied.
+func (m *Manager) clearEarlierSetUserWildCardLimits(newUserWildCardLimits map[string]*LimitConfig) {
+	for queuePath := range m.userWildCardLimitsConfig {
+		hierarchy := strings.Split(queuePath, configs.DOT)
+		// Is queue path exists?
+		if _, ok := newUserWildCardLimits[queuePath]; !ok {
+			for u, ut := range m.userTrackers {
+				// Has wild card user limit applied for this user?
+				if m.HasWildCardApplied(u, hierarchy) {
+					log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user because wild card limit has been applied earlier",
+						zap.String("user", ut.userName),
+						zap.String("queue path", queuePath))
+					m.resetUserEarlierUsage(ut, hierarchy)
+				}
+			}
+		}
+	}
 }
 
 // clearEarlierSetUserLimits Traverse new user config and decide whether earlier usage needs to be cleared or not
@@ -629,6 +653,21 @@ func (m *Manager) CanRunApp(queuePath, applicationID string, user security.UserG
 	}
 	groupCanRunApp := groupTracker.canRunApp(hierarchy, applicationID)
 	return userCanRunApp && groupCanRunApp
+}
+
+func (m *Manager) HasWildCardApplied(user string, hierarchy []string) bool {
+	m.RLock()
+	defer m.RUnlock()
+	log.Log(log.SchedUGM).Debug("Has wild card user limit applied?",
+		zap.String("user", user),
+		zap.Strings("queue path", hierarchy))
+	userTracker := m.GetUserTracker(user)
+	if userTracker == nil {
+		log.Log(log.SchedUGM).Error("user tracker must be available in userTrackers map",
+			zap.String("user", user))
+		return false
+	}
+	return userTracker.hasWildCardApplied(hierarchy)
 }
 
 // ClearUserTrackers only for tests

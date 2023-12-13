@@ -36,6 +36,7 @@ type QueueTracker struct {
 	maxResources        *resources.Resource
 	maxRunningApps      uint64
 	childQueueTrackers  map[string]*QueueTracker
+	useWildCard         bool
 }
 
 func newRootQueueTracker() *QueueTracker {
@@ -56,6 +57,7 @@ func newQueueTracker(queuePath string, queueName string) *QueueTracker {
 		maxResources:        nil,
 		maxRunningApps:      0,
 		childQueueTrackers:  make(map[string]*QueueTracker),
+		useWildCard:         false,
 	}
 	log.Log(log.SchedUGM).Debug("Created queue tracker object for queue",
 		zap.String("queue", queueName))
@@ -76,7 +78,8 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		zap.String("queue path", qt.queuePath),
 		zap.Strings("hierarchy", hierarchy),
 		zap.String("application", applicationID),
-		zap.Stringer("resource", usage))
+		zap.Stringer("resource", usage),
+		zap.Bool("use wild card", qt.useWildCard))
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
 	if len(hierarchy) > 1 {
@@ -94,67 +97,33 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 	}
 	finalResourceUsage := qt.resourceUsage.Clone()
 	finalResourceUsage.AddTo(usage)
-	wildCardQuotaExceeded := false
 	existingApp := qt.runningApplications[applicationID]
 
 	// apply user/group specific limit settings set if configured, otherwise use wild card limit settings
 	if qt.maxRunningApps != 0 && !resources.IsZero(qt.maxResources) {
-		log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of specific user/group",
+		log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings",
 			zap.Int("tracking type", int(trackType)),
 			zap.String("queue path", qt.queuePath),
 			zap.Bool("existing app", existingApp),
 			zap.Uint64("max running apps", qt.maxRunningApps),
-			zap.Stringer("max resources", qt.maxResources))
+			zap.Stringer("max resources", qt.maxResources),
+			zap.Bool("use wild card", qt.useWildCard))
 		if (!existingApp && len(qt.runningApplications)+1 > int(qt.maxRunningApps)) ||
 			resources.StrictlyGreaterThan(finalResourceUsage, qt.maxResources) {
-			log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit of specific user/group",
+			log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit",
 				zap.Int("tracking type", int(trackType)),
 				zap.String("queue path", qt.queuePath),
 				zap.Bool("existing app", existingApp),
 				zap.Int("current running applications", len(qt.runningApplications)),
 				zap.Uint64("max running applications", qt.maxRunningApps),
 				zap.Stringer("current resource usage", qt.resourceUsage),
-				zap.Stringer("max resource usage", qt.maxResources))
+				zap.Stringer("max resources", qt.maxResources),
+				zap.Bool("use wild card", qt.useWildCard))
 			return false
 		}
 	}
-
-	// Try wild card settings
-	if qt.maxRunningApps == 0 && resources.IsZero(qt.maxResources) {
-		// Is there any wild card settings? Do we need to apply enforcement checks using wild card limit settings?
-		var config *LimitConfig
-		if trackType == user {
-			config = m.getUserWildCardLimitsConfig(qt.queuePath)
-		} else if trackType == group {
-			config = m.getGroupWildCardLimitsConfig(qt.queuePath)
-		}
-		if config != nil {
-			wildCardQuotaExceeded = (config.maxApplications != 0 && !existingApp && len(qt.runningApplications)+1 > int(config.maxApplications)) ||
-				(!resources.IsZero(config.maxResources) && resources.StrictlyGreaterThan(finalResourceUsage, config.maxResources))
-			log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings of wild card user/group",
-				zap.Int("tracking type", int(trackType)),
-				zap.String("queue path", qt.queuePath),
-				zap.Bool("existing app", existingApp),
-				zap.Uint64("wild card max running apps", config.maxApplications),
-				zap.Stringer("wild card max resources", config.maxResources),
-				zap.Bool("wild card quota exceeded", wildCardQuotaExceeded))
-			if wildCardQuotaExceeded {
-				log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit of wild card user/group",
-					zap.Int("tracking type", int(trackType)),
-					zap.String("queue path", qt.queuePath),
-					zap.Bool("existing app", existingApp),
-					zap.Int("current running applications", len(qt.runningApplications)),
-					zap.Uint64("max running applications", config.maxApplications),
-					zap.Stringer("current resource usage", qt.resourceUsage),
-					zap.Stringer("max resource usage", config.maxResources))
-				return false
-			}
-		}
-	}
-
 	qt.resourceUsage.AddTo(usage)
 	qt.runningApplications[applicationID] = true
-
 	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
 		zap.Int("tracking type", int(trackType)),
 		zap.String("queue path", qt.queuePath),
@@ -163,6 +132,7 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		zap.Stringer("resource", usage),
 		zap.Uint64("max running applications", qt.maxRunningApps),
 		zap.Stringer("max resource usage", qt.maxResources),
+		zap.Bool("use wild card", qt.useWildCard),
 		zap.Stringer("total resource after increasing", qt.resourceUsage),
 		zap.Int("total applications after increasing", len(qt.runningApplications)))
 	return true
@@ -220,12 +190,13 @@ func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationI
 	return removeQT, true
 }
 
-func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Resource, maxApps uint64) {
+func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Resource, maxApps uint64, useWildCard bool) {
 	log.Log(log.SchedUGM).Debug("Setting limits",
 		zap.String("queue path", qt.queuePath),
 		zap.Strings("hierarchy", hierarchy),
 		zap.Uint64("max applications", maxApps),
-		zap.Stringer("max resources", maxResource))
+		zap.Stringer("max resources", maxResource),
+		zap.Bool("use wild card", useWildCard))
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
 	if len(hierarchy) > 1 {
@@ -233,10 +204,11 @@ func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Reso
 		if qt.childQueueTrackers[childName] == nil {
 			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName)
 		}
-		qt.childQueueTrackers[childName].setLimit(hierarchy[1:], maxResource, maxApps)
+		qt.childQueueTrackers[childName].setLimit(hierarchy[1:], maxResource, maxApps, useWildCard)
 	} else if len(hierarchy) == 1 {
 		qt.maxRunningApps = maxApps
 		qt.maxResources = maxResource
+		qt.useWildCard = useWildCard
 	}
 }
 
@@ -266,6 +238,15 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 		if trackType == user {
 			if config := m.getUserWildCardLimitsConfig(qt.queuePath); config != nil {
 				headroom = config.maxResources.Clone()
+				log.Log(log.SchedUGM).Debug("Use wild card limit settings as there is no limit set explicitly",
+					zap.String("queue name", qt.queueName),
+					zap.String("queue path", qt.queuePath),
+					zap.Strings("hierarchy", hierarchy),
+					zap.Uint64("max applications", config.maxApplications),
+					zap.Stringer("max resources", headroom))
+
+				// Override user/group specific limits with wild card limit settings
+				qt.setLimit([]string{qt.queueName}, config.maxResources.Clone(), config.maxApplications, true)
 				headroom.SubOnlyExisting(qt.resourceUsage)
 			}
 		}
@@ -448,8 +429,19 @@ func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trac
 		} else if trackType == group {
 			config = m.getGroupWildCardLimitsConfig(qt.queuePath)
 		}
-		if config != nil && config.maxApplications != 0 && running > int(config.maxApplications) {
-			return false
+		if config != nil && config.maxApplications != 0 {
+			log.Log(log.SchedUGM).Debug("Use wild card limit settings as there is no limit set explicitly",
+				zap.String("queue name", qt.queueName),
+				zap.String("queue path", qt.queuePath),
+				zap.Strings("hierarchy", hierarchy),
+				zap.Uint64("max applications", config.maxApplications),
+				zap.Stringer("max resources", config.maxResources))
+
+			// Override user/group specific limits with wild card limit settings
+			qt.setLimit([]string{qt.queueName}, config.maxResources, config.maxApplications, true)
+			if running > int(config.maxApplications) {
+				return false
+			}
 		}
 	}
 	return true
@@ -479,4 +471,23 @@ func (qt *QueueTracker) canBeRemovedInternal() bool {
 		return true
 	}
 	return false
+}
+
+func (qt *QueueTracker) hasWildCardApplied(hierarchy []string) bool {
+	// depth first: all the way to the leaf, child queue tracker should exist
+	// more than 1 in the slice means we need to recurse down
+	if len(hierarchy) > 1 {
+		childName := hierarchy[1]
+		if qt.childQueueTrackers[childName] == nil {
+			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
+				zap.String("child queueTracker name", childName))
+			return false
+		}
+		return qt.childQueueTrackers[childName].hasWildCardApplied(hierarchy[1:])
+	}
+	log.Log(log.SchedUGM).Debug("Has wild card limit applied?",
+		zap.String("queue path", qt.queuePath),
+		zap.Strings("hierarchy", hierarchy),
+		zap.Bool("use wild card ", qt.useWildCard))
+	return qt.useWildCard
 }

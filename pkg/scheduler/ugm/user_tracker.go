@@ -118,7 +118,7 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 func (ut *UserTracker) setLimits(hierarchy []string, resource *resources.Resource, maxApps uint64) {
 	ut.Lock()
 	defer ut.Unlock()
-	ut.queueTracker.setLimit(hierarchy, resource, maxApps)
+	ut.queueTracker.setLimit(hierarchy, resource, maxApps, false)
 }
 
 func (ut *UserTracker) headroom(hierarchy []string) *resources.Resource {
@@ -171,4 +171,10 @@ func (ut *UserTracker) canRunApp(hierarchy []string, applicationID string) bool 
 	ut.Lock()
 	defer ut.Unlock()
 	return ut.queueTracker.canRunApp(hierarchy, applicationID, user)
+}
+
+func (ut *UserTracker) hasWildCardApplied(hierarchy []string) bool {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.hasWildCardApplied(hierarchy)
 }

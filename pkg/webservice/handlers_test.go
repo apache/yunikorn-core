@@ -256,6 +256,23 @@ partitions:
                     - test_user
 `
 
+const groupsLimitsConfig = `
+partitions:
+    - name: default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: default
+              limits:
+                - limit: ""
+                  groups:
+                    - testgroup
+                  maxresources:
+                    cpu: "200"
+`
+
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
@@ -1405,7 +1422,7 @@ func TestFullStateDumpPath(t *testing.T) {
 }
 
 func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
-	prepareUserAndGroupContext(t)
+	prepareUserAndGroupContext(t, configDefault)
 	// Test user name is missing
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
@@ -1480,7 +1497,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 }
 
 func TestUsersAndGroupsResourceUsage(t *testing.T) {
-	prepareUserAndGroupContext(t)
+	prepareUserAndGroupContext(t, groupsLimitsConfig)
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
 	assert.NilError(t, err, "Get Users Resource Usage Handler request failed")
@@ -1500,35 +1517,31 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
 
 	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
-	expGroupsResourceUsageDao := []*dao.GroupResourceUsageDAOInfo{}
 	getGroupsResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
 	assert.NilError(t, err, unmarshalError)
-	assert.DeepEqual(t, groupsResourceUsageDao, expGroupsResourceUsageDao)
+	assert.Equal(t, groupsResourceUsageDao[0].Queues.ResourceUsage.String(),
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
 
 	// Assert existing groups
-	assert.Equal(t, len(groupsResourceUsageDao), 0)
-}
+	assert.Equal(t, len(groupsResourceUsageDao), 1)
+	assert.Equal(t, groupsResourceUsageDao[0].GroupName, "testgroup")
 
-func TestEmptyUsersResourceUsageHandler(t *testing.T) {
+	// test empty user group
 	prepareEmptyUserGroupContext()
 
-	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
 	assert.NilError(t, err, "Get Users Resource Usage Handler request failed")
-	resp := &MockResponseWriter{}
+	resp = &MockResponseWriter{}
 	getUsersResourceUsage(resp, req)
 	var userResourceUsageDao []*dao.UserResourceUsageDAOInfo
 	err = json.Unmarshal(resp.outputBytes, &userResourceUsageDao)
 	assert.NilError(t, err, unmarshalError)
 	assert.DeepEqual(t, userResourceUsageDao, []*dao.UserResourceUsageDAOInfo{})
-}
 
-func TestEmptyGroupsResourceUsageHandler(t *testing.T) {
-	prepareEmptyUserGroupContext()
-
-	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/groups", strings.NewReader(""))
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/groups", strings.NewReader(""))
 	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
-	resp := &MockResponseWriter{}
+	resp = &MockResponseWriter{}
 	getGroupsResourceUsage(resp, req)
 	var groupResourceUsageDao []*dao.GroupResourceUsageDAOInfo
 	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
@@ -1707,9 +1720,9 @@ func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.Cluste
 	return schedulerContext
 }
 
-func prepareUserAndGroupContext(t *testing.T) {
-	part := setup(t, configDefault, 1)
+func prepareUserAndGroupContext(t *testing.T, config string) {
 	clearUserManager()
+	part := setup(t, config, 1)
 
 	// add 1 application
 	app := addAppWithUserGroup(t, "app-1", part, "root.default", false, security.UserGroup{

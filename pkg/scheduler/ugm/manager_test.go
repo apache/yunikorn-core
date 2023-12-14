@@ -1568,6 +1568,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 			conf.Queues[0].Queues[0].Limits = tc.newLimits
 			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
+			manager.Headroom(queuePathParent, TestApp2, tc.user)
 			increased = manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
 			assert.Equal(t, increased, false, "should not increase tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
 		})

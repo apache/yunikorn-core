@@ -281,20 +281,6 @@ func (m *Manager) ensureGroupInternal(userGroups []string, queuePath string) str
 	return m.ensureGroupInternal(userGroups, parentPath)
 }
 
-func (m *Manager) isUserRemovable(ut *UserTracker) bool {
-	if len(ut.getTrackedApplications()) == 0 && resources.IsZero(ut.queueTracker.resourceUsage) {
-		return true
-	}
-	return false
-}
-
-func (m *Manager) isGroupRemovable(gt *GroupTracker) bool {
-	if len(gt.getTrackedApplications()) == 0 && resources.IsZero(gt.queueTracker.resourceUsage) {
-		return true
-	}
-	return false
-}
-
 func (m *Manager) UpdateConfig(config configs.QueueConfig, queuePath string) error {
 	userWildCardLimitsConfig := make(map[string]*LimitConfig)
 	groupWildCardLimitsConfig := make(map[string]*LimitConfig)

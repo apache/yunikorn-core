@@ -91,36 +91,8 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 			return false
 		}
 	}
-
 	if qt.resourceUsage == nil {
 		qt.resourceUsage = resources.NewResource()
-	}
-	finalResourceUsage := qt.resourceUsage.Clone()
-	finalResourceUsage.AddTo(usage)
-	existingApp := qt.runningApplications[applicationID]
-
-	// apply user/group specific limit settings set if configured, otherwise use wild card limit settings
-	if qt.maxRunningApps != 0 && !resources.IsZero(qt.maxResources) {
-		log.Log(log.SchedUGM).Debug("applying enforcement checks using limit settings",
-			zap.Int("tracking type", int(trackType)),
-			zap.String("queue path", qt.queuePath),
-			zap.Bool("existing app", existingApp),
-			zap.Uint64("max running apps", qt.maxRunningApps),
-			zap.Stringer("max resources", qt.maxResources),
-			zap.Bool("use wild card", qt.useWildCard))
-		if (!existingApp && len(qt.runningApplications)+1 > int(qt.maxRunningApps)) ||
-			resources.StrictlyGreaterThan(finalResourceUsage, qt.maxResources) {
-			log.Log(log.SchedUGM).Warn("Unable to increase resource usage as allowing new application to run would exceed either configured max applications or max resources limit",
-				zap.Int("tracking type", int(trackType)),
-				zap.String("queue path", qt.queuePath),
-				zap.Bool("existing app", existingApp),
-				zap.Int("current running applications", len(qt.runningApplications)),
-				zap.Uint64("max running applications", qt.maxRunningApps),
-				zap.Stringer("current resource usage", qt.resourceUsage),
-				zap.Stringer("max resources", qt.maxResources),
-				zap.Bool("use wild card", qt.useWildCard))
-			return false
-		}
 	}
 	qt.resourceUsage.AddTo(usage)
 	qt.runningApplications[applicationID] = true
@@ -128,7 +100,6 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		zap.Int("tracking type", int(trackType)),
 		zap.String("queue path", qt.queuePath),
 		zap.String("application", applicationID),
-		zap.Bool("existing app", existingApp),
 		zap.Stringer("resource", usage),
 		zap.Uint64("max running applications", qt.maxRunningApps),
 		zap.Stringer("max resource usage", qt.maxResources),

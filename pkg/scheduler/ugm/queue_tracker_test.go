@@ -231,10 +231,8 @@ func TestQTQuotaEnforcement(t *testing.T) {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp3, user, usage1)
-	if result {
-		t.Fatalf("Increasing resource usage should fail as child2's resource usage exceeded configured max resources limit. queuepath %s, app %s, res %v", queuePath2, TestApp3, usage1)
-	}
+	headroom := queueTracker.headroom(strings.Split(queuePath2, configs.DOT), user)
+	assert.Equal(t, headroom.FitInMaxUndef(usage1), false)
 
 	result = queueTracker.increaseTrackedResource(strings.Split(queuePath3, configs.DOT), TestApp3, user, usage1)
 	if !result {
@@ -246,10 +244,8 @@ func TestQTQuotaEnforcement(t *testing.T) {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath4, TestApp4, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(strings.Split(queuePath4, configs.DOT), TestApp4, user, usage1)
-	if result {
-		t.Fatalf("Increasing resource usage should fail as parent's resource usage exceeded configured max resources limit. queuepath %s, app %s, res %v", queuePath4, TestApp4, usage1)
-	}
+	headroom = queueTracker.headroom(strings.Split(queuePath4, configs.DOT), user)
+	assert.Equal(t, headroom.FitInMaxUndef(usage1), false)
 }
 
 func TestHeadroom(t *testing.T) {

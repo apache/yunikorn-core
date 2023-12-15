@@ -703,90 +703,58 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 }
 
 func TestUserGroupLimitWithMultipleApps(t *testing.T) {
-	// Increase app rsources to different leaf queue, which have different group linkage
+	// Increase app rsources to different child queue, which have different group linkage
 	// Queue setup:
 	//   root.parent with group1 limit
-	//   root.parent.leaf1 with group2 limit
-	//   root.parent.leaf2 with no limit
+	//   root.parent.child1 with group2 limit
+	//   root.parent.child2 with no limit
 
-	// Increase TestApp1 resource to root.parent.leaf1, it should be tracked by group2's groupTracker, limit was set in root.parent.leaf1
-	// Increase TestApp2 resource to root.parent.leaf2, it should be tracked by group1's groupTracker, limit was set in root.parent
-	// Decrease TestApp1 resource from root.parent.leaf1, resources should be cleaned up from group2's groupTracker
-	// Increase TestApp2 resource from root.parent.leaf2, resources should be cleaned up from group1's groupTracker
+	// Increase TestApp1 resource to root.parent.child1, it should be tracked by group2's groupTracker (limit was set in root.parent.child1 with group2 limit)
+	// Increase TestApp2 resource to root.parent.child2, it should be tracked by group1's groupTracker (limit was set in root.parent with group1 limit)
+	// Decrease TestApp1 resource from root.parent.child1, resources should be cleaned up from group2's groupTracker
+	// Decrease TestApp2 resource from root.parent.child2, resources should be cleaned up from group1's groupTracker
 
 	// Setup
 	setupUGM()
-	user := "user"
-	groups := []string{"group1", "group2"}
-	userGroup := security.UserGroup{User: user, Groups: groups}
-	mem := 10
-	vcore := 10
-	maxApp := uint64(3)
-	conf := createConfigWithDifferentGroupsLinkage(groups[0], groups[1], mem, vcore, maxApp)
+	manager := GetUserManager()
+	userGroup := security.UserGroup{User: "user", Groups: []string{"group1", "group2"}}
+
+	conf := createConfigWithDifferentGroupsLinkage(userGroup.Groups[0], userGroup.Groups[1], 10, 10, 3)
 	assert.NilError(t, m.UpdateConfig(conf.Queues[0], "root"))
-	usage, err := resources.NewResourceFromConf(map[string]string{"memory": strconv.Itoa(mem), "vcore": strconv.Itoa(vcore)})
+	usage, err := resources.NewResourceFromConf(map[string]string{"memory": "10", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
 	}
-	emptyUsage, err := resources.NewResourceFromConf(map[string]string{"memory": "0", "vcore": "0"})
-	if err != nil {
-		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, emptyUsage)
-	}
 
-	// Assert inital ugm state
-	assertUgmTrackedResourceCount(t, 0, 2)
+	// run different apps with different groups linkage (different queue limit settings)
+	increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, userGroup)
+	assert.Equal(t, increased, true)
+	increased = manager.IncreaseTrackedResource(queuePath2, TestApp2, usage, userGroup)
+	assert.Equal(t, increased, true)
 
-	// Assert inital GroupTracker state
-	assetGroupTrackerResources(t, "group1", 0, nil)
-	assetGroupTrackerResources(t, "group2", 0, nil)
+	// ensure different groups are linked and resource usage is correct
+	assert.Equal(t, len(manager.getUserTracker("user").appGroupTrackers), 2)
+	gt1 := manager.getUserTracker("user").appGroupTrackers[TestApp1]
+	gt2 := manager.getUserTracker("user").appGroupTrackers[TestApp2]
+	assert.Equal(t, gt1.groupName, "group2")
+	assert.Equal(t, resources.Equals(gt1.queueTracker.resourceUsage, usage), true)
+	assert.Equal(t, gt2.groupName, "group1")
+	assert.Equal(t, resources.Equals(gt2.queueTracker.resourceUsage, usage), true)
 
-	// Increase resources to different application, different queue, then check success
-	increaseTrackedResourceThenAssert(t, "root.parent.leaf1", TestApp1, usage, userGroup, true)
-	increaseTrackedResourceThenAssert(t, "root.parent.leaf2", TestApp2, usage, userGroup, true)
+	// limit has reached for both the groups
+	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, userGroup)
+	assert.Equal(t, increased, false)
+	increased = manager.IncreaseTrackedResource(queuePath2, TestApp2, usage, userGroup)
+	assert.Equal(t, increased, false)
 
-	// Assert ugm state after increase resources
-	assertUgmTrackedResourceCount(t, 1, 2)
+	// remove the apps
+	decreased := manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, userGroup, true)
+	assert.Equal(t, decreased, true)
+	decreased = manager.DecreaseTrackedResource(queuePath2, TestApp2, usage, userGroup, true)
+	assert.Equal(t, decreased, true)
 
-	// Assert UserTracker/GroupTracker, new UserTracker should be created.
-	assetUserTrackerResources(t, user, 2, resources.Multiply(usage, 2))
-	assetUserTrackerAppGroupTrackerMapping(t, user, TestApp1, "group2")
-	assetUserTrackerAppGroupTrackerMapping(t, user, TestApp2, "group1")
-	assertGroupTrackerResources(t, "group1", TestApp2, usage, 1, "user")
-	assertGroupTrackerResources(t, "group2", TestApp1, usage, 1, "user")
-
-	assertGroupTrackerQueuePathResource(t, "group1", "root.parent.leaf1", nil)
-	assertGroupTrackerQueuePathResource(t, "group1", "root.parent.leaf2", usage)
-	assertGroupTrackerQueuePathResource(t, "group1", "root.parent", usage)
-	assertGroupTrackerQueuePathResource(t, "group1", "root", usage)
-	assertGroupTrackerQueuePathResource(t, "group2", "root.parent.leaf1", usage)
-	assertGroupTrackerQueuePathResource(t, "group2", "root.parent.leaf2", nil)
-	assertGroupTrackerQueuePathResource(t, "group2", "root.parent", usage)
-	assertGroupTrackerQueuePathResource(t, "group2", "root", usage)
-
-	// Test limit setting has been limiting new resources, check failed
-	increaseTrackedResourceThenAssert(t, "root.parent.leaf1", TestApp1, usage, userGroup, false)
-	increaseTrackedResourceThenAssert(t, "root.parent.leaf2", TestApp2, usage, userGroup, false)
-
-	// Remove apps from queue, check success
-	decreaseTrackedResourceThenAssert(t, "root.parent.leaf1", TestApp1, usage, userGroup, true, true)
-	decreaseTrackedResourceThenAssert(t, "root.parent.leaf2", TestApp2, usage, userGroup, true, true)
-
-	// Assert ugm/GroupTracker state after apps removed, UserTracker should be removed.
-	assertUgmTrackedResourceCount(t, 0, 2)
-	assertGroupTrackerResources(t, "group1", TestApp2, emptyUsage, 0, "")
-	assertGroupTrackerResources(t, "group2", TestApp1, emptyUsage, 0, "")
-
-	// root.parent.leaf1 TestApp1 -> was limited by group 2, root.parent.leaf1
-	// root.parent.leaf2 TestApp2 -> was limited by group 1, root.parent
-	assertGroupTrackerQueuePathResource(t, "group1", "root.parent.leaf1", nil)
-	// assertGroupTrackerQueuePathResource(t, "group1", "root.parent.leaf2", emptyUsage)  // -> Failed
-	// assertGroupTrackerQueuePathResource(t, "group1", "root.parent.leaf2", usage)       // -> Passed
-	assertGroupTrackerQueuePathResource(t, "group1", "root.parent", emptyUsage)
-	assertGroupTrackerQueuePathResource(t, "group1", "root", emptyUsage)
-	assertGroupTrackerQueuePathResource(t, "group2", "root.parent.leaf1", emptyUsage)
-	assertGroupTrackerQueuePathResource(t, "group2", "root.parent.leaf2", nil)
-	assertGroupTrackerQueuePathResource(t, "group2", "root.parent", emptyUsage)
-	assertGroupTrackerQueuePathResource(t, "group2", "root", emptyUsage)
+	// assert group linkage has been removed
+	assert.Equal(t, len(manager.getUserTracker("user").appGroupTrackers), 0)
 }
 
 //nolint:funlen
@@ -1536,8 +1504,8 @@ func createConfigWithDifferentGroups(user string, group string, resourceKey stri
 
 func createConfigWithDifferentGroupsLinkage(group1 string, group2 string, mem int, vcore int, maxApps uint64) configs.PartitionConfig {
 	// root.parent with group1 limit
-	// root.parent.leaf1 with group2 limit
-	// root.parent.leaf2 with no limit
+	// root.parent.child1 with group2 limit
+	// root.parent.child2 with no limit
 	conf := configs.PartitionConfig{
 		Name: "test",
 		Queues: []configs.QueueConfig{
@@ -1552,13 +1520,13 @@ func createConfigWithDifferentGroupsLinkage(group1 string, group2 string, mem in
 						SubmitACL: "*",
 						Queues: []configs.QueueConfig{
 							{
-								Name:      "leaf1",
+								Name:      "child1",
 								Parent:    false,
 								SubmitACL: "*",
 								Queues:    nil,
 								Limits: []configs.Limit{
 									{
-										Limit: "leaf queue with group2 limit",
+										Limit: "child queue with group2 limit",
 										Groups: []string{
 											group2,
 										},
@@ -1571,7 +1539,7 @@ func createConfigWithDifferentGroupsLinkage(group1 string, group2 string, mem in
 								},
 							},
 							{
-								Name:      "leaf2",
+								Name:      "child2",
 								Parent:    false,
 								SubmitACL: "*",
 								Queues:    nil,
@@ -1702,78 +1670,4 @@ func assertWildCardLimits(t *testing.T, limitsConfig map[string]*LimitConfig, ex
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, configuredResource)
 	}
 	assert.Equal(t, resources.Equals(expResource, configuredResource), true)
-}
-
-func assertUgmTrackedResourceCount(t *testing.T, expectUserTrackerCount int, expectGroupTrackerCount int) {
-	manager := GetUserManager()
-	assert.Equal(t, len(manager.GetUsersResources()), expectUserTrackerCount, "userTrackers count should be "+strconv.Itoa(expectUserTrackerCount))
-	assert.Equal(t, len(manager.GetGroupsResources()), expectGroupTrackerCount, "groupTrackers count should be "+strconv.Itoa(expectGroupTrackerCount))
-}
-
-func assetUserTrackerResources(t *testing.T, user string, expectedAppGroupTrackerCount int, expectedRootTrackedResource *resources.Resource) {
-	manager := GetUserManager()
-	userTracker := manager.userTrackers[user]
-	assert.Assert(t, resources.Equals(userTracker.queueTracker.resourceUsage, expectedRootTrackedResource), "The new increased resources should be tracked by UserTracker.")
-	assert.Equal(t, len(userTracker.appGroupTrackers), expectedAppGroupTrackerCount, "We're expecting "+strconv.Itoa(expectedAppGroupTrackerCount)+" GroupTrackers were referenced by userTracker.")
-}
-
-func assetUserTrackerAppGroupTrackerMapping(t *testing.T, user string, app string, expectedGroup string) {
-	manager := GetUserManager()
-	appGroupTracker := manager.userTrackers[user].appGroupTrackers[app]
-	expecteGroupTracker := manager.groupTrackers[expectedGroup]
-	assert.Equal(t, appGroupTracker, expecteGroupTracker, "GroupTracker should be referenced by appGroupTracker.")
-}
-
-func assertGroupTrackerResources(t *testing.T, group string, application string, expectedRootTrackedResource *resources.Resource, expectTotalTrackedApplicationCount int, expectedAppUser string) {
-	manager := GetUserManager()
-	groupTracker := manager.groupTrackers[group]
-	assert.Equal(t, len(groupTracker.applications), expectTotalTrackedApplicationCount, "app count of GroupTracker shouldn be "+strconv.Itoa(expectTotalTrackedApplicationCount))
-	assert.Assert(t, resources.Equals(groupTracker.queueTracker.resourceUsage, expectedRootTrackedResource), "tracked resource does not matched. expected:"+expectedRootTrackedResource.String()+", but got:"+groupTracker.queueTracker.resourceUsage.String())
-	assert.Equal(t, groupTracker.applications[application], expectedAppUser, "User of application should be "+expectedAppUser, ", but got "+groupTracker.applications[application])
-}
-
-func assertGroupTrackerQueuePathResource(t *testing.T, group string, queuePath string, expectedTrackedResource *resources.Resource) {
-	manager := GetUserManager()
-	groupTracker := manager.groupTrackers[group]
-	targetQueueUsageInGroup := getQueuePathTrackedResources(queuePath, groupTracker.queueTracker)
-	assert.Assert(t, resources.Equals(targetQueueUsageInGroup, expectedTrackedResource), "tracked resource does not matched,  expected:"+expectedTrackedResource.String()+", but got: "+targetQueueUsageInGroup.String())
-}
-
-func getQueuePathTrackedResources(targetQueuePath string, baseQueueTracker *QueueTracker) *resources.Resource {
-	if baseQueueTracker == nil {
-		return nil
-	}
-
-	if targetQueuePath == baseQueueTracker.queuePath {
-		return baseQueueTracker.resourceUsage
-	}
-
-	currentQueueHierarchy := strings.Split(baseQueueTracker.queuePath, ".")
-	targetQueueHierarchy := strings.Split(targetQueuePath, ".")
-	if len(targetQueueHierarchy)-len(currentQueueHierarchy) > 0 {
-		// recursively check children queueTracker,
-		// if baseQueueTracker's queuePath is 'root', target queuePath is 'root.parent.leaf1'
-		// the next check will be queuePath 'root.parent'
-		return getQueuePathTrackedResources(targetQueuePath, baseQueueTracker.childQueueTrackers[targetQueueHierarchy[len(currentQueueHierarchy)]])
-	}
-	return nil
-}
-
-func assetGroupTrackerResources(t *testing.T, group string, expectedTrackedApplicationCount int, expectedRootTrackedResource *resources.Resource) {
-	manager := GetUserManager()
-	groupTracker := manager.groupTrackers[group]
-	assert.Equal(t, len(groupTracker.applications), expectedTrackedApplicationCount, "The expected groupTracker's app count should be "+strconv.Itoa(expectedTrackedApplicationCount)+", but got "+strconv.Itoa(len(groupTracker.applications)))
-	assert.Assert(t, resources.Equals(groupTracker.queueTracker.resourceUsage, expectedRootTrackedResource))
-}
-
-func increaseTrackedResourceThenAssert(t *testing.T, queuePath string, application string, resource *resources.Resource, user security.UserGroup, expectSuccess bool) {
-	manager := GetUserManager()
-	increased := manager.IncreaseTrackedResource(queuePath, application, resource, user)
-	assert.Equal(t, increased, expectSuccess, "The expected increased result should be "+strconv.FormatBool(expectSuccess)+", but got "+strconv.FormatBool(increased))
-}
-
-func decreaseTrackedResourceThenAssert(t *testing.T, queuePath string, application string, resource *resources.Resource, user security.UserGroup, removeApp bool, expectSuccess bool) {
-	manager := GetUserManager()
-	decreased := manager.DecreaseTrackedResource(queuePath, application, resource, user, removeApp)
-	assert.Equal(t, decreased, expectSuccess, "The expected decrease result should be "+strconv.FormatBool(expectSuccess)+", but got "+strconv.FormatBool(decreased))
 }

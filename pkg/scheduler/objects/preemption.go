@@ -573,20 +573,11 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 		"preempting allocations to free up resources to run ask: "+p.ask.GetAllocationKey())
 
 	// reserve the selected node for the new allocation if it will fit
-	if p.headRoom.FitInMaxUndef(p.ask.GetAllocatedResource()) {
-		log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
-			zap.String("allocationKey", p.ask.GetAllocationKey()),
-			zap.String("nodeID", nodeID),
-			zap.Int("victimCount", len(victims)))
-		return newReservedAllocation(nodeID, p.ask), true
-	}
-
-	// can't reserve as queue is still too full, but scheduling should succeed after preemption occurs
-	log.Log(log.SchedPreemption).Info("Preempting allocations for ask, but not reserving yet as queue is still above capacity",
+	log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
 		zap.String("allocationKey", p.ask.GetAllocationKey()),
+		zap.String("nodeID", nodeID),
 		zap.Int("victimCount", len(victims)))
-
-	return nil, true
+	return newReservedAllocation(nodeID, p.ask), true
 }
 
 type predicateCheckResult struct {

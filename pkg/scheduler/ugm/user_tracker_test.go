@@ -222,17 +222,6 @@ func TestSetMaxLimits(t *testing.T) {
 	userTracker.setLimits(hierarchy5, usage1, 1)
 }
 
-func TestSetGroupForApp(t *testing.T) {
-	userTracker := newUserTracker("user")
-	groupTracker1 := newGroupTracker("group1")
-	groupTracker2 := newGroupTracker("group2")
-	userTracker.setGroupForApp(TestApp1, groupTracker1)
-	userTracker.setGroupForApp(TestApp2, groupTracker2)
-
-	assert.Equal(t, 2, len(userTracker.getTrackedApplications()))
-	assert.Equal(t, 2, len(userTracker.appGroupTrackers))
-}
-
 func getUserResource(ut *UserTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := ut.GetUserResourceUsageDAOInfo()

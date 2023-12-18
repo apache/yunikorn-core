@@ -45,10 +45,17 @@ var (
 		"memory": "50",
 		"vcores": "50",
 	}
+	mediumResourceWithMemOnly = map[string]string{
+		"memory": "50",
+	}
+	mediumResourceWithVcoresOnly = map[string]string{
+		"vcores": "50",
+	}
 	tinyResource = map[string]string{
 		"memory": "25",
 		"vcores": "25",
 	}
+	nilResource = map[string]string{}
 )
 
 func TestUserManagerOnceInitialization(t *testing.T) {
@@ -1171,7 +1178,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 	}
 }
 
-func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
+func TestUserGroupMaxResourcesChange(t *testing.T) { //nolint:funlen
 	testCases := []struct {
 		name      string
 		user      security.UserGroup
@@ -1179,6 +1186,118 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 		newLimits []configs.Limit
 	}{
 		{
+			name: "Updated specific user & group max resources",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResource, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with mem only",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with vcores only",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithVcoresOnly, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with nil resource",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, nilResource, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with nil",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, nil, 2),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUGM()
+
+			manager := GetUserManager()
+			conf := createConfigWithLimits(tc.limits)
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			expectedResource, err := resources.NewResourceFromConf(tc.limits[0].MaxResources)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedResource)
+			}
+			assert.Equal(t, resources.Equals(manager.GetUserTracker("user1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+			assert.Equal(t, resources.Equals(manager.GetGroupTracker("group1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+
+			conf.Queues[0].Queues[0].Limits = tc.newLimits
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			expectedResource, err = resources.NewResourceFromConf(tc.newLimits[0].MaxResources)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedResource)
+			}
+			assert.Equal(t, resources.Equals(manager.GetUserTracker("user1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+			assert.Equal(t, resources.Equals(manager.GetGroupTracker("group1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+		})
+	}
+}
+
+func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name      string
+		user      security.UserGroup
+		limits    []configs.Limit
+		newLimits []configs.Limit
+	}{
+		// user limit only
+		{
+
+			name: "maxresources with an updated specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, mediumResource, 2),
+			},
+		},
+		{
+			name: "maxapplications with an updated specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 1),
+			},
+		},
+
+		// group limit only
+		{
+
 			name: "maxresources with an updated specific group limit",
 			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
 			limits: []configs.Limit{
@@ -1186,6 +1305,151 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 			},
 			newLimits: []configs.Limit{
 				createLimit(nil, []string{"group1"}, mediumResource, 2),
+			},
+		},
+		{
+			name: "maxapplications with an updated specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 1),
+			},
+		},
+
+		// user wilcard limit
+		{
+			name: "maxresources with an updated wildcard user limit",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, tinyResource, 2),
+				createLimit([]string{"*"}, nil, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit([]string{"*"}, nil, mediumResource, 2),
+			},
+		},
+		{
+			name: "maxapplications with an updated wildcard user limit",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, tinyResource, 1),
+				createLimit([]string{"*"}, nil, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, nil, largeResource, 2),
+				createLimit([]string{"*"}, nil, largeResource, 1),
+			},
+		},
+
+		// group wilcard limit
+		{
+
+			name: "maxresources with an updated wildcard group limit",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			limits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, tinyResource, 2),
+				createLimit(nil, []string{"*"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+				createLimit(nil, []string{"*"}, mediumResource, 2),
+			},
+		},
+		{
+			name: "maxapplications with an updated wildcard group limit",
+			user: security.UserGroup{User: "user2", Groups: []string{"group2"}},
+			limits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, tinyResource, 1),
+				createLimit(nil, []string{"*"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit(nil, []string{"group1"}, largeResource, 2),
+				createLimit(nil, []string{"*"}, largeResource, 1),
+			},
+		},
+
+		// in a different limit
+		{
+			name: "maxresources with a new specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				{
+					Limit:           "parent queue limit for specific user",
+					Users:           []string{"user1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 2,
+				},
+			},
+			newLimits: []configs.Limit{
+				{
+					Limit:           "new parent queue limit for specific user",
+					Users:           []string{"user1"},
+					MaxResources:    map[string]string{"memory": "50", "vcores": "50"},
+					MaxApplications: 2,
+				},
+			},
+		},
+		{
+			name: "maxapplications with a new specific user limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				{
+					Limit:           "parent queue limit for specific user",
+					Users:           []string{"user1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 2,
+				},
+			},
+			newLimits: []configs.Limit{
+				{
+					Limit:           "new parent queue limit for specific user",
+					Users:           []string{"user1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 1,
+				},
+			},
+		},
+		{
+			name: "maxresources with a new specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				{
+					Limit:           "parent queue limit for specific group",
+					Groups:          []string{"group1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 2,
+				},
+			},
+			newLimits: []configs.Limit{
+				{
+					Limit:           "new parent queue limit for specific group",
+					Groups:          []string{"group1"},
+					MaxResources:    map[string]string{"memory": "50", "vcores": "50"},
+					MaxApplications: 2,
+				},
+			},
+		},
+		{
+			name: "maxapplications with a new specific group limit",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				{
+					Limit:           "parent queue limit for specific group",
+					Groups:          []string{"group1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 2,
+				},
+			},
+			newLimits: []configs.Limit{
+				{
+					Limit:           "new parent queue limit for specific group",
+					Groups:          []string{"group1"},
+					MaxResources:    map[string]string{"memory": "100", "vcores": "100"},
+					MaxApplications: 1,
+				},
 			},
 		},
 	}

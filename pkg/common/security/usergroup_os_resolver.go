@@ -31,6 +31,7 @@ func GetUserGroupCacheOS() *UserGroupCache {
 		lookup:        user.Lookup,
 		lookupGroupID: user.LookupGroupId,
 		groupIds:      wrappedGroupIds,
+		stop:          make(chan struct{}),
 	}
 }
 

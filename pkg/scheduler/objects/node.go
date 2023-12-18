@@ -113,6 +113,11 @@ func (sn *Node) String() string {
 func (sn *Node) initializeAttribute(newAttributes map[string]string) {
 	sn.attributes = newAttributes
 
+	// Avoid passing empty nodeAttributes in initializeAttribute
+	if len(sn.attributes) == 0 {
+		sn.attributes = map[string]string{}
+	}
+
 	sn.Hostname = sn.attributes[common.HostName]
 	sn.Rackname = sn.attributes[common.RackName]
 	sn.Partition = sn.attributes[common.NodePartition]
@@ -208,13 +213,13 @@ func (sn *Node) refreshAvailableResource() {
 	}
 }
 
-// Return the allocation based on the uuid of the allocation.
+// Return the allocation based on the allocationID of the allocation.
 // returns nil if the allocation is not found
-func (sn *Node) GetAllocation(uuid string) *Allocation {
+func (sn *Node) GetAllocation(allocationID string) *Allocation {
 	sn.RLock()
 	defer sn.RUnlock()
 
-	return sn.allocations[uuid]
+	return sn.allocations[allocationID]
 }
 
 // Get a copy of the allocations on this node
@@ -284,24 +289,28 @@ func (sn *Node) GetUtilizedResource() *resources.Resource {
 	return &resources.Resource{Resources: utilizedResource}
 }
 
+// FitInNode checks if the request fits in the node.
+// All resources types requested must match the resource types provided by the nodes.
+// A request may ask for only a subset of the types, but the node must provide at least the
+// resource types requested in a larger or equal quantity as requested.
 func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
-	return sn.totalResource.FitInMaxUndef(resRequest)
+	return sn.totalResource.FitIn(resRequest)
 }
 
 // Remove the allocation to the node.
 // Returns nil if the allocation was not found and no changes are made. If the allocation
 // is found the Allocation removed is returned. Used resources will decrease available
 // will increase as per the allocation removed.
-func (sn *Node) RemoveAllocation(uuid string) *Allocation {
+func (sn *Node) RemoveAllocation(allocationID string) *Allocation {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
-	alloc := sn.allocations[uuid]
+	alloc := sn.allocations[allocationID]
 	if alloc != nil {
-		delete(sn.allocations, uuid)
+		delete(sn.allocations, allocationID)
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.nodeEvents.sendAllocationRemovedEvent(alloc.allocationKey, alloc.allocatedResource)
@@ -311,8 +320,8 @@ func (sn *Node) RemoveAllocation(uuid string) *Allocation {
 	return nil
 }
 
-// Add the allocation to the node. Used resources will increase available will decrease.
-// A nil Allocation makes no changes. Pre-empted resources must have been released already.
+// AddAllocation adds the allocation to the node. Used resources will increase available will decrease.
+// A nil Allocation makes no changes. Preempted resources must have been released already.
 // Do a sanity check to make sure it still fits in the node and nothing has changed
 func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	if alloc == nil {
@@ -321,10 +330,10 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
-	// check if this still fits: it might have changed since pre check
+	// check if this still fits: it might have changed since pre-check
 	res := alloc.GetAllocatedResource()
-	if sn.availableResource.FitInMaxUndef(res) {
-		sn.allocations[alloc.GetUUID()] = alloc
+	if sn.availableResource.FitIn(res) {
+		sn.allocations[alloc.GetAllocationID()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
 		sn.nodeEvents.sendAllocationAddedEvent(alloc.allocationKey, res)
@@ -336,33 +345,33 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 // ReplaceAllocation replaces the placeholder with the real allocation on the node.
 // The delta passed in is the difference in resource usage between placeholder and real allocation.
 // It should always be a negative value or zero: it is a decrease in usage or no change
-func (sn *Node) ReplaceAllocation(uuid string, replace *Allocation, delta *resources.Resource) {
+func (sn *Node) ReplaceAllocation(allocationID string, replace *Allocation, delta *resources.Resource) {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
-	replace.SetPlaceholderCreateTime(sn.allocations[uuid].GetCreateTime())
-	delete(sn.allocations, uuid)
+	replace.SetPlaceholderCreateTime(sn.allocations[allocationID].GetCreateTime())
+	delete(sn.allocations, allocationID)
 	replace.SetPlaceholderUsed(true)
-	sn.allocations[replace.GetUUID()] = replace
+	sn.allocations[replace.GetAllocationID()] = replace
 	before := sn.allocatedResource.Clone()
 	// The allocatedResource and availableResource should be updated in the same way
 	sn.allocatedResource.AddTo(delta)
 	sn.availableResource.SubFrom(delta)
-	if !resources.FitIn(before, sn.allocatedResource) {
+	if !before.FitIn(sn.allocatedResource) {
 		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",
-			zap.String("placeholder uuid", uuid),
-			zap.String("allocation uuid", replace.GetUUID()),
+			zap.String("placeholder allocationid", allocationID),
+			zap.String("allocation allocationid", replace.GetAllocationID()),
 			zap.Stringer("delta", delta))
 	}
 }
 
-// Check if the proposed allocation fits in the available resources.
+// CanAllocate checks if the proposed allocation fits in the available resources.
 // If the proposed allocation does not fit false is returned.
 func (sn *Node) CanAllocate(res *resources.Resource) bool {
 	sn.RLock()
 	defer sn.RUnlock()
-	return sn.availableResource.FitInMaxUndef(res)
+	return sn.availableResource.FitIn(res)
 }
 
 // Checking pre-conditions in the shim for an allocation.
@@ -405,8 +414,8 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 	return true
 }
 
-// Check if the node should be considered as a possible node to allocate on.
-// This is a lock free call. No updates are made this only performs a pre allocate checks
+// preAllocateCheck checks if the node should be considered as a possible node to allocate on.
+// No updates are made this only performs a pre allocate checks
 func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
@@ -427,7 +436,7 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	sn.RLock()
 	defer sn.RUnlock()
 	// returns true/false based on if the request fits in what we have calculated
-	return sn.availableResource.FitInMaxUndef(res)
+	return sn.availableResource.FitIn(res)
 }
 
 // Return if the node has been reserved by any application
@@ -479,7 +488,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
 	}
 	// reservation must fit on the empty node
-	if !resources.FitIn(sn.totalResource, ask.GetAllocatedResource()) {
+	if !sn.totalResource.FitIn(ask.GetAllocatedResource()) {
 		log.Log(log.SchedNode).Debug("reservation does not fit on the node",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("appID", app.ApplicationID),

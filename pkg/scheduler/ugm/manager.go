@@ -133,7 +133,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		return decreased
 	}
 	if removeQT {
-		log.Log(log.SchedUGM).Debug("Removing user from manager",
+		log.Log(log.SchedUGM).Info("Removing user from manager",
 			zap.String("user", user.User))
 		delete(m.userTrackers, user.User)
 	}
@@ -159,7 +159,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		return decreased
 	}
 	if removeQT {
-		log.Log(log.SchedUGM).Debug("Removing group from manager",
+		log.Log(log.SchedUGM).Info("Removing group from manager",
 			zap.String("group", appGroup),
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
@@ -219,7 +219,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath, applicationID string, user
 	if appGroup != common.Empty {
 		groupTracker = m.GetGroupTracker(appGroup)
 		if groupTracker == nil {
-			log.Log(log.SchedUGM).Debug("Group tracker doesn't exists. Creating appGroup tracker",
+			log.Log(log.SchedUGM).Info("Group tracker doesn't exists. Creating appGroup tracker",
 				zap.String("queue path", queuePath),
 				zap.String("appGroup", appGroup))
 			groupTracker = newGroupTracker(appGroup)
@@ -228,7 +228,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath, applicationID string, user
 			m.Unlock()
 		}
 	}
-	log.Log(log.SchedUGM).Debug("Group tracker set for user application",
+	log.Log(log.SchedUGM).Info("Group tracker set for user application",
 		zap.String("appGroup", appGroup),
 		zap.String("user", user.User),
 		zap.String("application", applicationID),
@@ -562,7 +562,7 @@ func (m *Manager) getUserTracker(user string) *UserTracker {
 	if ut, ok := m.userTrackers[user]; ok {
 		return ut
 	}
-	log.Log(log.SchedUGM).Debug("User tracker doesn't exists. Creating user tracker.",
+	log.Log(log.SchedUGM).Info("User tracker doesn't exists. Creating user tracker.",
 		zap.String("user", user))
 	userTracker := newUserTracker(user)
 	m.userTrackers[user] = userTracker
@@ -592,10 +592,6 @@ func (m *Manager) Headroom(queuePath, applicationID string, user security.UserGr
 	hierarchy := strings.Split(queuePath, configs.DOT)
 	userTracker := m.getUserTracker(user.User)
 	userHeadroom := userTracker.headroom(hierarchy)
-	log.Log(log.SchedUGM).Debug("Calculated headroom for user",
-		zap.String("user", user.User),
-		zap.String("queue path", queuePath),
-		zap.Stringer("user headroom", userHeadroom))
 	// make sure the user has a groupTracker for this application, if not yet there add it
 	if !userTracker.hasGroupForApp(applicationID) {
 		m.ensureGroupTrackerForApp(queuePath, applicationID, user)
@@ -610,10 +606,6 @@ func (m *Manager) Headroom(queuePath, applicationID string, user security.UserGr
 		return userHeadroom
 	}
 	groupHeadroom := groupTracker.headroom(hierarchy)
-	log.Log(log.SchedUGM).Debug("Calculated headroom for group",
-		zap.String("group", appGroup),
-		zap.String("queue path", queuePath),
-		zap.Stringer("group headroom", groupHeadroom))
 	return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
 }
 
@@ -622,10 +614,6 @@ func (m *Manager) CanRunApp(queuePath, applicationID string, user security.UserG
 	hierarchy := strings.Split(queuePath, configs.DOT)
 	userTracker := m.getUserTracker(user.User)
 	userCanRunApp := userTracker.canRunApp(hierarchy, applicationID)
-	log.Log(log.SchedUGM).Debug("Check whether user can run app",
-		zap.String("user", user.User),
-		zap.String("queue path", queuePath),
-		zap.Bool("can run app", userCanRunApp))
 	// make sure the user has a groupTracker for this application, if not yet there add it
 	if !userTracker.hasGroupForApp(applicationID) {
 		m.ensureGroupTrackerForApp(queuePath, applicationID, user)
@@ -640,10 +628,6 @@ func (m *Manager) CanRunApp(queuePath, applicationID string, user security.UserG
 		return userCanRunApp
 	}
 	groupCanRunApp := groupTracker.canRunApp(hierarchy, applicationID)
-	log.Log(log.SchedUGM).Debug("Check whether group can run app",
-		zap.String("group", appGroup),
-		zap.String("queue path", queuePath),
-		zap.Bool("can run app", groupCanRunApp))
 	return userCanRunApp && groupCanRunApp
 }
 

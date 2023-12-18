@@ -122,6 +122,7 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 	ec.requestCapacity = ec.readRequestCapacity()
 
 	go func() {
+		log.Log(log.Events).Info("Starting event system handler")
 		for {
 			select {
 			case <-ec.stop:

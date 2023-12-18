@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -751,7 +752,7 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
-	alloc := newAllocation(appID1, "uuid-0", "node-0", res)
+	alloc := newAllocation(appID1, "node-0", res)
 	alloc.placeholder = true
 	// adding a placeholder allocation & pending request to "app1"
 	app1.AddAllocation(alloc)
@@ -763,7 +764,7 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	assert.Equal(t, 1, len(phApps))
 
 	// adding a placeholder allocation & pending request to "app2"
-	alloc2 := newAllocation(appID2, "uuid-1", "node-1", res)
+	alloc2 := newAllocation(appID2, "node-1", res)
 	alloc2.placeholder = true
 	app2.AddAllocation(alloc2)
 	err = app2.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
@@ -1523,15 +1524,6 @@ func TestQueueProps(t *testing.T) {
 	assert.Assert(t, leaf.isLeaf && leaf.isManaged, "leaf queue is not marked as managed leaf")
 	assert.Equal(t, len(leaf.properties), 2, "leaf queue properties size incorrect")
 
-	props = map[string]string{"first": "not inherited", configs.ApplicationSortPolicy: "stateaware"}
-	parent, err = createManagedQueueWithProps(root, "parent2", true, nil, props)
-	assert.NilError(t, err, "failed to create parent queue")
-	assert.Equal(t, len(parent.properties), 2, "parent queue properties size incorrect")
-	leaf, err = createDynamicQueue(parent, "leaf", false)
-	assert.NilError(t, err, "failed to create leaf queue")
-	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
-	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
-
 	props = map[string]string{}
 	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
 	assert.NilError(t, err, "failed to create leaf queue")
@@ -1728,7 +1720,7 @@ func getAllocatingAcceptedApps() map[string]bool {
 
 func getResourceConf() map[string]string {
 	resource := make(map[string]string)
-	resource["memory"] = strconv.Itoa(time.Now().Second()%1000 + 100)
+	resource["memory"] = strconv.Itoa(rand.Intn(10000) + 100) //nolint:gosec
 	return resource
 }
 
@@ -1747,7 +1739,7 @@ func getZeroResourceConf() map[string]string {
 
 func getProperties() map[string]string {
 	properties := make(map[string]string)
-	properties[strconv.Itoa(time.Now().Second())] = strconv.Itoa(time.Now().Second())
+	properties[strconv.Itoa(rand.Intn(10000))] = strconv.Itoa(rand.Intn(10000)) //nolint:gosec
 	return properties
 }
 
@@ -1867,10 +1859,10 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	ask.pendingAskRepeat = 1
 	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
 	ask2.pendingAskRepeat = 1
-	alloc2 := NewAllocation("alloc-2", nodeID1, ask2)
+	alloc2 := NewAllocation(nodeID1, ask2)
 	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
 	ask3.pendingAskRepeat = 1
-	alloc3 := NewAllocation("alloc-3", nodeID1, ask3)
+	alloc3 := NewAllocation(nodeID1, ask3)
 	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
 	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
@@ -2656,7 +2648,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask")
 
-	alloc := NewAllocation("alloc-1", nodeID1, ask)
+	alloc := NewAllocation(nodeID1, ask)
 	app.AddAllocation(alloc)
 	assert.Equal(t, app.CurrentState(), Starting.String(), "app state should be starting")
 	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
@@ -2664,7 +2656,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	_, err = app.updateAskRepeatInternal(ask, -1)
 	assert.NilError(t, err, "failed to decrease pending resources")
 
-	app.RemoveAllocation(alloc.GetUUID(), si.TerminationType_STOPPED_BY_RM)
+	app.RemoveAllocation(alloc.GetAllocationID(), si.TerminationType_STOPPED_BY_RM)
 	assert.Equal(t, app.CurrentState(), Completing.String(), "app state should be completing")
 	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
 }

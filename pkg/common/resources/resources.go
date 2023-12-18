@@ -417,14 +417,14 @@ func subNonNegative(left, right *Resource) (*Resource, string) {
 	return out, message
 }
 
-// Check if smaller fits in larger
-// Types not defined in the larger resource are considered 0 values for Quantity
-// A nil resource is treated as an empty resource (all types are 0)
-func FitIn(larger, smaller *Resource) bool {
-	return larger.fitIn(smaller, false)
+// FitIn checks if smaller fits in the defined resource
+// Types not defined in resource this is called against are considered 0 for Quantity
+// A nil resource is treated as an empty resource (no types defined)
+func (r *Resource) FitIn(smaller *Resource) bool {
+	return r.fitIn(smaller, false)
 }
 
-// Check if smaller fits in the defined resource
+// FitInMaxUndef checks if smaller fits in the defined resource
 // Types not defined in resource this is called against are considered the maximum value for Quantity
 // A nil resource is treated as an empty resource (no types defined)
 func (r *Resource) FitInMaxUndef(smaller *Resource) bool {

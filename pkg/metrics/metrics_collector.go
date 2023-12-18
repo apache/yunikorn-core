@@ -31,8 +31,12 @@ import (
 // will fill missing values with -1, in case of failures
 type internalMetricsCollector struct {
 	ticker         *time.Ticker
-	stopped        chan bool
+	stopped        chan struct{}
 	metricsHistory *history.InternalMetricsHistory
+}
+
+type InternalMetricsCollector interface {
+	Stop()
 }
 
 func NewInternalMetricsCollector(hcInfo *history.InternalMetricsHistory) *internalMetricsCollector {
@@ -41,7 +45,7 @@ func NewInternalMetricsCollector(hcInfo *history.InternalMetricsHistory) *intern
 
 // create a internalMetricsCollector with specify tick duration.
 func newInternalMetricsCollector(hcInfo *history.InternalMetricsHistory, tickerDefault time.Duration) *internalMetricsCollector {
-	finished := make(chan bool)
+	finished := make(chan struct{})
 	ticker := time.NewTicker(tickerDefault)
 
 	return &internalMetricsCollector{
@@ -53,6 +57,7 @@ func newInternalMetricsCollector(hcInfo *history.InternalMetricsHistory, tickerD
 
 func (u *internalMetricsCollector) StartService() {
 	go func() {
+		log.Log(log.Metrics).Info("Starting internal metrics collector")
 		for {
 			select {
 			case <-u.stopped:
@@ -90,5 +95,6 @@ func (u *internalMetricsCollector) store() {
 }
 
 func (u *internalMetricsCollector) Stop() {
-	u.stopped <- true
+	log.Log(log.Metrics).Info("Stopping internal metrics collector")
+	close(u.stopped)
 }

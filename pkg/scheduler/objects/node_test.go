@@ -130,8 +130,13 @@ func TestPreAllocateCheck(t *testing.T) {
 	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted on node")
 	assert.Assert(t, !node.preAllocateCheck(resLarge, ""), "too large resource should not have fitted on node")
 
+	// unknown resource type in request is rejected always
+	resOther := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	assert.Assert(t, !node.preAllocateCheck(resOther, ""), "unknown resource type should not have fitted on node")
+
 	// set allocated resource
-	node.AddAllocation(newAllocation(appID1, "UUID1", nodeID, resSmall))
+	alloc := newAllocation(appID1, nodeID, resSmall)
+	node.AddAllocation(alloc)
 	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted in available allocation")
 	assert.Assert(t, !node.preAllocateCheck(resNode, ""), "node resource should not have fitted in available allocation")
 
@@ -156,19 +161,30 @@ func TestPreAllocateCheck(t *testing.T) {
 
 // Only test the CanAllocate code, the used logic in preAllocateCheck has its own test
 func TestCanAllocate(t *testing.T) {
-	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != nodeID1 {
-		t.Fatalf("node create failed which should not have %v", node)
+	available := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	request := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+	other := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	tests := []struct {
+		name      string
+		available *resources.Resource
+		request   *resources.Resource
+		want      bool
+	}{
+		{"all nils", nil, nil, true},
+		{"nil node available", nil, request, false},
+		{"all matching, req smaller", available, request, true},
+		{"partial match request", available, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), true},
+		{"all matching, req larger", available, resources.Add(request, available), false},
+		{"partial match available", available, resources.Add(request, other), false},
+		{"unmatched request", available, other, false},
 	}
-	// normal alloc
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	if !node.CanAllocate(res) {
-		t.Error("node should have accepted allocation")
-	}
-	// check one that pushes node over its size
-	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})
-	if node.CanAllocate(res) {
-		t.Error("node should have rejected allocation (oversize)")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sn := &Node{
+				availableResource: tt.available,
+			}
+			assert.Equal(t, sn.CanAllocate(tt.request), tt.want, "unexpected node can run result")
+		})
 	}
 }
 
@@ -193,14 +209,22 @@ func TestNodeReservation(t *testing.T) {
 		t.Errorf("illegal reservation requested but did not fail: error %v", err)
 	}
 
+	// too large for node
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
 	ask := newAllocationAsk(aKey, appID1, res)
 	app := newApplication(appID1, "default", "root.unknown")
-
-	// too large for node
 	err = node.Reserve(app, ask)
 	if err == nil {
 		t.Errorf("requested reservation does not fit in node resource but did not fail: error %v", err)
+	}
+
+	// resource type not available on node
+	res = resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	ask = newAllocationAsk(aKey, appID1, res)
+	app = newApplication(appID1, "default", "root.unknown")
+	err = node.Reserve(app, ask)
+	if err == nil {
+		t.Errorf("requested reservation does not match node resource types but did not fail: error %v", err)
 	}
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
@@ -364,14 +388,17 @@ func TestAddAllocation(t *testing.T) {
 	}
 
 	// check nil alloc
-	node.AddAllocation(nil)
-	if len(node.GetAllAllocations()) > 0 {
-		t.Fatalf("nil allocation should not have been added: %v", node)
-	}
+	assert.Assert(t, !node.AddAllocation(nil), "nil allocation should not have been added: %v", node)
+	// check alloc that does not match
+	unknown := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	alloc := newAllocation(appID1, nodeID1, unknown)
+	assert.Assert(t, !node.AddAllocation(alloc), "unmatched resource type in allocation should not have been added: %v", node)
+
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, half))
-	if node.GetAllocation("1") == nil {
+	alloc = newAllocation(appID1, nodeID1, half)
+	assert.Assert(t, node.AddAllocation(alloc), "add allocation 1 should not have failed")
+	if node.GetAllocation(alloc.GetAllocationID()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
 	if !resources.Equals(node.GetAllocatedResource(), half) {
@@ -386,8 +413,9 @@ func TestAddAllocation(t *testing.T) {
 	}
 	// second and check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, piece))
-	if node.GetAllocation("2") == nil {
+	alloc = newAllocation(appID1, nodeID1, piece)
+	assert.Assert(t, node.AddAllocation(alloc), "add allocation 2 should not have failed")
+	if node.GetAllocation(alloc.GetAllocationID()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
 	piece.AddTo(half)
@@ -412,8 +440,9 @@ func TestRemoveAllocation(t *testing.T) {
 
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, half))
-	if node.GetAllocation("1") == nil {
+	alloc1 := newAllocation(appID1, nodeID1, half)
+	node.AddAllocation(alloc1)
+	if node.GetAllocation(alloc1.GetAllocationID()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
 	// check empty alloc
@@ -429,11 +458,12 @@ func TestRemoveAllocation(t *testing.T) {
 
 	// add second alloc and remove first check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, piece))
-	if node.GetAllocation("2") == nil {
+	alloc2 := newAllocation(appID1, nodeID1, piece)
+	node.AddAllocation(alloc2)
+	if node.GetAllocation(alloc2.GetAllocationID()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
-	alloc := node.RemoveAllocation("1")
+	alloc := node.RemoveAllocation(alloc1.GetAllocationID())
 	if alloc == nil {
 		t.Error("allocation should have been removed but was not")
 	}
@@ -455,28 +485,26 @@ func TestNodeReplaceAllocation(t *testing.T) {
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "failed to initialize node")
 
 	// allocate half of the resources available and check the calculation
-	phID := "ph-1"
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	ph := newPlaceholderAlloc(appID1, phID, nodeID1, half)
+	ph := newPlaceholderAlloc(appID1, nodeID1, half)
 	node.AddAllocation(ph)
-	assert.Assert(t, node.GetAllocation(phID) != nil, "failed to add placeholder allocation")
+	assert.Assert(t, node.GetAllocation(ph.GetAllocationID()) != nil, "failed to add placeholder allocation")
 	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), half), "allocated resource not set correctly %v got %v", half, node.GetAllocatedResource())
 	assert.Assert(t, resources.Equals(node.GetAvailableResource(), half), "available resource not set correctly %v got %v", half, node.GetAvailableResource())
 
-	allocID := "real-1"
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	alloc := newAllocation(appID1, allocID, nodeID1, piece)
+	alloc := newAllocation(appID1, nodeID1, piece)
 	// calculate the delta: new allocation resource - placeholder (should be negative!)
 	delta := resources.Sub(piece, half)
 	assert.Assert(t, delta.HasNegativeValue(), "expected negative values in delta")
 	// swap and check the calculation
-	node.ReplaceAllocation(phID, alloc, delta)
-	assert.Assert(t, node.GetAllocation(allocID) != nil, "failed to replace allocation: allocation not returned")
+	node.ReplaceAllocation(ph.GetAllocationID(), alloc, delta)
+	assert.Assert(t, node.GetAllocation(alloc.GetAllocationID()) != nil, "failed to replace allocation: allocation not returned")
 	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), piece), "allocated resource not set correctly %v got %v", piece, node.GetAllocatedResource())
 	assert.Assert(t, resources.Equals(node.GetAvailableResource(), resources.Sub(node.GetCapacity(), piece)), "available resource not set correctly %v got %v", resources.Sub(node.GetCapacity(), piece), node.GetAvailableResource())
 
 	// clean up all should be zero
-	assert.Assert(t, node.RemoveAllocation(allocID) != nil, "allocation should have been removed but was not")
+	assert.Assert(t, node.RemoveAllocation(alloc.GetAllocationID()) != nil, "allocation should have been removed but was not")
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "allocated resource not updated correctly")
 	assert.Assert(t, resources.Equals(node.GetAvailableResource(), node.GetCapacity()), "available resource not set correctly %v got %v", node.GetCapacity(), node.GetAvailableResource())
 }
@@ -491,8 +519,9 @@ func TestGetAllocation(t *testing.T) {
 	if alloc != nil {
 		t.Fatalf("allocation should not have been found")
 	}
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, nil))
-	alloc = node.GetAllocation("1")
+	alloc = newAllocation(appID1, nodeID1, nil)
+	node.AddAllocation(alloc)
+	alloc = node.GetAllocation(alloc.GetAllocationID())
 	if alloc == nil {
 		t.Fatalf("allocation should have been found")
 	}
@@ -514,13 +543,15 @@ func TestGetAllocations(t *testing.T) {
 	if allocs == nil || len(allocs) != 0 {
 		t.Fatalf("allocation length should be 0 on new node")
 	}
+	alloc1 := newAllocation(appID1, nodeID1, nil)
+	alloc2 := newAllocation(appID1, nodeID1, nil)
 
 	// allocate
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, nil))
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, nil))
+	node.AddAllocation(alloc1)
+	node.AddAllocation(alloc2)
 	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
 	// This should not happen in real code just making sure the code does do what is expected
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, nil))
+	node.AddAllocation(alloc2)
 	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
 }
 
@@ -688,7 +719,7 @@ func TestNodeEvents(t *testing.T) {
 	node.AddAllocation(&Allocation{
 		allocatedResource: resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 1, "memory": 1}),
 		allocationKey:     aKey,
-		uuid:              "uuid-0",
+		allocationID:      "allocationid-0",
 	})
 	assert.Equal(t, 1, len(mockEvents.events))
 	event = mockEvents.events[0]
@@ -697,7 +728,7 @@ func TestNodeEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
 
 	mockEvents.Reset()
-	node.RemoveAllocation("uuid-0")
+	node.RemoveAllocation("allocationid-0")
 	event = mockEvents.events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
@@ -746,4 +777,32 @@ func TestNodeEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
+}
+
+func TestNode_FitInNode(t *testing.T) {
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	request := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+	other := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	tests := []struct {
+		name       string
+		totalRes   *resources.Resource
+		resRequest *resources.Resource
+		want       bool
+	}{
+		{"all nils", nil, nil, true},
+		{"nil node size", nil, request, false},
+		{"all matching, req smaller", total, request, true},
+		{"partial match request", total, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), true},
+		{"all matching, req larger", total, resources.Add(request, total), false},
+		{"partial match total", total, resources.Add(request, other), false},
+		{"unmatched request", total, other, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sn := &Node{
+				totalResource: tt.totalRes,
+			}
+			assert.Equal(t, sn.FitInNode(tt.resRequest), tt.want, "unexpected node fit result")
+		})
+	}
 }

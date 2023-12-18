@@ -64,7 +64,7 @@ func TestGetGroup(t *testing.T) {
 	manager := GetUserManager()
 
 	// create config with limits for "test" group and ensure picked up group is "test"
-	conf := createUpdateConfig(user.User, user.Groups[:1])
+	conf := createUpdateConfig(user.User, user.Groups[0])
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	group := manager.ensureGroup(user, "root.parent.leaf")
@@ -284,7 +284,7 @@ func TestUpdateConfig(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedResource)
 	}
 
-	conf := createConfig(user.User, user.Groups, "memory", "50", 50, 5)
+	conf := createConfig(user.User, user.Groups[0], "memory", "50", 50, 5)
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	usage, err := resources.NewResourceFromConf(map[string]string{"memory": "10", "vcores": "10"})
@@ -308,7 +308,7 @@ func TestUpdateConfig(t *testing.T) {
 	assert.Equal(t, false, manager.isGroupRemovable(groupTracker))
 
 	// configure max resource for root.parent lesser than current resource usage. should be allowed to set but user cannot be allowed to do any activity further
-	conf = createConfig(user.User, user.Groups, "memory", "50", 40, 4)
+	conf = createConfig(user.User, user.Groups[0], "memory", "50", 40, 4)
 	err = manager.UpdateConfig(conf.Queues[0], "root")
 	assert.NilError(t, err)
 	increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
@@ -317,7 +317,7 @@ func TestUpdateConfig(t *testing.T) {
 	}
 
 	// configure max resource for root and parent to allow one more application to run
-	conf = createConfig(user.User, user.Groups, "memory", "50", 60, 6)
+	conf = createConfig(user.User, user.Groups[0], "memory", "50", 60, 6)
 	err = manager.UpdateConfig(conf.Queues[0], "root")
 	assert.NilError(t, err, "unable to set the limit for user user1 because current resource usage is greater than config max resource for root.parent")
 
@@ -327,7 +327,7 @@ func TestUpdateConfig(t *testing.T) {
 	}
 
 	// configure max resource for root lesser than current resource usage. should be allowed to set but user cannot be allowed to do any activity further
-	conf = createConfig(user.User, user.Groups, "memory", "50", 10, 10)
+	conf = createConfig(user.User, user.Groups[0], "memory", "50", 10, 10)
 	err = manager.UpdateConfig(conf.Queues[0], "root")
 	assert.NilError(t, err)
 	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
@@ -341,7 +341,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	// Queue setup:
 	// root->parent
 	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
-	conf := createUpdateConfig(user.User, user.Groups)
+	conf := createUpdateConfig(user.User, user.Groups[0])
 	manager := GetUserManager()
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
@@ -363,7 +363,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	}
 
 	// configure max resource for root.parent as map[memory:60 vcores:60] to allow one more application to run
-	conf = createConfig(user.User, user.Groups, "memory", "50", 60, 6)
+	conf = createConfig(user.User, user.Groups[0], "memory", "50", 60, 6)
 	err = manager.UpdateConfig(conf.Queues[0], "root")
 	assert.NilError(t, err, "unable to set the limit for user user1 because current resource usage is greater than config max resource for root.parent")
 
@@ -455,7 +455,7 @@ func TestUpdateConfigClearEarlierSetLimits(t *testing.T) {
 	// Queue setup:
 	// root->parent
 	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
-	conf := createUpdateConfig(user.User, user.Groups)
+	conf := createUpdateConfig(user.User, user.Groups[0])
 
 	manager := GetUserManager()
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
@@ -469,7 +469,7 @@ func TestUpdateConfigClearEarlierSetLimits(t *testing.T) {
 	// create config user2 * root.parent with [50, 50] and maxapps as 5 (twice for root), but not user1.
 	// so user1 should not be there as it doesn't have any running applications
 	user1 := security.UserGroup{User: "user2", Groups: []string{"group2"}}
-	conf = createUpdateConfig(user1.User, user1.Groups)
+	conf = createUpdateConfig(user1.User, user1.Groups[0])
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	expectedResource, err = resources.NewResourceFromConf(map[string]string{"memory": "50", "vcores": "50"})
@@ -483,7 +483,7 @@ func TestUpdateConfigClearEarlierSetLimits(t *testing.T) {
 	assertMaxLimits(t, user1, expectedResource, 5)
 
 	// override user2 * root.parent config with [60, 60] and maxapps as 6 (twice for root)
-	conf = createConfig(user1.User, user1.Groups, "memory", "10", 60, 6)
+	conf = createConfig(user1.User, user1.Groups[0], "memory", "10", 60, 6)
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	expectedResource, err = resources.NewResourceFromConf(map[string]string{"memory": "60", "vcores": "60"})
@@ -547,7 +547,7 @@ func TestSetMaxLimitsForRemovedUsers(t *testing.T) {
 	// Queue setup:
 	// root->parent
 	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
-	conf := createUpdateConfig(user.User, user.Groups)
+	conf := createUpdateConfig(user.User, user.Groups[0])
 	manager := GetUserManager()
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
@@ -619,7 +619,7 @@ func TestUserGroupHeadroom(t *testing.T) {
 	// Queue setup:
 	// root->parent
 	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
-	conf := createUpdateConfig(user.User, user.Groups)
+	conf := createUpdateConfig(user.User, user.Groups[0])
 	manager := GetUserManager()
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
@@ -1367,11 +1367,11 @@ func createUpdateConfigWithWildCardUsersAndGroups(user string, group string, wil
 	return conf
 }
 
-func createUpdateConfig(user string, groups []string) configs.PartitionConfig {
-	return createConfig(user, groups, "memory", "10", 50, 5)
+func createUpdateConfig(user string, group string) configs.PartitionConfig {
+	return createConfig(user, group, "memory", "10", 50, 5)
 }
 
-func createConfig(user string, groups []string, resourceKey string, resourceValue string, mem int, maxApps uint64) configs.PartitionConfig {
+func createConfig(user string, group string, resourceKey string, resourceValue string, mem int, maxApps uint64) configs.PartitionConfig {
 	conf := configs.PartitionConfig{
 		Name: "test",
 		Queues: []configs.QueueConfig{
@@ -1396,7 +1396,9 @@ func createConfig(user string, groups []string, resourceKey string, resourceValu
 										Users: []string{
 											user,
 										},
-										Groups: groups,
+										Groups: []string{
+											group,
+										},
 										MaxResources: map[string]string{
 											resourceKey: resourceValue,
 											"vcores":    "10",
@@ -1412,7 +1414,9 @@ func createConfig(user string, groups []string, resourceKey string, resourceValu
 								Users: []string{
 									user,
 								},
-								Groups: groups,
+								Groups: []string{
+									group,
+								},
 								MaxResources: map[string]string{
 									"memory": strconv.Itoa(mem),
 									"vcores": strconv.Itoa(mem),
@@ -1428,7 +1432,9 @@ func createConfig(user string, groups []string, resourceKey string, resourceValu
 						Users: []string{
 							user,
 						},
-						Groups: groups,
+						Groups: []string{
+							group,
+						},
 						MaxResources: map[string]string{
 							"memory": strconv.Itoa(mem * 2),
 							"vcores": strconv.Itoa(mem * 2),

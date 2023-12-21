@@ -1871,7 +1871,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	// pass the time and try again
 	ask3.createTime = ask3.createTime.Add(-30 * time.Second)
 	alloc3 = app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
-	assert.Assert(t, alloc3 == nil, "alloc3 not expected")
+	assert.Assert(t, alloc3 != nil && alloc3.result == Reserved, "alloc3 should be a reservation")
 	assert.Assert(t, alloc2.IsPreempted(), "alloc2 should have been preempted")
 }
 

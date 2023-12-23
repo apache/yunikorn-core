@@ -661,8 +661,8 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName("partition")
-	appState := vars.ByName("state")
+	partition := vars.ByName(strings.ToLower("partition"))
+	appState := vars.ByName(strings.ToLower("state"))
 
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
@@ -693,6 +693,8 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		appList = partitionContext.GetRejectedApplications()
 	case objects.Completed.String():
 		appList = partitionContext.GetCompletedApplications()
+	default:
+		buildJSONErrorResponse(w, "BUG: unknown state", http.StatusInternalServerError)
 	}
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
 	for _, app := range appList {

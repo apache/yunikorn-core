@@ -213,10 +213,10 @@ func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.
 func checkQueueMaxApplications(cur QueueConfig) error {
 	var err error
 	for _, child := range cur.Queues {
-		if cur.MaxApplications != 0 && (cur.MaxApplications < child.MaxApplications) {
+		if cur.MaxApplications != 0 && cur.MaxApplications < child.MaxApplications {
 			return fmt.Errorf("parent maxApplications must be larger than child maxApplications")
 		}
-		if cur.MaxApplications != 0 && (child.MaxApplications == 0) {
+		if cur.MaxApplications != 0 && child.MaxApplications == 0 {
 			return fmt.Errorf("maxApplications is either undefined or zero, which is not allowed when parent queue's maxApplications is defined")
 		}
 		err = checkQueueMaxApplications(child)

@@ -18,6 +18,12 @@
 
 package dao
 
+type PartitionNodesUtilDAOInfo struct {
+	ClusterId     string              `json:"clusterId,omitempty"`
+	Partition     string              `json:"partition,omitempty"`
+	NodesUtilList []*NodesUtilDAOInfo `json:"utilizationList,omitempty"`
+}
+
 type NodesUtilDAOInfo struct {
 	ResourceType string             `json:"type,omitempty"`
 	NodesUtil    []*NodeUtilDAOInfo `json:"utilization,omitempty"`

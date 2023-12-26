@@ -848,25 +848,25 @@ func TestGetPartitionNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, len(result.NodesUtilList), 3, "Should have 3 resource types(CPU/Memory/GPU) in the list.")
 
 	// two nodes advertise memory: must show up in the list
-	memoryNodesUtil := getNodesUtiliByType(t, result.NodesUtilList, siCommon.Memory)
+	memoryNodesUtil := getNodesUtilByType(t, result.NodesUtilList, siCommon.Memory)
 	assert.Equal(t, memoryNodesUtil.NodesUtil[2].NumOfNodes, int64(1))
 	assert.Equal(t, memoryNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
 	assert.Equal(t, memoryNodesUtil.NodesUtil[2].NodeNames[0], node2ID)
 	assert.Equal(t, memoryNodesUtil.NodesUtil[4].NodeNames[0], node1ID)
 
 	// three nodes advertise cpu: must show up in the list
-	cpuNodesUtili := getNodesUtiliByType(t, result.NodesUtilList, siCommon.CPU)
-	assert.Equal(t, cpuNodesUtili.NodesUtil[0].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtili.NodesUtil[0].NodeNames[0], node3ID)
-	assert.Equal(t, cpuNodesUtili.NodesUtil[2].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtili.NodesUtil[2].NodeNames[0], node1ID)
-	assert.Equal(t, cpuNodesUtili.NodesUtil[4].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtili.NodesUtil[4].NodeNames[0], node2ID)
+	cpuNodesUtil := getNodesUtilByType(t, result.NodesUtilList, siCommon.CPU)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[0].NumOfNodes, int64(1))
+	assert.Equal(t, cpuNodesUtil.NodesUtil[0].NodeNames[0], node3ID)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[2].NumOfNodes, int64(1))
+	assert.Equal(t, cpuNodesUtil.NodesUtil[2].NodeNames[0], node1ID)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
+	assert.Equal(t, cpuNodesUtil.NodesUtil[4].NodeNames[0], node2ID)
 
 	// one node advertise GPU: must show up in the list
-	gpuNodesUtili := getNodesUtiliByType(t, result.NodesUtilList, "GPU")
-	assert.Equal(t, gpuNodesUtili.NodesUtil[4].NumOfNodes, int64(1))
-	assert.Equal(t, gpuNodesUtili.NodesUtil[4].NodeNames[0], node2ID)
+	gpuNodesUtil := getNodesUtilByType(t, result.NodesUtilList, "GPU")
+	assert.Equal(t, gpuNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
+	assert.Equal(t, gpuNodesUtil.NodesUtil[4].NodeNames[0], node2ID)
 }
 
 func TestGetNodeUtilisations(t *testing.T) {
@@ -929,7 +929,7 @@ func TestGetNodeUtilisations(t *testing.T) {
 
 func assertNodeUtilisationContent(t *testing.T, partitionNodesUtilDAOInfo *dao.PartitionNodesUtilDAOInfo, resourceType string, expectedNodeCount int) {
 	t.Helper()
-	nodeUtilisation := getNodesUtiliByType(t, partitionNodesUtilDAOInfo.NodesUtilList, resourceType)
+	nodeUtilisation := getNodesUtilByType(t, partitionNodesUtilDAOInfo.NodesUtilList, resourceType)
 	assert.Equal(t, nodeUtilisation.ResourceType, resourceType, fmt.Sprintf("should have returned '%s', but got '%s'", resourceType, nodeUtilisation.ResourceType))
 	assert.Equal(t, len(nodeUtilisation.NodesUtil), 10, fmt.Sprintf("should have 10 bucket, but got %d", len(nodeUtilisation.NodesUtil)))
 	assert.Assert(t,
@@ -938,7 +938,7 @@ func assertNodeUtilisationContent(t *testing.T, partitionNodesUtilDAOInfo *dao.P
 	)
 }
 
-func getNodesUtiliByType(t *testing.T, nodesUtilList []*dao.NodesUtilDAOInfo, resourceType string) *dao.NodesUtilDAOInfo {
+func getNodesUtilByType(t *testing.T, nodesUtilList []*dao.NodesUtilDAOInfo, resourceType string) *dao.NodesUtilDAOInfo {
 	t.Helper()
 	for _, nodesUtil := range nodesUtilList {
 		if nodesUtil.ResourceType == resourceType {

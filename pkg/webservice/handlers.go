@@ -355,7 +355,7 @@ func getNodesDAO(entries []*objects.Node) []*dao.NodeDAOInfo {
 // for the default partition. Dominant resource is defined as the highest utilised resource
 // type on the root queue based on the registered resources.
 // Only check the default partition
-// Deprecated - To be removed in 1.7.0. Replaced with getNodesUtilisations
+// Deprecated - To be removed in next major release. Replaced with getNodesUtilisations
 func getNodeUtilisation(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(configs.DefaultPartition)
@@ -380,7 +380,7 @@ func getNodeUtilisation(w http.ResponseWriter, r *http.Request) {
 }
 
 // getNodesUtilJSON loads the nodes utilisation for a partition for a specific resource type.
-// Deprecated - To be removed in 1.7.0. Replaced with getPartitionNodesUtilJSON
+// Deprecated - To be removed in next major release. Replaced with getPartitionNodesUtilJSON
 func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.NodesUtilDAOInfo {
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)

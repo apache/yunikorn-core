@@ -253,7 +253,7 @@ var webRoutes = routes{
 		"/ws/v1/scheduler/healthcheck",
 		checkHealthStatus,
 	},
-	// Deprecated - To be removed in 1.7.0. Replaced with /ws/v1/scheduler/node-utilizations
+	// Deprecated - To be removed in next major release. Replaced with /ws/v1/scheduler/node-utilizations
 	route{
 		"Scheduler",
 		"GET",

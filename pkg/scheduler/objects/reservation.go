@@ -21,6 +21,7 @@ package objects
 import (
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -69,9 +70,20 @@ func reservationKey(node *Node, app *Application, ask *AllocationAsk) string {
 		return ""
 	}
 	if node == nil {
-		return app.ApplicationID + "|" + ask.GetAllocationKey()
+		return ask.resKeyWithoutNode
 	}
-	return node.NodeID + "|" + ask.GetAllocationKey()
+	key := ask.getReservationKeyForNode(node.NodeID)
+	if key != common.Empty {
+		return key
+	}
+
+	key = node.NodeID + "|" + ask.GetAllocationKey()
+	ask.setReservationKeyForNode(node.NodeID, key)
+	return key
+}
+
+func reservationKeyWithoutNode(appID, allocKey string) string {
+	return appID + "|" + allocKey
 }
 
 // Return the reservation key

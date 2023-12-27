@@ -1331,7 +1331,14 @@ func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertUserExists(t *testing.T, resp *MockResponseWriter) {
+func assertUserExists(t *testing.T, resp *MockResponseWriter, expected *dao.UserResourceUsageDAOInfo) {
+	var actual *dao.UserResourceUsageDAOInfo
+	err := json.Unmarshal(resp.outputBytes, &actual)
+	assert.NilError(t, err, unmarshalError)
+	assert.DeepEqual(t, actual, expected)
+}
+
+func assertUserNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1340,7 +1347,7 @@ func assertUserExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
+func assertUserNameMissing(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1349,7 +1356,14 @@ func assertUserNameExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
-func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
+func assertGroupExists(t *testing.T, resp *MockResponseWriter, expected *dao.GroupResourceUsageDAOInfo) {
+	var actual *dao.GroupResourceUsageDAOInfo
+	err := json.Unmarshal(resp.outputBytes, &actual)
+	assert.NilError(t, err, unmarshalError)
+	assert.DeepEqual(t, actual, expected)
+}
+
+func assertGroupNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1358,7 +1372,7 @@ func assertGroupExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertGroupNameExists(t *testing.T, resp *MockResponseWriter) {
+func assertGroupNameMissing(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1422,7 +1436,7 @@ func TestFullStateDumpPath(t *testing.T) {
 }
 
 func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
-	prepareUserAndGroupContext(t, configDefault)
+	prepareUserAndGroupContext(t, groupsLimitsConfig)
 	// Test user name is missing
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
@@ -1431,7 +1445,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp := &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
-	assertUserNameExists(t, resp)
+	assertUserNameMissing(t, resp)
 
 	// Test group name is missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
@@ -1442,7 +1456,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}
 	getGroupResourceUsage(resp, req)
-	assertGroupNameExists(t, resp)
+	assertGroupNameMissing(t, resp)
 
 	// Test existed user query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
@@ -1453,6 +1467,23 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
+	assertUserExists(t, resp,
+		&dao.UserResourceUsageDAOInfo{
+			UserName: "testuser",
+			Groups:   map[string]string{"app-1": "testgroup"},
+			Queues: &dao.ResourceUsageDAOInfo{
+				QueuePath:           "root",
+				ResourceUsage:       resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}),
+				RunningApplications: []string{"app-1"},
+				Children: []*dao.ResourceUsageDAOInfo{
+					{
+						QueuePath:           "root.default",
+						ResourceUsage:       resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}),
+						RunningApplications: []string{"app-1"},
+					},
+				},
+			},
+		})
 
 	// Test non-existing user query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
@@ -1463,7 +1494,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
 	resp = &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
-	assertUserExists(t, resp)
+	assertUserNotExists(t, resp)
 
 	// Test existed group query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
@@ -1472,11 +1503,26 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 		httprouter.Param{Key: "user", Value: "testuser"},
 		httprouter.Param{Key: "group", Value: "testgroup"},
 	}))
-	var groupResourceUsageDao *dao.GroupResourceUsageDAOInfo
+	resp = &MockResponseWriter{}
 	getGroupResourceUsage(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &groupResourceUsageDao)
-	assert.NilError(t, err, unmarshalError)
-	assert.DeepEqual(t, groupResourceUsageDao, &dao.GroupResourceUsageDAOInfo{GroupName: "", Applications: nil, Queues: nil})
+	assertGroupExists(t, resp,
+		&dao.GroupResourceUsageDAOInfo{
+			GroupName:    "testgroup",
+			Applications: []string{"app-1"},
+			Queues: &dao.ResourceUsageDAOInfo{
+				QueuePath:           "root",
+				ResourceUsage:       resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}),
+				RunningApplications: []string{"app-1"},
+				Children: []*dao.ResourceUsageDAOInfo{
+					{
+						QueuePath:           "root.default",
+						ResourceUsage:       resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}),
+						MaxResources:        resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 200}),
+						RunningApplications: []string{"app-1"},
+					},
+				},
+			},
+		})
 
 	// Test non-existing group query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
@@ -1485,8 +1531,9 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 		httprouter.Param{Key: "user", Value: "testuser"},
 		httprouter.Param{Key: "group", Value: "testNonExistingGroup"},
 	}))
+	resp = &MockResponseWriter{}
 	getGroupResourceUsage(resp, req)
-	assertGroupExists(t, resp)
+	assertGroupNotExists(t, resp)
 
 	// Test params name missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))

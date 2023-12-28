@@ -58,7 +58,7 @@ const (
 	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
-	ActiveState              = "Active"
+	ActiveState              = "active"
 )
 
 var allowedStatesMsg string
@@ -71,8 +71,8 @@ func init() {
 	allowedAppActiveStates = make(map[string]bool)
 
 	allowedAppStates[ActiveState] = true
-	allowedAppStates[objects.Rejected.String()] = true
-	allowedAppStates[objects.Completed.String()] = true
+	allowedAppStates[strings.ToLower(objects.Rejected.String())] = true
+	allowedAppStates[strings.ToLower(objects.Completed.String())] = true
 
 	var states []string
 	for k := range allowedAppStates {
@@ -80,13 +80,13 @@ func init() {
 	}
 	allowedStatesMsg = fmt.Sprintf("Only following application states are allowed: %s", strings.Join(states, ","))
 
-	allowedAppActiveStates[objects.New.String()] = true
-	allowedAppActiveStates[objects.Accepted.String()] = true
-	allowedAppActiveStates[objects.Starting.String()] = true
-	allowedAppActiveStates[objects.Running.String()] = true
-	allowedAppActiveStates[objects.Completing.String()] = true
-	allowedAppActiveStates[objects.Failing.String()] = true
-	allowedAppActiveStates[objects.Resuming.String()] = true
+	allowedAppActiveStates[strings.ToLower(objects.New.String())] = true
+	allowedAppActiveStates[strings.ToLower(objects.Accepted.String())] = true
+	allowedAppActiveStates[strings.ToLower(objects.Starting.String())] = true
+	allowedAppActiveStates[strings.ToLower(objects.Running.String())] = true
+	allowedAppActiveStates[strings.ToLower(objects.Completing.String())] = true
+	allowedAppActiveStates[strings.ToLower(objects.Failing.String())] = true
+	allowedAppActiveStates[strings.ToLower(objects.Resuming.String())] = true
 
 	var activeStates []string
 	for k := range allowedAppActiveStates {
@@ -661,8 +661,8 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName(strings.ToLower("partition"))
-	appState := vars.ByName(strings.ToLower("state"))
+	partition := vars.ByName("partition")
+	appState := strings.ToLower(vars.ByName("state"))
 
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
@@ -676,25 +676,26 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	var appList []*objects.Application
 	switch appState {
 	case ActiveState:
-		if status := r.URL.Query().Get("status"); status != "" {
+		if status := strings.ToLower(r.URL.Query().Get("status")); status != "" {
 			if !allowedAppActiveStates[status] {
 				buildJSONErrorResponse(w, allowedActiveStatesMsg, http.StatusBadRequest)
 				return
 			}
 			for _, app := range partitionContext.GetApplications() {
-				if app.CurrentState() == status {
+				if strings.ToLower(app.CurrentState()) == status {
 					appList = append(appList, app)
 				}
 			}
 		} else {
 			appList = partitionContext.GetApplications()
 		}
-	case objects.Rejected.String():
+	case strings.ToLower(objects.Rejected.String()):
 		appList = partitionContext.GetRejectedApplications()
-	case objects.Completed.String():
+	case strings.ToLower(objects.Completed.String()):
 		appList = partitionContext.GetCompletedApplications()
 	default:
 		buildJSONErrorResponse(w, "BUG: unknown state", http.StatusInternalServerError)
+		return
 	}
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
 	for _, app := range appList {

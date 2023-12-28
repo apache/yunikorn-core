@@ -1374,6 +1374,24 @@ func TestGetApplicationHandler(t *testing.T) {
 	err = json.Unmarshal(resp4.outputBytes, &appsDao4)
 	assert.NilError(t, err, unmarshalError)
 
+	// test invalid queue name
+	var req5 *http.Request
+	req5, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	req5 = req5.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.test.test123@"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	resp5 := &MockResponseWriter{}
+	getApplication(resp5, req5)
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp5.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp5.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "problem in queue query parameter parsing as queue param root.test.test123@ contains invalid queue name test123@. Queue name must only have alphanumeric characters, - or _, and be no longer than 64 characters", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
 	// test missing params name
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
 	assert.NilError(t, err, "Get Application Handler request failed")

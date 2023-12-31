@@ -922,7 +922,8 @@ partitions:
 	if len(limit.Groups) != 0 {
 		t.Errorf("group list should be empty and is not: %v", limit)
 	}
-	if limit.MaxApplications != 5 || len(limit.MaxResources) != 2 || limit.MaxResources["memory"] != "10000" {
+	if limit.MaxApplications != 5 || len(limit.MaxResources) != 2 ||
+		limit.MaxResources["memory"] != "10000" || limit.MaxResources["vcore"] != "10" {
 		t.Errorf("failed to load max resources %v", limit)
 	}
 
@@ -996,7 +997,8 @@ partitions:
 	if len(limit.Users) != 1 || limit.Users[0] != "user1" || len(limit.Groups) != 0 {
 		t.Errorf("user and group list have incorrect entries: %v", limit)
 	}
-	if limit.MaxApplications != 5 || len(limit.MaxResources) != 2 || limit.MaxResources["memory"] != "10000" {
+	if limit.MaxApplications != 5 || len(limit.MaxResources) != 2 ||
+		limit.MaxResources["memory"] != "10000" || limit.MaxResources["vcore"] != "10" {
 		t.Errorf("loaded resource limits incorrectly: %v", limit)
 	}
 

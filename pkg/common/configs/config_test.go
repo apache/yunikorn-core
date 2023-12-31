@@ -718,7 +718,7 @@ partitions:
 	if rule.Parent.Create {
 		t.Errorf("Create flag is not set correctly expected 'false' got 'true'")
 	}
-	if len(rule.Parent.Filter.Users) != 1 && len(rule.Parent.Filter.Groups) != 0 {
+	if len(rule.Parent.Filter.Users) != 1 || len(rule.Parent.Filter.Groups) != 0 {
 		t.Errorf("Failed rule or group filter parsing length should have been 1 and 0, got: %v, %v", rule.Filter.Users, rule.Filter.Groups)
 	}
 
@@ -768,7 +768,7 @@ partitions:
 	if len(conf.Partitions[0].PlacementRules) != 2 {
 		t.Errorf("incorrect number of rules returned expected 2 got: %d", len(conf.Partitions[0].PlacementRules))
 	}
-	if conf.Partitions[0].PlacementRules[0].Value != "default" &&
+	if conf.Partitions[0].PlacementRules[0].Value != "root.default" ||
 		conf.Partitions[0].PlacementRules[1].Value != "Just Any value" {
 		t.Errorf("incorrect values set inside the rules: %v", conf.Partitions[0].PlacementRules)
 	}
@@ -916,35 +916,36 @@ partitions:
 
 	// limit 1 check
 	limit := conf.Partitions[0].Limits[0]
-	if len(limit.Users) != 1 && limit.Users[0] != "user1" && len(limit.Groups) != 0 {
+	if len(limit.Users) != 1 || limit.Users[0] != "user1" || len(limit.Groups) != 0 {
 		t.Errorf("failed to load max apps %v", limit)
 	}
 	if len(limit.Groups) != 0 {
 		t.Errorf("group list should be empty and is not: %v", limit)
 	}
-	if limit.MaxApplications != 10 && (len(limit.MaxResources) != 2 && limit.MaxResources["memory"] != "10000") {
+	if limit.MaxApplications != 5 || len(limit.MaxResources) != 2 ||
+		limit.MaxResources["memory"] != "10000" || limit.MaxResources["vcore"] != "10" {
 		t.Errorf("failed to load max resources %v", limit)
 	}
 
 	// limit 2 check
 	limit = conf.Partitions[0].Limits[1]
-	if len(limit.Users) != 1 && limit.Users[0] != "user2" &&
-		len(limit.Groups) != 1 && limit.Groups[0] != "prod" {
+	if len(limit.Users) != 1 || limit.Users[0] != "user2" ||
+		len(limit.Groups) != 1 || limit.Groups[0] != "prod" {
 		t.Errorf("user and group list have incorrect entries (limit 2): %v", limit)
 	}
-	if limit.MaxApplications != 5 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+	if limit.MaxApplications != 10 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (limit 2): %v", limit)
 	}
 
 	// limit 3 check
 	limit = conf.Partitions[0].Limits[2]
-	if len(limit.Groups) != 2 && limit.Groups[0] != "dev" && limit.Groups[1] != "test" {
+	if len(limit.Groups) != 2 || limit.Groups[0] != "dev" || limit.Groups[1] != "test" {
 		t.Errorf("failed to load groups from config (limit 3): %v", limit)
 	}
 	if len(limit.Users) != 0 {
 		t.Errorf("user list should be empty and is not (limit 3): %v", limit)
 	}
-	if limit.MaxApplications != 20 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+	if limit.MaxApplications != 20 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (limit 3): %v", limit)
 	}
 }
@@ -993,28 +994,29 @@ partitions:
 
 	// limit 1 check
 	limit := conf.Partitions[0].Queues[0].Limits[0]
-	if len(limit.Users) != 1 && limit.Users[0] != "user1" && len(limit.Groups) != 0 {
+	if len(limit.Users) != 1 || limit.Users[0] != "user1" || len(limit.Groups) != 0 {
 		t.Errorf("user and group list have incorrect entries: %v", limit)
 	}
-	if limit.MaxApplications != 5 && (len(limit.MaxResources) != 2 && limit.MaxResources["memory"] != "10000") {
+	if limit.MaxApplications != 5 || len(limit.MaxResources) != 2 ||
+		limit.MaxResources["memory"] != "10000" || limit.MaxResources["vcore"] != "10" {
 		t.Errorf("loaded resource limits incorrectly: %v", limit)
 	}
 
 	// limit 2 check
 	limit = conf.Partitions[0].Queues[0].Limits[1]
-	if len(limit.Users) != 1 && limit.Users[0] != "user2" && limit.Groups[0] != "prod" {
+	if len(limit.Users) != 1 || limit.Users[0] != "user2" || limit.Groups[0] != "prod" {
 		t.Errorf("user and group list have incorrect entries (limit 2): %v", limit)
 	}
-	if limit.MaxApplications != 10 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+	if limit.MaxApplications != 10 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (limit 2): %v", limit)
 	}
 
 	// sub queue limit check
 	limit = conf.Partitions[0].Queues[0].Queues[0].Limits[0]
-	if len(limit.Users) != 1 && limit.Users[0] != "subuser" && len(limit.Groups) != 0 {
+	if len(limit.Users) != 1 || limit.Users[0] != "subuser" || len(limit.Groups) != 0 {
 		t.Errorf("user and group list have incorrect entries (sub queue): %v", limit)
 	}
-	if limit.MaxApplications != 1 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+	if limit.MaxApplications != 1 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (sub queue): %v", limit)
 	}
 }
@@ -1239,7 +1241,7 @@ partitions:
 	conf, err := CreateConfig(data)
 	assert.NilError(t, err, "config parsing should not have failed")
 	// gone through validation: 1 top level queues
-	if len(conf.Partitions[0].Queues) != 1 && len(conf.Partitions[0].Queues[0].Limits) != 0 {
+	if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[0].Queues[0].Limits) != 0 {
 		t.Errorf("failed to load queues from config: %v", conf)
 	}
 	if len(conf.Partitions[0].Limits) != 5 {
@@ -1248,25 +1250,31 @@ partitions:
 
 	// user with dot check
 	limit := conf.Partitions[0].Limits[0]
-	if len(limit.Users) != 1 && limit.Users[0] != "user.lastname" {
+	if len(limit.Users) != 1 || limit.Users[0] != "user.lastname" {
 		t.Errorf("failed to load 'dot' user from config: %v", limit)
 	}
 
 	// user with @ check
 	limit = conf.Partitions[0].Limits[1]
-	if len(limit.Users) != 1 && limit.Users[0] != "user@domain" {
+	if len(limit.Users) != 1 || limit.Users[0] != "user@domain" {
 		t.Errorf("failed to load '@' user from config: %v", limit)
 	}
 
 	// user wildcard
 	limit = conf.Partitions[0].Limits[2]
-	if len(limit.Users) != 0 && limit.Users[0] != "*" {
+	if len(limit.Users) != 1 || limit.Users[0] != "*" {
 		t.Errorf("failed to load wildcard user from config: %v", limit)
 	}
 
-	// group wildcard
+	// group
 	limit = conf.Partitions[0].Limits[3]
-	if len(limit.Groups) != 1 && limit.Groups[0] != "*" {
+	if len(limit.Groups) != 1 || limit.Groups[0] != "test" {
+		t.Errorf("failed to load group from config: %v", limit)
+	}
+
+	// wildcard group
+	limit = conf.Partitions[0].Limits[4]
+	if len(limit.Groups) != 1 || limit.Groups[0] != "*" {
 		t.Errorf("failed to load wildcard group from config: %v", limit)
 	}
 }

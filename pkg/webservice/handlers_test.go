@@ -106,18 +106,6 @@ partitions:
           - name: noapps
 `
 
-const configStateDumpFilePath = `
-partitions:
-  - name: default
-    statedumpfilepath: "tmp/non-default-yunikorn-state.txt"
-    queues:
-      - name: root
-        submitacl: "*"
-        queues:
-          - name: default
-          - name: noapps
-`
-
 const configMultiPartitions = `
 partitions: 
   - 
@@ -1413,7 +1401,7 @@ func TestFullStateDumpPath(t *testing.T) {
 	}
 	configs.SetConfigMap(configMap)
 
-	schedulerContext = prepareSchedulerContext(t, false)
+	schedulerContext = prepareSchedulerContext(t)
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	context := partitionContext[normalizedPartitionName]
@@ -1597,7 +1585,7 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 }
 
 func TestGetEvents(t *testing.T) {
-	prepareSchedulerContext(t, false)
+	prepareSchedulerContext(t)
 	appEvent, nodeEvent, queueEvent := addEvents(t)
 
 	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
@@ -1752,13 +1740,8 @@ func getEventRecordDao(t *testing.T, req *http.Request) dao.EventRecordDAO {
 	return eventDao
 }
 
-func prepareSchedulerContext(t *testing.T, stateDumpConf bool) *scheduler.ClusterContext {
-	var config []byte
-	if !stateDumpConf {
-		config = []byte(configDefault)
-	} else {
-		config = []byte(configStateDumpFilePath)
-	}
+func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
+	config := []byte(configDefault)
 	var err error
 	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, config)
 	assert.NilError(t, err, "Error when load clusterInfo from config")

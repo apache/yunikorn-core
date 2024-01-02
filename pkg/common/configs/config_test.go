@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -910,12 +911,12 @@ partitions:
 	if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[0].Queues[0].Limits) != 3 {
 		t.Errorf("partition limits not correctly applied to root queue %v", conf)
 	}
-	if len(conf.Partitions[0].Limits) != 0 {
-		t.Errorf("partition limits not wiped out %v", conf)
+	if len(conf.Partitions[0].Limits) != 3 {
+		t.Errorf("partition users linked not correctly loaded %v", conf)
 	}
 
 	// limit 1 check
-	limit := conf.Partitions[0].Queues[0].Limits[0]
+	limit := conf.Partitions[0].Limits[0]
 	if len(limit.Users) != 1 || limit.Users[0] != "user1" || len(limit.Groups) != 0 {
 		t.Errorf("failed to load max apps %v", limit)
 	}
@@ -928,7 +929,7 @@ partitions:
 	}
 
 	// limit 2 check
-	limit = conf.Partitions[0].Queues[0].Limits[1]
+	limit = conf.Partitions[0].Limits[1]
 	if len(limit.Users) != 1 || limit.Users[0] != "user2" ||
 		len(limit.Groups) != 1 || limit.Groups[0] != "prod" {
 		t.Errorf("user and group list have incorrect entries (limit 2): %v", limit)
@@ -938,7 +939,7 @@ partitions:
 	}
 
 	// limit 3 check
-	limit = conf.Partitions[0].Queues[0].Limits[2]
+	limit = conf.Partitions[0].Limits[2]
 	if len(limit.Groups) != 2 || limit.Groups[0] != "dev" || limit.Groups[1] != "test" {
 		t.Errorf("failed to load groups from config (limit 3): %v", limit)
 	}
@@ -947,6 +948,10 @@ partitions:
 	}
 	if limit.MaxApplications != 20 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (limit 3): %v", limit)
+	}
+
+	if !reflect.DeepEqual(conf.Partitions[0].Limits, conf.Partitions[0].Queues[0].Limits) {
+		t.Errorf("partition limits and root queue limits are not equivalent : %v", conf)
 	}
 }
 
@@ -1244,38 +1249,42 @@ partitions:
 	if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[0].Queues[0].Limits) != 5 {
 		t.Errorf("partition limits not correctly applied to root queue: %v", conf)
 	}
-	if len(conf.Partitions[0].Limits) != 0 {
-		t.Errorf("partition limits not wiped out: %v", conf)
+	if len(conf.Partitions[0].Limits) != 5 {
+		t.Errorf("failed to load partition limits from config: %v", conf)
 	}
 
 	// user with dot check
-	limit := conf.Partitions[0].Queues[0].Limits[0]
+	limit := conf.Partitions[0].Limits[0]
 	if len(limit.Users) != 1 || limit.Users[0] != "user.lastname" {
 		t.Errorf("failed to load 'dot' user from config: %v", limit)
 	}
 
 	// user with @ check
-	limit = conf.Partitions[0].Queues[0].Limits[1]
+	limit = conf.Partitions[0].Limits[1]
 	if len(limit.Users) != 1 || limit.Users[0] != "user@domain" {
 		t.Errorf("failed to load '@' user from config: %v", limit)
 	}
 
 	// user wildcard
-	limit = conf.Partitions[0].Queues[0].Limits[2]
+	limit = conf.Partitions[0].Limits[2]
 	if len(limit.Users) != 1 || limit.Users[0] != "*" {
 		t.Errorf("failed to load wildcard user from config: %v", limit)
 	}
 
 	// group
-	limit = conf.Partitions[0].Queues[0].Limits[3]
+	limit = conf.Partitions[0].Limits[3]
 	if len(limit.Groups) != 1 || limit.Groups[0] != "test" {
 		t.Errorf("failed to load group from config: %v", limit)
 	}
 
 	// wildcard group
-	limit = conf.Partitions[0].Queues[0].Limits[4]
+	limit = conf.Partitions[0].Limits[4]
 	if len(limit.Groups) != 1 || limit.Groups[0] != "*" {
 		t.Errorf("failed to load wildcard group from config: %v", limit)
+	}
+
+	if !reflect.DeepEqual(conf.Partitions[0].Limits, conf.Partitions[0].Queues[0].Limits) {
+		t.Errorf("partition limits and root queue limits are not equivalent : %v", conf)
 	}
 }
 

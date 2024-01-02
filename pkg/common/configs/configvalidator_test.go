@@ -1604,7 +1604,7 @@ func TestCheckLimitsStructure(t *testing.T) {
 	}
 	assert.Error(t, checkLimitsStructure(partitionConfig), "top queue is not root")
 
-	// both partition limits and root queue limits exist
+	// partition limits and root queue limits are not equivalent
 	partitionConfig = &PartitionConfig{
 		Name: DefaultPartition,
 		Queues: []QueueConfig{{
@@ -1613,7 +1613,20 @@ func TestCheckLimitsStructure(t *testing.T) {
 		}},
 		Limits: []Limit{groupLimit},
 	}
-	assert.Error(t, checkLimitsStructure(partitionConfig), "partition limits and root queue limits both exist")
+	assert.Error(t, checkLimitsStructure(partitionConfig), "partition limits and root queue limits are not equivalent")
+
+	// partition limits and root queue limits are equivalent
+	partitionConfig = &PartitionConfig{
+		Name: DefaultPartition,
+		Queues: []QueueConfig{{
+			Name:   RootQueue,
+			Limits: []Limit{userLimit},
+		}},
+		Limits: []Limit{userLimit},
+	}
+	assert.NilError(t, checkLimitsStructure(partitionConfig))
+	assert.DeepEqual(t, partitionConfig.Queues[0].Limits, []Limit{userLimit})
+	assert.DeepEqual(t, partitionConfig.Limits, []Limit{userLimit})
 
 	// only partition limits exist
 	partitionConfig = &PartitionConfig{
@@ -1625,9 +1638,9 @@ func TestCheckLimitsStructure(t *testing.T) {
 	}
 	assert.NilError(t, checkLimitsStructure(partitionConfig))
 	assert.DeepEqual(t, partitionConfig.Queues[0].Limits, []Limit{groupLimit})
-	assert.Equal(t, len(partitionConfig.Limits), 0)
+	assert.DeepEqual(t, partitionConfig.Limits, []Limit{groupLimit})
 
-	// only root limits exist
+	// only root queue limits exist
 	partitionConfig = &PartitionConfig{
 		Name: DefaultPartition,
 		Queues: []QueueConfig{{

@@ -21,6 +21,7 @@ package configs
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -603,15 +604,13 @@ func checkLimitsStructure(partitionConfig *PartitionConfig) error {
 		return fmt.Errorf("top queue is not root")
 	}
 
-	if len(partitionLimits) > 0 && len(rootQueue.Limits) > 0 {
-		return fmt.Errorf("partition limits and root queue limits both exist")
+	if len(partitionLimits) > 0 && len(rootQueue.Limits) > 0 && !reflect.DeepEqual(partitionLimits, rootQueue.Limits) {
+		return fmt.Errorf("partition limits and root queue limits are not equivalent")
 	}
 
 	// if root queue limits not defined, apply partition limits
 	if len(partitionLimits) > 0 && len(rootQueue.Limits) == 0 {
 		partitionConfig.Queues[0].Limits = partitionLimits
-		// clear partition limits
-		partitionConfig.Limits = nil
 	}
 
 	return nil

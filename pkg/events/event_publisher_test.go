@@ -88,11 +88,9 @@ func TestServiceStartStopInternal(t *testing.T) {
 }
 
 func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
-	pushEventInterval := 2 * time.Millisecond
-
 	store := newEventStore()
 	publisher := CreateShimPublisher(store)
-	publisher.pushEventInterval = pushEventInterval
+	publisher.pushEventInterval = time.Millisecond
 	publisher.StartService()
 	defer publisher.Stop()
 
@@ -104,9 +102,11 @@ func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
 		TimestampNano: 123456,
 	}
 	store.Store(event)
-	time.Sleep(2 * pushEventInterval)
-	assert.Equal(t, store.CountStoredEvents(), 0,
-		"the Publisher should erase the store even if no EventPlugin registered")
+
+	err := common.WaitForCondition(func() bool {
+		return store.CountStoredEvents() == 0
+	}, time.Millisecond, time.Second)
+	assert.NilError(t, err, "the Publisher should erase the store even if no EventPlugin registered")
 }
 
 // we push an event to the publisher, and check that the same event

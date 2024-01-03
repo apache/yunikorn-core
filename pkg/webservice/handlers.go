@@ -58,35 +58,21 @@ const (
 	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
-	ActiveState              = "active"
 )
 
-var allowedStatesMsg string
 var allowedActiveStatesMsg string
-var allowedAppStates map[string]bool
 var allowedAppActiveStates map[string]bool
 
 func init() {
-	allowedAppStates = make(map[string]bool)
 	allowedAppActiveStates = make(map[string]bool)
 
-	allowedAppStates[ActiveState] = true
-	allowedAppStates[strings.ToLower(objects.Rejected.String())] = true
-	allowedAppStates[strings.ToLower(objects.Completed.String())] = true
-
-	var states []string
-	for k := range allowedAppStates {
-		states = append(states, k)
-	}
-	allowedStatesMsg = fmt.Sprintf("Only following application states are allowed: %s", strings.Join(states, ","))
-
-	allowedAppActiveStates[strings.ToLower(objects.New.String())] = true
-	allowedAppActiveStates[strings.ToLower(objects.Accepted.String())] = true
-	allowedAppActiveStates[strings.ToLower(objects.Starting.String())] = true
-	allowedAppActiveStates[strings.ToLower(objects.Running.String())] = true
-	allowedAppActiveStates[strings.ToLower(objects.Completing.String())] = true
-	allowedAppActiveStates[strings.ToLower(objects.Failing.String())] = true
-	allowedAppActiveStates[strings.ToLower(objects.Resuming.String())] = true
+	allowedAppActiveStates["new"] = true
+	allowedAppActiveStates["accepted"] = true
+	allowedAppActiveStates["starting"] = true
+	allowedAppActiveStates["running"] = true
+	allowedAppActiveStates["completing"] = true
+	allowedAppActiveStates["failing"] = true
+	allowedAppActiveStates["resuming"] = true
 
 	var activeStates []string
 	for k := range allowedAppActiveStates {
@@ -669,13 +655,13 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	if !allowedAppStates[appState] {
-		buildJSONErrorResponse(w, allowedStatesMsg, http.StatusBadRequest)
+	if appState != "active" && appState != "rejected" && appState != "completed" {
+		buildJSONErrorResponse(w, "Only following application states are allowed: active, rejected, completed", http.StatusBadRequest)
 		return
 	}
 	var appList []*objects.Application
 	switch appState {
-	case ActiveState:
+	case "active":
 		if status := strings.ToLower(r.URL.Query().Get("status")); status != "" {
 			if !allowedAppActiveStates[status] {
 				buildJSONErrorResponse(w, allowedActiveStatesMsg, http.StatusBadRequest)
@@ -689,15 +675,15 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		} else {
 			appList = partitionContext.GetApplications()
 		}
-	case strings.ToLower(objects.Rejected.String()):
+	case "rejected":
 		appList = partitionContext.GetRejectedApplications()
-	case strings.ToLower(objects.Completed.String()):
+	case "completed":
 		appList = partitionContext.GetCompletedApplications()
 	default:
 		buildJSONErrorResponse(w, "BUG: unknown state", http.StatusInternalServerError)
 		return
 	}
-	appsDao := make([]*dao.ApplicationDAOInfo, 0)
+	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(appList))
 	for _, app := range appList {
 		appsDao = append(appsDao, getApplicationDAO(app))
 	}

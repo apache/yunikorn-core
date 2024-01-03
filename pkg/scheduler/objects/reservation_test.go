@@ -85,6 +85,8 @@ func TestReservationKey(t *testing.T) {
 	// other cases
 	reserve = reservationKey(node, nil, ask)
 	assert.Equal(t, reserve, "node-1|alloc-1", "incorrect node reservation key")
+	assert.Equal(t, "node-1|alloc-1", ask.resKeyPerNode["node-1"])
+	assert.Equal(t, 1, len(ask.resKeyPerNode))
 	reserve = reservationKey(nil, app, ask)
 	assert.Equal(t, reserve, "app-1|alloc-1", "incorrect app reservation key")
 }

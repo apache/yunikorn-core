@@ -1495,7 +1495,7 @@ func assertActiveStateAllow(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
-	assert.Equal(t, errInfo.Message, allowedActiveStatesMsg, jsonMessageError)
+	assert.Equal(t, errInfo.Message, allowedActiveStatusMsg, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 

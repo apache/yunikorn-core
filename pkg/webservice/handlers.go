@@ -60,7 +60,7 @@ const (
 	NodeDoesNotExists        = "Node not found"
 )
 
-var allowedActiveStatesMsg string
+var allowedActiveStatusMsg string
 var allowedAppActiveStates map[string]bool
 
 func init() {
@@ -78,7 +78,7 @@ func init() {
 	for k := range allowedAppActiveStates {
 		activeStates = append(activeStates, k)
 	}
-	allowedActiveStatesMsg = fmt.Sprintf("Only following active states are allowed: %s", strings.Join(activeStates, ","))
+	allowedActiveStatusMsg = fmt.Sprintf("Only following active states are allowed: %s", strings.Join(activeStates, ","))
 }
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -655,16 +655,12 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	if appState != "active" && appState != "rejected" && appState != "completed" {
-		buildJSONErrorResponse(w, "Only following application states are allowed: active, rejected, completed", http.StatusBadRequest)
-		return
-	}
 	var appList []*objects.Application
 	switch appState {
 	case "active":
 		if status := strings.ToLower(r.URL.Query().Get("status")); status != "" {
 			if !allowedAppActiveStates[status] {
-				buildJSONErrorResponse(w, allowedActiveStatesMsg, http.StatusBadRequest)
+				buildJSONErrorResponse(w, allowedActiveStatusMsg, http.StatusBadRequest)
 				return
 			}
 			for _, app := range partitionContext.GetApplications() {
@@ -680,7 +676,7 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	case "completed":
 		appList = partitionContext.GetCompletedApplications()
 	default:
-		buildJSONErrorResponse(w, "BUG: unknown state", http.StatusInternalServerError)
+		buildJSONErrorResponse(w, "Only following application states are allowed: active, rejected, completed", http.StatusBadRequest)
 		return
 	}
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(appList))

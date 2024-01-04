@@ -816,10 +816,10 @@ func TestUserGroupLimitWithMultipleApps(t *testing.T) {
 	assert.Equal(t, resources.Equals(gt2.queueTracker.resourceUsage, usage), true)
 
 	// limit has reached for both the groups
-	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, userGroup)
-	assert.Equal(t, increased, false)
-	increased = manager.IncreaseTrackedResource(queuePath2, TestApp2, usage, userGroup)
-	assert.Equal(t, increased, false)
+	headroom := manager.Headroom(queuePath1, TestApp1, userGroup)
+	assert.Equal(t, resources.Equals(headroom, resources.Zero), true, "init headroom is not expected")
+	headroom = manager.Headroom(queuePath2, TestApp2, userGroup)
+	assert.Equal(t, resources.Equals(headroom, resources.Zero), true, "init headroom is not expected")
 
 	// remove the apps
 	decreased := manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, userGroup, true)

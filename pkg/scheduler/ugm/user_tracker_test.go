@@ -206,8 +206,8 @@ func TestSetMaxLimits(t *testing.T) {
 		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage1, err)
 	}
 
-	userTracker.setLimits(hierarchy1, resources.Multiply(usage1, 5), 5)
-	userTracker.setLimits(hierarchy5, resources.Multiply(usage1, 10), 10)
+	userTracker.setLimits(hierarchy1, resources.Multiply(usage1, 5), 5, false, false)
+	userTracker.setLimits(hierarchy5, resources.Multiply(usage1, 10), 10, false, false)
 
 	result = userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
 	if !result {
@@ -218,8 +218,8 @@ func TestSetMaxLimits(t *testing.T) {
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v", hierarchy1, TestApp2, usage1)
 	}
-	userTracker.setLimits(hierarchy1, usage1, 1)
-	userTracker.setLimits(hierarchy5, usage1, 1)
+	userTracker.setLimits(hierarchy1, usage1, 1, false, false)
+	userTracker.setLimits(hierarchy5, usage1, 1, false, false)
 }
 
 func getUserResource(ut *UserTracker) map[string]*resources.Resource {

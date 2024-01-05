@@ -600,8 +600,8 @@ func checkLimitsStructure(partitionConfig *PartitionConfig) error {
 	partitionLimits := partitionConfig.Limits
 	rootQueue := partitionConfig.Queues[0]
 
-	if len(partitionConfig.Queues) < 1 || strings.ToLower(partitionConfig.Queues[0].Name) != RootQueue {
-		return fmt.Errorf("top queue is not root")
+	if len(partitionConfig.Queues) < 1 || strings.ToLower(rootQueue.Name) != RootQueue {
+		return fmt.Errorf("top queue name is %s not root", rootQueue.Name)
 	}
 
 	if len(partitionLimits) > 0 && len(rootQueue.Limits) > 0 && !reflect.DeepEqual(partitionLimits, rootQueue.Limits) {

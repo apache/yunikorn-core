@@ -1602,7 +1602,7 @@ func TestCheckLimitsStructure(t *testing.T) {
 			Name: "test",
 		}},
 	}
-	assert.Error(t, checkLimitsStructure(partitionConfig), "top queue is not root")
+	assert.Error(t, checkLimitsStructure(partitionConfig), "top queue name is test not root")
 
 	// partition limits and root queue limits are not equivalent
 	partitionConfig = &PartitionConfig{

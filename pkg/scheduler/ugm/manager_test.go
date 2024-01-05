@@ -1029,6 +1029,8 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 		conf                          configs.PartitionConfig
 		initExpectedHeadroomResource  map[string]string
 		finalExpectedHeadroomResource map[string]string
+		canRunApp                     bool
+		isHeadroomAvailable           bool
 	}{
 		// unmixed user and group limit
 		{
@@ -1039,6 +1041,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with a specific user limit",
@@ -1048,6 +1051,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 		{
 			name: "maxresources with a specific user limit and a wildcard user limit for a not specific user",
@@ -1058,6 +1062,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with a specific user limit and a wildcard user limit for a not specific user",
@@ -1068,6 +1073,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 		{
 			name: "maxresources with a specific user limit and a wildcard user limit for a specific user",
@@ -1078,6 +1084,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with a specific user limit and a wildcard user limit for a specific user",
@@ -1088,6 +1095,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 		{
 			name: "maxresources with a wildcard user limit",
@@ -1097,6 +1105,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with a wildcard user limit",
@@ -1106,6 +1115,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 		{
 			name: "maxresources with a specific group limit",
@@ -1115,6 +1125,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with a specific group limit",
@@ -1124,6 +1135,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 		{
 			name: "maxresources with a specific group limit and a wildcard group limit for a not specific group user",
@@ -1134,6 +1146,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with a specific group limit and a wildcard group limit for a not specific group user",
@@ -1144,6 +1157,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 		{
 			name: "maxresources with a specific group limit and a wildcard group limit for a specific group user",
@@ -1154,6 +1168,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with a specific group limit and a wildcard group limit for a specific group user",
@@ -1164,6 +1179,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 		// mixed user and group limit
 		{
@@ -1175,6 +1191,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with user limit lower than group limit",
@@ -1185,6 +1202,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 		{
 			name: "maxresources with gorup limit lower than user limit",
@@ -1195,6 +1213,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  mediumResource,
 			finalExpectedHeadroomResource: nil,
+			canRunApp:                     true,
 		},
 		{
 			name: "maxapplications with group limit lower than user limit",
@@ -1205,6 +1224,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			}),
 			initExpectedHeadroomResource:  largeResource,
 			finalExpectedHeadroomResource: mediumResource,
+			isHeadroomAvailable:           true,
 		},
 	}
 
@@ -1238,10 +1258,9 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			assert.NilError(t, err, fmt.Sprintf("can't create resource from %v", tc.finalExpectedHeadroomResource))
 			headroom = manager.Headroom(queuePathParent, TestApp1, tc.user)
 			assert.Equal(t, resources.Equals(headroom, finalExpectedHeadroom), true, "final headroom is not expected")
-			if manager.CanRunApp(queuePathParent, TestApp2, tc.user) {
-				headroom = manager.Headroom(queuePathParent, TestApp2, tc.user)
-				assert.Equal(t, headroom.FitInMaxUndef(usage), false)
-			}
+			assert.Equal(t, manager.CanRunApp(queuePathParent, TestApp2, tc.user), tc.canRunApp)
+			headroom = manager.Headroom(queuePathParent, TestApp2, tc.user)
+			assert.Equal(t, headroom.FitInMaxUndef(usage), tc.isHeadroomAvailable)
 		})
 	}
 }
@@ -1335,14 +1354,15 @@ func TestUserGroupMaxResourcesChange(t *testing.T) { //nolint:funlen
 
 func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 	testCases := []struct {
-		name      string
-		user      security.UserGroup
-		limits    []configs.Limit
-		newLimits []configs.Limit
+		name                 string
+		user                 security.UserGroup
+		limits               []configs.Limit
+		newLimits            []configs.Limit
+		maxAppsExceeded      bool
+		maxResourcesExceeded bool
 	}{
 		// user limit only
 		{
-
 			name: "maxresources with an updated specific user limit",
 			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
 			limits: []configs.Limit{
@@ -1351,6 +1371,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 			newLimits: []configs.Limit{
 				createLimit([]string{"user1"}, nil, mediumResource, 2),
 			},
+			maxResourcesExceeded: true,
 		},
 		{
 			name: "maxapplications with an updated specific user limit",
@@ -1361,6 +1382,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 			newLimits: []configs.Limit{
 				createLimit([]string{"user1"}, nil, largeResource, 1),
 			},
+			maxAppsExceeded: true,
 		},
 
 		// group limit only
@@ -1374,6 +1396,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 			newLimits: []configs.Limit{
 				createLimit(nil, []string{"group1"}, mediumResource, 2),
 			},
+			maxResourcesExceeded: true,
 		},
 		{
 			name: "maxapplications with an updated specific group limit",
@@ -1384,6 +1407,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 			newLimits: []configs.Limit{
 				createLimit(nil, []string{"group1"}, largeResource, 1),
 			},
+			maxAppsExceeded: true,
 		},
 
 		// user wilcard limit
@@ -1398,6 +1422,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, largeResource, 2),
 				createLimit([]string{"*"}, nil, mediumResource, 2),
 			},
+			maxResourcesExceeded: true,
 		},
 		{
 			name: "maxapplications with an updated wildcard user limit",
@@ -1410,6 +1435,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 				createLimit([]string{"user1"}, nil, largeResource, 2),
 				createLimit([]string{"*"}, nil, largeResource, 1),
 			},
+			maxAppsExceeded: true,
 		},
 
 		// group wilcard limit
@@ -1425,6 +1451,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 				createLimit(nil, []string{"group1"}, largeResource, 2),
 				createLimit(nil, []string{"*"}, mediumResource, 2),
 			},
+			maxResourcesExceeded: true,
 		},
 		{
 			name: "maxapplications with an updated wildcard group limit",
@@ -1437,6 +1464,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 				createLimit(nil, []string{"group1"}, largeResource, 2),
 				createLimit(nil, []string{"*"}, largeResource, 1),
 			},
+			maxAppsExceeded: true,
 		},
 
 		// in a different limit
@@ -1459,6 +1487,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 					MaxApplications: 2,
 				},
 			},
+			maxResourcesExceeded: true,
 		},
 		{
 			name: "maxapplications with a new specific user limit",
@@ -1479,6 +1508,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 					MaxApplications: 1,
 				},
 			},
+			maxAppsExceeded: true,
 		},
 		{
 			name: "maxresources with a new specific group limit",
@@ -1499,6 +1529,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 					MaxApplications: 2,
 				},
 			},
+			maxResourcesExceeded: true,
 		},
 		{
 			name: "maxapplications with a new specific group limit",
@@ -1519,6 +1550,7 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 					MaxApplications: 1,
 				},
 			},
+			maxAppsExceeded: true,
 		},
 	}
 
@@ -1548,10 +1580,9 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 			conf.Queues[0].Queues[0].Limits = tc.newLimits
 			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
-			if manager.CanRunApp(queuePathParent, TestApp2, tc.user) {
-				headroom := manager.Headroom(queuePathParent, TestApp2, tc.user)
-				assert.Equal(t, headroom.FitInMaxUndef(usage), false)
-			}
+			assert.Equal(t, manager.CanRunApp(queuePathParent, TestApp2, tc.user), !tc.maxAppsExceeded)
+			headroom := manager.Headroom(queuePathParent, TestApp2, tc.user)
+			assert.Equal(t, headroom.FitInMaxUndef(usage), !tc.maxResourcesExceeded)
 		})
 	}
 }

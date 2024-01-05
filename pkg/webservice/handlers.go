@@ -424,8 +424,7 @@ func getNodeUtilisations(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	var result []*dao.PartitionNodesUtilDAOInfo
 	for _, part := range schedulerContext.GetPartitionMapClone() {
-		partitionNodesUtilJSON := getPartitionNodesUtilJSON(part)
-		result = append(result, partitionNodesUtilJSON)
+		result = append(result, getPartitionNodesUtilJSON(part))
 	}
 
 	if err := json.NewEncoder(w).Encode(result); err != nil {

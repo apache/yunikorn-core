@@ -55,8 +55,8 @@ type AllocationAsk struct {
 	allocLog            map[string]*AllocationLogEntry
 	preemptionTriggered bool
 	preemptCheckTime    time.Time
-	schedulingAttempted bool // whether scheduler core has tried to schedule this ask
-	scaleUpTriggered    bool // whether this ask has triggered autoscaling or not
+	schedulingAttempted bool              // whether scheduler core has tried to schedule this ask
+	scaleUpTriggered    bool              // whether this ask has triggered autoscaling or not
 	resKeyPerNode       map[string]string // reservation key for a given node
 
 	sync.RWMutex

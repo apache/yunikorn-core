@@ -906,6 +906,7 @@ func TestGetNodeUtilisations(t *testing.T) {
 	assert.NilError(t, err, "should decode a list of *dao.PartitionNodesUtilDAOInfo")
 	assert.Equal(t, len(partitionNodesUtilDAOInfo), 2)
 	assert.Equal(t, partitionNodesUtilDAOInfo[0].ClusterId, rmID)
+	assert.Equal(t, partitionNodesUtilDAOInfo[1].ClusterId, rmID)
 
 	defaultPartitionNodesUtilDAOInfo := partitionNodesUtilDAOInfo[0]
 	gpuPartitionNodesUtilDAOInfo := partitionNodesUtilDAOInfo[1]
@@ -914,17 +915,12 @@ func TestGetNodeUtilisations(t *testing.T) {
 		gpuPartitionNodesUtilDAOInfo = partitionNodesUtilDAOInfo[0]
 	}
 
-	expectedResourceTypeCount := 2
-	assert.Equal(t, len(defaultPartitionNodesUtilDAOInfo.NodesUtilList), expectedResourceTypeCount)
-	expectedResourceTypeCount = 1
-	assert.Equal(t, len(gpuPartitionNodesUtilDAOInfo.NodesUtilList), expectedResourceTypeCount)
+	assert.Equal(t, len(defaultPartitionNodesUtilDAOInfo.NodesUtilList), 2)
+	assert.Equal(t, len(gpuPartitionNodesUtilDAOInfo.NodesUtilList), 1)
 
-	expectedNodeCount := 3
-	assertNodeUtilisationContent(t, defaultPartitionNodesUtilDAOInfo, "memory", expectedNodeCount)
-	expectedNodeCount = 2
-	assertNodeUtilisationContent(t, defaultPartitionNodesUtilDAOInfo, "vcore", expectedNodeCount)
-	expectedNodeCount = 1
-	assertNodeUtilisationContent(t, gpuPartitionNodesUtilDAOInfo, "gpu", expectedNodeCount)
+	assertNodeUtilisationContent(t, defaultPartitionNodesUtilDAOInfo, "memory", 3)
+	assertNodeUtilisationContent(t, defaultPartitionNodesUtilDAOInfo, "vcore", 2)
+	assertNodeUtilisationContent(t, gpuPartitionNodesUtilDAOInfo, "gpu", 1)
 }
 
 func assertNodeUtilisationContent(t *testing.T, partitionNodesUtilDAOInfo *dao.PartitionNodesUtilDAOInfo, resourceType string, expectedNodeCount int) {

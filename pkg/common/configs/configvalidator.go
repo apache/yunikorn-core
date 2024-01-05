@@ -172,6 +172,11 @@ func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.
 				}
 				// Override with min resource
 				users[curQueuePath][user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
+			} else if wildcardMaxResource, ok := users[queuePath][common.Wildcard]; user != common.Wildcard && ok {
+				if !wildcardMaxResource.FitInMaxUndef(limitMaxResources) {
+					return fmt.Errorf("user %s max resource %s of queue %s is greater than wildcard maximum resource %s of immediate or ancestor parent queue", user, limitMaxResources.String(), cur.Name, wildcardMaxResource.String())
+				}
+				users[curQueuePath][user] = limitMaxResources
 			} else {
 				users[curQueuePath][user] = limitMaxResources
 			}
@@ -184,6 +189,11 @@ func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.
 				}
 				// Override with min resource
 				groups[curQueuePath][group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
+			} else if wildcardMaxResource, ok := groups[queuePath][common.Wildcard]; group != common.Wildcard && ok {
+				if !wildcardMaxResource.FitInMaxUndef(limitMaxResources) {
+					return fmt.Errorf("group %s max resource %s of queue %s is greater than wildcard maximum resource %s of immediate or ancestor parent queue", group, limitMaxResources.String(), cur.Name, wildcardMaxResource.String())
+				}
+				groups[curQueuePath][group] = limitMaxResources
 			} else {
 				groups[curQueuePath][group] = limitMaxResources
 			}
@@ -203,8 +213,11 @@ func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.
 func checkQueueMaxApplications(cur QueueConfig) error {
 	var err error
 	for _, child := range cur.Queues {
-		if cur.MaxApplications != 0 && (cur.MaxApplications < child.MaxApplications || child.MaxApplications == 0) {
+		if cur.MaxApplications != 0 && cur.MaxApplications < child.MaxApplications {
 			return fmt.Errorf("parent maxApplications must be larger than child maxApplications")
+		}
+		if cur.MaxApplications != 0 && child.MaxApplications == 0 {
+			return fmt.Errorf("maxApplications is either undefined or zero, which is not allowed when parent queue's maxApplications is defined")
 		}
 		err = checkQueueMaxApplications(child)
 		if err != nil {

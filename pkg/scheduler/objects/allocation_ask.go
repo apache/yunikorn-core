@@ -48,6 +48,7 @@ type AllocationAsk struct {
 	originator        bool
 	tags              map[string]string
 	allocatedResource *resources.Resource
+	resKeyWithoutNode string // the reservation key without node
 
 	// Mutable fields which need protection
 	pendingAskRepeat    int32
@@ -56,6 +57,7 @@ type AllocationAsk struct {
 	preemptCheckTime    time.Time
 	schedulingAttempted bool // whether scheduler core has tried to schedule this ask
 	scaleUpTriggered    bool // whether this ask has triggered autoscaling or not
+	resKeyPerNode       map[string]string // reservation key for a given node
 
 	sync.RWMutex
 }
@@ -67,12 +69,15 @@ type AllocationLogEntry struct {
 }
 
 func NewAllocationAsk(allocationKey string, applicationID string, allocatedResource *resources.Resource) *AllocationAsk {
-	return &AllocationAsk{
+	aa := &AllocationAsk{
 		allocationKey:     allocationKey,
 		applicationID:     applicationID,
 		allocatedResource: allocatedResource,
 		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
 	}
+	aa.resKeyWithoutNode = reservationKeyWithoutNode(applicationID, allocationKey)
+	return aa
 }
 
 func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
@@ -95,6 +100,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		allowPreemptOther: common.IsAllowPreemptOther(ask.PreemptionPolicy),
 		originator:        ask.Originator,
 		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
 	}
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
@@ -103,6 +109,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 			zap.Stringer("SI ask", ask))
 		return nil
 	}
+	saa.resKeyWithoutNode = reservationKeyWithoutNode(ask.ApplicationID, ask.AllocationKey)
 	return saa
 }
 
@@ -323,4 +330,16 @@ func (aa *AllocationAsk) completedPendingAsk() int {
 	aa.RLock()
 	defer aa.RUnlock()
 	return int(aa.maxAllocations - aa.pendingAskRepeat)
+}
+
+func (aa *AllocationAsk) setReservationKeyForNode(node, resKey string) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.resKeyPerNode[node] = resKey
+}
+
+func (aa *AllocationAsk) getReservationKeyForNode(node string) string {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.resKeyPerNode[node]
 }

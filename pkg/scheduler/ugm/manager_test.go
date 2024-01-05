@@ -45,10 +45,17 @@ var (
 		"memory": "50",
 		"vcores": "50",
 	}
+	mediumResourceWithMemOnly = map[string]string{
+		"memory": "50",
+	}
+	mediumResourceWithVcoresOnly = map[string]string{
+		"vcores": "50",
+	}
 	tinyResource = map[string]string{
 		"memory": "25",
 		"vcores": "25",
 	}
+	nilResource = map[string]string{}
 )
 
 func TestUserManagerOnceInitialization(t *testing.T) {
@@ -702,6 +709,61 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, resources.Zero), true)
 }
 
+func TestUserGroupLimitWithMultipleApps(t *testing.T) {
+	// Increase app rsources to different child queue, which have different group linkage
+	// Queue setup:
+	//   root.parent with group1 limit
+	//   root.parent.child1 with group2 limit
+	//   root.parent.child2 with no limit
+
+	// Increase TestApp1 resource to root.parent.child1, it should be tracked by group2's groupTracker (limit was set in root.parent.child1 with group2 limit)
+	// Increase TestApp2 resource to root.parent.child2, it should be tracked by group1's groupTracker (limit was set in root.parent with group1 limit)
+	// Decrease TestApp1 resource from root.parent.child1, resources should be cleaned up from group2's groupTracker
+	// Decrease TestApp2 resource from root.parent.child2, resources should be cleaned up from group1's groupTracker
+
+	// Setup
+	setupUGM()
+	manager := GetUserManager()
+	userGroup := security.UserGroup{User: "user", Groups: []string{"group1", "group2"}}
+
+	conf := createConfigWithDifferentGroupsLinkage(userGroup.Groups[0], userGroup.Groups[1], 10, 10, 3)
+	assert.NilError(t, m.UpdateConfig(conf.Queues[0], "root"))
+	usage, err := resources.NewResourceFromConf(map[string]string{"memory": "10", "vcore": "10"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
+	}
+
+	// run different apps with different groups linkage (different queue limit settings)
+	increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, userGroup)
+	assert.Equal(t, increased, true)
+	increased = manager.IncreaseTrackedResource(queuePath2, TestApp2, usage, userGroup)
+	assert.Equal(t, increased, true)
+
+	// ensure different groups are linked and resource usage is correct
+	assert.Equal(t, len(manager.getUserTracker("user").appGroupTrackers), 2)
+	gt1 := manager.getUserTracker("user").appGroupTrackers[TestApp1]
+	gt2 := manager.getUserTracker("user").appGroupTrackers[TestApp2]
+	assert.Equal(t, gt1.groupName, "group2")
+	assert.Equal(t, resources.Equals(gt1.queueTracker.resourceUsage, usage), true)
+	assert.Equal(t, gt2.groupName, "group1")
+	assert.Equal(t, resources.Equals(gt2.queueTracker.resourceUsage, usage), true)
+
+	// limit has reached for both the groups
+	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, userGroup)
+	assert.Equal(t, increased, false)
+	increased = manager.IncreaseTrackedResource(queuePath2, TestApp2, usage, userGroup)
+	assert.Equal(t, increased, false)
+
+	// remove the apps
+	decreased := manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, userGroup, true)
+	assert.Equal(t, decreased, true)
+	decreased = manager.DecreaseTrackedResource(queuePath2, TestApp2, usage, userGroup, true)
+	assert.Equal(t, decreased, true)
+
+	// assert group linkage has been removed
+	assert.Equal(t, len(manager.getUserTracker("user").appGroupTrackers), 0)
+}
+
 //nolint:funlen
 func TestCanRunApp(t *testing.T) {
 	testCases := []struct {
@@ -1112,6 +1174,93 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 
 			increased = manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
 			assert.Equal(t, increased, false, "should not increase tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
+		})
+	}
+}
+
+func TestUserGroupMaxResourcesChange(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name      string
+		user      security.UserGroup
+		limits    []configs.Limit
+		newLimits []configs.Limit
+	}{
+		{
+			name: "Updated specific user & group max resources",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, largeResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResource, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with mem only",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResource, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with vcores only",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithVcoresOnly, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with nil resource",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, nilResource, 2),
+			},
+		},
+		{
+			name: "Updated specific user & group max resources with nil",
+			user: security.UserGroup{User: "user1", Groups: []string{"group1"}},
+			limits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, mediumResourceWithMemOnly, 2),
+			},
+			newLimits: []configs.Limit{
+				createLimit([]string{"user1"}, []string{"group1"}, nil, 2),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUGM()
+
+			manager := GetUserManager()
+			conf := createConfigWithLimits(tc.limits)
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			expectedResource, err := resources.NewResourceFromConf(tc.limits[0].MaxResources)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedResource)
+			}
+			assert.Equal(t, resources.Equals(manager.GetUserTracker("user1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+			assert.Equal(t, resources.Equals(manager.GetGroupTracker("group1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+
+			conf.Queues[0].Queues[0].Limits = tc.newLimits
+			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+			expectedResource, err = resources.NewResourceFromConf(tc.newLimits[0].MaxResources)
+			if err != nil {
+				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedResource)
+			}
+			assert.Equal(t, resources.Equals(manager.GetUserTracker("user1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
+			assert.Equal(t, resources.Equals(manager.GetGroupTracker("group1").queueTracker.childQueueTrackers["parent"].maxResources, expectedResource), true)
 		})
 	}
 }
@@ -1615,6 +1764,70 @@ func createConfigWithDifferentGroups(user string, group string, resourceKey stri
 							"vcores": strconv.Itoa(mem * 2),
 						},
 						MaxApplications: maxApps * 2,
+					},
+				},
+			},
+		},
+	}
+	return conf
+}
+
+func createConfigWithDifferentGroupsLinkage(group1 string, group2 string, mem int, vcore int, maxApps uint64) configs.PartitionConfig {
+	// root.parent with group1 limit
+	// root.parent.child1 with group2 limit
+	// root.parent.child2 with no limit
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "parent",
+						Parent:    true,
+						SubmitACL: "*",
+						Queues: []configs.QueueConfig{
+							{
+								Name:      "child1",
+								Parent:    false,
+								SubmitACL: "*",
+								Queues:    nil,
+								Limits: []configs.Limit{
+									{
+										Limit: "child queue with group2 limit",
+										Groups: []string{
+											group2,
+										},
+										MaxResources: map[string]string{
+											"memory": strconv.Itoa(mem),
+											"vcore":  strconv.Itoa(vcore),
+										},
+										MaxApplications: maxApps,
+									},
+								},
+							},
+							{
+								Name:      "child2",
+								Parent:    false,
+								SubmitACL: "*",
+								Queues:    nil,
+							},
+						},
+						Limits: []configs.Limit{
+							{
+								Limit: "parent queue with group1 limit",
+								Groups: []string{
+									group1,
+								},
+								MaxResources: map[string]string{
+									"memory": strconv.Itoa(mem),
+									"vcore":  strconv.Itoa(vcore),
+								},
+								MaxApplications: maxApps,
+							},
+						},
 					},
 				},
 			},

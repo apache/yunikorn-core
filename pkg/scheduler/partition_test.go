@@ -1908,6 +1908,7 @@ func TestPreemption(t *testing.T) {
 	assert.Assert(t, alloc2.IsPreempted(), "alloc-2 is not preempted")
 
 	// allocation should still not do anything as we have not yet released the preempted allocation
+	// but the ask should have a reservation
 	alloc = partition.tryAllocate()
 	if alloc != nil {
 		t.Fatal("unexpected allocation")
@@ -1937,7 +1938,7 @@ func TestPreemption(t *testing.T) {
 		t.Fatal("missing allocation")
 	}
 	assert.Equal(t, 0, len(app2.GetReservations()), "ask should not be reserved")
-	assert.Equal(t, alloc.GetResult(), objects.Allocated, "result should be allocated")
+	assert.Equal(t, alloc.GetResult(), objects.AllocatedReserved, "result should be allocated from reservation")
 	assert.Equal(t, alloc.GetAllocationKey(), allocID3, "expected ask alloc-3 to be allocated")
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000}), getExpectedQueuesLimitsForPreemption())
 

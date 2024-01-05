@@ -598,7 +598,7 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 
 func checkLimitsStructure(partitionConfig *PartitionConfig) error {
 	partitionLimits := partitionConfig.Limits
-	rootQueue := partitionConfig.Queues[0]
+	rootQueue := &partitionConfig.Queues[0]
 
 	if len(partitionConfig.Queues) < 1 || strings.ToLower(rootQueue.Name) != RootQueue {
 		return fmt.Errorf("top queue name is %s not root", rootQueue.Name)
@@ -610,7 +610,7 @@ func checkLimitsStructure(partitionConfig *PartitionConfig) error {
 
 	// if root queue limits not defined, apply partition limits
 	if len(partitionLimits) > 0 && len(rootQueue.Limits) == 0 {
-		partitionConfig.Queues[0].Limits = partitionLimits
+		rootQueue.Limits = partitionLimits
 	}
 
 	return nil

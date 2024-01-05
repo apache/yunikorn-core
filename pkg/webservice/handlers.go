@@ -61,24 +61,24 @@ const (
 )
 
 var allowedActiveStatusMsg string
-var allowedAppActiveStates map[string]bool
+var allowedAppActiveStatuses map[string]bool
 
 func init() {
-	allowedAppActiveStates = make(map[string]bool)
+	allowedAppActiveStatuses = make(map[string]bool)
 
-	allowedAppActiveStates["new"] = true
-	allowedAppActiveStates["accepted"] = true
-	allowedAppActiveStates["starting"] = true
-	allowedAppActiveStates["running"] = true
-	allowedAppActiveStates["completing"] = true
-	allowedAppActiveStates["failing"] = true
-	allowedAppActiveStates["resuming"] = true
+	allowedAppActiveStatuses["new"] = true
+	allowedAppActiveStatuses["accepted"] = true
+	allowedAppActiveStatuses["starting"] = true
+	allowedAppActiveStatuses["running"] = true
+	allowedAppActiveStatuses["completing"] = true
+	allowedAppActiveStatuses["failing"] = true
+	allowedAppActiveStatuses["resuming"] = true
 
-	var activeStates []string
-	for k := range allowedAppActiveStates {
-		activeStates = append(activeStates, k)
+	var activeStatuses []string
+	for k := range allowedAppActiveStatuses {
+		activeStatuses = append(activeStatuses, k)
 	}
-	allowedActiveStatusMsg = fmt.Sprintf("Only following active states are allowed: %s", strings.Join(activeStates, ","))
+	allowedActiveStatusMsg = fmt.Sprintf("Only following active statuses are allowed: %s", strings.Join(activeStatuses, ","))
 }
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -659,7 +659,7 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	switch appState {
 	case "active":
 		if status := strings.ToLower(r.URL.Query().Get("status")); status != "" {
-			if !allowedAppActiveStates[status] {
+			if !allowedAppActiveStatuses[status] {
 				buildJSONErrorResponse(w, allowedActiveStatusMsg, http.StatusBadRequest)
 				return
 			}

@@ -21,6 +21,7 @@ package configs
 import (
 	"fmt"
 	"math"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
@@ -595,6 +596,26 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 	return nil
 }
 
+func checkLimitsStructure(partitionConfig *PartitionConfig) error {
+	partitionLimits := partitionConfig.Limits
+	rootQueue := &partitionConfig.Queues[0]
+
+	if len(partitionConfig.Queues) < 1 || strings.ToLower(rootQueue.Name) != RootQueue {
+		return fmt.Errorf("top queue name is %s not root", rootQueue.Name)
+	}
+
+	if len(partitionLimits) > 0 && len(rootQueue.Limits) > 0 && !reflect.DeepEqual(partitionLimits, rootQueue.Limits) {
+		return fmt.Errorf("partition limits and root queue limits are not equivalent")
+	}
+
+	// if root queue limits not defined, apply partition limits
+	if len(partitionLimits) > 0 && len(rootQueue.Limits) == 0 {
+		rootQueue.Limits = partitionLimits
+	}
+
+	return nil
+}
+
 // Check for global policy
 func checkNodeSortingPolicy(partition *PartitionConfig) error {
 	// get the policy
@@ -706,7 +727,7 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 	if rootQueue.Resources.Guaranteed != nil || rootQueue.Resources.Max != nil {
 		return fmt.Errorf("root queue must not have resource limits set")
 	}
-	return checkQueues(&rootQueue, 1)
+	return nil
 }
 
 // Check the state dump file path, if configured, is a valid path that can be written to.
@@ -734,7 +755,8 @@ func Validate(newConfig *SchedulerConfig) error {
 
 	// check uniqueness
 	partitionMap := make(map[string]bool)
-	for i, partition := range newConfig.Partitions {
+	for i := range newConfig.Partitions {
+		partition := newConfig.Partitions[i]
 		if partition.Name == "" || strings.ToLower(partition.Name) == DefaultPartition {
 			partition.Name = DefaultPartition
 		}
@@ -747,15 +769,19 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
+		err = checkLimitsStructure(&partition)
+		if err != nil {
+			return err
+		}
+		err = checkQueues(&partition.Queues[0], 1)
+		if err != nil {
+			return err
+		}
 		_, err = checkQueueResource(partition.Queues[0], nil)
 		if err != nil {
 			return err
 		}
 		err = checkPlacementRules(&partition)
-		if err != nil {
-			return err
-		}
-		err = checkLimits(partition.Limits, partition.Name, &partition.Queues[0])
 		if err != nil {
 			return err
 		}

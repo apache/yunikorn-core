@@ -397,7 +397,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
 	default:
-		log.Log(log.SchedQueue).Warn("max resources setting ignored: cannot set zero max resources",
+		log.Log(log.SchedQueue).Debug("max resources setting ignored: cannot set zero max resources",
 			zap.String("queue", sq.QueuePath))
 	}
 
@@ -423,7 +423,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		sq.guaranteedResource = nil
 		sq.updateGuaranteedResourceMetrics()
 	default:
-		log.Log(log.SchedQueue).Warn("guaranteed resources setting ignored: cannot set zero guaranteed resources",
+		log.Log(log.SchedQueue).Debug("guaranteed resources setting ignored: cannot set zero guaranteed resources",
 			zap.String("queue", sq.QueuePath))
 	}
 	return nil
@@ -1313,7 +1313,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
 	default:
-		log.Log(log.SchedQueue).Warn("max resources setting ignored: cannot set zero max resources",
+		log.Log(log.SchedQueue).Debug("max resources setting ignored: cannot set zero max resources",
 			zap.String("queue", sq.QueuePath))
 	}
 }

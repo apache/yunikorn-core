@@ -51,7 +51,8 @@ var (
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
-var rateLimitedLog = log.RateLimitedLog(log.SchedApplication, time.Second)
+var initAppLogOnce sync.Once
+var appLog *log.RateLimitedLogger
 
 const (
 	Soft string = "Soft"
@@ -973,7 +974,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
 			if node == nil {
-				rateLimitedLog.Warn("required node is not found (could be transient)",
+				GetAppLog().Warn("required node is not found (could be transient)",
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))
@@ -2047,12 +2048,12 @@ func (sa *Application) HasPlaceholderAllocation() bool {
 	return sa.hasPlaceholderAlloc
 }
 
-// test only
+// SetCompletingTimeout should be used for testing only.
 func SetCompletingTimeout(duration time.Duration) {
 	completingTimeout = duration
 }
 
-// test only
+// SetTimedOutPlaceholder should be used for testing only.
 func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int64) {
 	sa.Lock()
 	defer sa.Unlock()
@@ -2062,4 +2063,12 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	if _, ok := sa.placeholderData[taskGroupName]; ok {
 		sa.placeholderData[taskGroupName].TimedOut = timedOut
 	}
+}
+
+// GetAppLog lazy initializes the application logger the first time is needed. See YUNIKORN-2320.
+func GetAppLog() *log.RateLimitedLogger {
+	initAppLogOnce.Do(func() {
+		appLog = log.RateLimitedLog(log.SchedApplication, time.Second)
+	})
+	return appLog
 }

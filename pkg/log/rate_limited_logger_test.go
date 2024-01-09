@@ -48,7 +48,7 @@ func TestRateLimitedLog(t *testing.T) {
 		),
 	)
 	// log once within one minute
-	logger := &rateLimitedLogger{
+	logger := &RateLimitedLogger{
 		logger:  zapLogger,
 		limiter: rate.NewLimiter(rate.Every(time.Minute), 1),
 	}

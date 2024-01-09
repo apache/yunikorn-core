@@ -1082,7 +1082,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
-	assertPartitionExists(t, resp)
+	assertPartitionNotExists(t, resp)
 
 	// test params name missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
@@ -1183,7 +1183,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getPartitionNodes(resp1, req)
-	assertPartitionExists(t, resp1)
+	assertPartitionNotExists(t, resp1)
 
 	// test params name missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
@@ -1297,7 +1297,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getQueueApplications(resp1, req1)
-	assertPartitionExists(t, resp1)
+	assertPartitionNotExists(t, resp1)
 
 	// test nonexistent queue
 	var req2 *http.Request
@@ -1402,7 +1402,7 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	// test nonexistent partition
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: "notexists"},
-		httprouter.Param{Key: "state", Value: "Active"}}, assertPartitionExists)
+		httprouter.Param{Key: "state", Value: "Active"}}, assertPartitionNotExists)
 
 	// test disallow state
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Accepted", httprouter.Params{
@@ -1467,7 +1467,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getApplication(resp1, req1)
-	assertPartitionExists(t, resp1)
+	assertPartitionNotExists(t, resp1)
 
 	// test nonexistent queue
 	var req2 *http.Request
@@ -1544,7 +1544,7 @@ func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
-func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
+func assertPartitionNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)

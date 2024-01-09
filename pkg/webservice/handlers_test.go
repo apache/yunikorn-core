@@ -42,6 +42,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -170,24 +171,6 @@ partitions:
               max: 
                 memory: 800000
                 vcore: 80000
-          - 
-            name: b
-            resources: 
-              guaranteed: 
-                memory: 400000
-                vcore: 40000
-              max: 
-                memory: 600000
-                vcore: 60000
-          - 
-            name: c
-            resources: 
-              guaranteed: 
-                memory: 100000
-                vcore: 10000
-              max: 
-                memory: 100000
-                vcore: 10000
 `
 
 const userGroupLimitsConfig = `
@@ -1046,8 +1029,27 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	NewWebApp(schedulerContext, nil)
 
+	tMaxResource, err := resources.NewResourceFromConf(map[string]string{"memory": "600000"})
+	assert.NilError(t, err)
+	tGuaranteedResource, err := resources.NewResourceFromConf(map[string]string{"memory": "400000"})
+	assert.NilError(t, err)
+
+	templateInfo := dao.TemplateInfo{
+		MaxApplications:    10,
+		MaxResource:        tMaxResource.DAOMap(),
+		GuaranteedResource: tGuaranteedResource.DAOMap(),
+		Properties: map[string]string{
+			configs.ApplicationSortPolicy: policies.StateAwarePolicy.String(),
+		},
+	}
+
+	maxResource, err := resources.NewResourceFromConf(map[string]string{"memory": "800000", "vcore": "80000"})
+	assert.NilError(t, err)
+	guaranteedResource, err := resources.NewResourceFromConf(map[string]string{"memory": "500000", "vcore": "50000"})
+	assert.NilError(t, err)
+
 	var req *http.Request
-	req, err := http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp := &MockResponseWriter{}
@@ -1055,26 +1057,75 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	getPartitionQueues(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root")
-	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
-	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
+	// assert root fields
+	assert.Equal(t, partitionQueuesDao.QueueName, configs.RootQueue)
+	assert.Equal(t, partitionQueuesDao.Status, objects.Active.String())
+	assert.Equal(t, partitionQueuesDao.Partition, configs.DefaultPartition)
+	assert.Equal(t, partitionQueuesDao.PendingResource == nil, true)
+	assert.Equal(t, partitionQueuesDao.MaxResource == nil, true)
+	assert.Equal(t, partitionQueuesDao.GuaranteedResource == nil, true)
+	assert.Equal(t, partitionQueuesDao.AllocatedResource == nil, true)
+	assert.Equal(t, partitionQueuesDao.PreemptingResource == nil, true)
+	assert.Equal(t, partitionQueuesDao.HeadRoom == nil, true)
+	assert.Equal(t, partitionQueuesDao.IsLeaf, false)
+	assert.Equal(t, partitionQueuesDao.IsManaged, true)
+	assert.Equal(t, partitionQueuesDao.Parent, "")
+	assert.Equal(t, partitionQueuesDao.AbsUsedCapacity == nil, true)
+	assert.Equal(t, partitionQueuesDao.MaxRunningApps, uint64(0))
+	assert.Equal(t, partitionQueuesDao.RunningApps, uint64(0))
+	assert.Equal(t, partitionQueuesDao.CurrentPriority, configs.MinPriority)
+	assert.Equal(t, partitionQueuesDao.AllocatingAcceptedApps == nil, true)
 	assert.Equal(t, len(partitionQueuesDao.Properties), 1)
-	assert.Equal(t, partitionQueuesDao.Properties["application.sort.policy"], "stateaware")
-	assert.Equal(t, partitionQueuesDao.TemplateInfo.MaxApplications, uint64(10))
-	assert.Equal(t, len(partitionQueuesDao.TemplateInfo.Properties), 1)
-	assert.Equal(t, partitionQueuesDao.TemplateInfo.Properties["application.sort.policy"], "stateaware")
+	assert.Equal(t, partitionQueuesDao.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo, &templateInfo)
 
-	maxResourcesConf := make(map[string]string)
-	maxResourcesConf["memory"] = "600000"
-	maxResource, err := resources.NewResourceFromConf(maxResourcesConf)
-	assert.NilError(t, err)
-	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo.MaxResource, maxResource.DAOMap())
+	// assert child root.a fields
+	assert.Equal(t, len(partitionQueuesDao.Children), 1)
+	child := &partitionQueuesDao.Children[0]
+	assert.Equal(t, child.QueueName, "root.a")
+	assert.Equal(t, child.Status, objects.Active.String())
+	assert.Equal(t, child.Partition, "")
+	assert.Equal(t, child.PendingResource == nil, true)
+	assert.DeepEqual(t, child.MaxResource, maxResource.DAOMap())
+	assert.DeepEqual(t, child.GuaranteedResource, guaranteedResource.DAOMap())
+	assert.Equal(t, child.AllocatedResource == nil, true)
+	assert.Equal(t, child.PreemptingResource == nil, true)
+	assert.DeepEqual(t, child.HeadRoom, maxResource.DAOMap())
+	assert.Equal(t, child.IsLeaf, false)
+	assert.Equal(t, child.IsManaged, true)
+	assert.Equal(t, child.Parent, configs.RootQueue)
+	assert.Equal(t, child.AbsUsedCapacity == nil, true)
+	assert.Equal(t, child.MaxRunningApps, uint64(0))
+	assert.Equal(t, child.RunningApps, uint64(0))
+	assert.Equal(t, child.CurrentPriority, configs.MinPriority)
+	assert.Equal(t, child.AllocatingAcceptedApps == nil, true)
+	assert.Equal(t, len(child.Properties), 1)
+	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.DeepEqual(t, child.TemplateInfo, &templateInfo)
 
-	guaranteedResourcesConf := make(map[string]string)
-	guaranteedResourcesConf["memory"] = "400000"
-	guaranteedResources, err := resources.NewResourceFromConf(guaranteedResourcesConf)
-	assert.NilError(t, err)
-	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo.GuaranteedResource, guaranteedResources.DAOMap())
+	// assert child root.a.a1 fields
+	assert.Equal(t, len(partitionQueuesDao.Children[0].Children), 1)
+	child = &partitionQueuesDao.Children[0].Children[0]
+	assert.Equal(t, child.QueueName, "root.a.a1")
+	assert.Equal(t, child.Status, objects.Active.String())
+	assert.Equal(t, child.Partition, "")
+	assert.Equal(t, child.PendingResource == nil, true)
+	assert.DeepEqual(t, child.MaxResource, maxResource.DAOMap())
+	assert.DeepEqual(t, child.GuaranteedResource, guaranteedResource.DAOMap())
+	assert.Equal(t, child.AllocatedResource == nil, true)
+	assert.Equal(t, child.PreemptingResource == nil, true)
+	assert.DeepEqual(t, child.HeadRoom, maxResource.DAOMap())
+	assert.Equal(t, child.IsLeaf, true)
+	assert.Equal(t, child.IsManaged, true)
+	assert.Equal(t, child.Parent, "root.a")
+	assert.Equal(t, child.AbsUsedCapacity == nil, true)
+	assert.Equal(t, child.MaxRunningApps, uint64(0))
+	assert.Equal(t, child.RunningApps, uint64(0))
+	assert.Equal(t, child.CurrentPriority, configs.MinPriority)
+	assert.Equal(t, child.AllocatingAcceptedApps == nil, true)
+	assert.Equal(t, len(child.Properties), 1)
+	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.Equal(t, child.TemplateInfo == nil, true)
 
 	// Partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))

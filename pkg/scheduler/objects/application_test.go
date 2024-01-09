@@ -1475,7 +1475,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	setupUGM()
 
 	originalPhTimeout := defaultPlaceholderTimeout
-	defaultPlaceholderTimeout = 5 * time.Millisecond
+	defaultPlaceholderTimeout = 100 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")

@@ -157,6 +157,8 @@ partitions:
             queues: 
               - 
                 name: a1
+                properties:
+                  application.sort.policy: fifo
                 resources: 
                   guaranteed: 
                     memory: 500000
@@ -1124,7 +1126,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, child.CurrentPriority, configs.MinPriority)
 	assert.Equal(t, child.AllocatingAcceptedApps == nil, true)
 	assert.Equal(t, len(child.Properties), 1)
-	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.FifoSortPolicy.String())
 	assert.Equal(t, child.TemplateInfo == nil, true)
 
 	// Partition not exists
@@ -1256,7 +1258,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
-	assertNodeIDExists(t, resp)
+	assertNodeIDNotExists(t, resp)
 }
 
 // addApp Add app to the given partition and assert the app count, state etc
@@ -1360,7 +1362,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp2 := &MockResponseWriter{}
 	getQueueApplications(resp2, req2)
-	assertQueueExists(t, resp2)
+	assertQueueNotExists(t, resp2)
 
 	// test queue without applications
 	var req3 *http.Request
@@ -1531,7 +1533,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp2 := &MockResponseWriter{}
 	getApplication(resp2, req2)
-	assertQueueExists(t, resp2)
+	assertQueueNotExists(t, resp2)
 
 	// test nonexistent application
 	var req3 *http.Request
@@ -1544,7 +1546,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp3 := &MockResponseWriter{}
 	getApplication(resp3, req3)
-	assertApplicationExists(t, resp3)
+	assertApplicationNotExists(t, resp3)
 
 	// test without queue
 	var req4 *http.Request
@@ -1604,7 +1606,7 @@ func assertPartitionNotExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
+func assertQueueNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1613,7 +1615,7 @@ func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
+func assertApplicationNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1672,7 +1674,7 @@ func assertGroupNameMissing(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
-func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
+func assertNodeIDNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)

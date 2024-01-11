@@ -42,6 +42,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -156,6 +157,8 @@ partitions:
             queues: 
               - 
                 name: a1
+                properties:
+                  application.sort.policy: fifo
                 resources: 
                   guaranteed: 
                     memory: 500000
@@ -170,24 +173,6 @@ partitions:
               max: 
                 memory: 800000
                 vcore: 80000
-          - 
-            name: b
-            resources: 
-              guaranteed: 
-                memory: 400000
-                vcore: 40000
-              max: 
-                memory: 600000
-                vcore: 60000
-          - 
-            name: c
-            resources: 
-              guaranteed: 
-                memory: 100000
-                vcore: 10000
-              max: 
-                memory: 100000
-                vcore: 10000
 `
 
 const userGroupLimitsConfig = `
@@ -1046,8 +1031,27 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	NewWebApp(schedulerContext, nil)
 
+	tMaxResource, err := resources.NewResourceFromConf(map[string]string{"memory": "600000"})
+	assert.NilError(t, err)
+	tGuaranteedResource, err := resources.NewResourceFromConf(map[string]string{"memory": "400000"})
+	assert.NilError(t, err)
+
+	templateInfo := dao.TemplateInfo{
+		MaxApplications:    10,
+		MaxResource:        tMaxResource.DAOMap(),
+		GuaranteedResource: tGuaranteedResource.DAOMap(),
+		Properties: map[string]string{
+			configs.ApplicationSortPolicy: policies.StateAwarePolicy.String(),
+		},
+	}
+
+	maxResource, err := resources.NewResourceFromConf(map[string]string{"memory": "800000", "vcore": "80000"})
+	assert.NilError(t, err)
+	guaranteedResource, err := resources.NewResourceFromConf(map[string]string{"memory": "500000", "vcore": "50000"})
+	assert.NilError(t, err)
+
 	var req *http.Request
-	req, err := http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp := &MockResponseWriter{}
@@ -1055,26 +1059,75 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	getPartitionQueues(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, partitionQueuesDao.Children[0].Parent, "root")
-	assert.Equal(t, partitionQueuesDao.Children[1].Parent, "root")
-	assert.Equal(t, partitionQueuesDao.Children[2].Parent, "root")
+	// assert root fields
+	assert.Equal(t, partitionQueuesDao.QueueName, configs.RootQueue)
+	assert.Equal(t, partitionQueuesDao.Status, objects.Active.String())
+	assert.Equal(t, partitionQueuesDao.Partition, configs.DefaultPartition)
+	assert.Assert(t, partitionQueuesDao.PendingResource == nil)
+	assert.Assert(t, partitionQueuesDao.MaxResource == nil)
+	assert.Assert(t, partitionQueuesDao.GuaranteedResource == nil)
+	assert.Assert(t, partitionQueuesDao.AllocatedResource == nil)
+	assert.Assert(t, partitionQueuesDao.PreemptingResource == nil)
+	assert.Assert(t, partitionQueuesDao.HeadRoom == nil)
+	assert.Assert(t, !partitionQueuesDao.IsLeaf)
+	assert.Assert(t, partitionQueuesDao.IsManaged)
+	assert.Equal(t, partitionQueuesDao.Parent, "")
+	assert.Assert(t, partitionQueuesDao.AbsUsedCapacity == nil)
+	assert.Equal(t, partitionQueuesDao.MaxRunningApps, uint64(0))
+	assert.Equal(t, partitionQueuesDao.RunningApps, uint64(0))
+	assert.Equal(t, partitionQueuesDao.CurrentPriority, configs.MinPriority)
+	assert.Assert(t, partitionQueuesDao.AllocatingAcceptedApps == nil)
 	assert.Equal(t, len(partitionQueuesDao.Properties), 1)
-	assert.Equal(t, partitionQueuesDao.Properties["application.sort.policy"], "stateaware")
-	assert.Equal(t, partitionQueuesDao.TemplateInfo.MaxApplications, uint64(10))
-	assert.Equal(t, len(partitionQueuesDao.TemplateInfo.Properties), 1)
-	assert.Equal(t, partitionQueuesDao.TemplateInfo.Properties["application.sort.policy"], "stateaware")
+	assert.Equal(t, partitionQueuesDao.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo, &templateInfo)
 
-	maxResourcesConf := make(map[string]string)
-	maxResourcesConf["memory"] = "600000"
-	maxResource, err := resources.NewResourceFromConf(maxResourcesConf)
-	assert.NilError(t, err)
-	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo.MaxResource, maxResource.DAOMap())
+	// assert child root.a fields
+	assert.Equal(t, len(partitionQueuesDao.Children), 1)
+	child := &partitionQueuesDao.Children[0]
+	assert.Equal(t, child.QueueName, "root.a")
+	assert.Equal(t, child.Status, objects.Active.String())
+	assert.Equal(t, child.Partition, "")
+	assert.Assert(t, child.PendingResource == nil)
+	assert.DeepEqual(t, child.MaxResource, maxResource.DAOMap())
+	assert.DeepEqual(t, child.GuaranteedResource, guaranteedResource.DAOMap())
+	assert.Assert(t, child.AllocatedResource == nil)
+	assert.Assert(t, child.PreemptingResource == nil)
+	assert.DeepEqual(t, child.HeadRoom, maxResource.DAOMap())
+	assert.Assert(t, !child.IsLeaf)
+	assert.Assert(t, child.IsManaged)
+	assert.Equal(t, child.Parent, configs.RootQueue)
+	assert.Assert(t, child.AbsUsedCapacity == nil)
+	assert.Equal(t, child.MaxRunningApps, uint64(0))
+	assert.Equal(t, child.RunningApps, uint64(0))
+	assert.Equal(t, child.CurrentPriority, configs.MinPriority)
+	assert.Assert(t, child.AllocatingAcceptedApps == nil)
+	assert.Equal(t, len(child.Properties), 1)
+	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.DeepEqual(t, child.TemplateInfo, &templateInfo)
 
-	guaranteedResourcesConf := make(map[string]string)
-	guaranteedResourcesConf["memory"] = "400000"
-	guaranteedResources, err := resources.NewResourceFromConf(guaranteedResourcesConf)
-	assert.NilError(t, err)
-	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo.GuaranteedResource, guaranteedResources.DAOMap())
+	// assert child root.a.a1 fields
+	assert.Equal(t, len(partitionQueuesDao.Children[0].Children), 1)
+	child = &partitionQueuesDao.Children[0].Children[0]
+	assert.Equal(t, child.QueueName, "root.a.a1")
+	assert.Equal(t, child.Status, objects.Active.String())
+	assert.Equal(t, child.Partition, "")
+	assert.Assert(t, child.PendingResource == nil)
+	assert.DeepEqual(t, child.MaxResource, maxResource.DAOMap())
+	assert.DeepEqual(t, child.GuaranteedResource, guaranteedResource.DAOMap())
+	assert.Assert(t, child.AllocatedResource == nil)
+	assert.Assert(t, child.PreemptingResource == nil)
+	assert.DeepEqual(t, child.HeadRoom, maxResource.DAOMap())
+	assert.Assert(t, child.IsLeaf)
+	assert.Assert(t, child.IsManaged)
+	assert.Equal(t, child.Parent, "root.a")
+	assert.Assert(t, child.AbsUsedCapacity == nil)
+	assert.Equal(t, child.MaxRunningApps, uint64(0))
+	assert.Equal(t, child.RunningApps, uint64(0))
+	assert.Equal(t, child.CurrentPriority, configs.MinPriority)
+	assert.Assert(t, child.AllocatingAcceptedApps == nil)
+	assert.Equal(t, len(child.Properties), 1)
+	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.FifoSortPolicy.String())
+	assert.Assert(t, child.TemplateInfo == nil)
 
 	// Partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
@@ -1082,7 +1135,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
-	assertPartitionExists(t, resp)
+	assertPartitionNotExists(t, resp)
 
 	// test params name missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
@@ -1183,7 +1236,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getPartitionNodes(resp1, req)
-	assertPartitionExists(t, resp1)
+	assertPartitionNotExists(t, resp1)
 
 	// test params name missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
@@ -1205,7 +1258,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
-	assertNodeIDExists(t, resp)
+	assertNodeIDNotExists(t, resp)
 }
 
 // addApp Add app to the given partition and assert the app count, state etc
@@ -1297,7 +1350,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getQueueApplications(resp1, req1)
-	assertPartitionExists(t, resp1)
+	assertPartitionNotExists(t, resp1)
 
 	// test nonexistent queue
 	var req2 *http.Request
@@ -1309,7 +1362,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Queue Applications Handler request failed")
 	resp2 := &MockResponseWriter{}
 	getQueueApplications(resp2, req2)
-	assertQueueExists(t, resp2)
+	assertQueueNotExists(t, resp2)
 
 	// test queue without applications
 	var req3 *http.Request
@@ -1402,7 +1455,7 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	// test nonexistent partition
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: "notexists"},
-		httprouter.Param{Key: "state", Value: "Active"}}, assertPartitionExists)
+		httprouter.Param{Key: "state", Value: "Active"}}, assertPartitionNotExists)
 
 	// test disallow state
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Accepted", httprouter.Params{
@@ -1467,7 +1520,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getApplication(resp1, req1)
-	assertPartitionExists(t, resp1)
+	assertPartitionNotExists(t, resp1)
 
 	// test nonexistent queue
 	var req2 *http.Request
@@ -1480,7 +1533,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp2 := &MockResponseWriter{}
 	getApplication(resp2, req2)
-	assertQueueExists(t, resp2)
+	assertQueueNotExists(t, resp2)
 
 	// test nonexistent application
 	var req3 *http.Request
@@ -1493,7 +1546,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp3 := &MockResponseWriter{}
 	getApplication(resp3, req3)
-	assertApplicationExists(t, resp3)
+	assertApplicationNotExists(t, resp3)
 
 	// test without queue
 	var req4 *http.Request
@@ -1544,7 +1597,7 @@ func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
-func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
+func assertPartitionNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1553,7 +1606,7 @@ func assertPartitionExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
+func assertQueueNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1562,7 +1615,7 @@ func assertQueueExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertApplicationExists(t *testing.T, resp *MockResponseWriter) {
+func assertApplicationNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1621,7 +1674,7 @@ func assertGroupNameMissing(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
-func assertNodeIDExists(t *testing.T, resp *MockResponseWriter) {
+func assertNodeIDNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)

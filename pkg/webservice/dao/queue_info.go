@@ -17,22 +17,8 @@ limitations under the License.
 */
 package dao
 
-type QueueDAOInfo struct {
-	QueueName   string            `json:"queuename,omitempty"`
-	Status      string            `json:"status,omitempty"`
-	Capacities  QueueCapacity     `json:"capacities"` // no omitempty, omitempty doesn't work on a structure value
-	ChildQueues []QueueDAOInfo    `json:"queues,omitempty"`
-	Properties  map[string]string `json:"properties,omitempty"`
-}
-
-type QueueCapacity struct {
-	Capacity        map[string]int64 `json:"capacity,omitempty"`
-	MaxCapacity     map[string]int64 `json:"maxCapacity,omitempty"`
-	UsedCapacity    map[string]int64 `json:"usedCapacity,omitempty"`
-	AbsUsedCapacity map[string]int64 `json:"absUsedCapacity,omitempty"`
-}
-
 type TemplateInfo struct {
+	MaxApplications    uint64            `json:"maxApplications,omitempty"`
 	MaxResource        map[string]int64  `json:"maxResource,omitempty"`
 	GuaranteedResource map[string]int64  `json:"guaranteedResource,omitempty"`
 	Properties         map[string]string `json:"properties,omitempty"`
@@ -47,15 +33,17 @@ type PartitionQueueDAOInfo struct {
 	GuaranteedResource     map[string]int64        `json:"guaranteedResource,omitempty"`
 	AllocatedResource      map[string]int64        `json:"allocatedResource,omitempty"`
 	PreemptingResource     map[string]int64        `json:"preemptingResource,omitempty"`
+	HeadRoom               map[string]int64        `json:"headroom,omitempty"`
 	IsLeaf                 bool                    `json:"isLeaf"`    // no omitempty, a false value gives a quick way to understand whether it's leaf.
 	IsManaged              bool                    `json:"isManaged"` // no omitempty, a false value gives a quick way to understand whether it's managed.
 	Properties             map[string]string       `json:"properties,omitempty"`
 	Parent                 string                  `json:"parent,omitempty"`
 	TemplateInfo           *TemplateInfo           `json:"template,omitempty"`
 	Children               []PartitionQueueDAOInfo `json:"children,omitempty"`
+	ChildrenNames          []string                `json:"childrenNames,omitempty"`
 	AbsUsedCapacity        map[string]int64        `json:"absUsedCapacity,omitempty"`
 	MaxRunningApps         uint64                  `json:"maxRunningApps,omitempty"`
 	RunningApps            uint64                  `json:"runningApps,omitempty"`
-	CurrentPriority        int32                   `json:"currentPriority,omitempty"`
+	CurrentPriority        int32                   `json:"currentPriority"` // no omitempty, as the current priority value may be 0, which is a valid priority level
 	AllocatingAcceptedApps []string                `json:"allocatingAcceptedApps,omitempty"`
 }

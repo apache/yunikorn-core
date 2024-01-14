@@ -73,8 +73,8 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	events, err = client.GetEvents()
 	assert.NilError(t, err)
-	assert.Equal(t, 4, len(events.EventRecords), "number of events generated")
-	verifyNodeAddedEvents(t, events.EventRecords[2:])
+	assert.Equal(t, 5, len(events.EventRecords), "number of events generated")
+	verifyNodeAddedAndQueueMaxSetEvents(t, events.EventRecords[2:])
 
 	// Add application & check events
 	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
@@ -85,8 +85,8 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
 	events, err = client.GetEvents()
 	assert.NilError(t, err)
-	assert.Equal(t, 6, len(events.EventRecords), "number of events generated")
-	verifyAppAddedEvents(t, events.EventRecords[4:])
+	assert.Equal(t, 7, len(events.EventRecords), "number of events generated")
+	verifyAppAddedEvents(t, events.EventRecords[5:])
 
 	// Add allocation ask & check events
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
@@ -109,14 +109,14 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 1, 1000)
 	events, err = client.GetEvents()
 	assert.NilError(t, err)
-	assert.Equal(t, 11, len(events.EventRecords), "number of events generated")
-	verifyAllocationAskAddedEvents(t, events.EventRecords[6:])
+	assert.Equal(t, 12, len(events.EventRecords), "number of events generated")
+	verifyAllocationAskAddedEvents(t, events.EventRecords[7:])
 
 	allocations := ms.mockRM.getAllocations()
 	assert.Equal(t, 1, len(allocations), "number of allocations")
-	var uuid string
+	var allocationID string
 	for key := range allocations {
-		uuid = key
+		allocationID = key
 	}
 
 	// terminate allocation & check events
@@ -126,7 +126,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 				{
 					ApplicationID:   appID1,
 					PartitionName:   "default",
-					UUID:            uuid,
+					AllocationID:    allocationID,
 					TerminationType: si.TerminationType_STOPPED_BY_RM,
 				},
 			},
@@ -144,8 +144,8 @@ func TestApplicationHistoryTracking(t *testing.T) {
 
 	events, err = client.GetEvents()
 	assert.NilError(t, err)
-	assert.Equal(t, 14, len(events.EventRecords), "number of events generated")
-	verifyAllocationCancelledEvents(t, events.EventRecords[11:])
+	assert.Equal(t, 15, len(events.EventRecords), "number of events generated")
+	verifyAllocationCancelledEvents(t, events.EventRecords[12:])
 }
 
 func verifyQueueEvents(t *testing.T, events []*si.EventRecord) {
@@ -162,7 +162,7 @@ func verifyQueueEvents(t *testing.T, events []*si.EventRecord) {
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, events[1].EventChangeDetail)
 }
 
-func verifyNodeAddedEvents(t *testing.T, events []*si.EventRecord) {
+func verifyNodeAddedAndQueueMaxSetEvents(t *testing.T, events []*si.EventRecord) {
 	assert.Equal(t, "node-1:1234", events[0].ObjectID)
 	assert.Equal(t, "schedulable: true", events[0].Message)
 	assert.Equal(t, "", events[0].ReferenceID)
@@ -170,12 +170,18 @@ func verifyNodeAddedEvents(t *testing.T, events []*si.EventRecord) {
 	assert.Equal(t, si.EventRecord_SET, events[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_SCHEDULABLE, events[0].EventChangeDetail)
 
-	assert.Equal(t, "node-1:1234", events[1].ObjectID)
-	assert.Equal(t, "Node added to the scheduler", events[1].Message)
+	assert.Equal(t, "root", events[1].ObjectID)
+	assert.Equal(t, "", events[1].Message)
 	assert.Equal(t, "", events[1].ReferenceID)
-	assert.Equal(t, si.EventRecord_NODE, events[1].Type)
-	assert.Equal(t, si.EventRecord_ADD, events[1].EventChangeType)
-	assert.Equal(t, si.EventRecord_DETAILS_NONE, events[1].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_SET, events[1].EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_MAX, events[1].EventChangeDetail)
+
+	assert.Equal(t, "node-1:1234", events[2].ObjectID)
+	assert.Equal(t, "Node added to the scheduler", events[2].Message)
+	assert.Equal(t, "", events[2].ReferenceID)
+	assert.Equal(t, si.EventRecord_NODE, events[2].Type)
+	assert.Equal(t, si.EventRecord_ADD, events[2].EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, events[2].EventChangeDetail)
 }
 
 func verifyAppAddedEvents(t *testing.T, events []*si.EventRecord) {

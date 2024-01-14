@@ -20,8 +20,12 @@ package objects
 
 import (
 	"fmt"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -29,13 +33,14 @@ import (
 type applicationEvents struct {
 	eventSystem events.EventSystem
 	app         *Application
+	limiter     *rate.Limiter
 }
 
-func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk) {
-	if !evt.eventSystem.IsEventTrackingEnabled() {
+func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk, headroom *resources.Resource) {
+	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.limiter.Allow() {
 		return
 	}
-	message := fmt.Sprintf("Application %s does not fit into %s queue", request.GetApplicationID(), evt.app.queuePath)
+	message := fmt.Sprintf("Application %s does not fit into %s queue (request resoure %s, headroom %s)", request.GetApplicationID(), evt.app.queuePath, request.GetAllocatedResource(), headroom)
 	event := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
@@ -44,7 +49,7 @@ func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource().String(), ph.GetAllocatedResource().String(), ph.GetAllocationKey())
+	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource(), ph.GetAllocatedResource(), ph.GetAllocationKey())
 	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
@@ -53,7 +58,7 @@ func (evt *applicationEvents) sendNewAllocationEvent(alloc *Allocation) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetAllocationID(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -84,7 +89,7 @@ func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, termi
 		eventChangeDetail = si.EventRecord_ALLOC_REPLACED
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetUUID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetAllocationID(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -112,19 +117,11 @@ func (evt *applicationEvents) sendRemoveApplicationEvent() {
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendRejectApplicationEvent(eventInfo string) {
-	if !evt.eventSystem.IsEventTrackingEnabled() {
-		return
-	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_REMOVE, si.EventRecord_APP_REJECT, evt.app.allocatedResource)
-	evt.eventSystem.AddEvent(event)
-}
-
-func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_ChangeDetail) {
+func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_ChangeDetail, eventInfo string) {
 	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.app.sendStateChangeEvents {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource)
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -132,5 +129,6 @@ func newApplicationEvents(app *Application, evt events.EventSystem) *application
 	return &applicationEvents{
 		eventSystem: evt,
 		app:         app,
+		limiter:     rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 }

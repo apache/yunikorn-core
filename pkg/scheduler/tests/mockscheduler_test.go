@@ -19,8 +19,13 @@
 package tests
 
 import (
+	"fmt"
+	"net"
+	"time"
+
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
@@ -48,12 +53,27 @@ func (m *mockScheduler) Init(config string, autoSchedule bool, withWebapp bool) 
 	BuildInfoMap := make(map[string]string)
 	BuildInfoMap["k"] = "v"
 
+	events.Init()
 	m.serviceContext = entrypoint.StartAllServicesWithParams(!autoSchedule, withWebapp)
 
 	m.proxy = m.serviceContext.RMProxy
 	m.scheduler = m.serviceContext.Scheduler
 
 	m.mockRM = newMockRMCallbackHandler()
+
+	if withWebapp {
+		err := common.WaitFor(500*time.Millisecond, 2*time.Second, func() bool {
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", "9080"), time.Second)
+			if err == nil {
+				defer conn.Close()
+				return true
+			}
+			return false
+		})
+		if err != nil {
+			return fmt.Errorf("webapp failed to start in 2 seconds")
+		}
+	}
 
 	_, err := m.proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
@@ -140,13 +160,13 @@ func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resour
 	})
 }
 
-func (m *mockScheduler) releaseAllocRequest(appID, uuid string) error {
+func (m *mockScheduler) releaseAllocRequest(appID, allocationID string) error {
 	return m.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationsToRelease: []*si.AllocationRelease{
 				{
 					ApplicationID: appID,
-					UUID:          uuid,
+					AllocationID:  allocationID,
 					PartitionName: m.partitionName,
 				},
 			},

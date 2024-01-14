@@ -25,6 +25,7 @@ import (
 )
 
 type Template struct {
+	maxApplications    uint64
 	properties         map[string]string
 	maxResource        *resources.Resource
 	guaranteedResource *resources.Resource
@@ -34,17 +35,7 @@ type Template struct {
 // It returns error if it fails to parse configs.
 // It returns nil value if the configs.ChildTemplate is empty
 func FromConf(template *configs.ChildTemplate) (*Template, error) {
-	// A non-empty list of empty property values is also empty
-	isMapEmpty := func(m map[string]string) bool {
-		for k, v := range m {
-			if k != "" && v != "" {
-				return false
-			}
-		}
-		return true
-	}
-
-	if template == nil || (isMapEmpty(template.Properties) && isMapEmpty(template.Resources.Guaranteed) && isMapEmpty(template.Resources.Max)) {
+	if template == nil || isChildTemplateEmpty(template) {
 		return nil, nil
 	}
 
@@ -58,11 +49,29 @@ func FromConf(template *configs.ChildTemplate) (*Template, error) {
 		return nil, err
 	}
 
-	return newTemplate(template.Properties, maxResource, guaranteedResource), nil
+	return newTemplate(template.MaxApplications, template.Properties, maxResource, guaranteedResource), nil
 }
 
-func newTemplate(properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) *Template {
+func isChildTemplateEmpty(template *configs.ChildTemplate) bool {
+	return template.MaxApplications == 0 &&
+		isMapEmpty(template.Properties) &&
+		isMapEmpty(template.Resources.Guaranteed) &&
+		isMapEmpty(template.Resources.Max)
+}
+
+// A non-empty list of empty property values is also empty
+func isMapEmpty(m map[string]string) bool {
+	for k, v := range m {
+		if k != "" && v != "" {
+			return false
+		}
+	}
+	return true
+}
+
+func newTemplate(maxApplications uint64, properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) *Template {
 	template := &Template{
+		maxApplications:    maxApplications,
 		properties:         make(map[string]string),
 		maxResource:        nil,
 		guaranteedResource: nil,
@@ -82,6 +91,11 @@ func newTemplate(properties map[string]string, maxResource *resources.Resource, 
 		}
 	}
 	return template
+}
+
+// GetMaxApplications returns max applications.
+func (t *Template) GetMaxApplications() uint64 {
+	return t.maxApplications
 }
 
 // GetProperties returns a copy of properties. An empty map replaces the null value
@@ -115,6 +129,7 @@ func (t *Template) GetTemplateInfo() *dao.TemplateInfo {
 		return nil
 	}
 	return &dao.TemplateInfo{
+		MaxApplications:    t.GetMaxApplications(),
 		Properties:         t.GetProperties(),
 		MaxResource:        t.maxResource.DAOMap(),
 		GuaranteedResource: t.guaranteedResource.DAOMap(),

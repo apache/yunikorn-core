@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 	"sort"
 	"strconv"
@@ -751,7 +752,7 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
-	alloc := newAllocation(appID1, "uuid-0", "node-0", res)
+	alloc := newAllocation(appID1, "node-0", res)
 	alloc.placeholder = true
 	// adding a placeholder allocation & pending request to "app1"
 	app1.AddAllocation(alloc)
@@ -763,7 +764,7 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	assert.Equal(t, 1, len(phApps))
 
 	// adding a placeholder allocation & pending request to "app2"
-	alloc2 := newAllocation(appID2, "uuid-1", "node-1", res)
+	alloc2 := newAllocation(appID2, "node-1", res)
 	alloc2.placeholder = true
 	app2.AddAllocation(alloc2)
 	err = app2.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
@@ -1523,15 +1524,6 @@ func TestQueueProps(t *testing.T) {
 	assert.Assert(t, leaf.isLeaf && leaf.isManaged, "leaf queue is not marked as managed leaf")
 	assert.Equal(t, len(leaf.properties), 2, "leaf queue properties size incorrect")
 
-	props = map[string]string{"first": "not inherited", configs.ApplicationSortPolicy: "stateaware"}
-	parent, err = createManagedQueueWithProps(root, "parent2", true, nil, props)
-	assert.NilError(t, err, "failed to create parent queue")
-	assert.Equal(t, len(parent.properties), 2, "parent queue properties size incorrect")
-	leaf, err = createDynamicQueue(parent, "leaf", false)
-	assert.NilError(t, err, "failed to create leaf queue")
-	assert.Assert(t, leaf.isLeaf && !leaf.isManaged, "leaf queue is not marked as unmanaged leaf")
-	assert.Equal(t, leaf.properties[configs.ApplicationSortPolicy], "stateaware", "leaf queue property value not as expected")
-
 	props = map[string]string{}
 	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
 	assert.NilError(t, err, "failed to create leaf queue")
@@ -1692,13 +1684,15 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 
 	// test template
 	root.template, err = template.FromConf(&configs.ChildTemplate{
-		Properties: getProperties(),
+		MaxApplications: uint64(1),
+		Properties:      getProperties(),
 		Resources: configs.Resources{
 			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
 	})
 	assert.NilError(t, err)
+	assert.Equal(t, root.template.GetMaxApplications(), root.GetPartitionQueueDAOInfo().TemplateInfo.MaxApplications)
 	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties)
 	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo().TemplateInfo.MaxResource)
 	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo().TemplateInfo.GuaranteedResource)
@@ -1708,6 +1702,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	root.guaranteedResource = getResource(t)
 	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo().MaxResource)
 	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo().GuaranteedResource)
+	assert.DeepEqual(t, root.getHeadRoom().DAOMap(), root.GetPartitionQueueDAOInfo().HeadRoom)
 
 	// test allocatingAcceptedApps
 	root.allocatingAcceptedApps = getAllocatingAcceptedApps()
@@ -1725,7 +1720,7 @@ func getAllocatingAcceptedApps() map[string]bool {
 
 func getResourceConf() map[string]string {
 	resource := make(map[string]string)
-	resource["memory"] = strconv.Itoa(time.Now().Second()%1000 + 100)
+	resource["memory"] = strconv.Itoa(rand.Intn(10000) + 100) //nolint:gosec
 	return resource
 }
 
@@ -1744,7 +1739,7 @@ func getZeroResourceConf() map[string]string {
 
 func getProperties() map[string]string {
 	properties := make(map[string]string)
-	properties[strconv.Itoa(time.Now().Second())] = strconv.Itoa(time.Now().Second())
+	properties[strconv.Itoa(rand.Intn(10000))] = strconv.Itoa(rand.Intn(10000)) //nolint:gosec
 	return properties
 }
 
@@ -1770,23 +1765,24 @@ func TestSetResources(t *testing.T) {
 	assert.NilError(t, err, "failed to parse resource: %v", err)
 	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
 
-	// case 1: empty resource won't change the resources
+	// case 1: empty resource would set the queue resources to 'nil' if it has been set already
+	var nilResource *resources.Resource = nil
 	err = queue.setResources(configs.Resources{
 		Guaranteed: make(map[string]string),
 		Max:        make(map[string]string),
 	})
 	assert.NilError(t, err, "failed to set resources: %v", err)
-	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
-	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
+	assert.DeepEqual(t, queue.guaranteedResource, nilResource)
+	assert.DeepEqual(t, queue.maxResource, nilResource)
 
-	// case 2: zero resource won't change the resources
+	// case 2: zero resource won't change the queue resources as it is 'nil' already
 	err = queue.setResources(configs.Resources{
 		Guaranteed: getZeroResourceConf(),
 		Max:        getZeroResourceConf(),
 	})
 	assert.NilError(t, err, "failed to set resources: %v", err)
-	assert.DeepEqual(t, queue.guaranteedResource, expectedGuaranteedResource)
-	assert.DeepEqual(t, queue.maxResource, expectedMaxResource)
+	assert.DeepEqual(t, queue.guaranteedResource, nilResource)
+	assert.DeepEqual(t, queue.maxResource, nilResource)
 }
 
 func TestPreemptingResource(t *testing.T) {
@@ -1863,10 +1859,10 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	ask.pendingAskRepeat = 1
 	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
 	ask2.pendingAskRepeat = 1
-	alloc2 := NewAllocation("alloc-2", nodeID1, ask2)
+	alloc2 := NewAllocation(nodeID1, ask2)
 	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
 	ask3.pendingAskRepeat = 1
-	alloc3 := NewAllocation("alloc-3", nodeID1, ask3)
+	alloc3 := NewAllocation(nodeID1, ask3)
 	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
 	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
@@ -1943,6 +1939,13 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
 	alloc2.GetAsk().SetRequiredNode("")
 
+	// placeholder which has been marked released should not be considered
+	alloc2.released = true
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 1, len(victims(snapshot)), "wrong victim count")
+	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
+	alloc2.released = false
+
 	// setting priority offset on parent2 queue should remove leaf2 victims
 	parent2.priorityOffset = 1001
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
@@ -2003,6 +2006,7 @@ func TestSetTemplate(t *testing.T) {
 	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 
+	maxApplications := uint64(1)
 	properties := getProperties()
 	guaranteedResource := getResourceConf()
 	expectedGuaranteedResource, err := resources.NewResourceFromConf(guaranteedResource)
@@ -2012,6 +2016,7 @@ func TestSetTemplate(t *testing.T) {
 	assert.NilError(t, err, "failed to parse resource: %v", err)
 
 	checkTemplate := func(queue *Queue) {
+		assert.Equal(t, queue.template.GetMaxApplications(), maxApplications)
 		assert.DeepEqual(t, queue.template.GetProperties(), properties)
 		assert.DeepEqual(t, queue.template.GetGuaranteedResource(), expectedGuaranteedResource)
 		assert.DeepEqual(t, queue.template.GetMaxResource(), expectedMaxResource)
@@ -2019,7 +2024,8 @@ func TestSetTemplate(t *testing.T) {
 
 	// case 0: normal case
 	err = queue.setTemplate(configs.ChildTemplate{
-		Properties: properties,
+		MaxApplications: maxApplications,
+		Properties:      properties,
 		Resources: configs.Resources{
 			Guaranteed: guaranteedResource,
 			Max:        maxResource,
@@ -2042,7 +2048,8 @@ func TestSetTemplate(t *testing.T) {
 
 func TestApplyTemplate(t *testing.T) {
 	childTemplate, err := template.FromConf(&configs.ChildTemplate{
-		Properties: getProperties(),
+		MaxApplications: uint64(1),
+		Properties:      getProperties(),
 		Resources: configs.Resources{
 			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
@@ -2055,6 +2062,7 @@ func TestApplyTemplate(t *testing.T) {
 	assert.NilError(t, err, "failed to create basic queue queue: %v", err)
 	leaf.applyTemplate(childTemplate)
 	assert.Assert(t, leaf.template == nil)
+	assert.Equal(t, leaf.maxRunningApps, childTemplate.GetMaxApplications())
 	assert.DeepEqual(t, leaf.properties, childTemplate.GetProperties())
 	assert.DeepEqual(t, leaf.guaranteedResource, childTemplate.GetGuaranteedResource())
 	assert.DeepEqual(t, leaf.maxResource, childTemplate.GetMaxResource())
@@ -2071,6 +2079,7 @@ func TestApplyTemplate(t *testing.T) {
 	})
 	assert.NilError(t, err)
 	leaf2.applyTemplate(zeroTemplate)
+	assert.Assert(t, leaf2.maxRunningApps == 0)
 	assert.Assert(t, leaf2.template == nil)
 	assert.Assert(t, leaf2.maxResource == nil)
 	assert.Assert(t, leaf2.guaranteedResource == nil)
@@ -2207,7 +2216,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetMaxResource()))
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetGuaranteedResource()))
 
-	// case 0: leaf can use template
+	// case 0: managed leaf queue can't use template
 	leafConfig := configs.QueueConfig{
 		Name:       "leaf_queue",
 		Parent:     false,
@@ -2221,9 +2230,13 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
 	assert.Assert(t, childLeaf.template == nil)
-	assert.DeepEqual(t, childLeaf.properties, parent.template.GetProperties())
-	assert.Assert(t, resources.Equals(childLeaf.maxResource, parent.template.GetMaxResource()))
-	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, parent.template.GetGuaranteedResource()))
+	assert.Assert(t, reflect.DeepEqual(childLeaf.properties, leafConfig.Properties))
+	childLeafMax, err := resources.NewResourceFromConf(leafConfig.Resources.Max)
+	assert.NilError(t, err, "Resource creation failed")
+	assert.Assert(t, resources.Equals(childLeaf.maxResource, childLeafMax))
+	childLeafGuaranteed, err := resources.NewResourceFromConf(leafConfig.Resources.Guaranteed)
+	assert.NilError(t, err, "Resource creation failed")
+	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, childLeafGuaranteed))
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
 	NonLeafConfig := configs.QueueConfig{
@@ -2277,7 +2290,8 @@ func TestNewDynamicQueue(t *testing.T) {
 	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	parent.template, err = template.FromConf(&configs.ChildTemplate{
-		Properties: getProperties(),
+		MaxApplications: uint64(1),
+		Properties:      getProperties(),
 		Resources: configs.Resources{
 			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
@@ -2289,6 +2303,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	childLeaf, err := NewDynamicQueue("leaf", true, parent)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, childLeaf.template == nil)
+	assert.Equal(t, childLeaf.maxRunningApps, parent.template.GetMaxApplications())
 	assert.DeepEqual(t, childLeaf.properties, parent.template.GetProperties())
 	assert.DeepEqual(t, childLeaf.maxResource, parent.template.GetMaxResource())
 	assert.DeepEqual(t, childLeaf.guaranteedResource, parent.template.GetGuaranteedResource())
@@ -2633,7 +2648,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask")
 
-	alloc := NewAllocation("alloc-1", nodeID1, ask)
+	alloc := NewAllocation(nodeID1, ask)
 	app.AddAllocation(alloc)
 	assert.Equal(t, app.CurrentState(), Starting.String(), "app state should be starting")
 	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
@@ -2641,7 +2656,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	_, err = app.updateAskRepeatInternal(ask, -1)
 	assert.NilError(t, err, "failed to decrease pending resources")
 
-	app.RemoveAllocation(alloc.GetUUID(), si.TerminationType_STOPPED_BY_RM)
+	app.RemoveAllocation(alloc.GetAllocationID(), si.TerminationType_STOPPED_BY_RM)
 	assert.Equal(t, app.CurrentState(), Completing.String(), "app state should be completing")
 	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
 }

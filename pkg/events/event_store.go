@@ -25,7 +25,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-var defaultEventStoreSize = 1000
+const defaultEventStoreSize = 1000
 
 // The EventStore operates under the following assumptions:
 //   - there is a cap for the number of events stored
@@ -40,8 +40,12 @@ type EventStore struct {
 }
 
 func newEventStore() *EventStore {
+	return newEventStoreWithSize(defaultEventStoreSize)
+}
+
+func newEventStoreWithSize(size int) *EventStore {
 	return &EventStore{
-		events: make([]*si.EventRecord, defaultEventStoreSize),
+		events: make([]*si.EventRecord, size),
 	}
 }
 

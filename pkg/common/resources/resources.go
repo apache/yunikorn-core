@@ -25,8 +25,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
-	"time"
 
 	"go.uber.org/zap"
 
@@ -44,58 +42,6 @@ type Quantity int64
 
 func (q Quantity) string() string {
 	return strconv.FormatInt(int64(q), 10)
-}
-
-// Util struct to keep track of application resource usage
-type UsedResource struct {
-	// Two level map for aggregated resource usage
-	// With instance type being the top level key, the mapped value is a map:
-	//   resource type (CPU, memory etc) -> the aggregated used time (in seconds) of the resource type
-	//
-	UsedResourceMap map[string]map[string]int64
-
-	sync.RWMutex
-}
-
-func (ur *UsedResource) Clone() *UsedResource {
-	if ur == nil {
-		return nil
-	}
-	ret := NewUsedResource()
-	ur.RLock()
-	defer ur.RUnlock()
-	for k, v := range ur.UsedResourceMap {
-		dest := make(map[string]int64)
-		for key, element := range v {
-			dest[key] = element
-		}
-		ret.UsedResourceMap[k] = dest
-	}
-	return ret
-}
-
-// Aggregate the resource usage to UsedResourceMap[instType]
-// The time the given resource used is the delta between the resource createTime and currentTime
-func (ur *UsedResource) AggregateUsedResource(instType string,
-	resource *Resource, bindTime time.Time) {
-	ur.Lock()
-	defer ur.Unlock()
-
-	releaseTime := time.Now()
-	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
-	aggregatedResourceTime, ok := ur.UsedResourceMap[instType]
-	if !ok {
-		aggregatedResourceTime = map[string]int64{}
-	}
-	for key, element := range resource.Resources {
-		curUsage, ok := aggregatedResourceTime[key]
-		if !ok {
-			curUsage = 0
-		}
-		curUsage += int64(element) * timeDiff // resource size times timeDiff
-		aggregatedResourceTime[key] = curUsage
-	}
-	ur.UsedResourceMap[instType] = aggregatedResourceTime
 }
 
 // Never update value of Zero
@@ -155,10 +101,6 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 		res.Resources[key] = intValue
 	}
 	return res, nil
-}
-
-func NewUsedResource() *UsedResource {
-	return &UsedResource{UsedResourceMap: make(map[string]map[string]int64)}
 }
 
 func (r *Resource) String() string {
@@ -475,14 +417,14 @@ func subNonNegative(left, right *Resource) (*Resource, string) {
 	return out, message
 }
 
-// Check if smaller fits in larger
-// Types not defined in the larger resource are considered 0 values for Quantity
-// A nil resource is treated as an empty resource (all types are 0)
-func FitIn(larger, smaller *Resource) bool {
-	return larger.fitIn(smaller, false)
+// FitIn checks if smaller fits in the defined resource
+// Types not defined in resource this is called against are considered 0 for Quantity
+// A nil resource is treated as an empty resource (no types defined)
+func (r *Resource) FitIn(smaller *Resource) bool {
+	return r.fitIn(smaller, false)
 }
 
-// Check if smaller fits in the defined resource
+// FitInMaxUndef checks if smaller fits in the defined resource
 // Types not defined in resource this is called against are considered the maximum value for Quantity
 // A nil resource is treated as an empty resource (no types defined)
 func (r *Resource) FitInMaxUndef(smaller *Resource) bool {
@@ -992,4 +934,45 @@ func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 			zap.Stringer("missing resource(s)", missingResources))
 	}
 	return absResource
+}
+
+// DominantResourceType calculates the most used resource type based on the ratio of used compared to
+// the capacity. If a capacity type is set to 0 assume full usage.
+// Dominant type should be calculated with queue usage and capacity. Queue capacities should never
+// contain 0 values when there is a usage also, however in the root queue this could happen. If the
+// last node reporting that resource was removed but not everything has been updated.
+// immediately
+// Ignores resources types that are used but not defined in the capacity.
+func (r *Resource) DominantResourceType(capacity *Resource) string {
+	if r == nil || capacity == nil {
+		return ""
+	}
+	var div, temp float64
+	dominant := ""
+	for name, usedVal := range r.Resources {
+		capVal, ok := capacity.Resources[name]
+		if !ok {
+			log.Log(log.Resources).Debug("missing resource in dominant calculation",
+				zap.String("missing resource", name))
+			continue
+		}
+		// calculate the ratio between usage and capacity
+		// ratio should be somewhere between 0 and 1, but do not restrict
+		// handle 0 values specifically just to be safe should never happen
+		if capVal == 0 {
+			if usedVal == 0 {
+				temp = 0 // no usage, no cap: consider empty
+			} else {
+				temp = 1 // usage, no cap: fully used
+			}
+		} else {
+			temp = float64(usedVal) / float64(capVal) // both not zero calculate ratio
+		}
+		// if we have exactly the same use the latest one
+		if temp >= div {
+			div = temp
+			dominant = name
+		}
+	}
+	return dominant
 }

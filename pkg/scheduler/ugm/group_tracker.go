@@ -19,11 +19,9 @@
 package ugm
 
 import (
-	"strings"
 	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/common"
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -46,17 +44,17 @@ func newGroupTracker(group string) *GroupTracker {
 	return groupTracker
 }
 
-func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user string) bool {
+func (gt *GroupTracker) increaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, user string) bool {
 	if gt == nil {
 		return true
 	}
 	gt.Lock()
 	defer gt.Unlock()
 	gt.applications[applicationID] = user
-	return gt.queueTracker.increaseTrackedResource(strings.Split(queuePath, configs.DOT), applicationID, group, usage)
+	return gt.queueTracker.increaseTrackedResource(hierarchy, applicationID, group, usage)
 }
 
-func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
+func (gt *GroupTracker) decreaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
 	if gt == nil {
 		return false, true
 	}
@@ -65,7 +63,7 @@ func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string,
 	if removeApp {
 		delete(gt.applications, applicationID)
 	}
-	return gt.queueTracker.decreaseTrackedResource(strings.Split(queuePath, configs.DOT), applicationID, usage, removeApp)
+	return gt.queueTracker.decreaseTrackedResource(hierarchy, applicationID, usage, removeApp)
 }
 
 func (gt *GroupTracker) getTrackedApplications() map[string]string {
@@ -74,16 +72,16 @@ func (gt *GroupTracker) getTrackedApplications() map[string]string {
 	return gt.applications
 }
 
-func (gt *GroupTracker) setLimits(queuePath string, resource *resources.Resource, maxApps uint64) {
+func (gt *GroupTracker) setLimits(hierarchy []string, resource *resources.Resource, maxApps uint64) {
 	gt.Lock()
 	defer gt.Unlock()
-	gt.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), resource, maxApps)
+	gt.queueTracker.setLimit(hierarchy, resource, maxApps)
 }
 
-func (gt *GroupTracker) headroom(queuePath string) *resources.Resource {
+func (gt *GroupTracker) headroom(hierarchy []string) *resources.Resource {
 	gt.Lock()
 	defer gt.Unlock()
-	return gt.queueTracker.headroom(strings.Split(queuePath, configs.DOT))
+	return gt.queueTracker.headroom(hierarchy, group)
 }
 
 func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {
@@ -100,29 +98,28 @@ func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDA
 	return groupResourceUsage
 }
 
-func (gt *GroupTracker) IsQueuePathTrackedCompletely(queuePath string) bool {
+func (gt *GroupTracker) IsQueuePathTrackedCompletely(hierarchy []string) bool {
 	gt.RLock()
 	defer gt.RUnlock()
-	return gt.queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath, configs.DOT))
+	return gt.queueTracker.IsQueuePathTrackedCompletely(hierarchy)
 }
 
-func (gt *GroupTracker) IsUnlinkRequired(queuePath string) bool {
+func (gt *GroupTracker) IsUnlinkRequired(hierarchy []string) bool {
 	gt.RLock()
 	defer gt.RUnlock()
-	return gt.queueTracker.IsUnlinkRequired(strings.Split(queuePath, configs.DOT))
+	return gt.queueTracker.IsUnlinkRequired(hierarchy)
 }
 
-func (gt *GroupTracker) UnlinkQT(queuePath string) bool {
+func (gt *GroupTracker) UnlinkQT(hierarchy []string) bool {
 	gt.RLock()
 	defer gt.RUnlock()
-	return gt.queueTracker.UnlinkQT(strings.Split(queuePath, configs.DOT))
+	return gt.queueTracker.UnlinkQT(hierarchy)
 }
 
-// canBeRemoved Does "root" queue has any child queue trackers? Is there any running applications in "root" qt?
 func (gt *GroupTracker) canBeRemoved() bool {
 	gt.RLock()
 	defer gt.RUnlock()
-	return len(gt.queueTracker.childQueueTrackers) == 0 && len(gt.queueTracker.runningApplications) == 0
+	return gt.queueTracker.canBeRemoved()
 }
 
 func (gt *GroupTracker) getName() string {
@@ -132,13 +129,13 @@ func (gt *GroupTracker) getName() string {
 	return gt.groupName
 }
 
-func (gt *GroupTracker) decreaseAllTrackedResourceUsage(queuePath string) map[string]string {
+func (gt *GroupTracker) decreaseAllTrackedResourceUsage(hierarchy []string) map[string]string {
 	if gt == nil {
 		return nil
 	}
 	gt.Lock()
 	defer gt.Unlock()
-	applications := gt.queueTracker.decreaseTrackedResourceUsageDownwards(strings.Split(queuePath, configs.DOT))
+	applications := gt.queueTracker.decreaseTrackedResourceUsageDownwards(hierarchy)
 	removedApplications := make(map[string]string)
 	for app := range applications {
 		if u, ok := gt.applications[app]; ok {
@@ -148,8 +145,8 @@ func (gt *GroupTracker) decreaseAllTrackedResourceUsage(queuePath string) map[st
 	return removedApplications
 }
 
-func (gt *GroupTracker) canRunApp(queuePath, applicationID string) bool {
+func (gt *GroupTracker) canRunApp(hierarchy []string, applicationID string) bool {
 	gt.Lock()
 	defer gt.Unlock()
-	return gt.queueTracker.canRunApp(strings.Split(queuePath, configs.DOT), applicationID, group)
+	return gt.queueTracker.canRunApp(hierarchy, applicationID, group)
 }

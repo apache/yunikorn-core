@@ -42,7 +42,7 @@ func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) er
 	m.Lock()
 	defer m.Unlock()
 	for _, alloc := range response.New {
-		m.Allocations[alloc.UUID] = alloc
+		m.Allocations[alloc.AllocationID] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
 			val = append(val, alloc)
 			m.nodeAllocations[alloc.NodeID] = val
@@ -54,7 +54,7 @@ func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) er
 	}
 
 	for _, alloc := range response.Released {
-		delete(m.Allocations, alloc.UUID)
+		delete(m.Allocations, alloc.AllocationID)
 	}
 	return nil
 }

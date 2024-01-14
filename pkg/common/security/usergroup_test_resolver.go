@@ -34,6 +34,7 @@ func GetUserGroupCacheTest() *UserGroupCache {
 		lookup:        lookup,
 		lookupGroupID: lookupGroupID,
 		groupIds:      groupIds,
+		stop:          make(chan struct{}),
 	}
 }
 

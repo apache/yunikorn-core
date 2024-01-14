@@ -68,7 +68,7 @@ func sortQueuesByPriorityAndFairness(queues []*Queue) {
 		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
 			r.GetAllocatedResource(), r.GetGuaranteedResource())
 		if comp == 0 {
-			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
+			return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
 		}
 		return comp < 0
 	})
@@ -89,7 +89,7 @@ func sortQueuesByFairnessAndPriority(queues []*Queue) {
 			if lPriority < rPriority {
 				return false
 			}
-			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
+			return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
 		}
 		return comp < 0
 	})

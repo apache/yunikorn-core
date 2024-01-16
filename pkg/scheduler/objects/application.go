@@ -52,7 +52,7 @@ var (
 )
 
 var initAppLogOnce sync.Once
-var appLog *log.RateLimitedLogger
+var rateLimitedAppLog *log.RateLimitedLogger
 
 const (
 	Soft string = "Soft"
@@ -974,7 +974,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
 			if node == nil {
-				GetAppLog().Warn("required node is not found (could be transient)",
+				GetRateLimitedAppLog().Info("required node is not found (could be transient)",
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))
@@ -2065,10 +2065,10 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	}
 }
 
-// GetAppLog lazy initializes the application logger the first time is needed.
-func GetAppLog() *log.RateLimitedLogger {
+// GetRateLimitedAppLog lazy initializes the application logger the first time is needed.
+func GetRateLimitedAppLog() *log.RateLimitedLogger {
 	initAppLogOnce.Do(func() {
-		appLog = log.RateLimitedLog(log.SchedApplication, time.Second)
+		rateLimitedAppLog = log.RateLimitedLog(log.SchedApplication, time.Second)
 	})
-	return appLog
+	return rateLimitedAppLog
 }

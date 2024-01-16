@@ -58,7 +58,7 @@ func TestCustomLoggingConfiguration(t *testing.T) {
 	StartAllServices()
 	ykManagedLogger := log.Log(log.Core)
 	ykManagedLogger.Info(logMessage)
-	objects.GetAppLog().Info(logMessage2)
+	objects.GetRateLimitedAppLog().Info(logMessage2)
 	err = ykManagedLogger.Sync()
 	if err != nil {
 		// if it fails to sync, it may be because the logger is still using /dev/stderr

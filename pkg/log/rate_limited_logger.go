@@ -30,7 +30,7 @@ type RateLimitedLogger struct {
 	limiter *rate.Limiter
 }
 
-// RateLimitedLogger provides a logger that only logs once within a specified duration
+// RateLimitedLog provides a logger that only logs once within a specified duration.
 func RateLimitedLog(handle *LoggerHandle, every time.Duration) *RateLimitedLogger {
 	return &RateLimitedLogger{
 		logger:  Log(handle),

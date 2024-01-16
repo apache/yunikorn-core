@@ -2065,7 +2065,7 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	}
 }
 
-// GetAppLog lazy initializes the application logger the first time is needed. See YUNIKORN-2320.
+// GetAppLog lazy initializes the application logger the first time is needed.
 func GetAppLog() *log.RateLimitedLogger {
 	initAppLogOnce.Do(func() {
 		appLog = log.RateLimitedLog(log.SchedApplication, time.Second)

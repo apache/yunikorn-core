@@ -698,6 +698,12 @@ func (qps *QueuePreemptionSnapshot) IsAtOrAboveGuaranteedResource() bool {
 	if qps == nil {
 		return false
 	}
+
+	// check the parent, as violations at any level mean we are not within limits
+	if qps.Parent.IsAtOrAboveGuaranteedResource() {
+		return true
+	}
+
 	guaranteed := qps.GetGuaranteedResource()
 	max := qps.GetMaxResource()
 	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
@@ -746,7 +752,7 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteed() *resources.Resource
 	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
 	remaining := resources.Sub(absGuaranteed, used)
-	return resources.ComponentWiseMin(remaining, parentResult)
+	return resources.ComponentWiseMinPermissive(remaining, parentResult)
 }
 
 // GetGuaranteedResource computes the current guaranteed resources considering parent guaranteed

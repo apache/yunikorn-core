@@ -2357,6 +2357,11 @@ func TestGetOutstandingRequests(t *testing.T) {
 	assert.Equal(t, 0, len(total4), "expected no outstanding requests for TestCase 4")
 }
 
+func TestGetRateLimitedAppLog(t *testing.T) {
+	l := getRateLimitedAppLog()
+	assert.Check(t, l != nil)
+}
+
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()

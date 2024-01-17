@@ -2068,7 +2068,7 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 // getRateLimitedAppLog lazy initializes the application logger the first time is needed.
 func getRateLimitedAppLog() *log.RateLimitedLogger {
 	initAppLogOnce.Do(func() {
-		rateLimitedAppLog = log.RateLimitedLog(log.SchedApplication, time.Second)
+		rateLimitedAppLog = log.NewRateLimitedLogger(log.SchedApplication, time.Second)
 	})
 	return rateLimitedAppLog
 }

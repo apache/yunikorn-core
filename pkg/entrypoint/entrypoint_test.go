@@ -35,7 +35,6 @@ import (
 const relTestDataDir = "build" // test data directory, relative to the project root
 const logFileName = "test.log"
 const logMessage = "log message sent via the core logger"
-const logMessage2 = "log message sent via the app logger"
 
 // TestCustomLoggingConfiguration ensures that custom logging configuration takes even in the presence of "objects"
 // package initialization. "objects" package initialization used to break custom logging configuration in the past,
@@ -58,7 +57,6 @@ func TestCustomLoggingConfiguration(t *testing.T) {
 	StartAllServices()
 	ykManagedLogger := log.Log(log.Core)
 	ykManagedLogger.Info(logMessage)
-	objects.GetRateLimitedAppLog().Info(logMessage2)
 	err = ykManagedLogger.Sync()
 	if err != nil {
 		// if it fails to sync, it may be because the logger is still using /dev/stderr
@@ -67,9 +65,7 @@ func TestCustomLoggingConfiguration(t *testing.T) {
 	// make sure the test log messages are in the log file
 	bs, err := os.ReadFile(logFile)
 	assert.NilError(t, err, "failed to read the log file", logFile)
-	for _, m := range []string{logMessage, logMessage2} {
-		assert.Equal(t, strings.Contains(string(bs), m), true, "'%s' not found in the log file %s", m, logFile)
-	}
+	assert.Equal(t, strings.Contains(string(bs), logMessage), true, "'%s' not found in the log file %s", logMessage, logFile)
 }
 
 // getWritableTestDataDir returns the absolute path of the validated (in that it ensures it exists in the file system)

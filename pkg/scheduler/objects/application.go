@@ -974,7 +974,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
 			if node == nil {
-				GetRateLimitedAppLog().Info("required node is not found (could be transient)",
+				getRateLimitedAppLog().Info("required node is not found (could be transient)",
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))
@@ -2065,8 +2065,8 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	}
 }
 
-// GetRateLimitedAppLog lazy initializes the application logger the first time is needed.
-func GetRateLimitedAppLog() *log.RateLimitedLogger {
+// getRateLimitedAppLog lazy initializes the application logger the first time is needed.
+func getRateLimitedAppLog() *log.RateLimitedLogger {
 	initAppLogOnce.Do(func() {
 		rateLimitedAppLog = log.RateLimitedLog(log.SchedApplication, time.Second)
 	})

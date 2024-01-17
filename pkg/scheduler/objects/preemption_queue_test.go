@@ -190,7 +190,6 @@ func TestGetRemainingGuaranteed(t *testing.T) {
 	bothRes.AddTo(childRes)
 	rootQ.allocatedResource = bothRes
 	bothRes = resources.Add(smallestRes, childRes)
-	bothRes = smallestRes
 	parentQ.allocatedResource = bothRes
 	childQ.allocatedResource = childRes
 	cache = make(map[string]*QueuePreemptionSnapshot)

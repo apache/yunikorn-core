@@ -406,7 +406,7 @@ func (m *Manager) clearEarlierSetUserWildCardLimits(newUserWildCardLimits map[st
 		_, currentQPExists := m.userLimits[queuePath]
 		_, newQPExists := newUserLimits[queuePath]
 
-		// Is queue path exists? In case wild card user limit not exists, reset limit settings, useWildCard flag etc for all those users
+		// Does queue path exist? In case wild limit does not exist, reset limit settings and useWildCard flag for all those users
 		if newLimitConfig, ok := newUserWildCardLimits[queuePath]; !ok && (!currentQPExists || !newQPExists) {
 			for _, ut := range m.userTrackers {
 				_, exists := m.userLimits[queuePath][ut.userName]

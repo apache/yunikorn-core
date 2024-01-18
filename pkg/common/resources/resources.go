@@ -800,7 +800,9 @@ func ComponentWiseMin(left, right *Resource) *Resource {
 			out.Resources[k] = MinQuantity(v, right.Resources[k])
 		}
 		for k, v := range right.Resources {
-			out.Resources[k] = MinQuantity(v, left.Resources[k])
+			if _, ok := out.Resources[k]; !ok {
+				out.Resources[k] = MinQuantity(v, left.Resources[k])
+			}
 		}
 	}
 	return out
@@ -828,10 +830,13 @@ func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 		}
 	}
 	for k, v := range right.Resources {
-		if val, ok := left.Resources[k]; ok {
-			out.Resources[k] = MinQuantity(v, val)
-		} else {
-			out.Resources[k] = v
+		_, exist := out.Resources[k]
+		if !exist {
+			if val, ok := left.Resources[k]; ok {
+				out.Resources[k] = MinQuantity(v, val)
+			} else {
+				out.Resources[k] = v
+			}
 		}
 	}
 	return out
@@ -863,7 +868,9 @@ func ComponentWiseMax(left, right *Resource) *Resource {
 			out.Resources[k] = MaxQuantity(v, right.Resources[k])
 		}
 		for k, v := range right.Resources {
-			out.Resources[k] = MaxQuantity(v, left.Resources[k])
+			if _, ok := out.Resources[k]; !ok {
+				out.Resources[k] = MaxQuantity(v, left.Resources[k])
+			}
 		}
 	}
 	return out

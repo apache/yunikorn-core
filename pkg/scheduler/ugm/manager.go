@@ -281,20 +281,6 @@ func (m *Manager) ensureGroupInternal(userGroups []string, queuePath string) str
 	return m.ensureGroupInternal(userGroups, parentPath)
 }
 
-func (m *Manager) isUserRemovable(ut *UserTracker) bool {
-	if len(ut.getTrackedApplications()) == 0 && resources.IsZero(ut.queueTracker.resourceUsage) {
-		return true
-	}
-	return false
-}
-
-func (m *Manager) isGroupRemovable(gt *GroupTracker) bool {
-	if len(gt.getTrackedApplications()) == 0 && resources.IsZero(gt.queueTracker.resourceUsage) {
-		return true
-	}
-	return false
-}
-
 func (m *Manager) UpdateConfig(config configs.QueueConfig, queuePath string) error {
 	userWildCardLimitsConfig := make(map[string]*LimitConfig)
 	groupWildCardLimitsConfig := make(map[string]*LimitConfig)
@@ -310,6 +296,12 @@ func (m *Manager) UpdateConfig(config configs.QueueConfig, queuePath string) err
 
 	// compare existing config with new configs stored in above temporary maps
 	m.clearEarlierSetLimits(userLimits, groupLimits)
+
+	// compare existing wild card user config with new configs stored in above temporary maps
+	m.clearEarlierSetUserWildCardLimits(userWildCardLimitsConfig, userLimits)
+
+	// apply wild card user limits to all existing users for which no limits configured explicitly
+	m.applyWildCardUserLimits(userWildCardLimitsConfig, userLimits)
 
 	// switch over - replace the existing config with new configs
 	m.replaceLimitConfigs(userLimits, groupLimits, userWildCardLimitsConfig, groupWildCardLimitsConfig, configuredGroups)
@@ -401,6 +393,62 @@ func (m *Manager) clearEarlierSetLimits(newUserLimits map[string]map[string]*Lim
 	m.clearEarlierSetUserLimits(newUserLimits)
 }
 
+// clearEarlierSetUserWildCardLimits Traverse new wild card user config and decide whether earlier usage needs to be cleared/updated or not
+// by comparing with the existing config. If config set earlier but not now, then traverse all users, check whether wild card limit has been applied/used or not.
+// Reset earlier settings for the users only when wild card user limit has been applied.
+// If config set earlier and now as well, then traverse all users and apply the current wild card user limit configs
+// only when wild card user limit has been applied earlier.
+func (m *Manager) clearEarlierSetUserWildCardLimits(newUserWildCardLimits map[string]*LimitConfig, newUserLimits map[string]map[string]*LimitConfig) {
+	m.RLock()
+	defer m.RUnlock()
+	for queuePath, currentLimitConfig := range m.userWildCardLimitsConfig {
+		hierarchy := strings.Split(queuePath, configs.DOT)
+		_, currentQPExists := m.userLimits[queuePath]
+		_, newQPExists := newUserLimits[queuePath]
+
+		// Does queue path exist? In case wild limit does not exist, reset limit settings and useWildCard flag for all those users
+		if newLimitConfig, ok := newUserWildCardLimits[queuePath]; !ok && (!currentQPExists || !newQPExists) {
+			for _, ut := range m.userTrackers {
+				_, exists := m.userLimits[queuePath][ut.userName]
+				if _, ok = newUserLimits[queuePath][ut.userName]; !ok || !exists {
+					log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user because wild card limit has been applied earlier",
+						zap.String("user", ut.userName),
+						zap.String("queue path", queuePath))
+					ut.setLimits(hierarchy, nil, 0, false, true)
+				}
+			}
+		} else if !currentQPExists || !newQPExists {
+			// In case wild card user limit exists, compare the old wild card limits with new limits for existing users already using wild card limits.
+			// In case of difference, set new limits for all those users.
+			if currentLimitConfig.maxApplications != newLimitConfig.maxApplications ||
+				!resources.Equals(currentLimitConfig.maxResources, newLimitConfig.maxResources) {
+				for _, ut := range m.userTrackers {
+					log.Log(log.SchedUGM).Debug("Need to update earlier set configs for user because wild card limit applied earlier has been updated",
+						zap.String("user", ut.userName),
+						zap.String("queue path", queuePath))
+					_, exists := m.userLimits[queuePath][ut.userName]
+					if _, ok = newUserLimits[queuePath][ut.userName]; !ok || !exists {
+						ut.setLimits(hierarchy, newLimitConfig.maxResources, newLimitConfig.maxApplications, true, true)
+					}
+				}
+			}
+		}
+	}
+}
+
+// applyWildCardUserLimits Traverse new wild card user config and apply the limits for all existing users for which no limits configured explicitly
+func (m *Manager) applyWildCardUserLimits(newUserWildCardLimits map[string]*LimitConfig, newUserLimits map[string]map[string]*LimitConfig) {
+	m.RLock()
+	defer m.RUnlock()
+	for queuePath, newLimitConfig := range newUserWildCardLimits {
+		for _, ut := range m.userTrackers {
+			if _, ok := newUserLimits[queuePath][ut.userName]; !ok {
+				ut.setLimits(strings.Split(queuePath, "."), newLimitConfig.maxResources, newLimitConfig.maxApplications, true, false)
+			}
+		}
+	}
+}
+
 // clearEarlierSetUserLimits Traverse new user config and decide whether earlier usage needs to be cleared or not
 // by comparing with the existing config. Reset earlier usage only config set earlier but not now
 func (m *Manager) clearEarlierSetUserLimits(newUserLimits map[string]map[string]*LimitConfig) {
@@ -435,7 +483,7 @@ func (m *Manager) resetUserEarlierUsage(ut *UserTracker, hierarchy []string) {
 		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
 			zap.String("user", ut.userName),
 			zap.Strings("queue path", hierarchy))
-		ut.setLimits(hierarchy, nil, 0)
+		ut.setLimits(hierarchy, nil, 0, false, false)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
 		if ut.IsUnlinkRequired(hierarchy) {
 			ut.UnlinkQT(hierarchy)
@@ -529,7 +577,7 @@ func (m *Manager) setUserLimits(user string, limitConfig *LimitConfig, hierarchy
 		userTracker = newUserTracker(user)
 		m.userTrackers[user] = userTracker
 	}
-	userTracker.setLimits(hierarchy, limitConfig.maxResources, limitConfig.maxApplications)
+	userTracker.setLimits(hierarchy, limitConfig.maxResources, limitConfig.maxApplications, false, false)
 	return nil
 }
 
@@ -570,18 +618,7 @@ func (m *Manager) getUserTracker(user string) *UserTracker {
 }
 
 func (m *Manager) getUserWildCardLimitsConfig(queuePath string) *LimitConfig {
-	m.RLock()
-	defer m.RUnlock()
 	if config, ok := m.userWildCardLimitsConfig[queuePath]; ok {
-		return config
-	}
-	return nil
-}
-
-func (m *Manager) getGroupWildCardLimitsConfig(queuePath string) *LimitConfig {
-	m.RLock()
-	defer m.RUnlock()
-	if config, ok := m.groupWildCardLimitsConfig[queuePath]; ok {
 		return config
 	}
 	return nil

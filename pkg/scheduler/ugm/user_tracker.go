@@ -42,10 +42,10 @@ type UserTracker struct {
 	sync.RWMutex
 }
 
-func newUserTracker(user string) *UserTracker {
-	queueTracker := newRootQueueTracker()
+func newUserTracker(userName string) *UserTracker {
+	queueTracker := newRootQueueTracker(user)
 	userTracker := &UserTracker{
-		userName:         user,
+		userName:         userName,
 		appGroupTrackers: make(map[string]*GroupTracker),
 		queueTracker:     queueTracker,
 	}
@@ -115,10 +115,10 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 	return ut.appGroupTrackers
 }
 
-func (ut *UserTracker) setLimits(hierarchy []string, resource *resources.Resource, maxApps uint64) {
+func (ut *UserTracker) setLimits(hierarchy []string, resource *resources.Resource, maxApps uint64, useWildCard bool, doWildCardCheck bool) {
 	ut.Lock()
 	defer ut.Unlock()
-	ut.queueTracker.setLimit(hierarchy, resource, maxApps)
+	ut.queueTracker.setLimit(hierarchy, resource, maxApps, useWildCard, user, doWildCardCheck)
 }
 
 func (ut *UserTracker) headroom(hierarchy []string) *resources.Resource {

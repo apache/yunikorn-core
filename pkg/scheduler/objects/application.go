@@ -947,7 +947,6 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		if sa.canReplace(request) {
 			continue
 		}
-
 		// check if this fits in the users' headroom first, if that fits check the queues' headroom
 		// NOTE: preemption most likely will not help in this case. The chance that preemption helps is mall
 		// as the preempted allocation must be for the same user in a different queue in the hierarchy...

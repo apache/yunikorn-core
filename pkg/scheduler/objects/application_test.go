@@ -2458,6 +2458,7 @@ func TestGetOutstandingRequests_AskReplaceable(t *testing.T) {
 
 	assert.Equal(t, 1, len(total))
 	assert.Equal(t, "alloc-3", total[0].allocationKey)
+}
 
 func TestGetRateLimitedAppLog(t *testing.T) {
 	l := getRateLimitedAppLog()

@@ -904,7 +904,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
-			if !request.HasTriggeredScaleUp() && request.requiredNode == common.Empty {
+			if !request.HasTriggeredScaleUp() && request.requiredNode == common.Empty && !sa.canReplace(request) {
 				// if headroom is still enough for the resources
 				*total = append(*total, request)
 			}

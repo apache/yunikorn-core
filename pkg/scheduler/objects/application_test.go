@@ -2427,6 +2427,39 @@ func TestGetOutstandingRequests_RequestTriggeredPreemptionHasRequiredNode(t *tes
 	assert.Equal(t, "alloc-4", total[0].allocationKey)
 }
 
+func TestGetOutstandingRequests_AskReplaceable(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+
+	allocationAsk1 := newAllocationAsk("alloc-1", "app-1", res) // replaceable
+	allocationAsk2 := newAllocationAsk("alloc-2", "app-1", res) // replaceable
+	allocationAsk3 := newAllocationAsk("alloc-3", "app-1", res) // non-replaceable
+	allocationAsk1.SetSchedulingAttempted(true)
+	allocationAsk2.SetSchedulingAttempted(true)
+	allocationAsk3.SetSchedulingAttempted(true)
+	allocationAsk1.taskGroupName = "testgroup"
+	allocationAsk2.taskGroupName = "testgroup"
+
+	app := &Application{
+		ApplicationID: "app-1",
+		queuePath:     "default",
+	}
+	sr := sortedRequests{}
+	sr.insert(allocationAsk1)
+	sr.insert(allocationAsk2)
+	sr.insert(allocationAsk3)
+	app.sortedRequests = sr
+	app.addPlaceholderDataWithLocking(allocationAsk1)
+	app.addPlaceholderDataWithLocking(allocationAsk2)
+
+	var total []*AllocationAsk
+	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
+	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
+	app.getOutstandingRequests(headroom, userHeadroom, &total)
+
+	assert.Equal(t, 1, len(total))
+	assert.Equal(t, "alloc-3", total[0].allocationKey)
+}
+
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()

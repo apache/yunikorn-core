@@ -1475,7 +1475,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	setupUGM()
 
 	originalPhTimeout := defaultPlaceholderTimeout
-	defaultPlaceholderTimeout = 5 * time.Millisecond
+	defaultPlaceholderTimeout = 100 * time.Millisecond
 	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
 
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
@@ -2458,6 +2458,10 @@ func TestGetOutstandingRequests_AskReplaceable(t *testing.T) {
 
 	assert.Equal(t, 1, len(total))
 	assert.Equal(t, "alloc-3", total[0].allocationKey)
+
+func TestGetRateLimitedAppLog(t *testing.T) {
+	l := getRateLimitedAppLog()
+	assert.Check(t, l != nil)
 }
 
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {

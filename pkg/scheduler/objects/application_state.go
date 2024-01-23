@@ -60,6 +60,7 @@ func (ae applicationEvent) String() string {
 // ----------------------------------
 type applicationState int
 
+// Application states are used for filtering in the webservice handlers. Please check&update the logic as needed if the state machine is modified
 const (
 	New applicationState = iota
 	Accepted

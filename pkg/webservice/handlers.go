@@ -60,6 +60,27 @@ const (
 	NodeDoesNotExists        = "Node not found"
 )
 
+var allowedActiveStatusMsg string
+var allowedAppActiveStatuses map[string]bool
+
+func init() {
+	allowedAppActiveStatuses = make(map[string]bool)
+
+	allowedAppActiveStatuses["new"] = true
+	allowedAppActiveStatuses["accepted"] = true
+	allowedAppActiveStatuses["starting"] = true
+	allowedAppActiveStatuses["running"] = true
+	allowedAppActiveStatuses["completing"] = true
+	allowedAppActiveStatuses["failing"] = true
+	allowedAppActiveStatuses["resuming"] = true
+
+	var activeStatuses []string
+	for k := range allowedAppActiveStatuses {
+		activeStatuses = append(activeStatuses, k)
+	}
+	allowedActiveStatusMsg = fmt.Sprintf("Only following active statuses are allowed: %s", strings.Join(activeStatuses, ","))
+}
+
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	var stack = func() []byte {
@@ -356,7 +377,8 @@ func getNodesDAO(entries []*objects.Node) []*dao.NodeDAOInfo {
 // getNodeUtilisation loads the node utilisation based on the dominant resource used
 // for the default partition. Dominant resource is defined as the highest utilised resource
 // type on the root queue based on the registered resources.
-// Use the default partition until we get YUNIKORN-2088 fixed
+// Only check the default partition
+// Deprecated - To be removed in next major release. Replaced with getNodesUtilisations
 func getNodeUtilisation(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(configs.DefaultPartition)
@@ -381,6 +403,7 @@ func getNodeUtilisation(w http.ResponseWriter, r *http.Request) {
 }
 
 // getNodesUtilJSON loads the nodes utilisation for a partition for a specific resource type.
+// Deprecated - To be removed in next major release. Replaced with getPartitionNodesUtilJSON
 func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.NodesUtilDAOInfo {
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)
@@ -417,6 +440,79 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 	return &dao.NodesUtilDAOInfo{
 		ResourceType: name,
 		NodesUtil:    nodeUtil,
+	}
+}
+
+func getNodeUtilisations(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	var result []*dao.PartitionNodesUtilDAOInfo
+	for _, part := range schedulerContext.GetPartitionMapClone() {
+		result = append(result, getPartitionNodesUtilJSON(part))
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// getPartitionNodesUtilJSON retrieves the utilization of all resource types for nodes within a specific partition.
+func getPartitionNodesUtilJSON(partition *scheduler.PartitionContext) *dao.PartitionNodesUtilDAOInfo {
+	type UtilizationBucket struct {
+		NodeCount []int      // 10 buckets, each bucket contains number of nodes
+		NodeList  [][]string // 10 buckets, each bucket contains node name list
+	}
+	resourceBuckets := make(map[string]*UtilizationBucket) // key is resource type, value is UtilizationBucket
+
+	// put nodes to buckets
+	for _, node := range partition.GetNodes() {
+		capacity := node.GetCapacity()
+		resourceAllocated := node.GetAllocatedResource()
+		absUsedCapacity := resources.CalculateAbsUsedCapacity(capacity, resourceAllocated)
+
+		// append to bucket based on resource type, only count if node advertises the resource
+		for resourceType := range capacity.Resources {
+			idx := 0
+			if absValue, ok := absUsedCapacity.Resources[resourceType]; ok {
+				v := float64(absValue)
+				idx = int(math.Dim(math.Ceil(v/10), 1))
+			}
+
+			// create resource bucket if not exist
+			if _, ok := resourceBuckets[resourceType]; !ok {
+				resourceBuckets[resourceType] = &UtilizationBucket{
+					NodeCount: make([]int, 10),
+					NodeList:  make([][]string, 10),
+				}
+			}
+
+			resourceBuckets[resourceType].NodeCount[idx]++
+			resourceBuckets[resourceType].NodeList[idx] = append(resourceBuckets[resourceType].NodeList[idx], node.NodeID)
+		}
+	}
+
+	// build result
+	var nodesUtilList []*dao.NodesUtilDAOInfo
+	for resourceType, bucket := range resourceBuckets {
+		var nodesUtil []*dao.NodeUtilDAOInfo
+		for k := 0; k < 10; k++ {
+			util := &dao.NodeUtilDAOInfo{
+				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+				NumOfNodes: int64(bucket.NodeCount[k]),
+				NodeNames:  bucket.NodeList[k],
+			}
+			nodesUtil = append(nodesUtil, util)
+		}
+		nodeUtilization := &dao.NodesUtilDAOInfo{
+			ResourceType: resourceType,
+			NodesUtil:    nodesUtil,
+		}
+		nodesUtilList = append(nodesUtilList, nodeUtilization)
+	}
+
+	return &dao.PartitionNodesUtilDAOInfo{
+		ClusterId:     partition.RmID,
+		Partition:     common.GetPartitionNameWithoutClusterID(partition.Name),
+		NodesUtilList: nodesUtilList,
 	}
 }
 
@@ -621,6 +717,54 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	appState := strings.ToLower(vars.ByName("state"))
+
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+	var appList []*objects.Application
+	switch appState {
+	case "active":
+		if status := strings.ToLower(r.URL.Query().Get("status")); status != "" {
+			if !allowedAppActiveStatuses[status] {
+				buildJSONErrorResponse(w, allowedActiveStatusMsg, http.StatusBadRequest)
+				return
+			}
+			for _, app := range partitionContext.GetApplications() {
+				if strings.ToLower(app.CurrentState()) == status {
+					appList = append(appList, app)
+				}
+			}
+		} else {
+			appList = partitionContext.GetApplications()
+		}
+	case "rejected":
+		appList = partitionContext.GetRejectedApplications()
+	case "completed":
+		appList = partitionContext.GetCompletedApplications()
+	default:
+		buildJSONErrorResponse(w, "Only following application states are allowed: active, rejected, completed", http.StatusBadRequest)
+		return
+	}
+	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(appList))
+	for _, app := range appList {
+		appsDao = append(appsDao, getApplicationDAO(app))
+	}
+	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func getApplication(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
@@ -631,22 +775,27 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
 	application := vars.ByName("application")
-	queueErr := validateQueue(queueName)
-	if queueErr != nil {
-		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
-		return
-	}
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	queue := partitionContext.GetQueue(queueName)
-	if queue == nil {
-		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
-		return
+	var app *objects.Application
+	if len(queueName) == 0 {
+		app = partitionContext.GetApplication(application)
+	} else {
+		queueErr := validateQueue(queueName)
+		if queueErr != nil {
+			buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+			return
+		}
+		queue := partitionContext.GetQueue(queueName)
+		if queue == nil {
+			buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
+			return
+		}
+		app = queue.GetApplication(application)
 	}
-	app := queue.GetApplication(application)
 	if app == nil {
 		buildJSONErrorResponse(w, ApplicationDoesNotExists, http.StatusNotFound)
 		return

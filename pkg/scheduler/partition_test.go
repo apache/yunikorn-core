@@ -1451,6 +1451,23 @@ func TestUpdateQueues(t *testing.T) {
 	assertUpdateQueues(t, "both", map[string]string{})
 }
 
+func TestGetApplication(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "no error expected while adding the application")
+	assert.Equal(t, partition.GetApplication(appID1), app, "partition failed to add app incorrect app returned")
+	app2 := newApplication(appID2, "default", "unknown")
+	err = partition.AddApplication(app2)
+	if err == nil {
+		t.Error("app-2 should not have been added to the partition")
+	}
+	if partition.GetApplication(appID2) != nil {
+		t.Fatal("partition added app incorrectly should have failed")
+	}
+}
+
 func TestGetQueue(t *testing.T) {
 	// get the partition
 	partition, err := newBasePartition()

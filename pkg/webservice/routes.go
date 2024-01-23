@@ -125,6 +125,18 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
+		"/ws/v1/partition/:partition/application/:application",
+		getApplication,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/:partition/applications/:state",
+		getPartitionApplicationsByState,
+	},
+	route{
+		"Scheduler",
+		"GET",
 		"/ws/v1/partition/:partition/usage/users",
 		getUsersResourceUsage,
 	},
@@ -253,10 +265,17 @@ var webRoutes = routes{
 		"/ws/v1/scheduler/healthcheck",
 		checkHealthStatus,
 	},
+	// Deprecated - To be removed in next major release. Replaced with /ws/v1/scheduler/node-utilizations
 	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/scheduler/node-utilization",
 		getNodeUtilisation,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/scheduler/node-utilizations",
+		getNodeUtilisations,
 	},
 }

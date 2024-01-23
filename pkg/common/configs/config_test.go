@@ -22,6 +22,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -907,11 +908,11 @@ partitions:
 	conf, err := CreateConfig(data)
 	assert.NilError(t, err, "partition user parsing should not have failed")
 	// gone through validation: 1 top level queues
-	if len(conf.Partitions[0].Queues) != 1 {
-		t.Errorf("failed to load queue %v", conf)
+	if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[0].Queues[0].Limits) != 3 {
+		t.Errorf("partition limits not correctly applied to root queue %v", conf)
 	}
 	if len(conf.Partitions[0].Limits) != 3 {
-		t.Errorf("partition users linked not correctly loaded  %v", conf)
+		t.Errorf("partition users linked not correctly loaded %v", conf)
 	}
 
 	// limit 1 check
@@ -947,6 +948,10 @@ partitions:
 	}
 	if limit.MaxApplications != 20 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (limit 3): %v", limit)
+	}
+
+	if !reflect.DeepEqual(conf.Partitions[0].Limits, conf.Partitions[0].Queues[0].Limits) {
+		t.Errorf("partition limits and root queue limits are not equivalent : %v", conf)
 	}
 }
 
@@ -1241,8 +1246,8 @@ partitions:
 	conf, err := CreateConfig(data)
 	assert.NilError(t, err, "config parsing should not have failed")
 	// gone through validation: 1 top level queues
-	if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[0].Queues[0].Limits) != 0 {
-		t.Errorf("failed to load queues from config: %v", conf)
+	if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[0].Queues[0].Limits) != 5 {
+		t.Errorf("partition limits not correctly applied to root queue: %v", conf)
 	}
 	if len(conf.Partitions[0].Limits) != 5 {
 		t.Errorf("failed to load partition limits from config: %v", conf)
@@ -1276,6 +1281,10 @@ partitions:
 	limit = conf.Partitions[0].Limits[4]
 	if len(limit.Groups) != 1 || limit.Groups[0] != "*" {
 		t.Errorf("failed to load wildcard group from config: %v", limit)
+	}
+
+	if !reflect.DeepEqual(conf.Partitions[0].Limits, conf.Partitions[0].Queues[0].Limits) {
+		t.Errorf("partition limits and root queue limits are not equivalent : %v", conf)
 	}
 }
 

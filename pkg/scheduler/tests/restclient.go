@@ -23,6 +23,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -31,7 +32,8 @@ type RClient struct {
 	BaseURL *url.URL
 }
 
-func (c *RClient) GetEvents() (*dao.EventRecordDAO, error) {
+// GetBatchEvents returns history events from the batch interface
+func (c *RClient) GetBatchEvents() (*dao.EventRecordDAO, error) {
 	req, err := c.newRequest("GET", "ws/v1/events/batch")
 	if err != nil {
 		return nil, err
@@ -39,6 +41,21 @@ func (c *RClient) GetEvents() (*dao.EventRecordDAO, error) {
 	var events *dao.EventRecordDAO
 	_, err = c.do(req, &events)
 	return events, err
+}
+
+// GetEventsStream returns a persistent connection with a stream of events
+func (c *RClient) GetEventsStream(count uint64) (io.ReadCloser, error) {
+	req, err := c.newRequest("GET", "ws/v1/events/stream")
+	if err != nil {
+		return nil, err
+	}
+	req.URL.RawQuery = "count=" + strconv.FormatUint(count, 10)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.Body, nil
 }
 
 func (c *RClient) newRequest(method, path string) (*http.Request, error) {

@@ -36,7 +36,7 @@ type EventStreaming struct {
 	buffer       *eventRingBuffer
 	stopCh       chan struct{}
 	eventStreams map[*EventStream]eventConsumerDetails
-	sync.Mutex
+	sync.RWMutex
 }
 
 type eventConsumerDetails struct {
@@ -45,6 +45,12 @@ type eventConsumerDetails struct {
 	stopCh    chan struct{}
 	name      string
 	createdAt time.Time
+}
+
+// EventStreamData contains data about an event stream.
+type EventStreamData struct {
+	Name      string
+	CreatedAt time.Time
 }
 
 // EventStream handle type returned to the client that wants to capture the stream of events.
@@ -167,6 +173,21 @@ func (e *EventStreaming) removeEventStream(consumer *EventStream) {
 // Close stops event streaming completely.
 func (e *EventStreaming) Close() {
 	close(e.stopCh)
+}
+
+// GetEventStreams returns the current active event streams.
+func (e *EventStreaming) GetEventStreams() []EventStreamData {
+	e.RLock()
+	defer e.RUnlock()
+	var streams []EventStreamData
+	for _, s := range e.eventStreams {
+		streams = append(streams, EventStreamData{
+			Name:      s.name,
+			CreatedAt: s.createdAt,
+		})
+	}
+
+	return streams
 }
 
 // NewEventStreaming creates a new event streaming infrastructure.

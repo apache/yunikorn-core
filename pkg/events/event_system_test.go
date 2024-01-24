@@ -141,3 +141,16 @@ func TestConfigUpdate(t *testing.T) {
 	assert.Equal(t, eventSystem.GetRequestCapacity(), newRequestCapacity)
 	assert.Equal(t, eventSystem.eventBuffer.capacity, newRingBufferCapacity)
 }
+
+func TestEventStreaming(t *testing.T) {
+	Init()
+	eventSystem := GetEventSystem()
+	eventSystem.StartService()
+	defer eventSystem.Stop()
+
+	eventSystem.CreateEventStream("test", 10)
+	streams := eventSystem.GetEventStreams()
+
+	assert.Equal(t, 1, len(streams))
+	assert.Equal(t, "test", streams[0].Name)
+}

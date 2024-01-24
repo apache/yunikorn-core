@@ -56,6 +56,10 @@ func (m *EventSystemMock) IsEventTrackingEnabled() bool {
 	return m.enabled
 }
 
+func (m *EventSystemMock) GetEventStreams() []events.EventStreamData {
+	return nil
+}
+
 func newEventSystemMock() *EventSystemMock {
 	return &EventSystemMock{events: make([]*si.EventRecord, 0), enabled: true}
 }

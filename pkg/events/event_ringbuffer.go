@@ -70,12 +70,38 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.id++
 }
 
-// GetEventsFromID returns "count" number of event records from "id" if possible. The id can be determined from
+// GetRecentEvents returns the most recent "count" elements from the ring buffer.
+// It is allowed for "count" to be larger than the number of elements.
+func (e *eventRingBuffer) GetRecentEvents(count uint64) []*si.EventRecord {
+	e.RLock()
+	defer e.RUnlock()
+
+	lastID := e.getLastEventID()
+	var startID uint64
+	if lastID < count {
+		startID = 0
+	} else {
+		startID = lastID - count + 1
+	}
+
+	history, _, _ := e.getEventsFromID(startID, count)
+	return history
+}
+
+// GetEventsFromID returns "count" number of event records from id if possible. The id can be determined from
 // the first call of the method - if it returns nothing because the id is not in the buffer, the lowest valid
 // identifier is returned which can be used to get the first batch.
 // If the caller does not want to pose limit on the number of events returned, "count" must be set to a high
 // value, e.g. math.MaxUint64.
 func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64, uint64) {
+	e.RLock()
+	defer e.RUnlock()
+
+	return e.getEventsFromID(id, count)
+}
+
+// getEventsFromID unlocked version of GetEventsFromID
+func (e *eventRingBuffer) getEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64, uint64) {
 	e.RLock()
 	defer e.RUnlock()
 	lowest := e.getLowestID()

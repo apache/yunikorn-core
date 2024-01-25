@@ -55,6 +55,8 @@ type AllocationAsk struct {
 	allocLog            map[string]*AllocationLogEntry
 	preemptionTriggered bool
 	preemptCheckTime    time.Time
+	schedulingAttempted bool              // whether scheduler core has tried to schedule this ask
+	scaleUpTriggered    bool              // whether this ask has triggered autoscaling or not
 	resKeyPerNode       map[string]string // reservation key for a given node
 
 	sync.RWMutex
@@ -297,6 +299,30 @@ func (aa *AllocationAsk) LessThan(other *AllocationAsk) bool {
 	}
 
 	return aa.priority < other.priority
+}
+
+func (aa *AllocationAsk) SetSchedulingAttempted(attempted bool) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.schedulingAttempted = attempted
+}
+
+func (aa *AllocationAsk) IsSchedulingAttempted() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.schedulingAttempted
+}
+
+func (aa *AllocationAsk) SetScaleUpTriggered(triggered bool) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.scaleUpTriggered = triggered
+}
+
+func (aa *AllocationAsk) HasTriggeredScaleUp() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.scaleUpTriggered
 }
 
 // completedPendingAsk How many pending asks has been completed or processed so far?

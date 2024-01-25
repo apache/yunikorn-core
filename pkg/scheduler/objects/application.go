@@ -899,13 +899,16 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 		return
 	}
 	for _, request := range sa.sortedRequests {
-		if request.GetPendingAskRepeat() == 0 {
+		if request.GetPendingAskRepeat() == 0 || !request.IsSchedulingAttempted() {
 			continue
 		}
+
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
-			// if headroom is still enough for the resources
-			*total = append(*total, request)
+			if !request.HasTriggeredScaleUp() && request.requiredNode == common.Empty && !sa.canReplace(request) {
+				// if headroom is still enough for the resources
+				*total = append(*total, request)
+			}
 			headRoom.SubOnlyExisting(request.GetAllocatedResource())
 			userHeadRoom.SubOnlyExisting(request.GetAllocatedResource())
 		}
@@ -950,6 +953,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		if !userHeadroom.FitInMaxUndef(request.GetAllocatedResource()) {
 			continue
 		}
+
+		request.SetSchedulingAttempted(true)
 
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
 		if !headRoom.FitInMaxUndef(request.GetAllocatedResource()) {

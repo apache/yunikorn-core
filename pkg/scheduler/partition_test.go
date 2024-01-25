@@ -4324,3 +4324,70 @@ func TestLimitMaxApplicationsForReservedAllocation(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateOutstandingRequests(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "unable to create partition: %v", err)
+
+	// no application&asks
+	requests := partition.calculateOutstandingRequests()
+	assert.Equal(t, 0, len(requests))
+
+	// two applications with no asks
+	app1 := newApplication(appID1, "test", "root.default")
+	app2 := newApplication(appID2, "test", "root.default")
+	err = partition.AddApplication(app1)
+	assert.NilError(t, err)
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err)
+	requests = partition.calculateOutstandingRequests()
+	assert.Equal(t, 0, len(requests))
+
+	// new asks for the two apps, but the scheduler hasn't processed them
+	askResource := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcores": 1,
+		"memory": 1,
+	})
+	siAsk1 := &si.AllocationAsk{
+		AllocationKey:  "ask-uuid-1",
+		ApplicationID:  appID1,
+		ResourceAsk:    askResource.ToProto(),
+		MaxAllocations: 1,
+	}
+	siAsk2 := &si.AllocationAsk{
+		AllocationKey:  "ask-uuid-2",
+		ApplicationID:  appID1,
+		ResourceAsk:    askResource.ToProto(),
+		MaxAllocations: 1,
+	}
+	siAsk3 := &si.AllocationAsk{
+		AllocationKey:  "ask-uuid-3",
+		ApplicationID:  appID2,
+		ResourceAsk:    askResource.ToProto(),
+		MaxAllocations: 1,
+	}
+	err = partition.addAllocationAsk(siAsk1)
+	assert.NilError(t, err)
+	err = partition.addAllocationAsk(siAsk2)
+	assert.NilError(t, err)
+	err = partition.addAllocationAsk(siAsk3)
+	assert.NilError(t, err)
+	requests = partition.calculateOutstandingRequests()
+	assert.Equal(t, 0, len(requests))
+
+	// mark asks as attempted
+	app1.GetAllocationAsk("ask-uuid-1").SetSchedulingAttempted(true)
+	app1.GetAllocationAsk("ask-uuid-2").SetSchedulingAttempted(true)
+	app2.GetAllocationAsk("ask-uuid-3").SetSchedulingAttempted(true)
+	requests = partition.calculateOutstandingRequests()
+	total := resources.NewResource()
+	expectedTotal := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"memory": 3,
+		"vcores": 3,
+	})
+	for _, req := range requests {
+		total.AddTo(req.GetAllocatedResource())
+	}
+	assert.Equal(t, 3, len(requests))
+	assert.Assert(t, resources.Equals(expectedTotal, total), "total resource expected: %v, got: %v", expectedTotal, total)
+}

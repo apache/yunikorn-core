@@ -2302,6 +2302,8 @@ func TestGetOutstandingRequests(t *testing.T) {
 
 	allocationAsk1 := newAllocationAsk("alloc-1", "app-1", res)
 	allocationAsk2 := newAllocationAsk("alloc-2", "app-1", res)
+	allocationAsk1.SetSchedulingAttempted(true)
+	allocationAsk2.SetSchedulingAttempted(true)
 
 	// Create an Application instance
 	app := &Application{
@@ -2355,6 +2357,107 @@ func TestGetOutstandingRequests(t *testing.T) {
 	total4 := []*AllocationAsk{}
 	app.getOutstandingRequests(queueHeadroom4, userHeadroom4, &total4)
 	assert.Equal(t, 0, len(total4), "expected no outstanding requests for TestCase 4")
+}
+
+func TestGetOutstandingRequests_NoSchedulingAttempt(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+
+	allocationAsk1 := newAllocationAsk("alloc-1", "app-1", res)
+	allocationAsk2 := newAllocationAsk("alloc-2", "app-1", res)
+	allocationAsk3 := newAllocationAsk("alloc-3", "app-1", res)
+	allocationAsk4 := newAllocationAsk("alloc-4", "app-1", res)
+	allocationAsk2.SetSchedulingAttempted(true)
+	allocationAsk4.SetSchedulingAttempted(true)
+	app := &Application{
+		ApplicationID: "app-1",
+		queuePath:     "default",
+	}
+	sr := sortedRequests{}
+	sr.insert(allocationAsk1)
+	sr.insert(allocationAsk2)
+	sr.insert(allocationAsk3)
+	sr.insert(allocationAsk4)
+	app.sortedRequests = sr
+
+	var total []*AllocationAsk
+	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
+	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
+	app.getOutstandingRequests(headroom, userHeadroom, &total)
+
+	assert.Equal(t, 2, len(total))
+	assert.Equal(t, "alloc-2", total[0].allocationKey)
+	assert.Equal(t, "alloc-4", total[1].allocationKey)
+}
+
+func TestGetOutstandingRequests_RequestTriggeredPreemptionHasRequiredNode(t *testing.T) {
+	// Test that we decrease headrooms even if the requests have triggered upscaling or
+	// the ask is a DaemonSet pod (requiredNode != "")
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+
+	allocationAsk1 := newAllocationAsk("alloc-1", "app-1", res)
+	allocationAsk2 := newAllocationAsk("alloc-2", "app-1", res)
+	allocationAsk3 := newAllocationAsk("alloc-3", "app-1", res)
+	allocationAsk4 := newAllocationAsk("alloc-4", "app-1", res)
+	allocationAsk1.SetSchedulingAttempted(true)
+	allocationAsk2.SetSchedulingAttempted(true)
+	allocationAsk3.SetSchedulingAttempted(true)
+	allocationAsk4.SetSchedulingAttempted(true) // hasn't triggered scaling, no required node --> picked
+	allocationAsk1.SetScaleUpTriggered(true)    // triggered scaling, no required node --> not selected
+	allocationAsk2.SetScaleUpTriggered(true)    // triggered scaling, has required node --> not selected
+	allocationAsk2.SetRequiredNode("node-1")
+	allocationAsk3.SetRequiredNode("node-1") // hasn't triggered scaling, has required node --> not selected
+
+	app := &Application{
+		ApplicationID: "app-1",
+		queuePath:     "default",
+	}
+	sr := sortedRequests{}
+	sr.insert(allocationAsk1)
+	sr.insert(allocationAsk2)
+	sr.insert(allocationAsk3)
+	sr.insert(allocationAsk4)
+	app.sortedRequests = sr
+
+	var total []*AllocationAsk
+	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
+	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
+	app.getOutstandingRequests(headroom, userHeadroom, &total)
+
+	assert.Equal(t, 1, len(total))
+	assert.Equal(t, "alloc-4", total[0].allocationKey)
+}
+
+func TestGetOutstandingRequests_AskReplaceable(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+
+	allocationAsk1 := newAllocationAsk("alloc-1", "app-1", res) // replaceable
+	allocationAsk2 := newAllocationAsk("alloc-2", "app-1", res) // replaceable
+	allocationAsk3 := newAllocationAsk("alloc-3", "app-1", res) // non-replaceable
+	allocationAsk1.SetSchedulingAttempted(true)
+	allocationAsk2.SetSchedulingAttempted(true)
+	allocationAsk3.SetSchedulingAttempted(true)
+	allocationAsk1.taskGroupName = "testgroup"
+	allocationAsk2.taskGroupName = "testgroup"
+
+	app := &Application{
+		ApplicationID: "app-1",
+		queuePath:     "default",
+	}
+	sr := sortedRequests{}
+	sr.insert(allocationAsk1)
+	sr.insert(allocationAsk2)
+	sr.insert(allocationAsk3)
+	app.sortedRequests = sr
+	app.addPlaceholderDataWithLocking(allocationAsk1)
+	app.addPlaceholderDataWithLocking(allocationAsk2)
+
+	var total []*AllocationAsk
+	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
+	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
+	app.getOutstandingRequests(headroom, userHeadroom, &total)
+
+	assert.Equal(t, 1, len(total))
+	assert.Equal(t, "alloc-3", total[0].allocationKey)
 }
 
 func TestGetRateLimitedAppLog(t *testing.T) {

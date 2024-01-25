@@ -334,6 +334,8 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),
 		TriggeredPreemption: ask.HasTriggeredPreemption(),
 		Originator:          ask.IsOriginator(),
+		SchedulingAttempted: ask.IsSchedulingAttempted(),
+		TriggeredScaleUp:    ask.HasTriggeredScaleUp(),
 	}
 }
 

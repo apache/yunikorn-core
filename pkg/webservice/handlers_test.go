@@ -2139,7 +2139,7 @@ func TestGetStream_Limit(t *testing.T) {
 		configs.SetConfigMap(current)
 	}()
 	configs.SetConfigMap(map[string]string{
-		configs.CMMaxStreamConnectionsTotal: "3",
+		configs.CMMaxEventStreams: "3",
 	})
 	resp := NewResponseRecorderWithDeadline()
 	ev, req := initEventsAndCreateRequest(t)
@@ -2159,7 +2159,7 @@ func TestGetStream_Limit(t *testing.T) {
 	err := common.WaitFor(time.Millisecond, time.Second, func() bool {
 		streamingLimiter.Lock()
 		defer streamingLimiter.Unlock()
-		return streamingLimiter.total == 3
+		return streamingLimiter.streams == 3
 	})
 	assert.NilError(t, err)
 	assertGetStreamError(t, req, resp, http.StatusServiceUnavailable, "Too many streaming connections")

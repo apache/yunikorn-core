@@ -33,19 +33,19 @@ const (
 	HealthCheckInterval = PrefixHealth + "checkInterval"
 
 	// events
-	CMEventTrackingEnabled        = PrefixEvent + "trackingEnabled"    // Application Tracking
-	CMEventRequestCapacity        = PrefixEvent + "requestCapacity"    // Request Capacity
-	CMEventRingBufferCapacity     = PrefixEvent + "ringBufferCapacity" // Ring Buffer Capacity
-	CMMaxStreamConnectionsTotal   = PrefixEvent + "maxStreamConnectionsTotal"
-	CMMaxStreamPerHostConnections = PrefixEvent + "maxStreamConnectionsPerHost"
+	CMEventTrackingEnabled    = PrefixEvent + "trackingEnabled"    // Application Tracking
+	CMEventRequestCapacity    = PrefixEvent + "requestCapacity"    // Request Capacity
+	CMEventRingBufferCapacity = PrefixEvent + "ringBufferCapacity" // Ring Buffer Capacity
+	CMMaxEventStreams         = PrefixEvent + "maxStreams"
+	CMMaxEventStreamsPerHost  = PrefixEvent + "maxStreamsPerHost"
 
 	// defaults
-	DefaultHealthCheckInterval      = 30 * time.Second
-	DefaultEventTrackingEnabled     = true
-	DefaultEventRequestCapacity     = 1000
-	DefaultEventRingBufferCapacity  = 100000
-	DefaultStreamConnections        = uint64(100)
-	DefaultStreamPerHostConnections = uint64(15)
+	DefaultHealthCheckInterval     = 30 * time.Second
+	DefaultEventTrackingEnabled    = true
+	DefaultEventRequestCapacity    = 1000
+	DefaultEventRingBufferCapacity = 100000
+	DefaultMaxStreams              = uint64(100)
+	DefaultMaxStreamsPerHost       = uint64(15)
 )
 
 var ConfigContext *SchedulerConfigContext

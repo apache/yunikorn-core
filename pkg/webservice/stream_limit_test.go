@@ -31,24 +31,24 @@ func TestAddRemoveHost(t *testing.T) {
 	assert.Assert(t, sl.AddHost("host-1"))
 	assert.Assert(t, sl.AddHost("host-1"))
 	assert.Assert(t, sl.AddHost("host-2"))
-	assert.Equal(t, 2, len(sl.perHost))
-	assert.Equal(t, uint64(3), sl.total)
+	assert.Equal(t, 2, len(sl.perHostStreams))
+	assert.Equal(t, uint64(3), sl.streams)
 
 	sl.RemoveHost("host-3") // remove non-existing
-	assert.Equal(t, 2, len(sl.perHost))
-	assert.Equal(t, uint64(3), sl.total)
+	assert.Equal(t, 2, len(sl.perHostStreams))
+	assert.Equal(t, uint64(3), sl.streams)
 
 	sl.RemoveHost("host-1")
-	assert.Equal(t, 2, len(sl.perHost))
-	assert.Equal(t, uint64(2), sl.total)
+	assert.Equal(t, 2, len(sl.perHostStreams))
+	assert.Equal(t, uint64(2), sl.streams)
 
 	sl.RemoveHost("host-2")
-	assert.Equal(t, 1, len(sl.perHost))
-	assert.Equal(t, uint64(1), sl.total)
+	assert.Equal(t, 1, len(sl.perHostStreams))
+	assert.Equal(t, uint64(1), sl.streams)
 
 	sl.RemoveHost("host-1")
-	assert.Equal(t, 0, len(sl.perHost))
-	assert.Equal(t, uint64(0), sl.total)
+	assert.Equal(t, 0, len(sl.perHostStreams))
+	assert.Equal(t, uint64(0), sl.streams)
 }
 
 func TestAddHost_TotalLimitHit(t *testing.T) {
@@ -57,7 +57,7 @@ func TestAddHost_TotalLimitHit(t *testing.T) {
 		configs.SetConfigMap(current)
 	}()
 	configs.SetConfigMap(map[string]string{
-		configs.CMMaxStreamConnectionsTotal: "2",
+		configs.CMMaxEventStreams: "2",
 	})
 	sl := NewStreamingLimiter()
 
@@ -72,7 +72,7 @@ func TestAddHost_PerHostLimitHit(t *testing.T) {
 		configs.SetConfigMap(current)
 	}()
 	configs.SetConfigMap(map[string]string{
-		configs.CMMaxStreamPerHostConnections: "2",
+		configs.CMMaxEventStreamsPerHost: "2",
 	})
 	cl := NewStreamingLimiter()
 
@@ -88,29 +88,29 @@ func TestGetLimits(t *testing.T) {
 	}()
 	sl := NewStreamingLimiter()
 
-	total, perHost := sl.getLimits()
-	assert.Equal(t, uint64(100), total)
-	assert.Equal(t, uint64(15), perHost)
+	sl.setLimits()
+	assert.Equal(t, uint64(100), sl.maxStreams)
+	assert.Equal(t, uint64(15), sl.maxPerHostStreams)
 
 	configs.SetConfigMap(map[string]string{
-		configs.CMMaxStreamConnectionsTotal: "123",
+		configs.CMMaxEventStreams: "123",
 	})
-	total, perHost = sl.getLimits()
-	assert.Equal(t, uint64(123), total)
-	assert.Equal(t, uint64(15), perHost)
+	sl.setLimits()
+	assert.Equal(t, uint64(123), sl.maxStreams)
+	assert.Equal(t, uint64(15), sl.maxPerHostStreams)
 
 	configs.SetConfigMap(map[string]string{
-		configs.CMMaxStreamPerHostConnections: "321",
+		configs.CMMaxEventStreamsPerHost: "321",
 	})
-	total, perHost = sl.getLimits()
-	assert.Equal(t, uint64(100), total)
-	assert.Equal(t, uint64(321), perHost)
+	sl.setLimits()
+	assert.Equal(t, uint64(100), sl.maxStreams)
+	assert.Equal(t, uint64(321), sl.maxPerHostStreams)
 
 	configs.SetConfigMap(map[string]string{
-		configs.CMMaxStreamConnectionsTotal:   "xxx",
-		configs.CMMaxStreamPerHostConnections: "yyy",
+		configs.CMMaxEventStreams:        "xxx",
+		configs.CMMaxEventStreamsPerHost: "yyy",
 	})
-	total, perHost = sl.getLimits()
-	assert.Equal(t, uint64(100), total)
-	assert.Equal(t, uint64(15), perHost)
+	sl.setLimits()
+	assert.Equal(t, uint64(100), sl.maxStreams)
+	assert.Equal(t, uint64(15), sl.maxPerHostStreams)
 }

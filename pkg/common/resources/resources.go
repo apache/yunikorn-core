@@ -450,9 +450,7 @@ func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
 		if skipUndef && !ok {
 			continue
 		}
-		if largerValue < 0 {
-			largerValue = 0
-		}
+		largerValue = max(0, largerValue)
 		if v > largerValue {
 			return false
 		}

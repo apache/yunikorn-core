@@ -233,12 +233,7 @@ func (e *eventRingBuffer) Resize(newSize uint64) {
 
 	initialSize := e.capacity
 	newEvents := make([]*si.EventRecord, newSize)
-	var numEventsToCopy uint64
-	if e.id-e.getLowestID() > newSize {
-		numEventsToCopy = newSize
-	} else {
-		numEventsToCopy = e.id - e.getLowestID()
-	}
+	numEventsToCopy := min(e.id-e.getLowestID(), newSize)
 
 	// Calculate the index from where to start copying (the oldest event)
 	startIndex := (e.head + e.capacity - numEventsToCopy) % e.capacity

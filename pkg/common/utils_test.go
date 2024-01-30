@@ -267,13 +267,6 @@ func TestWaitFor(t *testing.T) {
 	}
 }
 
-func TestMin(t *testing.T) {
-	assert.DeepEqual(t, Min(uint64(1), uint64(2)), uint64(1))
-	assert.DeepEqual(t, Min(uint64(2), uint64(1)), uint64(1))
-	assert.Check(t, Min(uint64(2), uint64(1)) == uint64(1), true)
-	assert.Check(t, Min(uint64(2), uint64(1)) == 1, false)
-}
-
 func TestGetConfigurationBool(t *testing.T) {
 	testCases := []struct {
 		name          string

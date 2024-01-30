@@ -142,15 +142,6 @@ func (e *eventRingBuffer) getEventsFromID(id uint64, count uint64) ([]*si.EventR
 	}, nil), lowest, e.getLastEventID()
 }
 
-// min a utility function to return the smallest value of two unsigned int
-func min(a, b uint64) uint64 {
-	m := a
-	if b < a {
-		m = b
-	}
-	return m
-}
-
 // GetLastEventID returns the value of the unique id counter.
 // If the buffer is empty, it returns 0.
 func (e *eventRingBuffer) GetLastEventID() uint64 {

@@ -279,9 +279,7 @@ func initLoggingConfig(config map[string]string) {
 	// compute the finest log level necessary to allow all loggers to succeed
 	minLevel := zapcore.InvalidLevel - 1
 	for _, v := range levelMap {
-		if minLevel > v {
-			minLevel = v
-		}
+		minLevel = min(v, minLevel)
 	}
 
 	// create each configured logger and initialize the overall configuration

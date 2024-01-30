@@ -774,22 +774,6 @@ func StrictlyGreaterThanZero(larger *Resource) bool {
 	return greater
 }
 
-// Return the smallest quantity
-func MinQuantity(x, y Quantity) Quantity {
-	if x < y {
-		return x
-	}
-	return y
-}
-
-// Return the largest quantity
-func MaxQuantity(x, y Quantity) Quantity {
-	if x > y {
-		return x
-	}
-	return y
-}
-
 // Returns a new resource with the smallest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
 // If a resource type is missing from one of the Resource, it is considered 0
@@ -797,10 +781,10 @@ func ComponentWiseMin(left, right *Resource) *Resource {
 	out := NewResource()
 	if left != nil && right != nil {
 		for k, v := range left.Resources {
-			out.Resources[k] = MinQuantity(v, right.Resources[k])
+			out.Resources[k] = min(v, right.Resources[k])
 		}
 		for k, v := range right.Resources {
-			out.Resources[k] = MinQuantity(v, left.Resources[k])
+			out.Resources[k] = min(v, left.Resources[k])
 		}
 	}
 	return out
@@ -822,14 +806,14 @@ func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 	}
 	for k, v := range left.Resources {
 		if val, ok := right.Resources[k]; ok {
-			out.Resources[k] = MinQuantity(v, val)
+			out.Resources[k] = min(v, val)
 		} else {
 			out.Resources[k] = v
 		}
 	}
 	for k, v := range right.Resources {
 		if val, ok := left.Resources[k]; ok {
-			out.Resources[k] = MinQuantity(v, val)
+			out.Resources[k] = min(v, val)
 		} else {
 			out.Resources[k] = v
 		}
@@ -860,10 +844,10 @@ func ComponentWiseMax(left, right *Resource) *Resource {
 	out := NewResource()
 	if left != nil && right != nil {
 		for k, v := range left.Resources {
-			out.Resources[k] = MaxQuantity(v, right.Resources[k])
+			out.Resources[k] = max(v, right.Resources[k])
 		}
 		for k, v := range right.Resources {
-			out.Resources[k] = MaxQuantity(v, left.Resources[k])
+			out.Resources[k] = max(v, left.Resources[k])
 		}
 	}
 	return out

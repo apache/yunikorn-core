@@ -39,6 +39,15 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+var (
+	nilNodeIterator = func() NodeIterator {
+		return nil
+	}
+	nilGetNode = func(string) *Node {
+		return nil
+	}
+)
+
 func setupUGM() {
 	userManager := ugm.GetUserManager()
 	userManager.ClearUserTrackers()
@@ -2272,13 +2281,7 @@ func TestAppDoesNotFitEvent(t *testing.T) {
 	app.sortedRequests = sr
 	attempts := 0
 
-	app.tryAllocate(headroom, true, time.Second, &attempts, func() NodeIterator {
-		return nil
-	}, func() NodeIterator {
-		return nil
-	}, func(s string) *Node {
-		return nil
-	})
+	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
 
 	noEvents := 0
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
@@ -2292,6 +2295,56 @@ func TestAppDoesNotFitEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[1].EventChangeDetail)
 	assert.Equal(t, "app-1", records[1].ReferenceID)
 	assert.Equal(t, "alloc-0", records[1].ObjectID)
+}
+
+func TestAllocationFailures(t *testing.T) {
+	setupUGM()
+
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+	assert.NilError(t, err)
+	headroom, err := resources.NewResourceFromConf(map[string]string{"memory": "0", "vcores": "0"})
+	assert.NilError(t, err)
+	ask := newAllocationAsk("alloc-0", "app-1", res)
+	app := newApplication(appID1, "default", "root")
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+	sr := sortedRequests{}
+	sr.insert(ask)
+	app.sortedRequests = sr
+	attempts := 0
+
+	// case #1: not enough queue headroom
+	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 1, len(ask.allocLog))
+	assert.Equal(t, int32(1), ask.allocLog[NotEnoughQueueQuota].Count)
+
+	// case #2: not enough user quota
+	// create config with resource limits for "testuser"
+	conf := configs.QueueConfig{
+		Name:      "root",
+		Parent:    true,
+		SubmitACL: "*",
+		Limits: []configs.Limit{
+			{
+				Limit: "leaf queue limit",
+				Users: []string{
+					"testuser",
+				},
+				MaxResources: map[string]string{
+					"memory": "1",
+					"vcores": "1",
+				},
+			},
+		},
+	}
+	err = ugm.GetUserManager().UpdateConfig(conf, "root")
+	assert.NilError(t, err)
+	headroom, err = resources.NewResourceFromConf(map[string]string{"memory": "1000", "vcores": "1000"})
+	assert.NilError(t, err)
+	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 2, len(ask.allocLog))
+	assert.Equal(t, int32(1), ask.allocLog[NotEnoughUserQuota].Count)
 }
 
 func TestGetOutstandingRequests(t *testing.T) {

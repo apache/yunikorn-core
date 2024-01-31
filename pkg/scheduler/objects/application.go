@@ -1818,10 +1818,7 @@ func (sa *Application) updateAskMaxPriority() {
 		if v.GetPendingAskRepeat() == 0 {
 			continue
 		}
-		p := v.GetPriority()
-		if p > value {
-			value = p
-		}
+		value = max(value, v.GetPriority())
 	}
 	sa.askMaxPriority = value
 	sa.queue.UpdateApplicationPriority(sa.ApplicationID, value)

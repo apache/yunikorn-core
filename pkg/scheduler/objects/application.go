@@ -57,6 +57,9 @@ var rateLimitedAppLog *log.RateLimitedLogger
 const (
 	Soft string = "Soft"
 	Hard string = "Hard"
+
+	NotEnoughUserQuota  = "Not enough user quota"
+	NotEnoughQueueQuota = "Not enough queue quota"
 )
 
 type PlaceholderData struct {
@@ -951,6 +954,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		// NOTE: preemption most likely will not help in this case. The chance that preemption helps is mall
 		// as the preempted allocation must be for the same user in a different queue in the hierarchy...
 		if !userHeadroom.FitInMaxUndef(request.GetAllocatedResource()) {
+			request.LogAllocationFailure(NotEnoughUserQuota, true) // error message MUST be constant!
 			continue
 		}
 
@@ -970,6 +974,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 				}
 			}
 			sa.appEvents.sendAppDoesNotFitEvent(request, headRoom)
+			request.LogAllocationFailure(NotEnoughQueueQuota, true) // error message MUST be constant!
 			continue
 		}
 

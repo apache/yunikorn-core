@@ -229,6 +229,28 @@ func TestAllocationLog(t *testing.T) {
 	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
 }
 
+func TestSendPredicateFailed(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	siAsk := &si.AllocationAsk{
+		AllocationKey:  "ask-1",
+		ApplicationID:  "app-1",
+		MaxAllocations: 1,
+		ResourceAsk:    res.ToProto(),
+	}
+	ask := NewAllocationAskFromSI(siAsk)
+	eventSystem := newEventSystemMockDisabled()
+	ask.askEvents = newAskEvents(ask, eventSystem)
+	ask.SendPredicateFailedEvent("failed")
+	assert.Equal(t, 0, len(eventSystem.events))
+
+	eventSystem = newEventSystemMock()
+	ask.askEvents = newAskEvents(ask, eventSystem)
+	ask.SendPredicateFailedEvent("failure")
+	assert.Equal(t, 1, len(eventSystem.events))
+	event := eventSystem.events[0]
+	assert.Equal(t, "Predicate failed for request 'ask-1' with message: 'failure'", event.Message)
+}
+
 func sortedLog(ask *AllocationAsk) []*AllocationLogEntry {
 	log := ask.GetAllocationLog()
 	sort.SliceStable(log, func(i int, j int) bool {

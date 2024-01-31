@@ -25,7 +25,6 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/apache/yunikorn-core/pkg/common"
-	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -34,15 +33,6 @@ type applicationEvents struct {
 	eventSystem events.EventSystem
 	app         *Application
 	limiter     *rate.Limiter
-}
-
-func (evt *applicationEvents) sendAppDoesNotFitEvent(request *AllocationAsk, headroom *resources.Resource) {
-	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.limiter.Allow() {
-		return
-	}
-	message := fmt.Sprintf("Application %s does not fit into %s queue (request resoure %s, headroom %s)", request.GetApplicationID(), evt.app.queuePath, request.GetAllocatedResource(), headroom)
-	event := events.CreateRequestEventRecord(request.GetAllocationKey(), request.GetApplicationID(), message, request.GetAllocatedResource())
-	evt.eventSystem.AddEvent(event)
 }
 
 func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request *AllocationAsk) {

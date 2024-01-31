@@ -27,6 +27,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -59,6 +60,10 @@ type AllocationAsk struct {
 	scaleUpTriggered    bool              // whether this ask has triggered autoscaling or not
 	resKeyPerNode       map[string]string // reservation key for a given node
 
+	askEvents            *askEvents
+	userQuotaCheckFailed bool
+	headroomCheckFailed  bool
+
 	sync.RWMutex
 }
 
@@ -77,6 +82,7 @@ func NewAllocationAsk(allocationKey string, applicationID string, allocatedResou
 		resKeyPerNode:     make(map[string]string),
 	}
 	aa.resKeyWithoutNode = reservationKeyWithoutNode(applicationID, allocationKey)
+	aa.askEvents = newAskEvents(aa, events.GetEventSystem())
 	return aa
 }
 
@@ -110,6 +116,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		return nil
 	}
 	saa.resKeyWithoutNode = reservationKeyWithoutNode(ask.ApplicationID, ask.AllocationKey)
+	saa.askEvents = newAskEvents(saa, events.GetEventSystem())
 	return saa
 }
 
@@ -261,6 +268,10 @@ func (aa *AllocationAsk) LogAllocationFailure(message string, allocate bool) {
 	entry.Count++
 }
 
+func (aa *AllocationAsk) SendPredicateFailedEvent(message string) {
+	aa.askEvents.sendPredicateFailed(message)
+}
+
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met
 func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
 	aa.RLock()
@@ -342,4 +353,40 @@ func (aa *AllocationAsk) getReservationKeyForNode(node string) string {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.resKeyPerNode[node]
+}
+
+func (aa *AllocationAsk) setHeadroomCheckFailed(headroom *resources.Resource, queue string) {
+	aa.Lock()
+	defer aa.Unlock()
+	if !aa.headroomCheckFailed {
+		aa.headroomCheckFailed = true
+		aa.askEvents.sendRequestDoesNotFitInQueue(headroom, queue)
+	}
+}
+
+func (aa *AllocationAsk) setHeadroomCheckPassed(queue string) {
+	aa.Lock()
+	defer aa.Unlock()
+	if aa.headroomCheckFailed {
+		aa.headroomCheckFailed = false
+		aa.askEvents.sendRequestFitsInQueue(queue)
+	}
+}
+
+func (aa *AllocationAsk) setUserQuotaCheckFailed(available *resources.Resource) {
+	aa.Lock()
+	defer aa.Unlock()
+	if !aa.userQuotaCheckFailed {
+		aa.userQuotaCheckFailed = true
+		aa.askEvents.sendRequestExceedsUserQuota(available)
+	}
+}
+
+func (aa *AllocationAsk) setUserQuotaCheckPassed() {
+	aa.Lock()
+	defer aa.Unlock()
+	if aa.userQuotaCheckFailed {
+		aa.userQuotaCheckFailed = false
+		aa.askEvents.sendRequestFitsInUserQuota()
+	}
 }

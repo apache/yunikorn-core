@@ -955,9 +955,10 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		// as the preempted allocation must be for the same user in a different queue in the hierarchy...
 		if !userHeadroom.FitInMaxUndef(request.GetAllocatedResource()) {
 			request.LogAllocationFailure(NotEnoughUserQuota, true) // error message MUST be constant!
+			request.setUserQuotaCheckFailed(userHeadroom)
 			continue
 		}
-
+		request.setUserQuotaCheckPassed()
 		request.SetSchedulingAttempted(true)
 
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
@@ -973,10 +974,11 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 					}
 				}
 			}
-			sa.appEvents.sendAppDoesNotFitEvent(request, headRoom)
 			request.LogAllocationFailure(NotEnoughQueueQuota, true) // error message MUST be constant!
+			request.setHeadroomCheckFailed(headRoom, sa.queuePath)
 			continue
 		}
+		request.setHeadroomCheckPassed(sa.queuePath)
 
 		requiredNode := request.GetRequiredNode()
 		// does request have any constraint to run on specific node?

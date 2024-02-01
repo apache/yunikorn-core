@@ -19,8 +19,10 @@
 package webservice
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"go.uber.org/zap"
 
@@ -28,10 +30,13 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
+var idGen atomic.Uint64
+
 // StreamingLimiter tracks the concurrent streaming connections.
 type StreamingLimiter struct {
 	perHostStreams map[string]uint64 // number of connections per host
 	streams        uint64            // number of connections (total)
+	id             string            // unique name for configmap callback
 
 	maxStreams        uint64 // maximum number of event streams
 	maxPerHostStreams uint64 // maximum number of event streams per host
@@ -42,9 +47,10 @@ type StreamingLimiter struct {
 func NewStreamingLimiter() *StreamingLimiter {
 	sl := &StreamingLimiter{
 		perHostStreams: make(map[string]uint64),
+		id:             fmt.Sprintf("stream-limiter-%d", idGen.Add(1)),
 	}
 
-	configs.AddConfigMapCallback("stream-limiter", func() {
+	configs.AddConfigMapCallback(sl.id, func() {
 		log.Log(log.REST).Info("Reloading streaming limit settings")
 		sl.setLimits()
 	})
@@ -95,13 +101,16 @@ func (sl *StreamingLimiter) RemoveHost(host string) {
 }
 
 func (sl *StreamingLimiter) setLimits() {
+	sl.Lock()
+	defer sl.Unlock()
+
 	maxStreams := configs.DefaultMaxStreams
 	configMap := configs.GetConfigMap()
 
 	if value, ok := configMap[configs.CMMaxEventStreams]; ok {
 		parsed, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			log.Log(log.SchedHealth).Warn("Failed to parse configuration value",
+			log.Log(log.REST).Warn("Failed to parse configuration value",
 				zap.String("key", configs.CMMaxEventStreams),
 				zap.String("value", value),
 				zap.Error(err))
@@ -114,7 +123,7 @@ func (sl *StreamingLimiter) setLimits() {
 	if value, ok := configMap[configs.CMMaxEventStreamsPerHost]; ok {
 		parsed, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			log.Log(log.SchedHealth).Warn("Failed to parse configuration value",
+			log.Log(log.REST).Warn("Failed to parse configuration value",
 				zap.String("key", configs.CMMaxEventStreamsPerHost),
 				zap.String("value", value),
 				zap.Error(err))

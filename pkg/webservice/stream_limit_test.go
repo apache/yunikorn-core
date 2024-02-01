@@ -28,6 +28,7 @@ import (
 
 func TestAddRemoveHost(t *testing.T) {
 	sl := NewStreamingLimiter()
+	defer sl.Stop()
 	assert.Assert(t, sl.AddHost("host-1"))
 	assert.Assert(t, sl.AddHost("host-1"))
 	assert.Assert(t, sl.AddHost("host-2"))
@@ -60,6 +61,7 @@ func TestAddHost_TotalLimitHit(t *testing.T) {
 		configs.CMMaxEventStreams: "2",
 	})
 	sl := NewStreamingLimiter()
+	sl.Stop()
 
 	assert.Assert(t, sl.AddHost("host-1"))
 	assert.Assert(t, sl.AddHost("host-2"))
@@ -74,11 +76,12 @@ func TestAddHost_PerHostLimitHit(t *testing.T) {
 	configs.SetConfigMap(map[string]string{
 		configs.CMMaxEventStreamsPerHost: "2",
 	})
-	cl := NewStreamingLimiter()
+	sl := NewStreamingLimiter()
+	defer sl.Stop()
 
-	assert.Assert(t, cl.AddHost("host-1"))
-	assert.Assert(t, cl.AddHost("host-1"))
-	assert.Assert(t, !cl.AddHost("host-1"))
+	assert.Assert(t, sl.AddHost("host-1"))
+	assert.Assert(t, sl.AddHost("host-1"))
+	assert.Assert(t, !sl.AddHost("host-1"))
 }
 
 func TestGetLimits(t *testing.T) {
@@ -87,6 +90,7 @@ func TestGetLimits(t *testing.T) {
 		configs.SetConfigMap(current)
 	}()
 	sl := NewStreamingLimiter()
+	defer sl.Stop()
 
 	sl.setLimits()
 	assert.Equal(t, uint64(100), sl.maxStreams)
@@ -113,4 +117,8 @@ func TestGetLimits(t *testing.T) {
 	sl.setLimits()
 	assert.Equal(t, uint64(100), sl.maxStreams)
 	assert.Equal(t, uint64(15), sl.maxPerHostStreams)
+}
+
+func (sl *StreamingLimiter) Stop() {
+	configs.RemoveConfigMapCallback(sl.id)
 }

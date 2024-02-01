@@ -73,6 +73,9 @@ type EventSystem interface {
 	// Consumers that no longer wish to be updated (e.g., a remote client
 	// disconnected) *must* call this method to gracefully stop the streaming.
 	RemoveStream(*EventStream)
+
+	// GetEventStreams returns the current active event streams.
+	GetEventStreams() []EventStreamData
 }
 
 // EventSystemImpl main implementation of the event system which is used for history tracking.
@@ -252,6 +255,11 @@ func (ec *EventSystemImpl) isRestartNeeded() bool {
 func (ec *EventSystemImpl) Restart() {
 	ec.Stop()
 	ec.StartServiceWithPublisher(true)
+}
+
+// GetEventStreams returns the current active event streams.
+func (ec *EventSystemImpl) GetEventStreams() []EventStreamData {
+	return ec.streaming.GetEventStreams()
 }
 
 // VisibleForTesting

@@ -26,19 +26,11 @@ import (
 var plugins SchedulerPlugins
 
 func init() {
-	plugins = SchedulerPlugins{
-		StateDumpPlugin: dummyStateDumpPlugin{},
-	}
+	plugins = SchedulerPlugins{}
 }
 
-type dummyStateDumpPlugin struct{}
-
-var _ api.StateDumpPlugin = dummyStateDumpPlugin{}
-
-func (d dummyStateDumpPlugin) GetStateDump() (string, error) {
-	return "{}", nil
-}
-
+// RegisterSchedulerPlugin registers the plugin based on the interfaces(s) it implements.
+// The known interfaces are defined in yunikorn-scheduler-interface/lib/go/api
 func RegisterSchedulerPlugin(plugin interface{}) {
 	plugins.Lock()
 	defer plugins.Unlock()
@@ -52,7 +44,8 @@ func RegisterSchedulerPlugin(plugin interface{}) {
 	}
 }
 
-// visible for testing
+// UnregisterSchedulerPlugins removes all earlier set plugins
+// visible for testing only
 func UnregisterSchedulerPlugins() {
 	plugins.Lock()
 	defer plugins.Unlock()
@@ -60,12 +53,14 @@ func UnregisterSchedulerPlugins() {
 	plugins.StateDumpPlugin = nil
 }
 
+// GetResourceManagerCallbackPlugin returns the registered callback plugin or nil if none was registered.
 func GetResourceManagerCallbackPlugin() api.ResourceManagerCallback {
 	plugins.RLock()
 	defer plugins.RUnlock()
 	return plugins.ResourceManagerCallbackPlugin
 }
 
+// GetStateDumpPlugin returns the registered state dump plugin or nil if none was registered.
 func GetStateDumpPlugin() api.StateDumpPlugin {
 	plugins.RLock()
 	defer plugins.RUnlock()

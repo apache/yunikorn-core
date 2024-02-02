@@ -63,6 +63,7 @@ const (
 
 var allowedActiveStatusMsg string
 var allowedAppActiveStatuses map[string]bool
+var streamingLimiter *StreamingLimiter
 
 func init() {
 	allowedAppActiveStatuses = make(map[string]bool)
@@ -80,6 +81,8 @@ func init() {
 		activeStatuses = append(activeStatuses, k)
 	}
 	allowedActiveStatusMsg = fmt.Sprintf("Only following active statuses are allowed: %s", strings.Join(activeStatuses, ","))
+
+	streamingLimiter = NewStreamingLimiter()
 }
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -1101,6 +1104,12 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, "Writer does not implement http.Flusher", http.StatusInternalServerError)
 		return
 	}
+
+	if !streamingLimiter.AddHost(r.Host) {
+		buildJSONErrorResponse(w, "Too many streaming connections", http.StatusServiceUnavailable)
+		return
+	}
+	defer streamingLimiter.RemoveHost(r.Host)
 
 	var count uint64
 	if countStr := r.URL.Query().Get("count"); countStr != "" {

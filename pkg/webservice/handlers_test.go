@@ -2095,7 +2095,7 @@ func TestGetStream_TrackingDisabled(t *testing.T) {
 	_, req := initEventsAndCreateRequest(t)
 	resp := httptest.NewRecorder()
 
-	assertGetStreamError(t, req, resp, "Event tracking is disabled")
+	assertGetStreamError(t, req, resp, http.StatusInternalServerError, "Event tracking is disabled")
 }
 
 func TestGetStream_NoWriteDeadline(t *testing.T) {
@@ -2103,7 +2103,7 @@ func TestGetStream_NoWriteDeadline(t *testing.T) {
 	defer ev.Stop()
 	resp := httptest.NewRecorder() // does not have SetWriteDeadline()
 
-	assertGetStreamError(t, req, resp, "Cannot set write deadline: feature not supported")
+	assertGetStreamError(t, req, resp, http.StatusInternalServerError, "Cannot set write deadline: feature not supported")
 }
 
 func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
@@ -2122,7 +2122,7 @@ func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
 	}()
 
 	getStream(resp, req)
-	checkGetStreamErrorResult(t, resp.Result(), "Cannot set write deadline: SetWriteDeadline failed")
+	checkGetStreamErrorResult(t, resp.Result(), http.StatusInternalServerError, "Cannot set write deadline: SetWriteDeadline failed")
 }
 
 func TestGetStream_SetReadDeadlineFails(t *testing.T) {
@@ -2130,11 +2130,42 @@ func TestGetStream_SetReadDeadlineFails(t *testing.T) {
 	resp := NewResponseRecorderWithDeadline()
 	resp.setReadFails = true
 
-	assertGetStreamError(t, req, resp, "Cannot set read deadline: SetReadDeadline failed")
+	assertGetStreamError(t, req, resp, http.StatusInternalServerError, "Cannot set read deadline: SetReadDeadline failed")
 }
 
-func assertGetStreamError(t *testing.T, req *http.Request, resp interface{},
-	expectedMsg string) {
+func TestGetStream_Limit(t *testing.T) {
+	current := configs.GetConfigMap()
+	defer func() {
+		configs.SetConfigMap(current)
+	}()
+	configs.SetConfigMap(map[string]string{
+		configs.CMMaxEventStreams: "3",
+	})
+	resp := NewResponseRecorderWithDeadline()
+	ev, req := initEventsAndCreateRequest(t)
+	defer ev.Stop()
+
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	req = req.Clone(cancelCtx)
+	defer cancel()
+	req.Host = "host-1"
+
+	// start simulated connections in the background
+	go getStream(NewResponseRecorderWithDeadline(), req)
+	go getStream(NewResponseRecorderWithDeadline(), req)
+	go getStream(NewResponseRecorderWithDeadline(), req)
+
+	// wait until the StreamingLimiter.AddHost() calls
+	err := common.WaitFor(time.Millisecond, time.Second, func() bool {
+		streamingLimiter.Lock()
+		defer streamingLimiter.Unlock()
+		return streamingLimiter.streams == 3
+	})
+	assert.NilError(t, err)
+	assertGetStreamError(t, req, resp, http.StatusServiceUnavailable, "Too many streaming connections")
+}
+
+func assertGetStreamError(t *testing.T, req *http.Request, resp interface{}, statusCode int, expectedMsg string) {
 	t.Helper()
 	var response *http.Response
 
@@ -2149,17 +2180,17 @@ func assertGetStreamError(t *testing.T, req *http.Request, resp interface{},
 		t.Fatalf("unknown response recorder type")
 	}
 
-	checkGetStreamErrorResult(t, response, expectedMsg)
+	checkGetStreamErrorResult(t, response, statusCode, expectedMsg)
 }
 
-func checkGetStreamErrorResult(t *testing.T, response *http.Response, expectedMsg string) {
+func checkGetStreamErrorResult(t *testing.T, response *http.Response, statusCode int, expectedMsg string) {
 	t.Helper()
 	output := make([]byte, 256)
 	n, err := response.Body.Read(output)
 	assert.NilError(t, err)
 	line := string(output[:n])
 	assertYunikornError(t, line, expectedMsg)
-	assert.Equal(t, http.StatusInternalServerError, response.StatusCode)
+	assert.Equal(t, statusCode, response.StatusCode)
 }
 
 func initEventsAndCreateRequest(t *testing.T) (*events.EventSystemImpl, *http.Request) {

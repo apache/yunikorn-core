@@ -16,18 +16,33 @@
  limitations under the License.
 */
 
-package plugins
+package mock
 
 import (
-	"testing"
+	"sync"
 
-	"gotest.tools/v3/assert"
-
-	"github.com/apache/yunikorn-core/pkg/mock"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func TestRegisterPlugins(t *testing.T) {
-	plugins = SchedulerPlugins{}
-	RegisterSchedulerPlugin(&mock.ResourceManagerCallback{})
-	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallbackPlugin plugin should have been registered")
+type ContainerStateUpdater struct {
+	ResourceManagerCallback
+	sentUpdate *si.UpdateContainerSchedulingStateRequest
+	sync.RWMutex
+}
+
+func (m *ContainerStateUpdater) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	m.Lock()
+	defer m.Unlock()
+	m.sentUpdate = request
+}
+
+func (m *ContainerStateUpdater) GetContainerUpdateRequest() *si.UpdateContainerSchedulingStateRequest {
+	m.RLock()
+	defer m.RUnlock()
+	return m.sentUpdate
+}
+
+// NewContainerStateUpdater returns a mock that can allows retrieval of the update that was sent.
+func NewContainerStateUpdater() *ContainerStateUpdater {
+	return &ContainerStateUpdater{}
 }

@@ -22,12 +22,12 @@ import (
 	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
-	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type exampleRMCallback struct {
-	tests.MockResourceManagerCallback
+	mock.ResourceManagerCallback
 	acceptedApplications map[string]bool
 	rejectedApplications map[string]bool
 	acceptedNodes        map[string]bool
@@ -205,7 +205,7 @@ partitions:
 		panic(err)
 	}
 
-	// Refer to mock_rm_callback.go:109
+	// Refer to mock/rm_callback.go:109
 	// You need to check app accepted by scheduler before proceed.
 
 	// Send request

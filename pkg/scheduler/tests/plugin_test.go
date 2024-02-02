@@ -19,34 +19,16 @@
 package tests
 
 import (
-	"sync"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
-
-type fakeContainerStateUpdater struct {
-	MockResourceManagerCallback
-	sentUpdate *si.UpdateContainerSchedulingStateRequest
-	sync.RWMutex
-}
-
-func (f *fakeContainerStateUpdater) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	f.Lock()
-	defer f.Unlock()
-	f.sentUpdate = request
-}
-
-func (f *fakeContainerStateUpdater) getContainerUpdateRequest() *si.UpdateContainerSchedulingStateRequest {
-	f.RLock()
-	defer f.RUnlock()
-	return f.sentUpdate
-}
 
 func TestContainerStateUpdater(t *testing.T) {
 	configData := `
@@ -68,8 +50,8 @@ partitions:
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// register a fake container state updater for testing
-	fk := &fakeContainerStateUpdater{}
-	plugins.RegisterSchedulerPlugin(fk)
+	csu := mock.NewContainerStateUpdater()
+	plugins.RegisterSchedulerPlugin(csu)
 
 	const leafName = "root.singleleaf"
 	const node1 = "node-1"
@@ -149,7 +131,7 @@ partitions:
 	assert.NilError(t, err)
 
 	err = common.WaitFor(100*time.Millisecond, 3000*time.Millisecond, func() bool {
-		reqSent := fk.getContainerUpdateRequest()
+		reqSent := csu.GetContainerUpdateRequest()
 		return reqSent != nil && reqSent.ApplicationID == appID1 &&
 			reqSent.GetState() == si.UpdateContainerSchedulingStateRequest_FAILED
 	})

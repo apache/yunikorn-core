@@ -32,6 +32,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -3344,10 +3345,10 @@ func TestFailReplacePlaceholder(t *testing.T) {
 		t.Fatalf("empty cluster placeholder allocate returned allocation: %s", alloc)
 	}
 	// plugin to let the pre-check fail on node-1 only, means we cannot replace the placeholder
-	plugin := newFakePredicatePlugin(false, map[string]int{nodeID1: -1})
+	plugin := mock.NewPredicatePlugin(false, map[string]int{nodeID1: -1})
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer func() {
-		passPlugin := newFakePredicatePlugin(false, nil)
+		passPlugin := mock.NewPredicatePlugin(false, nil)
 		plugins.RegisterSchedulerPlugin(passPlugin)
 	}()
 	var tgRes, res *resources.Resource

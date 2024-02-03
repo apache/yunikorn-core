@@ -947,9 +947,14 @@ func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[stri
 }
 
 func getResourceManagerDiagnostics() map[string]interface{} {
-	result := make(map[string]interface{}, 0)
+	result := make(map[string]interface{})
 
+	// if the RM has not registered state dump the plugin will be nil
 	plugin := plugins.GetStateDumpPlugin()
+	if plugin == nil {
+		result["empty"] = "Resource Manager did not register callback"
+		return result
+	}
 
 	// get state dump from RM
 	dumpStr, err := plugin.GetStateDump()

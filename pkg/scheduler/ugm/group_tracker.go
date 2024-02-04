@@ -34,10 +34,10 @@ type GroupTracker struct {
 	sync.RWMutex
 }
 
-func newGroupTracker(group string) *GroupTracker {
-	queueTracker := newRootQueueTracker()
+func newGroupTracker(groupName string) *GroupTracker {
+	queueTracker := newRootQueueTracker(group)
 	groupTracker := &GroupTracker{
-		groupName:    group,
+		groupName:    groupName,
 		applications: make(map[string]string),
 		queueTracker: queueTracker,
 	}
@@ -75,7 +75,7 @@ func (gt *GroupTracker) getTrackedApplications() map[string]string {
 func (gt *GroupTracker) setLimits(hierarchy []string, resource *resources.Resource, maxApps uint64) {
 	gt.Lock()
 	defer gt.Unlock()
-	gt.queueTracker.setLimit(hierarchy, resource, maxApps)
+	gt.queueTracker.setLimit(hierarchy, resource, maxApps, false, group, false)
 }
 
 func (gt *GroupTracker) headroom(hierarchy []string) *resources.Resource {

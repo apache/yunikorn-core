@@ -26,11 +26,12 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type mockRMCallback struct {
-	MockResourceManagerCallback
+	mock.ResourceManagerCallback
 	acceptedApplications map[string]bool
 	rejectedApplications map[string]bool
 	acceptedNodes        map[string]bool
@@ -41,8 +42,6 @@ type mockRMCallback struct {
 	sync.RWMutex
 }
 
-// This is only exported to allow the use in the simple_example.go.
-// Lint exclusion added as the non-export return is OK
 func newMockRMCallbackHandler() *mockRMCallback {
 	return &mockRMCallback{
 		acceptedApplications: make(map[string]bool),

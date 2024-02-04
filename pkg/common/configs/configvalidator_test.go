@@ -1194,12 +1194,37 @@ func createLimitMaxApplications(users map[string]uint64, groups map[string]uint6
 
 func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 	testCases := []struct {
-		name     string
-		config   QueueConfig
-		hasError bool
+		name   string
+		config QueueConfig
+		errMsg string
 	}{
 		{
-			name: "leaf queue user group maxapplications are within parent queue user group maxapplications",
+			name: "leaf queue user group maxapplications are within immediate parent queue user group maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					map[string]uint64{"test-user": 100, "*": 100},
+					map[string]uint64{"test-group": 100, "*": 100}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxApplications(
+							map[string]uint64{"test-user": 100, "test-user2": 100},
+							map[string]uint64{"test-group": 100, "test-group2": 100}),
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxApplications(
+									map[string]uint64{"test-user": 100, "test-user2": 100},
+									map[string]uint64{"test-group": 100, "test-group2": 100}),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "leaf queue user group maxapplications are within ancestor parent queue user group maxapplications",
 			config: QueueConfig{
 				Name: "parent",
 				Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
@@ -1207,22 +1232,24 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 				Queues: []QueueConfig{
 					{
 						Name: "child1",
-						Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
-							map[string]uint64{"test-group": 100}),
 						Queues: []QueueConfig{
 							{
-								Name: "child2",
-								Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
-									map[string]uint64{"test-group": 100}),
+								Name: "childA",
+								Limits: createLimitMaxApplications(map[string]uint64{"test-user": 50},
+									map[string]uint64{"test-group": 50}),
+							},
+							{
+								Name: "childB",
+								Limits: createLimitMaxApplications(map[string]uint64{"test-user": 10},
+									map[string]uint64{"test-group": 10}),
 							},
 						},
 					},
 				},
 			},
-			hasError: false,
 		},
 		{
-			name: "leaf queue user maxapplications exceed parent queue user maxapplications",
+			name: "leaf queue user maxapplications exceed immediate parent queue user maxapplications",
 			config: QueueConfig{
 				Name: "parent",
 				Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
@@ -1235,7 +1262,7 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 					},
 				},
 			},
-			hasError: true,
+			errMsg: "is greater than immediate or ancestor parent max applications",
 		},
 		{
 			name: "leaf queue group maxapplications exceed parent queue group maxapplications",
@@ -1251,15 +1278,233 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 					},
 				},
 			},
-			hasError: true,
+			errMsg: "is greater than immediate or ancestor parent max applications",
+		},
+		{
+			name: "leaf queue user maxapplications are exceed grandparent queue user maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
+					map[string]uint64{"test-group": 100}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxApplications(map[string]uint64{"test-user": 150},
+									map[string]uint64{"test-group": 50}),
+							},
+						},
+					},
+				},
+			},
+			errMsg: "is greater than immediate or ancestor parent max applications",
+		},
+		{
+			name: "leaf queue group maxapplications are exceed grandparent queue group maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(map[string]uint64{"test-user": 100},
+					map[string]uint64{"test-group": 100}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxApplications(map[string]uint64{"test-user": 50},
+									map[string]uint64{"test-group": 150}),
+							},
+						},
+					},
+				},
+			},
+			errMsg: "is greater than immediate or ancestor parent max applications",
+		},
+		{
+			name: "leaf queue user maxapplications exceed parent queue wildcard maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					map[string]uint64{"test-user1": 100, "*": 100},
+					nil),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxApplications(
+							map[string]uint64{"test-user1": 50, "test-user2": 150},
+							nil),
+					},
+				},
+			},
+			errMsg: "is greater than wildcard max applications",
+		},
+		{
+			name: "leaf queue group maxapplications exceed parent queue wildcard maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					nil,
+					map[string]uint64{"test-group1": 100, "*": 100}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxApplications(
+							nil,
+							map[string]uint64{"test-group1": 50, "test-group2": 150}),
+					},
+				},
+			},
+			errMsg: "is greater than wildcard max applications",
+		},
+		{
+			name: "leaf queue user maxapplications exceed grandparent queue wildcard maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					map[string]uint64{"test-user1": 100, "*": 100},
+					nil),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxApplications(
+							map[string]uint64{"test-user1": 50},
+							nil),
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxApplications(
+									map[string]uint64{"test-user1": 10, "test-user2": 150},
+									nil),
+							},
+						},
+					},
+				},
+			},
+			errMsg: "is greater than wildcard max applications",
+		},
+		{
+			name: "leaf queue group maxapplications exceed grandparent queue wildcard maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					nil,
+					map[string]uint64{"test-group1": 100, "*": 100}),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxApplications(
+							nil,
+							map[string]uint64{"test-group1": 50}),
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxApplications(
+									nil,
+									map[string]uint64{"test-group1": 10, "test-group2": 150}),
+							},
+						},
+					},
+				},
+			},
+			errMsg: "is greater than wildcard max applications",
+		},
+		{
+			name: "leaf queue wildcard maxapplications is within immediate parent queue wildcard maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					map[string]uint64{"*": 100},
+					nil),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxApplications(
+							map[string]uint64{"*": 50},
+							nil),
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxApplications(
+									map[string]uint64{"*": 10},
+									nil),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "leaf queue wildcard maxapplications is within grandparent queue wildcard maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					map[string]uint64{"*": 100},
+					nil),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxApplications(
+									map[string]uint64{"*": 10},
+									nil),
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "leaf queue wildcard maxapplications exceed immediate parent queue wildcard maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					map[string]uint64{"*": 100},
+					nil),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Limits: createLimitMaxApplications(
+							map[string]uint64{"*": 150},
+							nil),
+					},
+				},
+			},
+			errMsg: "is greater than immediate or ancestor parent max applications",
+		},
+		{
+			name: "leaf queue wildcard maxapplications exceed grandparent queue wildcard maxapplications",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxApplications(
+					map[string]uint64{"*": 100},
+					nil),
+				Queues: []QueueConfig{
+					{
+						Name: "child1",
+						Queues: []QueueConfig{
+							{
+								Name: "child2",
+								Limits: createLimitMaxApplications(
+									map[string]uint64{"*": 150},
+									nil),
+							},
+						},
+					},
+				},
+			},
+			errMsg: "is greater than immediate or ancestor parent max applications",
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			err := checkLimitMaxApplications(testCase.config, make(map[string]map[string]uint64), make(map[string]map[string]uint64), common.Empty)
-			if testCase.hasError {
-				assert.ErrorContains(t, err, "is greater than immediate or ancestor parent max applications")
+			if testCase.errMsg != "" {
+				assert.ErrorContains(t, err, testCase.errMsg)
 			} else {
 				assert.NilError(t, err)
 			}

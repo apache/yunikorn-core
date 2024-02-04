@@ -24,6 +24,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/plugins"
@@ -96,7 +97,11 @@ func (s *Scheduler) internalInspectOutstandingRequests() {
 		case <-s.stop:
 			return
 		case <-time.After(time.Second):
-			s.inspectOutstandingRequests()
+			if noRequests, totalResources := s.inspectOutstandingRequests(); noRequests > 0 {
+				log.Log(log.Scheduler).Info("Found outstanding requests that will trigger autoscaling",
+					zap.Int("number of requests", noRequests),
+					zap.Stringer("total resources", totalResources))
+			}
 		}
 	}
 }
@@ -163,12 +168,15 @@ func (s *Scheduler) registerActivity() {
 // skipped due to insufficient cluster resources and update the
 // state through the ContainerSchedulingStateUpdaterPlugin in order
 // to trigger the auto-scaling.
-func (s *Scheduler) inspectOutstandingRequests() {
+func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
 	log.Log(log.Scheduler).Debug("inspect outstanding requests")
 	// schedule each partition defined in the cluster
+	total := resources.NewResource()
+	noRequests := 0
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
 		requests := psc.calculateOutstandingRequests()
-		if len(requests) > 0 {
+		noRequests = len(requests)
+		if noRequests > 0 {
 			for _, ask := range requests {
 				log.Log(log.Scheduler).Debug("outstanding request",
 					zap.String("appID", ask.GetApplicationID()),
@@ -183,9 +191,12 @@ func (s *Scheduler) inspectOutstandingRequests() {
 						Reason:        "request is waiting for cluster resources become available",
 					})
 				}
+				total.AddTo(ask.GetAllocatedResource())
+				ask.SetScaleUpTriggered(true)
 			}
 		}
 	}
+	return noRequests, total
 }
 
 // Visible by tests

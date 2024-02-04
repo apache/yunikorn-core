@@ -20,12 +20,20 @@ import (
 	"github.com/google/btree"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type EventSystemMock struct {
 	events  []*si.EventRecord
 	enabled bool
+}
+
+func (m *EventSystemMock) CreateEventStream(_ string, _ uint64) *events.EventStream {
+	return nil
+}
+
+func (m *EventSystemMock) RemoveStream(_ *events.EventStream) {
 }
 
 func (m *EventSystemMock) AddEvent(event *si.EventRecord) {
@@ -46,6 +54,10 @@ func (m *EventSystemMock) GetEventsFromID(uint64, uint64) ([]*si.EventRecord, ui
 
 func (m *EventSystemMock) IsEventTrackingEnabled() bool {
 	return m.enabled
+}
+
+func (m *EventSystemMock) GetEventStreams() []events.EventStreamData {
+	return nil
 }
 
 func newEventSystemMock() *EventSystemMock {

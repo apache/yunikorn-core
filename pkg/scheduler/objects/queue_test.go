@@ -1295,8 +1295,9 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	app1.queue = queue1
 	queue1.AddApplication(app1)
 	for i := 0; i < 20; i++ {
-		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc)
+		ask.SetSchedulingAttempted(true)
+		err = app1.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1304,8 +1305,9 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	app2.queue = queue2
 	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
-		err = app2.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, alloc))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, alloc)
+		ask.SetSchedulingAttempted(true)
+		err = app2.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1376,8 +1378,9 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	app1.queue = queue1
 	queue1.AddApplication(app1)
 	for i := 0; i < 20; i++ {
-		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc)
+		ask.SetSchedulingAttempted(true)
+		err = app1.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1424,8 +1427,9 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 	res, err = resources.NewResourceFromConf(map[string]string{"cpu": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	for i := 0; i < 10; i++ {
-		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res)
+		ask.SetSchedulingAttempted(true)
+		err = app1.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1433,8 +1437,9 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 	app2.queue = queue2
 	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
-		err = app2.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, res))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, res)
+		ask.SetSchedulingAttempted(true)
+		err = app2.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 

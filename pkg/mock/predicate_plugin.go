@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package scheduler
+package mock
 
 import (
 	"fmt"
@@ -24,17 +24,16 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
-	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type fakePredicatePlugin struct {
-	tests.MockResourceManagerCallback
+type PredicatePlugin struct {
+	ResourceManagerCallback
 	mustFail bool
 	nodes    map[string]int
 }
 
-func (f *fakePredicatePlugin) Predicates(args *si.PredicatesArgs) error {
+func (f *PredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 	if f.mustFail {
 		log.Log(log.Test).Info("fake predicate plugin fail: must fail set")
 		return fmt.Errorf("fake predicate plugin failed")
@@ -58,12 +57,12 @@ func (f *fakePredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 	return nil
 }
 
-// A fake predicate plugin that can either always fail or fail based on the node that is checked.
+// NewPredicatePlugin returns a mock that can either always fail or fail based on the node that is checked.
 // mustFail will cause the predicate check to always fail
 // nodes allows specifying which node to fail for which check using the nodeID:
 // possible values: -1 fail reserve, 0 fail always, 1 fail alloc (defaults to always)
-func newFakePredicatePlugin(mustFail bool, nodes map[string]int) *fakePredicatePlugin {
-	return &fakePredicatePlugin{
+func NewPredicatePlugin(mustFail bool, nodes map[string]int) *PredicatePlugin {
+	return &PredicatePlugin{
 		mustFail: mustFail,
 		nodes:    nodes,
 	}

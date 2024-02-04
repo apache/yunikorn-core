@@ -277,6 +277,39 @@ func TestResize(t *testing.T) {
 	assert.Equal(t, uint64(7), ringBuffer.resizeOffset)
 }
 
+func TestGetRecentEvents(t *testing.T) {
+	// empty
+	buffer := newEventRingBuffer(10)
+	records := buffer.GetRecentEvents(5)
+	assert.Equal(t, 0, len(records))
+
+	populate(buffer, 5)
+
+	// count < elements
+	records = buffer.GetRecentEvents(2)
+	assert.Equal(t, 2, len(records))
+	assert.Equal(t, int64(3), records[0].TimestampNano)
+	assert.Equal(t, int64(4), records[1].TimestampNano)
+
+	// count = elements
+	records = buffer.GetRecentEvents(5)
+	assert.Equal(t, 5, len(records))
+	assert.Equal(t, int64(0), records[0].TimestampNano)
+	assert.Equal(t, int64(1), records[1].TimestampNano)
+	assert.Equal(t, int64(2), records[2].TimestampNano)
+	assert.Equal(t, int64(3), records[3].TimestampNano)
+	assert.Equal(t, int64(4), records[4].TimestampNano)
+
+	// count > elements
+	records = buffer.GetRecentEvents(15)
+	assert.Equal(t, 5, len(records))
+	assert.Equal(t, int64(0), records[0].TimestampNano)
+	assert.Equal(t, int64(1), records[1].TimestampNano)
+	assert.Equal(t, int64(2), records[2].TimestampNano)
+	assert.Equal(t, int64(3), records[3].TimestampNano)
+	assert.Equal(t, int64(4), records[4].TimestampNano)
+}
+
 func populate(buffer *eventRingBuffer, count int) {
 	for i := 0; i < count; i++ {
 		buffer.Add(&si.EventRecord{

@@ -171,7 +171,6 @@ func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.
 				if !userMaxResource.FitInMaxUndef(limitMaxResources) {
 					return fmt.Errorf("user %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", user, limitMaxResources.String(), cur.Name, userMaxResource.String())
 				}
-				// Override with min resource
 				users[curQueuePath][user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
 			} else if wildcardMaxResource, ok := users[queuePath][common.Wildcard]; user != common.Wildcard && ok {
 				if !wildcardMaxResource.FitInMaxUndef(limitMaxResources) {
@@ -236,54 +235,53 @@ func checkLimitMaxApplications(cur QueueConfig, users map[string]map[string]uint
 		curQueuePath = queuePath + DOT + cur.Name
 	}
 
-	// Carry forward (populate) the parent limit settings to the next level if limits are not configured for the current queue
-	if len(cur.Limits) == 0 {
-		if _, ok := users[queuePath]; ok {
-			users[curQueuePath] = users[queuePath]
-		}
-		if _, ok := groups[queuePath]; ok {
-			groups[curQueuePath] = groups[queuePath]
-		}
-	} else {
-		// compare user & group limit setting between the current queue and parent queue
-		for _, limit := range cur.Limits {
-			limitMaxApplications := limit.MaxApplications
-			for _, user := range limit.Users {
-				// Is user limit setting exists?
-				if userMaxApplications, ok := users[queuePath][user]; ok {
-					if userMaxApplications != 0 && (userMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
-						return fmt.Errorf("user %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", user, limitMaxApplications, cur.Name, userMaxApplications)
-					}
-					// Override with min resource
-					if _, ok := users[curQueuePath]; !ok {
-						users[curQueuePath] = make(map[string]uint64)
-					}
-					users[curQueuePath][user] = common.Min(limitMaxApplications, userMaxApplications)
-				} else {
-					if _, ok := users[curQueuePath]; !ok {
-						users[curQueuePath] = make(map[string]uint64)
-					}
-					users[curQueuePath][user] = limitMaxApplications
-				}
-			}
+	users[curQueuePath] = make(map[string]uint64)
+	groups[curQueuePath] = make(map[string]uint64)
 
-			for _, group := range limit.Groups {
-				// Is user limit setting exists?
-				if groupMaxApplications, ok := groups[queuePath][group]; ok {
-					if groupMaxApplications != 0 && (groupMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
-						return fmt.Errorf("group %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", group, limitMaxApplications, cur.Name, groupMaxApplications)
-					}
-					// Override with min resource
-					if _, ok := groups[curQueuePath]; !ok {
-						groups[curQueuePath] = make(map[string]uint64)
-					}
-					groups[curQueuePath][group] = common.Min(limitMaxApplications, groupMaxApplications)
-				} else {
-					if _, ok := groups[curQueuePath]; !ok {
-						groups[curQueuePath] = make(map[string]uint64)
-					}
-					groups[curQueuePath][group] = limitMaxApplications
+	// Carry forward (populate) the parent limit settings to the next level
+	// queuePath is the parent queue path and curQueuePath is the current queue path.
+	// For example, queuePath is root and curQueuePath is root.current.
+	for u, maxapplications := range users[queuePath] {
+		users[curQueuePath][u] = maxapplications
+	}
+	for g, maxapplications := range groups[queuePath] {
+		groups[curQueuePath][g] = maxapplications
+	}
+
+	// compare user & group limit setting between the current queue and parent queue
+	for _, limit := range cur.Limits {
+		limitMaxApplications := limit.MaxApplications
+		for _, user := range limit.Users {
+			// Is user limit setting exists?
+			if userMaxApplications, ok := users[queuePath][user]; ok {
+				if userMaxApplications != 0 && (userMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+					return fmt.Errorf("user %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", user, limitMaxApplications, cur.Name, userMaxApplications)
 				}
+				users[curQueuePath][user] = limitMaxApplications
+			} else if wildcardMaxApplications, ok := users[queuePath][common.Wildcard]; user != common.Wildcard && ok {
+				if wildcardMaxApplications != 0 && (wildcardMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+					return fmt.Errorf("user %s max applications %d of queue %s is greater than wildcard max applications %d of immediate or ancestor parent queue", user, limitMaxApplications, cur.Name, wildcardMaxApplications)
+				}
+				users[curQueuePath][user] = limitMaxApplications
+			} else {
+				users[curQueuePath][user] = limitMaxApplications
+			}
+		}
+
+		for _, group := range limit.Groups {
+			// Is user limit setting exists?
+			if groupMaxApplications, ok := groups[queuePath][group]; ok {
+				if groupMaxApplications != 0 && (groupMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+					return fmt.Errorf("group %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", group, limitMaxApplications, cur.Name, groupMaxApplications)
+				}
+				groups[curQueuePath][group] = limitMaxApplications
+			} else if wildcardMaxApplications, ok := groups[queuePath][common.Wildcard]; group != common.Wildcard && ok {
+				if wildcardMaxApplications != 0 && (wildcardMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+					return fmt.Errorf("group %s max applications %d of queue %s is greater than wildcard max applications %d of immediate or ancestor parent queue", group, limitMaxApplications, cur.Name, wildcardMaxApplications)
+				}
+				groups[curQueuePath][group] = limitMaxApplications
+			} else {
+				groups[curQueuePath][group] = limitMaxApplications
 			}
 		}
 	}

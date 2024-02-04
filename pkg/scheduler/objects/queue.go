@@ -1963,9 +1963,7 @@ func (sq *Queue) recalculatePriority() int32 {
 
 	curr := configs.MinPriority
 	for _, v := range items {
-		if v > curr {
-			curr = v
-		}
+		curr = max(v, curr)
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)

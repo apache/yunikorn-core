@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -62,6 +63,7 @@ const (
 
 var allowedActiveStatusMsg string
 var allowedAppActiveStatuses map[string]bool
+var streamingLimiter *StreamingLimiter
 
 func init() {
 	allowedAppActiveStatuses = make(map[string]bool)
@@ -79,6 +81,8 @@ func init() {
 		activeStatuses = append(activeStatuses, k)
 	}
 	allowedActiveStatusMsg = fmt.Sprintf("Only following active statuses are allowed: %s", strings.Join(activeStatuses, ","))
+
+	streamingLimiter = NewStreamingLimiter()
 }
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -333,6 +337,8 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),
 		TriggeredPreemption: ask.HasTriggeredPreemption(),
 		Originator:          ask.IsOriginator(),
+		SchedulingAttempted: ask.IsSchedulingAttempted(),
+		TriggeredScaleUp:    ask.HasTriggeredScaleUp(),
 	}
 }
 
@@ -988,9 +994,14 @@ func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[stri
 }
 
 func getResourceManagerDiagnostics() map[string]interface{} {
-	result := make(map[string]interface{}, 0)
+	result := make(map[string]interface{})
 
+	// if the RM has not registered state dump the plugin will be nil
 	plugin := plugins.GetStateDumpPlugin()
+	if plugin == nil {
+		result["empty"] = "Resource Manager did not register callback"
+		return result
+	}
 
 	// get state dump from RM
 	dumpStr, err := plugin.GetStateDump()
@@ -1129,5 +1140,90 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewEncoder(w).Encode(eventDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getStream(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	eventSystem := events.GetEventSystem()
+	if !eventSystem.IsEventTrackingEnabled() {
+		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusInternalServerError)
+		return
+	}
+
+	f, ok := w.(http.Flusher)
+	if !ok {
+		buildJSONErrorResponse(w, "Writer does not implement http.Flusher", http.StatusInternalServerError)
+		return
+	}
+
+	if !streamingLimiter.AddHost(r.Host) {
+		buildJSONErrorResponse(w, "Too many streaming connections", http.StatusServiceUnavailable)
+		return
+	}
+	defer streamingLimiter.RemoveHost(r.Host)
+
+	var count uint64
+	if countStr := r.URL.Query().Get("count"); countStr != "" {
+		var err error
+		count, err = strconv.ParseUint(countStr, 10, 64)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	rc := http.NewResponseController(w)
+	// make sure both deadlines can be set
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
+		buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if err := rc.SetReadDeadline(time.Time{}); err != nil {
+		log.Log(log.REST).Error("Cannot set read deadline", zap.Error(err))
+		buildJSONErrorResponse(w, fmt.Sprintf("Cannot set read deadline: %v", err), http.StatusInternalServerError)
+		return
+	}
+	enc := json.NewEncoder(w)
+	stream := eventSystem.CreateEventStream(r.Host, count)
+
+	// Reading events in an infinite loop until either the client disconnects or Yunikorn closes the channel.
+	// This results in a persistent HTTP connection where the message body is never closed.
+	// Write deadline is adjusted before sending data to the client.
+	for {
+		select {
+		case <-r.Context().Done():
+			log.Log(log.REST).Info("Connection closed for event stream client",
+				zap.String("host", r.Host))
+			eventSystem.RemoveStream(stream)
+			return
+		case e, ok := <-stream.Events:
+			err := rc.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if err != nil {
+				// should not fail at this point
+				log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
+				buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
+				eventSystem.RemoveStream(stream)
+				return
+			}
+
+			if !ok {
+				// the channel was closed by the event system itself
+				msg := "Event stream was closed by the producer"
+				buildJSONErrorResponse(w, msg, http.StatusOK) // status code is 200 at this point, cannot be changed
+				log.Log(log.REST).Error(msg)
+				return
+			}
+
+			if err := enc.Encode(e); err != nil {
+				log.Log(log.REST).Error("Marshalling error",
+					zap.String("host", r.Host))
+				buildJSONErrorResponse(w, err.Error(), http.StatusOK) // status code is 200 at this point, cannot be changed
+				eventSystem.RemoveStream(stream)
+				return
+			}
+			f.Flush()
+		}
 	}
 }

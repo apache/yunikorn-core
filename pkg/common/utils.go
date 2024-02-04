@@ -238,13 +238,6 @@ func WaitForCondition(eval func() bool, interval time.Duration, timeout time.Dur
 	}
 }
 
-func Min(x, y uint64) uint64 {
-	if x < y {
-		return x
-	}
-	return y
-}
-
 func GetConfigurationBool(configs map[string]string, key string, defaultValue bool) bool {
 	value, ok := configs[key]
 	if !ok {

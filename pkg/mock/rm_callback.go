@@ -16,32 +16,32 @@
  limitations under the License.
 */
 
-package tests
+package mock
 
 import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type MockResourceManagerCallback struct{}
+type ResourceManagerCallback struct{}
 
-func (f *MockResourceManagerCallback) UpdateApplication(response *si.ApplicationResponse) error {
+func (f *ResourceManagerCallback) UpdateApplication(_ *si.ApplicationResponse) error {
 	return nil
 }
 
-func (f *MockResourceManagerCallback) UpdateAllocation(response *si.AllocationResponse) error {
+func (f *ResourceManagerCallback) UpdateAllocation(_ *si.AllocationResponse) error {
 	return nil
 }
 
-func (f *MockResourceManagerCallback) UpdateNode(response *si.NodeResponse) error {
+func (f *ResourceManagerCallback) UpdateNode(_ *si.NodeResponse) error {
 	return nil
 }
 
-func (f *MockResourceManagerCallback) Predicates(args *si.PredicatesArgs) error {
+func (f *ResourceManagerCallback) Predicates(_ *si.PredicatesArgs) error {
 	// do nothing
 	return nil
 }
 
-func (f *MockResourceManagerCallback) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
+func (f *ResourceManagerCallback) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
 	// simulate "ideal" preemption check
 	return &si.PreemptionPredicatesResponse{
 		Success: true,
@@ -49,13 +49,14 @@ func (f *MockResourceManagerCallback) PreemptionPredicates(args *si.PreemptionPr
 	}
 }
 
-func (f *MockResourceManagerCallback) SendEvent(events []*si.EventRecord) {
+func (f *ResourceManagerCallback) SendEvent(_ []*si.EventRecord) {
 	// do nothing
 }
 
-func (f *MockResourceManagerCallback) GetStateDump() (string, error) {
+func (f *ResourceManagerCallback) GetStateDump() (string, error) {
 	return "{}", nil
 }
 
-func (f *MockResourceManagerCallback) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+func (f *ResourceManagerCallback) UpdateContainerSchedulingState(_ *si.UpdateContainerSchedulingStateRequest) {
+	// do nothing
 }

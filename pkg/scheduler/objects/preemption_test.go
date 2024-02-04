@@ -19,17 +19,14 @@
 package objects
 
 import (
-	"errors"
-	"fmt"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestCheckPreconditions(t *testing.T) {
@@ -214,25 +211,15 @@ func TestTryPreemption(t *testing.T) {
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
 	// register predicate handler
-	pluginErr := &errHolder{}
-	plugin := &mockPredicates{
-		errHolder:    pluginErr,
-		reservations: nil,
-		allocations:  nil,
-		preemptions: []mockPreemption{{
-			expectedAllocationKey:  "alloc3",
-			expectedNodeID:         "node1",
-			expectedAllocationKeys: []string{"alloc1"},
-			expectedStartIndex:     0,
-			success:                true,
-			index:                  0,
-		}},
+	preemptions := []mock.Preemption{
+		mock.NewPreemption(true, "alloc3", "node1", []string{"alloc1"}, 0, 0),
 	}
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
 	alloc, ok := preemptor.TryPreemption()
-	assert.NilError(t, pluginErr.err)
+	assert.NilError(t, plugin.GetPredicateError())
 	assert.Assert(t, ok, "no victims found")
 	assert.Equal(t, "alloc3", alloc.allocationKey, "wrong alloc")
 	assert.Check(t, alloc1.IsPreempted(), "alloc1 preempted")
@@ -289,109 +276,4 @@ func allocForScore(originator bool, allowPreemptSelf bool) *Allocation {
 	ask.originator = originator
 	ask.allowPreemptSelf = allowPreemptSelf
 	return NewAllocation(nodeID1, ask)
-}
-
-type mockPreemption struct {
-	expectedAllocationKey  string
-	expectedNodeID         string
-	expectedAllocationKeys []string
-	expectedStartIndex     int32
-	success                bool
-	index                  int32
-}
-
-var _ api.ResourceManagerCallback = &mockPredicates{}
-
-type errHolder struct {
-	err error
-}
-
-type mockPredicates struct {
-	reservations map[string]string
-	allocations  map[string]string
-	preemptions  []mockPreemption
-	errHolder    *errHolder
-	api.ResourceManagerCallback
-}
-
-func (m mockPredicates) Predicates(args *si.PredicatesArgs) error {
-	if args.Allocate {
-		nodeID, ok := m.allocations[args.AllocationKey]
-		if !ok {
-			return errors.New("no allocation found")
-		}
-		if nodeID != args.NodeID {
-			return errors.New("wrong node")
-		}
-		return nil
-	} else {
-		nodeID, ok := m.reservations[args.AllocationKey]
-		if !ok {
-			return errors.New("no allocation found")
-		}
-		if nodeID != args.NodeID {
-			return errors.New("wrong node")
-		}
-		return nil
-	}
-}
-
-func (m mockPredicates) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
-	result := &si.PreemptionPredicatesResponse{
-		Success: false,
-		Index:   -1,
-	}
-	for _, preemption := range m.preemptions {
-		if preemption.expectedAllocationKey != args.AllocationKey {
-			continue
-		}
-		if preemption.expectedNodeID != args.NodeID {
-			continue
-		}
-		if preemption.expectedStartIndex != args.StartIndex {
-			m.errHolder.err = fmt.Errorf("unexpected start index exepected=%d, actual=%d, allocationKey=%s",
-				preemption.expectedStartIndex, args.StartIndex, args.AllocationKey)
-			return result
-		}
-		if len(preemption.expectedAllocationKeys) != len(args.PreemptAllocationKeys) {
-			m.errHolder.err = fmt.Errorf("unexpected alloc key length expected=%d, actual=%d, allocationKey=%s",
-				len(preemption.expectedAllocationKeys), len(args.PreemptAllocationKeys), args.AllocationKey)
-			return result
-		}
-		for idx, key := range preemption.expectedAllocationKeys {
-			if args.PreemptAllocationKeys[idx] != key {
-				m.errHolder.err = fmt.Errorf("unexpected preempt alloc key expected=%s, actual=%s, index=%d, allocationKey=%s",
-					args.PreemptAllocationKeys[idx], key, idx, args.AllocationKey)
-				return result
-			}
-		}
-		result.Success = preemption.success
-		result.Index = preemption.index
-		return result
-	}
-	m.errHolder.err = fmt.Errorf("mo match found allocationKey=%s, nodeID=%s", args.AllocationKey, args.NodeID)
-	return result
-}
-
-func (m mockPredicates) UpdateAllocation(_ *si.AllocationResponse) error {
-	// no implementation
-	return nil
-}
-
-func (m mockPredicates) UpdateApplication(_ *si.ApplicationResponse) error {
-	// no implementation
-	return nil
-}
-
-func (m mockPredicates) UpdateNode(_ *si.NodeResponse) error {
-	// no implementation
-	return nil
-}
-
-func (m mockPredicates) SendEvent(_ []*si.EventRecord) {
-	// no implementation
-}
-
-func (m mockPredicates) UpdateContainerSchedulingState(_ *si.UpdateContainerSchedulingStateRequest) {
-	// no implementation
 }

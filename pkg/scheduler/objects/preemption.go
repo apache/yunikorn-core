@@ -699,8 +699,8 @@ func (qps *QueuePreemptionSnapshot) IsAtOrAboveGuaranteedResource() bool {
 		return false
 	}
 	guaranteed := qps.GetGuaranteedResource()
-	max := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
+	maxResource := qps.GetMaxResource()
+	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
 
 	// if we don't fit, we're clearly above
@@ -727,8 +727,8 @@ func (qps *QueuePreemptionSnapshot) IsWithinGuaranteedResource() bool {
 	if qps.Leaf && guaranteed.IsEmpty() {
 		return false
 	}
-	max := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
+	maxResource := qps.GetMaxResource()
+	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
 	return absGuaranteed.FitIn(used)
 }
@@ -742,8 +742,8 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteed() *resources.Resource
 		parentResult = resources.NewResource()
 	}
 	guaranteed := qps.GetGuaranteedResource()
-	max := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
+	maxResource := qps.GetMaxResource()
+	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
 	remaining := resources.Sub(absGuaranteed, used)
 	return resources.ComponentWiseMin(remaining, parentResult)
@@ -873,10 +873,7 @@ func preemptPredicateCheck(plugin api.ResourceManagerCallback, ch chan<- *predic
 func batchPreemptionChecks(checks []*si.PreemptionPredicatesArgs, batchSize int) [][]*si.PreemptionPredicatesArgs {
 	var result [][]*si.PreemptionPredicatesArgs
 	for i := 0; i < len(checks); i += batchSize {
-		end := i + batchSize
-		if end > len(checks) {
-			end = len(checks)
-		}
+		end := min(i+batchSize, len(checks))
 		result = append(result, checks[i:end])
 	}
 	return result

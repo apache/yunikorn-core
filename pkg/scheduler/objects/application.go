@@ -51,11 +51,15 @@ var (
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
-var rateLimitedLog = log.RateLimitedLog(log.SchedApplication, time.Second)
+var initAppLogOnce sync.Once
+var rateLimitedAppLog *log.RateLimitedLogger
 
 const (
 	Soft string = "Soft"
 	Hard string = "Hard"
+
+	NotEnoughUserQuota  = "Not enough user quota"
+	NotEnoughQueueQuota = "Not enough queue quota"
 )
 
 type PlaceholderData struct {
@@ -898,13 +902,16 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 		return
 	}
 	for _, request := range sa.sortedRequests {
-		if request.GetPendingAskRepeat() == 0 {
+		if request.GetPendingAskRepeat() == 0 || !request.IsSchedulingAttempted() {
 			continue
 		}
+
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
-			// if headroom is still enough for the resources
-			*total = append(*total, request)
+			if !request.HasTriggeredScaleUp() && request.requiredNode == common.Empty && !sa.canReplace(request) {
+				// if headroom is still enough for the resources
+				*total = append(*total, request)
+			}
 			headRoom.SubOnlyExisting(request.GetAllocatedResource())
 			userHeadRoom.SubOnlyExisting(request.GetAllocatedResource())
 		}
@@ -947,8 +954,11 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		// NOTE: preemption most likely will not help in this case. The chance that preemption helps is mall
 		// as the preempted allocation must be for the same user in a different queue in the hierarchy...
 		if !userHeadroom.FitInMaxUndef(request.GetAllocatedResource()) {
+			request.LogAllocationFailure(NotEnoughUserQuota, true) // error message MUST be constant!
 			continue
 		}
+
+		request.SetSchedulingAttempted(true)
 
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
 		if !headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
@@ -964,6 +974,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 				}
 			}
 			sa.appEvents.sendAppDoesNotFitEvent(request, headRoom)
+			request.LogAllocationFailure(NotEnoughQueueQuota, true) // error message MUST be constant!
 			continue
 		}
 
@@ -973,7 +984,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
 			if node == nil {
-				rateLimitedLog.Warn("required node is not found (could be transient)",
+				getRateLimitedAppLog().Info("required node is not found (could be transient)",
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))
@@ -1812,10 +1823,7 @@ func (sa *Application) updateAskMaxPriority() {
 		if v.GetPendingAskRepeat() == 0 {
 			continue
 		}
-		p := v.GetPriority()
-		if p > value {
-			value = p
-		}
+		value = max(value, v.GetPriority())
 	}
 	sa.askMaxPriority = value
 	sa.queue.UpdateApplicationPriority(sa.ApplicationID, value)
@@ -2047,12 +2055,12 @@ func (sa *Application) HasPlaceholderAllocation() bool {
 	return sa.hasPlaceholderAlloc
 }
 
-// test only
+// SetCompletingTimeout should be used for testing only.
 func SetCompletingTimeout(duration time.Duration) {
 	completingTimeout = duration
 }
 
-// test only
+// SetTimedOutPlaceholder should be used for testing only.
 func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int64) {
 	sa.Lock()
 	defer sa.Unlock()
@@ -2062,4 +2070,12 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	if _, ok := sa.placeholderData[taskGroupName]; ok {
 		sa.placeholderData[taskGroupName].TimedOut = timedOut
 	}
+}
+
+// getRateLimitedAppLog lazy initializes the application logger the first time is needed.
+func getRateLimitedAppLog() *log.RateLimitedLogger {
+	initAppLogOnce.Do(func() {
+		rateLimitedAppLog = log.NewRateLimitedLogger(log.SchedApplication, time.Second)
+	})
+	return rateLimitedAppLog
 }

@@ -32,7 +32,7 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	// root->parent->child1->child12
 	// root->parent->child2
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed)
-	GetUserManager()
+	manager := GetUserManager()
 	user := &security.UserGroup{User: "test", Groups: []string{"test"}}
 	groupTracker := newGroupTracker(user.User)
 
@@ -40,6 +40,8 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
+
+	manager.Headroom(queuePath1, TestApp1, *user)
 	result := groupTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1, user.User)
 	if !result {
 		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v", hierarchy1, TestApp1, usage1)

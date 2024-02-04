@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/events"
 	yunikornLog "github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -48,6 +49,7 @@ type AggregatedStateInfo struct {
 	RMDiagnostics    map[string]interface{}           `json:"rmDiagnostics,omitempty"`
 	LogLevel         string                           `json:"logLevel,omitempty"`
 	Config           *dao.ConfigDAOInfo               `json:"config,omitempty"`
+	EventStreams     []events.EventStreamData         `json:"eventStreams,omitempty"`
 }
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +84,7 @@ func doStateDump(w io.Writer) error {
 		RMDiagnostics:    getResourceManagerDiagnostics(),
 		LogLevel:         zapConfig.Level.Level().String(),
 		Config:           getClusterConfigDAO(),
+		EventStreams:     events.GetEventSystem().GetEventStreams(),
 	}
 
 	var prettyJSON []byte

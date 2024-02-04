@@ -16,18 +16,45 @@
  limitations under the License.
 */
 
-package plugins
+package mock
 
 import (
-	"testing"
+	"sync"
 
-	"gotest.tools/v3/assert"
-
-	"github.com/apache/yunikorn-core/pkg/mock"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func TestRegisterPlugins(t *testing.T) {
-	plugins = SchedulerPlugins{}
-	RegisterSchedulerPlugin(&mock.ResourceManagerCallback{})
-	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallbackPlugin plugin should have been registered")
+type EventPlugin struct {
+	ResourceManagerCallback
+	records chan *si.EventRecord
+
+	sync.Mutex
+}
+
+func (m *EventPlugin) SendEvent(events []*si.EventRecord) {
+	m.Lock()
+	defer m.Unlock()
+
+	for _, event := range events {
+		m.records <- event
+	}
+}
+
+func (m *EventPlugin) GetNextEventRecord() *si.EventRecord {
+	m.Lock()
+	defer m.Unlock()
+
+	select {
+	case record := <-m.records:
+		return record
+	default:
+		return nil
+	}
+}
+
+// NewEventPlugin creates a mocked event plugin
+func NewEventPlugin() *EventPlugin {
+	return &EventPlugin{
+		records: make(chan *si.EventRecord, 3),
+	}
 }

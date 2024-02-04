@@ -646,7 +646,7 @@ func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
 	partition := vars.ByName("partition")
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
-		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
 	queueName := vars.ByName("queue")
@@ -660,10 +660,23 @@ func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
 	}
-	single := strings.ToLower(vars.ByName("single"))
-	queueDao := queue.GetSingleQueueDAOInfo()
-	if single == "false" {
-		queueDao = queue.GetPartitionQueueDAOInfo()
+	// The default is to exclude children
+	queueDao := queue.GetPartitionQueueDAOInfo(true)
+	// exclude children
+	if exclude := strings.ToLower(r.URL.Query().Get("exclude")); exclude != "" {
+		if exclude != "children" {
+			buildJSONErrorResponse(w, "Only following exclude is allowed: children", http.StatusBadRequest)
+			return
+		}
+	}
+	// include children
+	if include := strings.ToLower(r.URL.Query().Get("include")); include != "" {
+		if include == "children" {
+			queueDao = queue.GetPartitionQueueDAOInfo(false)
+		} else {
+			buildJSONErrorResponse(w, "Only following include is allowed: children", http.StatusBadRequest)
+			return
+		}
 	}
 	if err := json.NewEncoder(w).Encode(queueDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)

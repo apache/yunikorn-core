@@ -624,58 +624,19 @@ func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 }
 
 // GetPartitionQueueDAOInfo returns the queue hierarchy as an object for a REST call.
-func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
+// Exclude is true, which means that returns the specified queue object, but does not return the children of the specified queue.
+func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
-	childes := sq.GetCopyOfChildren()
-	queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(childes))
-	for _, child := range childes {
-		queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo())
-	}
-	// we have held the read lock so following method should not take lock again.
-	sq.RLock()
-	defer sq.RUnlock()
-
-	queueInfo.QueueName = sq.QueuePath
-	queueInfo.Status = sq.stateMachine.Current()
-	queueInfo.PendingResource = sq.pending.DAOMap()
-	queueInfo.MaxResource = sq.maxResource.DAOMap()
-	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOMap()
-	queueInfo.AllocatedResource = sq.allocatedResource.DAOMap()
-	queueInfo.PreemptingResource = sq.preemptingResource.DAOMap()
-	queueInfo.HeadRoom = sq.getHeadRoom().DAOMap()
-	queueInfo.IsLeaf = sq.isLeaf
-	queueInfo.IsManaged = sq.isManaged
-	queueInfo.CurrentPriority = sq.getCurrentPriority()
-	queueInfo.TemplateInfo = sq.template.GetTemplateInfo()
-	queueInfo.AbsUsedCapacity = resources.CalculateAbsUsedCapacity(
-		sq.maxResource, sq.allocatedResource).DAOMap()
-	queueInfo.Properties = make(map[string]string)
-	for k, v := range sq.properties {
-		queueInfo.Properties[k] = v
-	}
-	if sq.parent == nil {
-		queueInfo.Parent = ""
-	} else {
-		queueInfo.Parent = sq.QueuePath[:strings.LastIndex(sq.QueuePath, configs.DOT)]
-	}
-	queueInfo.MaxRunningApps = sq.maxRunningApps
-	queueInfo.RunningApps = sq.runningApps
-	queueInfo.AllocatingAcceptedApps = make([]string, 0)
-	for appID, result := range sq.allocatingAcceptedApps {
-		if result {
-			queueInfo.AllocatingAcceptedApps = append(queueInfo.AllocatingAcceptedApps, appID)
+	children := sq.GetCopyOfChildren()
+	queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(children))
+	if exclude == true {
+		for _, child := range children {
+			queueInfo.ChildrenNames = append(queueInfo.ChildrenNames, child.QueuePath)
 		}
-	}
-	return queueInfo
-}
-
-// GetSingleQueueDAOInfo returns the single queue as an object for a REST call.
-func (sq *Queue) GetSingleQueueDAOInfo() dao.PartitionQueueDAOInfo {
-	queueInfo := dao.PartitionQueueDAOInfo{}
-	childes := sq.GetCopyOfChildren()
-	queueInfo.ChildrenNames = make([]string, 0, len(childes))
-	for _, child := range childes {
-		queueInfo.ChildrenNames = append(queueInfo.ChildrenNames, child.Name)
+	} else {
+		for _, child := range children {
+			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo(false))
+		}
 	}
 	// we have held the read lock so following method should not take lock again.
 	sq.RLock()

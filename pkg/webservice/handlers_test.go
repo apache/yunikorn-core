@@ -1129,51 +1129,95 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.FifoSortPolicy.String())
 	assert.Assert(t, child.TemplateInfo == nil)
 
-	// Partition not exists
+	// test partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
-	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
+	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
 	assertPartitionNotExists(t, resp)
 
 	// test params name missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
-	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
+	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
 	assertParamsMissing(t, resp)
 
-	// Test specific queue
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a/single/true", strings.NewReader(""))
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}, httprouter.Param{Key: "single", Value: "true"}}))
-	assert.NilError(t, err, "Get Queue for PartitionQueue Handler request failed")
+	// test specific queue
+	var partitionQueueDao1 dao.PartitionQueueDAOInfo
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a?exclude=children", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
+	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
+	err = json.Unmarshal(resp.outputBytes, &partitionQueueDao1)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, 1, len(partitionQueuesDao.ChildrenNames))
-	assert.Equal(t, partitionQueuesDao.ChildrenNames[0], "a1")
+	assert.Equal(t, partitionQueueDao1.QueueName, "root.a")
+	assert.Equal(t, len(partitionQueueDao1.Children), 0)
+	assert.Equal(t, len(partitionQueueDao1.ChildrenNames), 1)
+	assert.Equal(t, partitionQueueDao1.ChildrenNames[0], "root.a.a1")
 
-	// Test hierarchy queue
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a/single/false", strings.NewReader(""))
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}, httprouter.Param{Key: "single", Value: "false"}}))
-	assert.NilError(t, err, "Get Queue for PartitionQueue Handler request failed")
+	// test hierarchy queue
+	var partitionQueueDao2 dao.PartitionQueueDAOInfo
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a?include=children", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
+	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &partitionQueuesDao)
+	err = json.Unmarshal(resp.outputBytes, &partitionQueueDao2)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, len(partitionQueuesDao.Children), 1)
-	child = &partitionQueuesDao.Children[0]
-	assert.Equal(t, child.QueueName, "root.a.a1")
+	assert.Equal(t, partitionQueueDao2.QueueName, "root.a")
+	assert.Equal(t, len(partitionQueueDao2.Children), 1)
+	assert.Equal(t, len(partitionQueueDao2.ChildrenNames), 0)
+	assert.Equal(t, partitionQueueDao2.Children[0].QueueName, "root.a.a1")
 
-	// Test queue name is missing
+	// test partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: ""}}))
-	assert.NilError(t, err, "Get Queue for PartitionQueue Handler request failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	assertPartitionNotExists(t, resp)
+
+	// test params name missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	assertParamsMissing(t, resp)
+
+	// test invalid queue name
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.notexists@"}}))
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	assertQueueInvalid(t, resp, "root.notexists@", "notexists@")
+
+	// test queue is not exists
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "notexists"}}))
+	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	assertQueueNotExists(t, resp)
+
+	// test when exclude is not children
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a?exclude=parent", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	assertQueueExcludeNotAllow(t, resp)
+
+	// test when include is not children
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a?include=parent", strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	assertQueueIncludeNotAllow(t, resp)
 }
 
 func TestGetClusterInfo(t *testing.T) {
@@ -1491,12 +1535,12 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	// test disallow state
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Accepted", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "state", Value: "Accepted"}}, assertAppStateAllow)
+		httprouter.Param{Key: "state", Value: "Accepted"}}, assertAppStateNotAllow)
 
 	// test disallow active state
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active?status=invalid", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "state", Value: "Active"}}, assertActiveStateAllow)
+		httprouter.Param{Key: "state", Value: "Active"}}, assertActiveStateNotAllow)
 
 	// test missing params name
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", nil, assertParamsMissing)
@@ -1604,12 +1648,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp5 := &MockResponseWriter{}
 	getApplication(resp5, req5)
-	var errInfo dao.YAPIError
-	err = json.Unmarshal(resp5.outputBytes, &errInfo)
-	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp5.statusCode, statusCodeError)
-	assert.Equal(t, errInfo.Message, "problem in queue query parameter parsing as queue param root.test.test123@ contains invalid queue name test123@. Queue name must only have alphanumeric characters, - or _, and be no longer than 64 characters", jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+	assertQueueInvalid(t, resp5, "root.test.test123@", "test123@")
 
 	// test missing params name
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
@@ -1644,6 +1683,33 @@ func assertQueueNotExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, QueueDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
+}
+
+func assertQueueInvalid(t *testing.T, resp *MockResponseWriter, invalidQueuePath string, invalidQueueName string) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "problem in queue query parameter parsing as queue param "+invalidQueuePath+" contains invalid queue name "+invalidQueueName+". Queue name must only have alphanumeric characters, - or _, and be no longer than 64 characters", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertQueueExcludeNotAllow(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "Only following exclude is allowed: children", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func assertQueueIncludeNotAllow(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "Only following include is allowed: children", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func assertApplicationNotExists(t *testing.T, resp *MockResponseWriter) {
@@ -1714,7 +1780,7 @@ func assertNodeIDNotExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertAppStateAllow(t *testing.T, resp *MockResponseWriter) {
+func assertAppStateNotAllow(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1723,7 +1789,7 @@ func assertAppStateAllow(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
-func assertActiveStateAllow(t *testing.T, resp *MockResponseWriter) {
+func assertActiveStateNotAllow(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)

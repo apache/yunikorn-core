@@ -629,7 +629,7 @@ func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInf
 	queueInfo := dao.PartitionQueueDAOInfo{}
 	children := sq.GetCopyOfChildren()
 	queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(children))
-	if exclude == true {
+	if exclude {
 		for _, child := range children {
 			queueInfo.ChildrenNames = append(queueInfo.ChildrenNames, child.QueuePath)
 		}

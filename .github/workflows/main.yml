@@ -39,4 +39,5 @@ jobs:
       - name: Code coverage
         uses: codecov/codecov-action@v4
         with:
-         files: build/coverage.txt
+          files: build/coverage.txt
+          token: ${{ secrets.CODECOV_TOKEN }}

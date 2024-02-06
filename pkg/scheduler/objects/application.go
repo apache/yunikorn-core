@@ -112,6 +112,8 @@ type Application struct {
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 	askMaxPriority       int32                       // highest priority value of outstanding asks
 	hasPlaceholderAlloc  bool                        // Whether there is at least one allocated placeholder
+	runnableInQueue      bool                        // whether the application is runnable/schedulable in the queue. Default is true.
+	runnableByUserLimit  bool                        // whether the application is runnable/schedulable based on user/group quota. Default is true.
 
 	rmEventHandler        handler.EventHandler
 	rmID                  string
@@ -171,6 +173,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		askMaxPriority:        configs.MinPriority,
 		sortedRequests:        sortedRequests{},
 		sendStateChangeEvents: true,
+		runnableByUserLimit:   true,
+		runnableInQueue:       true,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -2082,4 +2086,41 @@ func getRateLimitedAppLog() *log.RateLimitedLogger {
 		rateLimitedAppLog = log.NewRateLimitedLogger(log.SchedApplication, time.Second)
 	})
 	return rateLimitedAppLog
+}
+
+func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit bool) {
+	sa.Lock()
+	defer sa.Unlock()
+	if sa.runnableInQueue != runnableInQueue {
+		sa.runnableInQueue = runnableInQueue
+		if sa.runnableInQueue {
+			log.Log(log.SchedApplication).Info("Application is now runnable in queue",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath))
+			sa.appEvents.sendAppRunnableInQueueEvent()
+		} else {
+			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the queue limit",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath))
+			sa.appEvents.sendAppNotRunnableInQueueEvent()
+		}
+	}
+
+	if sa.runnableByUserLimit != runnableByUserLimit {
+		sa.runnableByUserLimit = runnableByUserLimit
+		if sa.runnableByUserLimit {
+			log.Log(log.SchedApplication).Info("Application is now runnable based on user quota",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath))
+			sa.appEvents.sendAppRunnableQuotaEvent()
+		} else {
+			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the user/group limit",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath))
+			sa.appEvents.sendAppNotRunnableQuotaEvent()
+		}
+	}
+
+	sa.runnableInQueue = runnableInQueue
+	sa.runnableByUserLimit = runnableByUserLimit
 }

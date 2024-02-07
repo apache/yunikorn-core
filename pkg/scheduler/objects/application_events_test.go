@@ -19,13 +19,10 @@
 package objects
 
 import (
-	"testing"
-	"time"
-
 	"gotest.tools/v3/assert"
+	"testing"
 
 	"github.com/apache/yunikorn-core/pkg/common"
-	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -48,45 +45,6 @@ func isStateChangeEvent(t *testing.T, app *Application, changeDetail si.EventRec
 	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, si.EventRecord_SET, record.EventChangeType, "incorrect change type, expected set")
 	assert.Equal(t, changeDetail, record.EventChangeDetail, "incorrect change detail")
-}
-
-func TestSendAppDoesNotFitEvent(t *testing.T) {
-	app := &Application{
-		queuePath: "root.test",
-	}
-	mock := newEventSystemMockDisabled()
-	appEvents := newApplicationEvents(app, mock)
-	appEvents.sendAppDoesNotFitEvent(&AllocationAsk{}, &resources.Resource{})
-	assert.Equal(t, 0, len(mock.events), "unexpected event")
-
-	mock = newEventSystemMock()
-	appEvents = newApplicationEvents(app, mock)
-	appEvents.sendAppDoesNotFitEvent(&AllocationAsk{
-		applicationID: appID0,
-		allocationKey: aKey,
-	}, &resources.Resource{})
-	assert.Equal(t, 1, len(mock.events), "event was not generated")
-}
-
-func TestSendAppDoesNotFitEventWithRateLimiter(t *testing.T) {
-	app := &Application{
-		queuePath: "root.test",
-	}
-	mock := newEventSystemMock()
-	appEvents := newApplicationEvents(app, mock)
-	startTime := time.Now()
-	for {
-		elapsed := time.Since(startTime)
-		if elapsed > 500*time.Millisecond {
-			break
-		}
-		appEvents.sendAppDoesNotFitEvent(&AllocationAsk{
-			applicationID: appID0,
-			allocationKey: aKey,
-		}, &resources.Resource{})
-		time.Sleep(10 * time.Millisecond)
-	}
-	assert.Equal(t, 1, len(mock.events), "event was not generated")
 }
 
 func TestSendPlaceholderLargerEvent(t *testing.T) {

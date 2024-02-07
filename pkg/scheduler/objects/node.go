@@ -406,7 +406,9 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 				zap.Bool("allocateFlag", allocate),
 				zap.Error(err))
 			// running predicates failed
-			ask.LogAllocationFailure(err.Error(), allocate)
+			msg := err.Error()
+			ask.LogAllocationFailure(msg, allocate)
+			ask.SendPredicateFailedEvent(msg)
 			return false
 		}
 	}

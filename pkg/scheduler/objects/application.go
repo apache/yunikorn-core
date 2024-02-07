@@ -1847,7 +1847,9 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 		sa.appEvents.sendRemoveAllocationEvent(alloc, si.TerminationType_STOPPED_BY_RM)
 	}
 
-	if resources.IsZero(sa.pending) {
+	// if an app doesn't have any allocations and the user doesn't have other applications,
+	// the user tracker is nonexistent. We don't want to decrease resource usage in this case.
+	if ugm.GetUserManager().GetUserTracker(sa.user.User) != nil && resources.IsZero(sa.pending) {
 		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), true)
 	}
 	// cleanup allocated resource for app (placeholders and normal)

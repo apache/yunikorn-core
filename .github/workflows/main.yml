@@ -40,4 +40,7 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           files: build/coverage.txt
+          # After codecov/codecov-action@v4, tokenless uploading of coverage files to non-public repo is unsupported.
+          # To enable codecov analysis in your forked repo. Please configure CODECOV_TOKEN in your repository secrets.
+          # Ref: https://docs.codecov.com/docs/adding-the-codecov-token
           token: ${{ secrets.CODECOV_TOKEN }}

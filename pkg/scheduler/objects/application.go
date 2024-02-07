@@ -1281,6 +1281,10 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		}
 		iterator := nodeIterator()
 		if iterator != nil {
+			// check if this fits in the queue's head room
+			if !headRoom.FitInMaxUndef(reserve.ask.GetAllocatedResource()) {
+				continue
+			}
 			alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if alloc != nil {

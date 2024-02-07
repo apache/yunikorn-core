@@ -39,7 +39,7 @@ require (
 	golang.org/x/time v0.3.0
 	google.golang.org/grpc v1.58.3
 	gopkg.in/yaml.v3 v3.0.1
-	gotest.tools/v3 v3.0.3
+	gotest.tools/v3 v3.5.1
 )
 
 require (

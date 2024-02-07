@@ -360,7 +360,7 @@ func (aa *AllocationAsk) setHeadroomCheckFailed(headroom *resources.Resource, qu
 	defer aa.Unlock()
 	if !aa.headroomCheckFailed {
 		aa.headroomCheckFailed = true
-		aa.askEvents.sendRequestDoesNotFitInQueue(headroom, queue)
+		aa.askEvents.sendRequestExceedsQueueHeadroom(headroom, queue)
 	}
 }
 

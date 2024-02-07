@@ -42,12 +42,12 @@ func TestRequestDoesNotFitInQueueEvent(t *testing.T) {
 	}
 	eventSystem := newEventSystemMockDisabled()
 	events := newAskEvents(ask, eventSystem)
-	events.sendRequestDoesNotFitInQueue(getTestResource(), "root.test")
+	events.sendRequestExceedsQueueHeadroom(getTestResource(), "root.test")
 	assert.Equal(t, 0, len(eventSystem.events))
 
 	eventSystem = newEventSystemMock()
 	events = newAskEvents(ask, eventSystem)
-	events.sendRequestDoesNotFitInQueue(getTestResource(), "root.test")
+	events.sendRequestExceedsQueueHeadroom(getTestResource(), "root.test")
 	assert.Equal(t, 1, len(eventSystem.events))
 	event := eventSystem.events[0]
 	assert.Equal(t, "alloc-0", event.ObjectID)

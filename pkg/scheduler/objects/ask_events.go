@@ -35,7 +35,7 @@ type askEvents struct {
 	limiter     *rate.Limiter
 }
 
-func (ae *askEvents) sendRequestDoesNotFitInQueue(headroom *resources.Resource, queuePath string) {
+func (ae *askEvents) sendRequestExceedsQueueHeadroom(headroom *resources.Resource, queuePath string) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}

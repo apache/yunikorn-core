@@ -23,11 +23,76 @@ import (
 
 	"gotest.tools/v3/assert"
 
-	"github.com/apache/yunikorn-core/pkg/mock"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
+
+type NoPluginImplemented struct{}
+
+type RMPluginImplemented struct{}
+
+type StateDumpImplemented struct{}
+
+type AllPluginsImplemented struct {
+	RMPluginImplemented
+	StateDumpImplemented
+}
+
+func (f *RMPluginImplemented) UpdateApplication(_ *si.ApplicationResponse) error {
+	return nil
+}
+
+func (f *RMPluginImplemented) UpdateAllocation(_ *si.AllocationResponse) error {
+	return nil
+}
+
+func (f *RMPluginImplemented) UpdateNode(_ *si.NodeResponse) error {
+	return nil
+}
+
+func (f *RMPluginImplemented) Predicates(_ *si.PredicatesArgs) error {
+	return nil
+}
+
+func (f *RMPluginImplemented) PreemptionPredicates(_ *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
+	return nil
+}
+
+func (f *RMPluginImplemented) SendEvent(_ []*si.EventRecord) {
+	// do nothing
+}
+
+func (f *RMPluginImplemented) UpdateContainerSchedulingState(_ *si.UpdateContainerSchedulingStateRequest) {
+}
+
+func (f *StateDumpImplemented) GetStateDump() (string, error) {
+	return "", nil
+}
 
 func TestRegisterPlugins(t *testing.T) {
 	plugins = SchedulerPlugins{}
-	RegisterSchedulerPlugin(&mock.ResourceManagerCallback{})
-	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallbackPlugin plugin should have been registered")
+	RegisterSchedulerPlugin(&NoPluginImplemented{})
+	assert.Assert(t, GetResourceManagerCallbackPlugin() == nil, "ResourceManagerCallback plugin should not have been registered")
+	assert.Assert(t, GetStateDumpPlugin() == nil, "StateDumpCallback plugin should not have been registered")
+
+	RegisterSchedulerPlugin(&RMPluginImplemented{})
+	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallback plugin should have been registered")
+	assert.Assert(t, GetStateDumpPlugin() == nil, "StateDumpCallback plugin should not have been registered")
+	UnregisterSchedulerPlugins()
+
+	RegisterSchedulerPlugin(&StateDumpImplemented{})
+	assert.Assert(t, GetResourceManagerCallbackPlugin() == nil, "ResourceManagerCallback plugin should not have been registered")
+	assert.Assert(t, GetStateDumpPlugin() != nil, "StateDumpCallback plugin should have been registered")
+	UnregisterSchedulerPlugins()
+
+	RegisterSchedulerPlugin(&AllPluginsImplemented{})
+	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallback plugin should have been registered")
+	assert.Assert(t, GetStateDumpPlugin() != nil, "StateDumpCallback plugin should have been registered")
+	UnregisterSchedulerPlugins()
+
+	// registration are additive
+	RegisterSchedulerPlugin(&RMPluginImplemented{})
+	RegisterSchedulerPlugin(&StateDumpImplemented{})
+	assert.Assert(t, GetResourceManagerCallbackPlugin() != nil, "ResourceManagerCallback plugin should have been registered")
+	assert.Assert(t, GetStateDumpPlugin() != nil, "StateDumpCallback plugin should have been registered")
+	UnregisterSchedulerPlugins()
 }

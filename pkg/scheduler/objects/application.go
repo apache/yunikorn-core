@@ -1281,6 +1281,10 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		}
 		iterator := nodeIterator()
 		if iterator != nil {
+			// check if this fits in the users' headroom first, if that fits check the queues' headroom
+			if !userHeadroom.FitInMaxUndef(reserve.ask.GetAllocatedResource()) {
+				continue
+			}
 			// check if this fits in the queue's head room
 			if !headRoom.FitInMaxUndef(reserve.ask.GetAllocatedResource()) {
 				continue

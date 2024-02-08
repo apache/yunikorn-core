@@ -1276,20 +1276,21 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
 		// Other nodes cannot be tried if the ask has a required node
-		if reserve.ask.GetRequiredNode() != "" {
+		ask := reserve.ask
+		if ask.GetRequiredNode() != "" {
 			continue
 		}
 		iterator := nodeIterator()
 		if iterator != nil {
 			// check if this fits in the users' headroom first, if that fits check the queues' headroom
-			if !userHeadroom.FitInMaxUndef(reserve.ask.GetAllocatedResource()) {
+			if !userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
 				continue
 			}
 			// check if this fits in the queue's head room
-			if !headRoom.FitInMaxUndef(reserve.ask.GetAllocatedResource()) {
+			if !headRoom.FitInMaxUndef(ask.GetAllocatedResource()) {
 				continue
 			}
-			alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
+			alloc := sa.tryNodesNoReserve(ask, iterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if alloc != nil {
 				return alloc

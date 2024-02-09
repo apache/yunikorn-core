@@ -35,8 +35,8 @@ require (
 	github.com/uber/jaeger-client-go v2.25.0+incompatible
 	github.com/uber/jaeger-lib v2.4.0+incompatible
 	go.uber.org/zap v1.26.0
-	golang.org/x/net v0.20.0
-	golang.org/x/time v0.3.0
+	golang.org/x/net v0.21.0
+	golang.org/x/time v0.5.0
 	google.golang.org/grpc v1.58.3
 	gopkg.in/yaml.v3 v3.0.1
 	gotest.tools/v3 v3.5.1

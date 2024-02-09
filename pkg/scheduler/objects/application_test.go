@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
@@ -2258,19 +2259,15 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	assert.Equal(t, "app-1", records[3].ReferenceID)
 }
 
-func TestAppDoesNotFitEvent(t *testing.T) {
-	resMap := map[string]string{"memory": "100", "vcores": "10"}
-	res, err := resources.NewResourceFromConf(resMap)
-	assert.NilError(t, err, "failed to create resource with error")
-	headroomMap := map[string]string{"memory": "0", "vcores": "0"}
-	headroom, err := resources.NewResourceFromConf(headroomMap)
-	assert.NilError(t, err, "failed to create resource with error")
+func TestRequestDoesNotFitQueueEvents(t *testing.T) {
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+	assert.NilError(t, err)
+	headroom, err := resources.NewResourceFromConf(map[string]string{"memory": "0", "vcores": "0"})
+	assert.NilError(t, err)
 	ask := newAllocationAsk("alloc-0", "app-1", res)
 	app := newApplication(appID1, "default", "root.default")
-	// Create event system after new application to avoid new application event.
-	events.Init()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-	eventSystem.StartServiceWithPublisher(false)
+	eventSystem := mock.NewEventSystem()
+	ask.askEvents = newAskEvents(ask, eventSystem)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
@@ -2281,20 +2278,106 @@ func TestAppDoesNotFitEvent(t *testing.T) {
 	app.sortedRequests = sr
 	attempts := 0
 
+	// try to allocate
 	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "app-1", event.ReferenceID)
+	assert.Equal(t, "alloc-0", event.ObjectID)
+	assert.Equal(t, "Request 'alloc-0' does not fit in queue 'root.default' (requested map[memory:100 vcores:10], available map[memory:0 vcores:0])", event.Message)
 
-	noEvents := 0
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
-		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 2
-	})
-	assert.NilError(t, err, "expected 2 event, got %d", noEvents)
-	records := eventSystem.Store.CollectEvents()
-	assert.Equal(t, si.EventRecord_REQUEST, records[1].Type)
-	assert.Equal(t, si.EventRecord_NONE, records[1].EventChangeType)
-	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[1].EventChangeDetail)
-	assert.Equal(t, "app-1", records[1].ReferenceID)
-	assert.Equal(t, "alloc-0", records[1].ObjectID)
+	// second attempt - no new event
+	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// third attempt with enough headroom - new event
+	eventSystem.Reset()
+	headroom, err = resources.NewResourceFromConf(map[string]string{"memory": "1000", "vcores": "1000"})
+	assert.NilError(t, err)
+	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event = eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "app-1", event.ReferenceID)
+	assert.Equal(t, "alloc-0", event.ObjectID)
+	assert.Equal(t, "Request 'alloc-0' has become schedulable in queue 'root.default'", event.Message)
+}
+
+func TestRequestDoesNotFitUserQuotaQueueEvents(t *testing.T) {
+	setupUGM()
+	// create config with resource limits for "testuser"
+	conf := configs.QueueConfig{
+		Name:      "root",
+		Parent:    true,
+		SubmitACL: "*",
+		Limits: []configs.Limit{
+			{
+				Limit: "leaf queue limit",
+				Users: []string{
+					"testuser",
+				},
+				MaxResources: map[string]string{
+					"memory": "1",
+					"vcores": "1",
+				},
+			},
+		},
+	}
+	err := ugm.GetUserManager().UpdateConfig(conf, "root")
+	assert.NilError(t, err)
+
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+	assert.NilError(t, err)
+	headroom, err := resources.NewResourceFromConf(map[string]string{"memory": "1000", "vcores": "1000"})
+	assert.NilError(t, err)
+	ask := newAllocationAsk("alloc-0", "app-1", res)
+	app := newApplication(appID1, "default", "root")
+	eventSystem := mock.NewEventSystem()
+	ask.askEvents = newAskEvents(ask, eventSystem)
+	app.disableStateChangeEvents()
+	app.resetAppEvents()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+	sr := sortedRequests{}
+	sr.insert(ask)
+	app.sortedRequests = sr
+	attempts := 0
+
+	// try to allocate
+	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "app-1", event.ReferenceID)
+	assert.Equal(t, "alloc-0", event.ObjectID)
+	assert.Equal(t, "Request 'alloc-0' exceeds the available user quota (requested map[memory:100 vcores:10], available map[memory:1 vcores:1])", event.Message)
+
+	// second attempt - no new event
+	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// third attempt with enough headroom - new event
+	eventSystem.Reset()
+	conf.Limits[0].MaxResources = nil
+	err = ugm.GetUserManager().UpdateConfig(conf, "root")
+	assert.NilError(t, err)
+	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event = eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "app-1", event.ReferenceID)
+	assert.Equal(t, "alloc-0", event.ObjectID)
+	assert.Equal(t, "Request 'alloc-0' fits in the available user quota", event.Message)
 }
 
 func TestAllocationFailures(t *testing.T) {

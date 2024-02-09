@@ -25,7 +25,9 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/events/mock"
+	evtMock "github.com/apache/yunikorn-core/pkg/events/mock"
+	"github.com/apache/yunikorn-core/pkg/mock"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -686,7 +688,7 @@ func TestReadyAttribute(t *testing.T) {
 }
 
 func TestNodeEvents(t *testing.T) {
-	mockEvents := mock.NewEventSystem()
+	mockEvents := evtMock.NewEventSystem()
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
 	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
 	proto := newProto(testNode, total, occupied, map[string]string{
@@ -806,4 +808,37 @@ func TestNode_FitInNode(t *testing.T) {
 			assert.Equal(t, sn.FitInNode(tt.resRequest), tt.want, "unexpected node fit result")
 		})
 	}
+}
+
+func TestPreconditions(t *testing.T) {
+	current := plugins.GetResourceManagerCallbackPlugin()
+	defer func() {
+		plugins.RegisterSchedulerPlugin(current)
+	}()
+
+	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(true, map[string]int{}))
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
+	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
+	proto := newProto(testNode, total, occupied, map[string]string{
+		"ready": "true",
+	})
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAsk("test", "app001", res)
+	eventSystem := evtMock.NewEventSystem()
+	ask.askEvents = newAskEvents(ask, eventSystem)
+	node := NewNode(proto)
+
+	// failure
+	node.preConditions(ask, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, "Predicate failed for request 'test' with message: 'fake predicate plugin failed'", eventSystem.Events[0].Message)
+	assert.Equal(t, 1, len(ask.allocLog))
+	assert.Equal(t, "fake predicate plugin failed", ask.allocLog["fake predicate plugin failed"].Message)
+
+	// pass
+	eventSystem.Reset()
+	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(false, map[string]int{}))
+	node.preConditions(ask, true)
+	assert.Equal(t, 0, len(eventSystem.Events))
+	assert.Equal(t, 1, len(ask.allocLog))
 }

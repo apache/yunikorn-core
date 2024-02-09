@@ -25,6 +25,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	evtMock "github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -638,7 +639,7 @@ type testListener struct {
 	updateCount int
 }
 
-func (tl *testListener) NodeUpdated(node *Node) {
+func (tl *testListener) NodeUpdated(_ *Node) {
 	tl.updateCount++
 }
 
@@ -687,7 +688,7 @@ func TestReadyAttribute(t *testing.T) {
 }
 
 func TestNodeEvents(t *testing.T) {
-	mockEvents := newEventSystemMock()
+	mockEvents := evtMock.NewEventSystem()
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
 	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
 	proto := newProto(testNode, total, occupied, map[string]string{
@@ -697,22 +698,22 @@ func TestNodeEvents(t *testing.T) {
 	node.nodeEvents = newNodeEvents(node, mockEvents)
 
 	node.SendNodeAddedEvent()
-	assert.Equal(t, 1, len(mockEvents.events))
-	event := mockEvents.events[0]
+	assert.Equal(t, 1, len(mockEvents.Events))
+	event := mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
 
 	mockEvents.Reset()
 	node.SendNodeRemovedEvent()
-	assert.Equal(t, 1, len(mockEvents.events))
-	event = mockEvents.events[0]
+	assert.Equal(t, 1, len(mockEvents.Events))
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 
 	mockEvents.Reset()
 	node.SetReady(false)
-	assert.Equal(t, 1, len(mockEvents.events))
-	event = mockEvents.events[0]
+	assert.Equal(t, 1, len(mockEvents.Events))
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_READY, event.EventChangeDetail)
@@ -723,22 +724,22 @@ func TestNodeEvents(t *testing.T) {
 		allocationKey:     aKey,
 		allocationID:      "allocationid-0",
 	})
-	assert.Equal(t, 1, len(mockEvents.events))
-	event = mockEvents.events[0]
+	assert.Equal(t, 1, len(mockEvents.Events))
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
 
 	mockEvents.Reset()
 	node.RemoveAllocation("allocationid-0")
-	event = mockEvents.events[0]
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
 
 	mockEvents.Reset()
 	node.SetOccupiedResource(resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 20, "memory": 20}))
-	event = mockEvents.events[0]
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_OCCUPIED, event.EventChangeDetail)
@@ -747,7 +748,7 @@ func TestNodeEvents(t *testing.T) {
 
 	mockEvents.Reset()
 	node.SetCapacity(resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 90, "memory": 90}))
-	event = mockEvents.events[0]
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_CAPACITY, event.EventChangeDetail)
@@ -756,7 +757,7 @@ func TestNodeEvents(t *testing.T) {
 
 	mockEvents.Reset()
 	node.SetSchedulable(false)
-	event = mockEvents.events[0]
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_SCHEDULABLE, event.EventChangeDetail)
@@ -767,7 +768,7 @@ func TestNodeEvents(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	err := node.Reserve(app, ask)
 	assert.NilError(t, err, "could not reserve")
-	event = mockEvents.events[0]
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
@@ -775,7 +776,7 @@ func TestNodeEvents(t *testing.T) {
 	mockEvents.Reset()
 	_, err = node.unReserve(app, ask)
 	assert.NilError(t, err, "could not unreserve")
-	event = mockEvents.events[0]
+	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
@@ -823,14 +824,14 @@ func TestPreconditions(t *testing.T) {
 	})
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAsk("test", "app001", res)
-	eventSystem := newEventSystemMock()
+	eventSystem := evtMock.NewEventSystem()
 	ask.askEvents = newAskEvents(ask, eventSystem)
 	node := NewNode(proto)
 
 	// failure
 	node.preConditions(ask, true)
-	assert.Equal(t, 1, len(eventSystem.events))
-	assert.Equal(t, "Predicate failed for request 'test' with message: 'fake predicate plugin failed'", eventSystem.events[0].Message)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, "Predicate failed for request 'test' with message: 'fake predicate plugin failed'", eventSystem.Events[0].Message)
 	assert.Equal(t, 1, len(ask.allocLog))
 	assert.Equal(t, "fake predicate plugin failed", ask.allocLog["fake predicate plugin failed"].Message)
 
@@ -838,6 +839,6 @@ func TestPreconditions(t *testing.T) {
 	eventSystem.Reset()
 	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(false, map[string]int{}))
 	node.preConditions(ask, true)
-	assert.Equal(t, 0, len(eventSystem.events))
+	assert.Equal(t, 0, len(eventSystem.Events))
 	assert.Equal(t, 1, len(ask.allocLog))
 }

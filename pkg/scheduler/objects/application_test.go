@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
@@ -2265,7 +2266,7 @@ func TestRequestDoesNotFitQueueEvents(t *testing.T) {
 	assert.NilError(t, err)
 	ask := newAllocationAsk("alloc-0", "app-1", res)
 	app := newApplication(appID1, "default", "root.default")
-	eventSystem := newEventSystemMock()
+	eventSystem := mock.NewEventSystem()
 	ask.askEvents = newAskEvents(ask, eventSystem)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
@@ -2279,8 +2280,8 @@ func TestRequestDoesNotFitQueueEvents(t *testing.T) {
 
 	// try to allocate
 	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
-	assert.Equal(t, 1, len(eventSystem.events))
-	event := eventSystem.events[0]
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
@@ -2290,15 +2291,15 @@ func TestRequestDoesNotFitQueueEvents(t *testing.T) {
 
 	// second attempt - no new event
 	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
-	assert.Equal(t, 1, len(eventSystem.events))
+	assert.Equal(t, 1, len(eventSystem.Events))
 
 	// third attempt with enough headroom - new event
 	eventSystem.Reset()
 	headroom, err = resources.NewResourceFromConf(map[string]string{"memory": "1000", "vcores": "1000"})
 	assert.NilError(t, err)
 	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
-	assert.Equal(t, 1, len(eventSystem.events))
-	event = eventSystem.events[0]
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event = eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
@@ -2336,7 +2337,7 @@ func TestRequestDoesNotFitUserQuotaQueueEvents(t *testing.T) {
 	assert.NilError(t, err)
 	ask := newAllocationAsk("alloc-0", "app-1", res)
 	app := newApplication(appID1, "default", "root")
-	eventSystem := newEventSystemMock()
+	eventSystem := mock.NewEventSystem()
 	ask.askEvents = newAskEvents(ask, eventSystem)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
@@ -2350,8 +2351,8 @@ func TestRequestDoesNotFitUserQuotaQueueEvents(t *testing.T) {
 
 	// try to allocate
 	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
-	assert.Equal(t, 1, len(eventSystem.events))
-	event := eventSystem.events[0]
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
@@ -2361,7 +2362,7 @@ func TestRequestDoesNotFitUserQuotaQueueEvents(t *testing.T) {
 
 	// second attempt - no new event
 	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
-	assert.Equal(t, 1, len(eventSystem.events))
+	assert.Equal(t, 1, len(eventSystem.Events))
 
 	// third attempt with enough headroom - new event
 	eventSystem.Reset()
@@ -2369,8 +2370,8 @@ func TestRequestDoesNotFitUserQuotaQueueEvents(t *testing.T) {
 	err = ugm.GetUserManager().UpdateConfig(conf, "root")
 	assert.NilError(t, err)
 	app.tryAllocate(headroom, true, time.Second, &attempts, nilNodeIterator, nilNodeIterator, nilGetNode)
-	assert.Equal(t, 1, len(eventSystem.events))
-	event = eventSystem.events[0]
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event = eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)

@@ -867,8 +867,8 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 		log.Log(log.SchedPartition).Info("scheduler replace placeholder processed",
 			zap.String("appID", alloc.GetApplicationID()),
 			zap.String("allocationKey", alloc.GetAllocationKey()),
-			zap.String("allocationid", alloc.GetAllocationID()),
-			zap.String("placeholder released allocationid", alloc.GetFirstRelease().GetAllocationID()))
+			zap.String("allocationId", alloc.GetAllocationID()),
+			zap.String("placeholder released allocationId", alloc.GetFirstRelease().GetAllocationID()))
 		// pass the release back to the RM via the cluster context
 		return alloc
 	}
@@ -931,7 +931,7 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 	log.Log(log.SchedPartition).Info("scheduler allocation processed",
 		zap.String("appID", alloc.GetApplicationID()),
 		zap.String("allocationKey", alloc.GetAllocationKey()),
-		zap.String("allocationid", alloc.GetAllocationID()),
+		zap.String("allocationId", alloc.GetAllocationID()),
 		zap.Stringer("allocatedResource", alloc.GetAllocatedResource()),
 		zap.Bool("placeholder", alloc.IsPlaceholder()),
 		zap.String("targetNode", alloc.GetNodeID()))
@@ -1149,11 +1149,11 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 		return fmt.Errorf("partition %s is stopped cannot add new allocation %s", pc.Name, alloc.GetAllocationKey())
 	}
 
-	// We must not generate a new allocationid for it, we directly use the allocationid reported by shim
-	// to track this allocation, a missing allocationid is a broken allocation
+	// We must not generate a new allocationId for it, we directly use the allocationId reported by shim
+	// to track this allocation, a missing allocationId is a broken allocation
 	if alloc.GetAllocationID() == "" {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("failing to restore allocation %s for application %s: missing allocationid",
+		return fmt.Errorf("failing to restore allocation %s for application %s: missing allocationId",
 			alloc.GetAllocationKey(), alloc.GetApplicationID())
 	}
 
@@ -1161,7 +1161,7 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 		zap.String("partitionName", pc.Name),
 		zap.String("appID", alloc.GetApplicationID()),
 		zap.String("allocKey", alloc.GetAllocationKey()),
-		zap.String("allocationid", alloc.GetAllocationID()))
+		zap.String("allocationId", alloc.GetAllocationID()))
 
 	// Check if allocation violates any resource restriction, or allocate on a
 	// non-existent application or nodes.
@@ -1202,7 +1202,7 @@ func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
 		zap.String("partitionName", pc.Name),
 		zap.String("appID", alloc.GetApplicationID()),
 		zap.String("allocKey", alloc.GetAllocationKey()),
-		zap.String("allocationUid", alloc.GetAllocationID()),
+		zap.String("allocationId", alloc.GetAllocationID()),
 		zap.Bool("placeholder", alloc.IsPlaceholder()))
 	return nil
 }
@@ -1282,7 +1282,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	// temp store for allocations manipulated
 	released := make([]*objects.Allocation, 0)
 	var confirmed *objects.Allocation
-	// when allocationid is not specified, remove all allocations from the app
+	// when allocationId is not specified, remove all allocations from the app
 	if allocationID == "" {
 		log.Log(log.SchedPartition).Info("remove all allocations",
 			zap.String("appID", appID))

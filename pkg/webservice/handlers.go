@@ -532,6 +532,9 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
 	result := getAppHistoryDAO(records)
+	if result == nil {
+		result = make([]*dao.ApplicationHistoryDAOInfo, 0)
+	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -549,6 +552,9 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
 	result := getContainerHistoryDAO(records)
+	if result == nil {
+		result = make([]*dao.ContainerHistoryDAOInfo, 0)
+	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

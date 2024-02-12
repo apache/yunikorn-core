@@ -102,8 +102,6 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventR
 
 // getEventsFromID unlocked version of GetEventsFromID
 func (e *eventRingBuffer) getEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64, uint64) {
-	e.RLock()
-	defer e.RUnlock()
 	lowest := e.getLowestID()
 
 	pos, idFound := e.id2pos(id)

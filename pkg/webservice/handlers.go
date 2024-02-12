@@ -1140,6 +1140,7 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 	}
 	enc := json.NewEncoder(w)
 	stream := eventSystem.CreateEventStream(r.Host, count)
+	defer eventSystem.RemoveStream(stream)
 
 	// Reading events in an infinite loop until either the client disconnects or Yunikorn closes the channel.
 	// This results in a persistent HTTP connection where the message body is never closed.
@@ -1149,7 +1150,6 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			log.Log(log.REST).Info("Connection closed for event stream client",
 				zap.String("host", r.Host))
-			eventSystem.RemoveStream(stream)
 			return
 		case e, ok := <-stream.Events:
 			err := rc.SetWriteDeadline(time.Now().Add(5 * time.Second))
@@ -1157,7 +1157,6 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 				// should not fail at this point
 				log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
 				buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
-				eventSystem.RemoveStream(stream)
 				return
 			}
 
@@ -1173,7 +1172,6 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 				log.Log(log.REST).Error("Marshalling error",
 					zap.String("host", r.Host))
 				buildJSONErrorResponse(w, err.Error(), http.StatusOK) // status code is 200 at this point, cannot be changed
-				eventSystem.RemoveStream(stream)
 				return
 			}
 			f.Flush()

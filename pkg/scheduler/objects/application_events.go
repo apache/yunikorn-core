@@ -20,9 +20,6 @@ package objects
 
 import (
 	"fmt"
-	"time"
-
-	"golang.org/x/time/rate"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
@@ -32,7 +29,6 @@ import (
 type applicationEvents struct {
 	eventSystem events.EventSystem
 	app         *Application
-	limiter     *rate.Limiter
 }
 
 func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request *AllocationAsk) {
@@ -119,6 +115,5 @@ func newApplicationEvents(app *Application, evt events.EventSystem) *application
 	return &applicationEvents{
 		eventSystem: evt,
 		app:         app,
-		limiter:     rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 }

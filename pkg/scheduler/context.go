@@ -788,7 +788,9 @@ func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
 				zap.String("applicationID", siAlloc.ApplicationID),
 				zap.String("allocationKey", siAlloc.AllocationKey),
 				zap.Error(err))
+			continue
 		}
+		cc.notifyRMNewAllocation(request.RmID, alloc)
 	}
 
 	// Reject allocs returned to RM proxy for the apps and partitions not found

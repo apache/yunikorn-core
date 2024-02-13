@@ -1,7 +1,7 @@
 github.com/HdrHistogram/hdrhistogram-go v1.0.1 h1:GX8GAYDuhlFQnI2fRDHQhTlkHMz8bEn0jTI6LJU0mpw=
 github.com/HdrHistogram/hdrhistogram-go v1.0.1/go.mod h1:BWJ+nMSHY3L41Zj7CA3uXnloDp7xxV0YvstAE7nKTaM=
-github.com/apache/yunikorn-scheduler-interface v0.0.0-20231211235204-ec7bfad7d00e h1:WiDns+JSNrp1jUfTkwtTwVyfxAhe3vPMtxJxs2CRseE=
-github.com/apache/yunikorn-scheduler-interface v0.0.0-20231211235204-ec7bfad7d00e/go.mod h1:zDWV5y9Zh9DM1C65RCVXT1nhNNO8kykVW7bzPFamNYw=
+github.com/apache/yunikorn-scheduler-interface v0.0.0-20240213122907-834ff5c1f36c h1:u4ckUfYqKfrRGUyvGcyS5lMu1eVOsiMQZafjCcE/tNw=
+github.com/apache/yunikorn-scheduler-interface v0.0.0-20240213122907-834ff5c1f36c/go.mod h1:Ga7qJusiW9E/dRokVGB50sUycR9Oc/yooixJWS0K7ZY=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj44=

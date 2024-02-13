@@ -532,9 +532,6 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
 	result := getAppHistoryDAO(records)
-	if result == nil {
-		result = make([]*dao.ApplicationHistoryDAOInfo, 0)
-	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -552,9 +549,6 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 	// start and we cannot shortcut the loop using a break, we must finish iterating
 	records := imHistory.GetRecords()
 	result := getContainerHistoryDAO(records)
-	if result == nil {
-		result = make([]*dao.ContainerHistoryDAOInfo, 0)
-	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -858,7 +852,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 }
 
 func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistoryDAOInfo {
-	var result []*dao.ApplicationHistoryDAOInfo
+	result := make([]*dao.ApplicationHistoryDAOInfo, 0)
 
 	for _, record := range records {
 		if record == nil {
@@ -889,7 +883,7 @@ func getPartitionNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.N
 }
 
 func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHistoryDAOInfo {
-	var result []*dao.ContainerHistoryDAOInfo
+	result := make([]*dao.ContainerHistoryDAOInfo, 0)
 
 	for _, record := range records {
 		if record == nil {

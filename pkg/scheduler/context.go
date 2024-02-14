@@ -600,7 +600,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 	partition := cc.GetPartition(sn.Partition)
 	if partition == nil {
 		err := fmt.Errorf("failed to find partition %s for new node %s", sn.Partition, sn.NodeID)
-		//nolint: TODO assess impact of partition metrics (this never hit the partition)
+		//nolint:godox //TODO: assess impact of partition metrics (this never hit the partition)
 		metrics.GetSchedulerMetrics().IncFailedNodes()
 		log.Log(log.SchedContext).Error("Failed to add node to non existing partition",
 			zap.String("nodeID", sn.NodeID),

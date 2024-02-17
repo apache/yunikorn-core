@@ -818,7 +818,7 @@ func TestGetPartitionNodesUtilJSON(t *testing.T) {
 
 	// assert partition nodes utilization
 	result := getPartitionNodesUtilJSON(partition)
-	assert.Equal(t, result.ClusterId, rmID)
+	assert.Equal(t, result.ClusterID, rmID)
 	assert.Equal(t, result.Partition, "default")
 	assert.Equal(t, len(result.NodesUtilList), 3, "Should have 3 resource types(CPU/Memory/GPU) in the list.")
 
@@ -880,8 +880,8 @@ func TestGetNodeUtilisations(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &partitionNodesUtilDAOInfo)
 	assert.NilError(t, err, "should decode a list of *dao.PartitionNodesUtilDAOInfo")
 	assert.Equal(t, len(partitionNodesUtilDAOInfo), 2)
-	assert.Equal(t, partitionNodesUtilDAOInfo[0].ClusterId, rmID)
-	assert.Equal(t, partitionNodesUtilDAOInfo[1].ClusterId, rmID)
+	assert.Equal(t, partitionNodesUtilDAOInfo[0].ClusterID, rmID)
+	assert.Equal(t, partitionNodesUtilDAOInfo[1].ClusterID, rmID)
 
 	defaultPartitionNodesUtilDAOInfo := partitionNodesUtilDAOInfo[0]
 	gpuPartitionNodesUtilDAOInfo := partitionNodesUtilDAOInfo[1]

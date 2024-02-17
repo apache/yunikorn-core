@@ -514,7 +514,7 @@ func getPartitionNodesUtilJSON(partition *scheduler.PartitionContext) *dao.Parti
 	}
 
 	return &dao.PartitionNodesUtilDAOInfo{
-		ClusterId:     partition.RmID,
+		ClusterID:     partition.RmID,
 		Partition:     common.GetPartitionNameWithoutClusterID(partition.Name),
 		NodesUtilList: nodesUtilList,
 	}

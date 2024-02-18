@@ -360,8 +360,8 @@ func (sn *Node) ReplaceAllocation(allocationID string, replace *Allocation, delt
 	sn.availableResource.SubFrom(delta)
 	if !before.FitIn(sn.allocatedResource) {
 		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",
-			zap.String("placeholder allocationId", allocationID),
-			zap.String("allocation allocationId", replace.GetAllocationID()),
+			zap.String("placeholder allocationID", allocationID),
+			zap.String("allocation allocationID", replace.GetAllocationID()),
 			zap.Stringer("delta", delta))
 	}
 }

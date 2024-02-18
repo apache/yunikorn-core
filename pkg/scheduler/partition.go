@@ -1073,7 +1073,7 @@ func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 func (pc *PartitionContext) getAppsState(appMap map[string]*objects.Application, state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	var apps []string
+	apps := []string{}
 	for appID, app := range appMap {
 		if app.CurrentState() == state {
 			apps = append(apps, appID)

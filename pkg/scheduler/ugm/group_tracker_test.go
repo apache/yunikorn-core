@@ -228,7 +228,7 @@ func TestGTSetAndClearMaxLimits(t *testing.T) {
 	})
 	hierarchy5 := strings.Split(path5, configs.DOT)
 	assert.Assert(t, resources.Equals(groupTracker.headroom(hierarchy5), path5expectedHeadroom))
-	assert.Equal(t, true, groupTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, groupTracker.canRunApp(hierarchy1, TestApp4))
 
 	// lower limits
 	groupTracker.setLimits(path1, usage1, 1)
@@ -243,21 +243,21 @@ func TestGTSetAndClearMaxLimits(t *testing.T) {
 		"vcore": -10000,
 	})
 	assert.Assert(t, resources.Equals(groupTracker.headroom(hierarchy5), lowerParentHeadroom))
-	assert.Equal(t, false, groupTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Equal(t, false, groupTracker.canRunApp(hierarchy5, TestApp4))
+	assert.Assert(t, !groupTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, !groupTracker.canRunApp(hierarchy5, TestApp4))
 
 	// clear limits
 	eventSystem.Reset()
 	groupTracker.clearLimits(path1)
 	assert.Assert(t, resources.Equals(groupTracker.headroom(hierarchy1), lowerParentHeadroom))
 	assert.Assert(t, resources.Equals(groupTracker.headroom(hierarchy5), lowerParentHeadroom))
-	assert.Equal(t, false, groupTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Equal(t, false, groupTracker.canRunApp(hierarchy5, TestApp4))
+	assert.Assert(t, !groupTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, !groupTracker.canRunApp(hierarchy5, TestApp4))
 	groupTracker.clearLimits(path5)
 	assert.Assert(t, groupTracker.headroom(hierarchy1) == nil)
 	assert.Assert(t, groupTracker.headroom(hierarchy5) == nil)
-	assert.Equal(t, true, groupTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Equal(t, true, groupTracker.canRunApp(hierarchy5, TestApp4))
+	assert.Assert(t, groupTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, groupTracker.canRunApp(hierarchy5, TestApp4))
 	assert.Equal(t, 2, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_UG_GROUP_LIMIT, eventSystem.Events[0].EventChangeDetail)

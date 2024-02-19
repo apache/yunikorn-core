@@ -416,7 +416,7 @@ func (m *Manager) clearEarlierSetUserWildCardLimits(newUserWildCardLimits map[st
 					log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user because wild card limit has been applied earlier",
 						zap.String("user", ut.userName),
 						zap.String("queue path", queuePath))
-					ut.clearLimits(queuePath)
+					ut.clearLimits(queuePath, true)
 				}
 			}
 		} else if !currentQPExists || !newQPExists {
@@ -485,7 +485,7 @@ func (m *Manager) resetUserEarlierUsage(ut *UserTracker, queuePath string) {
 		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
 			zap.String("user", ut.userName),
 			zap.Strings("queue path", hierarchy))
-		ut.clearLimits(queuePath)
+		ut.clearLimits(queuePath, false)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
 		if ut.IsUnlinkRequired(hierarchy) {
 			ut.UnlinkQT(hierarchy)

@@ -263,7 +263,7 @@ func TestSetAndClearMaxLimits(t *testing.T) {
 	})
 	hierarchy5 := strings.Split(path5, configs.DOT)
 	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), path5expectedHeadroom))
-	assert.Equal(t, true, userTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4))
 
 	// lower limits
 	userTracker.setLimits(path1, usage1, 1, false, false)
@@ -278,21 +278,21 @@ func TestSetAndClearMaxLimits(t *testing.T) {
 		"vcore": -10000,
 	})
 	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), lowerParentHeadroom))
-	assert.Equal(t, false, userTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Equal(t, false, userTracker.canRunApp(hierarchy5, TestApp4))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4))
 
 	// clear limits
 	eventSystem.Reset()
-	userTracker.clearLimits(path1)
+	userTracker.clearLimits(path1, true)
 	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1), lowerParentHeadroom))
 	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), lowerParentHeadroom))
-	assert.Equal(t, false, userTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Equal(t, false, userTracker.canRunApp(hierarchy5, TestApp4))
-	userTracker.clearLimits(path5)
+	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4))
+	userTracker.clearLimits(path5, true)
 	assert.Assert(t, userTracker.headroom(hierarchy1) == nil)
 	assert.Assert(t, userTracker.headroom(hierarchy5) == nil)
-	assert.Equal(t, true, userTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Equal(t, true, userTracker.canRunApp(hierarchy5, TestApp4))
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, userTracker.canRunApp(hierarchy5, TestApp4))
 	assert.Equal(t, 2, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_UG_USER_LIMIT, eventSystem.Events[0].EventChangeDetail)

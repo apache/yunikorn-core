@@ -137,11 +137,11 @@ func (ut *UserTracker) setLimits(queuePath string, resource *resources.Resource,
 	ut.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), resource, maxApps, useWildCard, user, doWildCardCheck)
 }
 
-func (ut *UserTracker) clearLimits(queuePath string) {
+func (ut *UserTracker) clearLimits(queuePath string, doWildCardCheck bool) {
 	ut.Lock()
 	defer ut.Unlock()
 	ut.events.sendLimitRemoveForUser(ut.userName, queuePath)
-	ut.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), nil, 0, false, user, false)
+	ut.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), nil, 0, false, user, doWildCardCheck)
 }
 
 func (ut *UserTracker) headroom(hierarchy []string) *resources.Resource {

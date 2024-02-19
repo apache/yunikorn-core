@@ -1070,44 +1070,32 @@ func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 	return appList
 }
 
-// getAppsByState returns a slice of applicationIDs for the current applications filtered by state
-// Completed and Rejected applications are tracked in a separate map and will never be included.
-func (pc *PartitionContext) getAppsByState(state string) []string {
+func (pc *PartitionContext) getAppsState(appMap map[string]*objects.Application, state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	var apps []string
-	for appID, app := range pc.applications {
+	apps := []string{}
+	for appID, app := range appMap {
 		if app.CurrentState() == state {
 			apps = append(apps, appID)
 		}
 	}
 	return apps
+}
+
+// getAppsByState returns a slice of applicationIDs for the current applications filtered by state
+// Completed and Rejected applications are tracked in a separate map and will never be included.
+func (pc *PartitionContext) getAppsByState(state string) []string {
+	return pc.getAppsState(pc.applications, state)
 }
 
 // getRejectedAppsByState returns a slice of applicationIDs for the rejected applications filtered by state.
 func (pc *PartitionContext) getRejectedAppsByState(state string) []string {
-	pc.RLock()
-	defer pc.RUnlock()
-	var apps []string
-	for appID, app := range pc.rejectedApplications {
-		if app.CurrentState() == state {
-			apps = append(apps, appID)
-		}
-	}
-	return apps
+	return pc.getAppsState(pc.rejectedApplications, state)
 }
 
 // getCompletedAppsByState returns a slice of applicationIDs for the completed applicationIDs filtered by state.
 func (pc *PartitionContext) getCompletedAppsByState(state string) []string {
-	pc.RLock()
-	defer pc.RUnlock()
-	var apps []string
-	for appID, app := range pc.completedApplications {
-		if app.CurrentState() == state {
-			apps = append(apps, appID)
-		}
-	}
-	return apps
+	return pc.getAppsState(pc.completedApplications, state)
 }
 
 // cleanupExpiredApps cleans up applications in the Expired state from the three tracking maps

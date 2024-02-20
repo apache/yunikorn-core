@@ -101,8 +101,8 @@ func (ut *UserTracker) setGroupForApp(applicationID string, groupTrack *GroupTra
 }
 
 func (ut *UserTracker) getGroupForApp(applicationID string) string {
-	ut.Lock()
-	defer ut.Unlock()
+	ut.RLock()
+	defer ut.RUnlock()
 	if ut.appGroupTrackers[applicationID] != nil {
 		return ut.appGroupTrackers[applicationID].groupName
 	}

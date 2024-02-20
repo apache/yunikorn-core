@@ -2092,8 +2092,7 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 	sa.Lock()
 	defer sa.Unlock()
 	if sa.runnableInQueue != runnableInQueue {
-		sa.runnableInQueue = runnableInQueue
-		if sa.runnableInQueue {
+		if runnableInQueue {
 			log.Log(log.SchedApplication).Info("Application is now runnable in queue",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("queue", sa.queuePath))
@@ -2105,10 +2104,10 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 			sa.appEvents.sendAppNotRunnableInQueueEvent()
 		}
 	}
+	sa.runnableInQueue = runnableInQueue
 
 	if sa.runnableByUserLimit != runnableByUserLimit {
-		sa.runnableByUserLimit = runnableByUserLimit
-		if sa.runnableByUserLimit {
+		if runnableByUserLimit {
 			log.Log(log.SchedApplication).Info("Application is now runnable based on user quota",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("queue", sa.queuePath),
@@ -2122,7 +2121,5 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 			sa.appEvents.sendAppNotRunnableQuotaEvent()
 		}
 	}
-
-	sa.runnableInQueue = runnableInQueue
 	sa.runnableByUserLimit = runnableByUserLimit
 }

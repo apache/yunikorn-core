@@ -83,6 +83,8 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[0].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_ADD, eventSystem.Events[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_UG_APP_LINK, eventSystem.Events[1].EventChangeDetail)
+	assert.Equal(t, "test", eventSystem.Events[1].ObjectID)
+	assert.Equal(t, TestApp1, eventSystem.Events[1].ReferenceID)
 	assert.Equal(t, si.EventRecord_SET, eventSystem.Events[1].EventChangeType)
 	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[2].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_ADD, eventSystem.Events[2].EventChangeType)

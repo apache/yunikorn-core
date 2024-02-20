@@ -2647,6 +2647,13 @@ func TestUpdateRunnableStatus(t *testing.T) {
 	// Try again - no new events
 	app.updateRunnableStatus(true, true)
 	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// Both false
+	eventSystem.Reset()
+	app.updateRunnableStatus(false, false)
+	assert.Equal(t, 2, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUEUE, eventSystem.Events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, eventSystem.Events[1].EventChangeDetail)
 }
 
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {

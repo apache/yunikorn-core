@@ -2111,7 +2111,9 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 		if sa.runnableByUserLimit {
 			log.Log(log.SchedApplication).Info("Application is now runnable based on user quota",
 				zap.String("appID", sa.ApplicationID),
-				zap.String("queue", sa.queuePath))
+				zap.String("queue", sa.queuePath),
+				zap.String("user", sa.user.User),
+				zap.Strings("groups", sa.user.Groups))
 			sa.appEvents.sendAppRunnableQuotaEvent()
 		} else {
 			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the user/group limit",

@@ -390,6 +390,7 @@ func TestApplicationHistory(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &appHist)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
+	assert.Assert(t, appHist != nil, "appHist should not be nil")
 	assert.Equal(t, len(appHist), 0, "empty response must have no records")
 
 	// add new history records
@@ -445,6 +446,7 @@ func TestContainerHistory(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &contHist)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
+	assert.Check(t, contHist != nil, "contHist should not be nil")
 	assert.Equal(t, len(contHist), 0, "empty response must have no records")
 
 	// add new history records

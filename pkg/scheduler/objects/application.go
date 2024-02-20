@@ -1491,7 +1491,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(node.NodeID, ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
-			log.Log(log.SchedApplication).Warn("queue update failed unexpectedly",
+			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(alloc.GetAllocationID())

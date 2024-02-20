@@ -41,6 +41,7 @@ const (
 	aKey          = "alloc-1"
 	aAllocationID = "alloc-allocationid-1"
 	nodeID1       = "node-1"
+	nodeID2       = "node-2"
 	instType1     = "itype-1"
 )
 

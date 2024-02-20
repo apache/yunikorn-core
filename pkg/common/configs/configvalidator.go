@@ -728,14 +728,6 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 	return nil
 }
 
-// Check the state dump file path, if configured, is a valid path that can be written to.
-func checkDeprecatedStateDumpFilePath(partition *PartitionConfig) error {
-	if partition.StateDumpFilePath != "" {
-		log.Log(log.Deprecation).Warn("Ignoring deprecated partition setting 'statedumpfilepath'. This parameter will be removed in a future release.")
-	}
-	return nil
-}
-
 // Check the partition configuration. Any parsing issues will return an error which means that the
 // configuration is invalid. This *must* be called before the configuration is activated. Any
 // configuration that does not pass must be rejected.
@@ -787,10 +779,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkDeprecatedStateDumpFilePath(&newConfig.Partitions[i])
-		if err != nil {
-			return err
-		}
+
 		err = checkQueueMaxApplications(partition.Queues[0])
 		if err != nil {
 			return err

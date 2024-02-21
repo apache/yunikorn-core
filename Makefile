@@ -102,6 +102,10 @@ GOLANGCI_LINT_BIN=$(TOOLS_DIR)/golangci-lint
 GOLANGCI_LINT_ARCHIVE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH).tar.gz
 GOLANGCI_LINT_ARCHIVEBASE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH)
 
+# go-licenses
+GO_LICENSES_VERSION=v1.6.0
+GO_LICENSES_BIN=$(TOOLS_DIR)/go-licenses
+
 all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
@@ -122,6 +126,12 @@ $(GOLANGCI_LINT_BIN):
 	@mkdir -p "$(TOOLS_DIR)"
 	@curl -sSfL "https://github.com/golangci/golangci-lint/releases/download/v$(GOLANGCI_LINT_VERSION)/$(GOLANGCI_LINT_ARCHIVE)" \
 		| tar -x -z --strip-components=1 -C "$(TOOLS_DIR)" "$(GOLANGCI_LINT_ARCHIVEBASE)/golangci-lint"
+
+# Install go-licences
+$(GO_LICENSES_BIN):
+	@echo "installing go-licenses $(GO_LICENSES_VERSION)"
+	@mkdir -p "$(TOOLS_DIR)"
+	@GOBIN="$(BASE_DIR)/$(TOOLS_DIR)" go install "github.com/google/go-licenses@$(GO_LICENSES_VERSION)"
 
 .PHONY: lint
 # Run lint against the previous commit for PR and branch build
@@ -158,6 +168,26 @@ endif
 		exit 1; \
 	fi
 	@echo "  all OK"
+
+# Check licenses of go dependencies
+.PHONY: go-license-check
+go-license-check: $(GO_LICENSES_BIN)
+	@echo "Checking third-party licenses"
+	@"$(GO_LICENSES_BIN)" check ./pkg/... ./cmd/... --include_tests --disallowed_types=forbidden,permissive,reciprocal,restricted,unknown
+	@echo "License checks OK"
+
+# Save licenses of go dependencies
+.PHONY: go-license-save
+go-license-save: $(GO_LICENSES_BIN)
+	@echo "Saving third-party license files"
+	@rm -rf build/third-party-licenses
+	@"$(GO_LICENSES_BIN)" \
+		save ./pkg/... ./cmd/... \
+		--save_path=build/third-party-licenses \
+		--ignore github.com/apache/yunikorn-core \
+		--ignore github.com/apache/yunikorn-scheduler-interface
+	@rm -rf third-party-licenses
+	@mv -f build/third-party-licenses third-party-licenses
 
 # Check that we use pseudo versions in master
 .PHONY: pseudo

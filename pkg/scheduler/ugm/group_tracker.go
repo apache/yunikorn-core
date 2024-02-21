@@ -111,8 +111,8 @@ func (gt *GroupTracker) IsUnlinkRequired(hierarchy []string) bool {
 }
 
 func (gt *GroupTracker) UnlinkQT(hierarchy []string) bool {
-	gt.RLock()
-	defer gt.RUnlock()
+	gt.Lock()
+	defer gt.Unlock()
 	return gt.queueTracker.UnlinkQT(hierarchy)
 }
 

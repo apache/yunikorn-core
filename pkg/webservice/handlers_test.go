@@ -936,6 +936,7 @@ func TestPartitions(t *testing.T) {
 	getPartitions(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
 	assert.NilError(t, err, unmarshalError)
+	assert.Check(t, partitionInfo != nil, "partitionInfo should not be nil")
 	assert.Equal(t, len(partitionInfo), 0)
 
 	defaultPartition := setup(t, configMultiPartitions, 2)

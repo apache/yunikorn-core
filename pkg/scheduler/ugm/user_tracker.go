@@ -52,33 +52,20 @@ func newUserTracker(userName string) *UserTracker {
 	return userTracker
 }
 
-func (ut *UserTracker) increaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource) bool {
+func (ut *UserTracker) increaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource) {
 	ut.Lock()
 	defer ut.Unlock()
-	increased := ut.queueTracker.increaseTrackedResource(hierarchy, applicationID, user, usage)
-	if increased {
-		gt := ut.appGroupTrackers[applicationID]
-		log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
-			zap.String("group", gt.getName()),
-			zap.Strings("queue path", hierarchy),
-			zap.String("application", applicationID),
-			zap.Stringer("resource", usage))
-		increasedGroupUsage := gt.increaseTrackedResource(hierarchy, applicationID, usage, ut.userName)
-		if !increasedGroupUsage {
-			_, decreased := ut.queueTracker.decreaseTrackedResource(hierarchy, applicationID, usage, false)
-			if !decreased {
-				log.Log(log.SchedUGM).Error("User resource usage rollback has failed",
-					zap.Strings("queue path", hierarchy),
-					zap.String("application", applicationID),
-					zap.String("user", ut.userName))
-			}
-		}
-		return increasedGroupUsage
-	}
-	return increased
+	ut.queueTracker.increaseTrackedResource(hierarchy, applicationID, user, usage)
+	gt := ut.appGroupTrackers[applicationID]
+	log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
+		zap.String("group", gt.getName()),
+		zap.Strings("queue path", hierarchy),
+		zap.String("application", applicationID),
+		zap.Stringer("resource", usage))
+	gt.increaseTrackedResource(hierarchy, applicationID, usage, ut.userName)
 }
 
-func (ut *UserTracker) decreaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
+func (ut *UserTracker) decreaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, removeApp bool) bool {
 	ut.Lock()
 	defer ut.Unlock()
 	if removeApp {

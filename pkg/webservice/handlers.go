@@ -811,7 +811,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
-	var result []*dao.PartitionInfo
+	result := make([]*dao.PartitionInfo, 0, len(lists))
 
 	for _, partitionContext := range lists {
 		partitionInfo := &dao.PartitionInfo{}
@@ -869,7 +869,7 @@ func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistor
 }
 
 func getPartitionNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
-	var result []*dao.NodesDAOInfo
+	result := make([]*dao.NodesDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		nodesDao := getNodesDAO(partition.GetNodes())
@@ -900,7 +900,7 @@ func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHi
 }
 
 func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.ApplicationDAOInfo {
-	var result []*dao.ApplicationDAOInfo
+	result := make([]*dao.ApplicationDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		var appList []*objects.Application
@@ -917,7 +917,7 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 }
 
 func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.PartitionQueueDAOInfo {
-	var result []dao.PartitionQueueDAOInfo
+	result := make([]dao.PartitionQueueDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		result = append(result, partition.GetPartitionQueues())
@@ -927,7 +927,7 @@ func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.P
 }
 
 func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
-	var result []*dao.ClusterDAOInfo
+	result := make([]*dao.ClusterDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		result = append(result, getClusterJSON(partition))
@@ -937,7 +937,7 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 }
 
 func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[string]string {
-	var result []map[string]string
+	result := make([]map[string]string, 0, len(lists))
 
 	for _, rmInfo := range lists {
 		result = append(result, rmInfo.RMBuildInformation)

@@ -832,7 +832,7 @@ func TestUserGroupLimitWithMultipleApps(t *testing.T) {
 }
 
 //nolint:funlen
-func TestCanRunApp(t *testing.T) {
+func TestManagerCanRunApp(t *testing.T) {
 	testCases := []struct {
 		name   string
 		limits []configs.Limit

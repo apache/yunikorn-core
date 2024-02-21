@@ -222,6 +222,33 @@ func TestSetMaxLimits(t *testing.T) {
 	userTracker.setLimits(hierarchy5, usage1, 1, false, false)
 }
 
+func TestUTCanRunApp(t *testing.T) {
+	manager := GetUserManager()
+	defer manager.ClearConfigLimits()
+	user := security.UserGroup{User: "test", Groups: []string{"test"}}
+	userTracker := newUserTracker(user.User)
+	maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"cpu": 1000,
+	})
+	manager.userWildCardLimitsConfig["root.parent"] = &LimitConfig{
+		maxResources:    maxRes,
+		maxApplications: 3,
+	} // manipulate map directly to avoid hierarchy creation
+
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp1))
+	// make sure wildcard limits are applied
+	assert.Equal(t, uint64(3), userTracker.queueTracker.childQueueTrackers["parent"].maxRunningApps)
+	assert.Assert(t, resources.Equals(maxRes, userTracker.queueTracker.childQueueTrackers["parent"].maxResources))
+
+	// limit hit
+	userTracker.setLimits(hierarchy1, resources.Zero, 1, false, false)
+	userTracker.increaseTrackedResource(hierarchy1, TestApp1, resources.NewResourceFromMap(map[string]resources.Quantity{
+		"cpu": 1000,
+	}))
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp1))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp2))
+}
+
 func getUserResource(ut *UserTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := ut.GetUserResourceUsageDAOInfo()

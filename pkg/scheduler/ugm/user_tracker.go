@@ -156,8 +156,8 @@ func (ut *UserTracker) IsUnlinkRequired(hierarchy []string) bool {
 }
 
 func (ut *UserTracker) UnlinkQT(hierarchy []string) bool {
-	ut.RLock()
-	defer ut.RUnlock()
+	ut.Lock()
+	defer ut.Unlock()
 	return ut.queueTracker.UnlinkQT(hierarchy)
 }
 

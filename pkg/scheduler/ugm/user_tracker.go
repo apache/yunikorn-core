@@ -122,8 +122,8 @@ func (ut *UserTracker) setLimits(hierarchy []string, resource *resources.Resourc
 }
 
 func (ut *UserTracker) headroom(hierarchy []string) *resources.Resource {
-	ut.Lock()
-	defer ut.Unlock()
+	ut.RLock()
+	defer ut.RUnlock()
 	return ut.queueTracker.headroom(hierarchy, user)
 }
 
@@ -168,7 +168,7 @@ func (ut *UserTracker) canBeRemoved() bool {
 }
 
 func (ut *UserTracker) canRunApp(hierarchy []string, applicationID string) bool {
-	ut.Lock()
-	defer ut.Unlock()
+	ut.RLock()
+	defer ut.RUnlock()
 	return ut.queueTracker.canRunApp(hierarchy, applicationID, user)
 }

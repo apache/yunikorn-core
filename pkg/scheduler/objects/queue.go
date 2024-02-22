@@ -1355,7 +1355,10 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true, false) {
-			if app.IsAccepted() && (!sq.canRunApp(app.ApplicationID) || !ugm.GetUserManager().CanRunApp(sq.QueuePath, app.ApplicationID, app.user)) {
+			runnableInQueue := sq.canRunApp(app.ApplicationID)
+			runnableByUserLimit := ugm.GetUserManager().CanRunApp(sq.QueuePath, app.ApplicationID, app.user)
+			app.updateRunnableStatus(runnableInQueue, runnableByUserLimit)
+			if app.IsAccepted() && (!runnableInQueue || !runnableByUserLimit) {
 				continue
 			}
 			alloc := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)

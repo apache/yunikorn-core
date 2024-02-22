@@ -52,3 +52,11 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
 	google.golang.org/protobuf v1.31.0 // indirect
 )
+
+replace (
+	golang.org/x/crypto => golang.org/x/crypto v0.19.0
+	golang.org/x/net => golang.org/x/net v0.21.0
+	golang.org/x/sys => golang.org/x/sys v0.17.0
+	golang.org/x/text => golang.org/x/text v0.14.0
+	golang.org/x/tools => golang.org/x/tools v0.17.0
+)

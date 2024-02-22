@@ -45,13 +45,13 @@ func newRootQueueTracker(trackType trackingType) *QueueTracker {
 }
 
 func newQueueTracker(queuePath string, queueName string, trackType trackingType) *QueueTracker {
-	qp := queueName
+	fullPath := queueName
 	if queuePath != common.Empty {
-		qp = queuePath + "." + queueName
+		fullPath = queuePath + "." + queueName
 	}
 	queueTracker := &QueueTracker{
 		queueName:           queueName,
-		queuePath:           qp,
+		queuePath:           fullPath,
 		resourceUsage:       nil,
 		runningApplications: make(map[string]bool),
 		maxResources:        nil,
@@ -61,7 +61,7 @@ func newQueueTracker(queuePath string, queueName string, trackType trackingType)
 
 	// Override user/group specific limits with wild card limit settings
 	if trackType == user {
-		if config := m.getUserWildCardLimitsConfig(queuePath + "." + queueName); config != nil {
+		if config := m.getUserWildCardLimitsConfig(fullPath); config != nil {
 			log.Log(log.SchedUGM).Debug("Use wild card limit settings as there is no limit set explicitly",
 				zap.String("queue name", queueName),
 				zap.String("queue path", queuePath),

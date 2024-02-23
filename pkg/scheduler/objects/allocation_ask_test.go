@@ -26,6 +26,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -238,16 +239,16 @@ func TestSendPredicateFailed(t *testing.T) {
 		ResourceAsk:    res.ToProto(),
 	}
 	ask := NewAllocationAskFromSI(siAsk)
-	eventSystem := newEventSystemMockDisabled()
+	eventSystem := mock.NewEventSystemDisabled()
 	ask.askEvents = newAskEvents(ask, eventSystem)
 	ask.SendPredicateFailedEvent("failed")
-	assert.Equal(t, 0, len(eventSystem.events))
+	assert.Equal(t, 0, len(eventSystem.Events))
 
-	eventSystem = newEventSystemMock()
+	eventSystem = mock.NewEventSystem()
 	ask.askEvents = newAskEvents(ask, eventSystem)
 	ask.SendPredicateFailedEvent("failure")
-	assert.Equal(t, 1, len(eventSystem.events))
-	event := eventSystem.events[0]
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
 	assert.Equal(t, "Predicate failed for request 'ask-1' with message: 'failure'", event.Message)
 }
 

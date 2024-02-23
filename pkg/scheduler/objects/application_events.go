@@ -20,9 +20,6 @@ package objects
 
 import (
 	"fmt"
-	"time"
-
-	"golang.org/x/time/rate"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
@@ -32,7 +29,6 @@ import (
 type applicationEvents struct {
 	eventSystem events.EventSystem
 	app         *Application
-	limiter     *rate.Limiter
 }
 
 func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request *AllocationAsk) {
@@ -87,7 +83,7 @@ func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, detail 
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", request.GetAllocationKey(), si.EventRecord_REMOVE, detail, request.GetAllocatedResource())
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, request.GetAllocationKey(), si.EventRecord_REMOVE, detail, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -95,7 +91,7 @@ func (evt *applicationEvents) sendNewApplicationEvent() {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -103,7 +99,7 @@ func (evt *applicationEvents) sendRemoveApplicationEvent() {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, "", "", si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -111,7 +107,39 @@ func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_C
 	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.app.sendStateChangeEvents {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, "", si.EventRecord_SET, changeDetail, evt.app.allocatedResource)
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, common.Empty, si.EventRecord_SET, changeDetail, evt.app.allocatedResource)
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendAppNotRunnableInQueueEvent() {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
+		return
+	}
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_CANNOTRUN_QUEUE, nil)
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendAppRunnableInQueueEvent() {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
+		return
+	}
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_RUNNABLE_QUEUE, nil)
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendAppNotRunnableQuotaEvent() {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
+		return
+	}
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_CANNOTRUN_QUOTA, nil)
+	evt.eventSystem.AddEvent(event)
+}
+
+func (evt *applicationEvents) sendAppRunnableQuotaEvent() {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
+		return
+	}
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_RUNNABLE_QUOTA, nil)
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -119,6 +147,5 @@ func newApplicationEvents(app *Application, evt events.EventSystem) *application
 	return &applicationEvents{
 		eventSystem: evt,
 		app:         app,
-		limiter:     rate.NewLimiter(rate.Every(time.Second), 1),
 	}
 }

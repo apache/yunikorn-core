@@ -514,7 +514,7 @@ func getPartitionNodesUtilJSON(partition *scheduler.PartitionContext) *dao.Parti
 	}
 
 	return &dao.PartitionNodesUtilDAOInfo{
-		ClusterId:     partition.RmID,
+		ClusterID:     partition.RmID,
 		Partition:     common.GetPartitionNameWithoutClusterID(partition.Name),
 		NodesUtilList: nodesUtilList,
 	}
@@ -811,7 +811,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
-	var result []*dao.PartitionInfo
+	result := make([]*dao.PartitionInfo, 0, len(lists))
 
 	for _, partitionContext := range lists {
 		partitionInfo := &dao.PartitionInfo{}
@@ -852,7 +852,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 }
 
 func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistoryDAOInfo {
-	var result []*dao.ApplicationHistoryDAOInfo
+	result := make([]*dao.ApplicationHistoryDAOInfo, 0)
 
 	for _, record := range records {
 		if record == nil {
@@ -869,7 +869,7 @@ func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistor
 }
 
 func getPartitionNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
-	var result []*dao.NodesDAOInfo
+	result := make([]*dao.NodesDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		nodesDao := getNodesDAO(partition.GetNodes())
@@ -883,7 +883,7 @@ func getPartitionNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.N
 }
 
 func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHistoryDAOInfo {
-	var result []*dao.ContainerHistoryDAOInfo
+	result := make([]*dao.ContainerHistoryDAOInfo, 0)
 
 	for _, record := range records {
 		if record == nil {
@@ -900,7 +900,7 @@ func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHi
 }
 
 func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.ApplicationDAOInfo {
-	var result []*dao.ApplicationDAOInfo
+	result := make([]*dao.ApplicationDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		var appList []*objects.Application
@@ -917,7 +917,7 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 }
 
 func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.PartitionQueueDAOInfo {
-	var result []dao.PartitionQueueDAOInfo
+	result := make([]dao.PartitionQueueDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		result = append(result, partition.GetPartitionQueues())
@@ -927,7 +927,7 @@ func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.P
 }
 
 func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
-	var result []*dao.ClusterDAOInfo
+	result := make([]*dao.ClusterDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		result = append(result, getClusterJSON(partition))
@@ -937,7 +937,7 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 }
 
 func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[string]string {
-	var result []map[string]string
+	result := make([]map[string]string, 0, len(lists))
 
 	for _, rmInfo := range lists {
 		result = append(result, rmInfo.RMBuildInformation)
@@ -1140,6 +1140,7 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 	}
 	enc := json.NewEncoder(w)
 	stream := eventSystem.CreateEventStream(r.Host, count)
+	defer eventSystem.RemoveStream(stream)
 
 	// Reading events in an infinite loop until either the client disconnects or Yunikorn closes the channel.
 	// This results in a persistent HTTP connection where the message body is never closed.
@@ -1149,7 +1150,6 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 		case <-r.Context().Done():
 			log.Log(log.REST).Info("Connection closed for event stream client",
 				zap.String("host", r.Host))
-			eventSystem.RemoveStream(stream)
 			return
 		case e, ok := <-stream.Events:
 			err := rc.SetWriteDeadline(time.Now().Add(5 * time.Second))
@@ -1157,7 +1157,6 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 				// should not fail at this point
 				log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
 				buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
-				eventSystem.RemoveStream(stream)
 				return
 			}
 
@@ -1173,7 +1172,6 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 				log.Log(log.REST).Error("Marshalling error",
 					zap.String("host", r.Host))
 				buildJSONErrorResponse(w, err.Error(), http.StatusOK) // status code is 200 at this point, cannot be changed
-				eventSystem.RemoveStream(stream)
 				return
 			}
 			f.Flush()

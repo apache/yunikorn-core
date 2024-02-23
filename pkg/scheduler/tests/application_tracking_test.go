@@ -126,9 +126,9 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	ms.mockRM.waitForAllocations(t, 1, 1000)
 	eventsDao, err = client.GetBatchEvents()
 	assert.NilError(t, err)
-	assert.Equal(t, 12, len(eventsDao.EventRecords), "number of events generated")
+	assert.Equal(t, 13, len(eventsDao.EventRecords), "number of events generated")
 	verifyAllocationAskAddedEvents(t, eventsDao.EventRecords[7:])
-	events = getEventsFromStream(t, stream, 5)
+	events = getEventsFromStream(t, stream, 6)
 	verifyAllocationAskAddedEvents(t, events)
 
 	allocations := ms.mockRM.getAllocations()
@@ -163,9 +163,9 @@ func TestApplicationHistoryTracking(t *testing.T) {
 
 	eventsDao, err = client.GetBatchEvents()
 	assert.NilError(t, err)
-	assert.Equal(t, 15, len(eventsDao.EventRecords), "number of events generated")
-	verifyAllocationCancelledEvents(t, eventsDao.EventRecords[12:])
-	events = getEventsFromStream(t, stream, 3)
+	assert.Equal(t, 17, len(eventsDao.EventRecords), "number of events generated")
+	verifyAllocationCancelledEvents(t, eventsDao.EventRecords[13:])
+	events = getEventsFromStream(t, stream, 4)
 	assert.NilError(t, err)
 	verifyAllocationCancelledEvents(t, events)
 }
@@ -314,35 +314,51 @@ func verifyAllocationAskAddedEvents(t *testing.T, events []*si.EventRecord) {
 	assert.Equal(t, si.EventRecord_SET, events[3].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_STARTING, events[3].EventChangeDetail)
 
-	// adding allocation to the App
-	assert.Equal(t, "app-1", events[4].ObjectID)
+	// Track resource usage for the user - increment
+	assert.Equal(t, "testuser", events[4].ObjectID)
 	assert.Equal(t, "", events[4].Message)
-	assert.Equal(t, si.EventRecord_APP, events[4].Type)
+	assert.Equal(t, "root.singleleaf", events[4].ReferenceID)
+	assert.Equal(t, si.EventRecord_USERGROUP, events[4].Type)
 	assert.Equal(t, si.EventRecord_ADD, events[4].EventChangeType)
-	assert.Equal(t, si.EventRecord_APP_ALLOC, events[4].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, events[4].EventChangeDetail)
+
+	// adding allocation to the App
+	assert.Equal(t, "app-1", events[5].ObjectID)
+	assert.Equal(t, "", events[5].Message)
+	assert.Equal(t, si.EventRecord_APP, events[5].Type)
+	assert.Equal(t, si.EventRecord_ADD, events[5].EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_ALLOC, events[5].EventChangeDetail)
 }
 
 func verifyAllocationCancelledEvents(t *testing.T, events []*si.EventRecord) {
-	// state transition to Completing
-	assert.Equal(t, "app-1", events[0].ObjectID)
+	// Track resource usage for the user - decrement
+	assert.Equal(t, "testuser", events[0].ObjectID)
 	assert.Equal(t, "", events[0].Message)
-	assert.Equal(t, "", events[0].ReferenceID)
-	assert.Equal(t, si.EventRecord_APP, events[0].Type)
-	assert.Equal(t, si.EventRecord_SET, events[0].EventChangeType)
-	assert.Equal(t, si.EventRecord_APP_COMPLETING, events[0].EventChangeDetail)
+	assert.Equal(t, "root.singleleaf", events[0].ReferenceID)
+	assert.Equal(t, si.EventRecord_USERGROUP, events[0].Type)
+	assert.Equal(t, si.EventRecord_REMOVE, events[0].EventChangeType)
+	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, events[0].EventChangeDetail)
 
-	// cancel allocation
+	// state transition to Completing
 	assert.Equal(t, "app-1", events[1].ObjectID)
 	assert.Equal(t, "", events[1].Message)
+	assert.Equal(t, "", events[1].ReferenceID)
 	assert.Equal(t, si.EventRecord_APP, events[1].Type)
-	assert.Equal(t, si.EventRecord_REMOVE, events[1].EventChangeType)
-	assert.Equal(t, si.EventRecord_ALLOC_CANCEL, events[1].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_SET, events[1].EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_COMPLETING, events[1].EventChangeDetail)
+
+	// cancel allocation
+	assert.Equal(t, "app-1", events[2].ObjectID)
+	assert.Equal(t, "", events[2].Message)
+	assert.Equal(t, si.EventRecord_APP, events[2].Type)
+	assert.Equal(t, si.EventRecord_REMOVE, events[2].EventChangeType)
+	assert.Equal(t, si.EventRecord_ALLOC_CANCEL, events[2].EventChangeDetail)
 
 	// remove allocation from the node
-	assert.Equal(t, "node-1:1234", events[2].ObjectID)
-	assert.Equal(t, "", events[2].Message)
-	assert.Equal(t, "alloc-1", events[2].ReferenceID)
-	assert.Equal(t, si.EventRecord_NODE, events[2].Type)
-	assert.Equal(t, si.EventRecord_REMOVE, events[2].EventChangeType)
-	assert.Equal(t, si.EventRecord_NODE_ALLOC, events[2].EventChangeDetail)
+	assert.Equal(t, "node-1:1234", events[3].ObjectID)
+	assert.Equal(t, "", events[3].Message)
+	assert.Equal(t, "alloc-1", events[3].ReferenceID)
+	assert.Equal(t, si.EventRecord_NODE, events[3].Type)
+	assert.Equal(t, si.EventRecord_REMOVE, events[3].EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_ALLOC, events[3].EventChangeDetail)
 }

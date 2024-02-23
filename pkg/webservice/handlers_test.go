@@ -390,6 +390,7 @@ func TestApplicationHistory(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &appHist)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "app response should have no status")
+	assert.Assert(t, appHist != nil, "appHist should not be nil")
 	assert.Equal(t, len(appHist), 0, "empty response must have no records")
 
 	// add new history records
@@ -445,6 +446,7 @@ func TestContainerHistory(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &contHist)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, resp.statusCode, 0, "container response should have no status")
+	assert.Check(t, contHist != nil, "contHist should not be nil")
 	assert.Equal(t, len(contHist), 0, "empty response must have no records")
 
 	// add new history records
@@ -551,9 +553,11 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	buildInfoMap["buildVersion"] = "latest"
 	buildInfoMap["isPluginVersion"] = "false"
 	schedulerContext.SetRMInfo(rmID, buildInfoMap)
+	rmBuildInformationMaps := getRMBuildInformation(nil)
+	assert.Equal(t, 0, len(rmBuildInformationMaps))
 	rmInfo := schedulerContext.GetRMInfoMapClone()
 	assert.Equal(t, 1, len(rmInfo))
-	rmBuildInformationMaps := getRMBuildInformation(rmInfo)
+	rmBuildInformationMaps = getRMBuildInformation(rmInfo)
 	assert.Equal(t, 1, len(rmBuildInformationMaps))
 	assert.Equal(t, rmBuildInformationMaps[0]["buildDate"], buildInfoMap["buildDate"])
 	assert.Equal(t, rmBuildInformationMaps[0]["buildVersion"], buildInfoMap["buildVersion"])
@@ -818,7 +822,7 @@ func TestGetPartitionNodesUtilJSON(t *testing.T) {
 
 	// assert partition nodes utilization
 	result := getPartitionNodesUtilJSON(partition)
-	assert.Equal(t, result.ClusterId, rmID)
+	assert.Equal(t, result.ClusterID, rmID)
 	assert.Equal(t, result.Partition, "default")
 	assert.Equal(t, len(result.NodesUtilList), 3, "Should have 3 resource types(CPU/Memory/GPU) in the list.")
 
@@ -880,8 +884,8 @@ func TestGetNodeUtilisations(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &partitionNodesUtilDAOInfo)
 	assert.NilError(t, err, "should decode a list of *dao.PartitionNodesUtilDAOInfo")
 	assert.Equal(t, len(partitionNodesUtilDAOInfo), 2)
-	assert.Equal(t, partitionNodesUtilDAOInfo[0].ClusterId, rmID)
-	assert.Equal(t, partitionNodesUtilDAOInfo[1].ClusterId, rmID)
+	assert.Equal(t, partitionNodesUtilDAOInfo[0].ClusterID, rmID)
+	assert.Equal(t, partitionNodesUtilDAOInfo[1].ClusterID, rmID)
 
 	defaultPartitionNodesUtilDAOInfo := partitionNodesUtilDAOInfo[0]
 	gpuPartitionNodesUtilDAOInfo := partitionNodesUtilDAOInfo[1]
@@ -921,6 +925,20 @@ func getNodesUtilByType(t *testing.T, nodesUtilList []*dao.NodesUtilDAOInfo, res
 }
 
 func TestPartitions(t *testing.T) {
+	schedulerContext = &scheduler.ClusterContext{}
+
+	var req *http.Request
+	req, err := http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
+	assert.NilError(t, err, "App Handler request failed")
+
+	resp := &MockResponseWriter{}
+	var partitionInfo []*dao.PartitionInfo
+	getPartitions(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Check(t, partitionInfo != nil, "partitionInfo should not be nil")
+	assert.Equal(t, len(partitionInfo), 0)
+
 	defaultPartition := setup(t, configMultiPartitions, 2)
 	partitionName := defaultPartition.Name
 
@@ -970,17 +988,15 @@ func TestPartitions(t *testing.T) {
 	ask1 := objects.NewAllocationAsk("alloc-1", app6.ApplicationID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", app3.ApplicationID, resAlloc2)
 	allocs := []*objects.Allocation{objects.NewAllocation(node1ID, ask1)}
-	err := defaultPartition.AddNode(node1, allocs)
+	err = defaultPartition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
 	allocs = []*objects.Allocation{objects.NewAllocation(node2ID, ask2)}
 	err = defaultPartition.AddNode(node2, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
 
-	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
 	assert.NilError(t, err, "App Handler request failed")
-	resp := &MockResponseWriter{}
-	var partitionInfo []*dao.PartitionInfo
+	resp = &MockResponseWriter{}
 	getPartitions(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1148,12 +1164,19 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 }
 
 func TestGetClusterInfo(t *testing.T) {
-	setup(t, configTwoLevelQueues, 2)
-
+	schedulerContext = &scheduler.ClusterContext{}
 	resp := &MockResponseWriter{}
 	getClusterInfo(resp, nil)
 	var data []*dao.ClusterDAOInfo
 	err := json.Unmarshal(resp.outputBytes, &data)
+	assert.NilError(t, err)
+	assert.Equal(t, 0, len(data))
+
+	setup(t, configTwoLevelQueues, 2)
+
+	resp = &MockResponseWriter{}
+	getClusterInfo(resp, nil)
+	err = json.Unmarshal(resp.outputBytes, &data)
 	assert.NilError(t, err)
 	assert.Equal(t, 2, len(data))
 

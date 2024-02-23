@@ -310,7 +310,7 @@ func TestHeadroom(t *testing.T) {
 	assert.Assert(t, resources.Equals(headroom, combined), "headroom should be same as combined")
 }
 
-func TestCanRunApp(t *testing.T) {
+func TestQTCanRunApp(t *testing.T) {
 	GetUserManager()
 
 	// validate that the hierarchy gets created

@@ -2601,6 +2601,61 @@ func TestGetRateLimitedAppLog(t *testing.T) {
 	assert.Check(t, l != nil)
 }
 
+func TestUpdateRunnableStatus(t *testing.T) {
+	app := newApplication(appID0, "default", "root.unknown")
+	assert.Assert(t, app.runnableInQueue)
+	assert.Assert(t, app.runnableByUserLimit)
+	eventSystem := mock.NewEventSystem()
+	app.appEvents = newApplicationEvents(app, eventSystem)
+
+	// App runnable - no events
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, 0, len(eventSystem.Events))
+
+	// App not runnable in queue
+	eventSystem.Reset()
+	app.updateRunnableStatus(false, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUEUE, eventSystem.Events[0].EventChangeDetail)
+	// Try again - no new events
+	app.updateRunnableStatus(false, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// App becomes runnable in queue
+	eventSystem.Reset()
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_RUNNABLE_QUEUE, eventSystem.Events[0].EventChangeDetail)
+
+	// Try again - no new events
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// App not runnable by UG quota
+	eventSystem.Reset()
+	app.updateRunnableStatus(true, false)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, eventSystem.Events[0].EventChangeDetail)
+	// Try again - no new events
+	app.updateRunnableStatus(true, false)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// App becomes runnable by user quota
+	eventSystem.Reset()
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, si.EventRecord_APP_RUNNABLE_QUOTA, eventSystem.Events[0].EventChangeDetail)
+	// Try again - no new events
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// Both false
+	eventSystem.Reset()
+	app.updateRunnableStatus(false, false)
+	assert.Equal(t, 2, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUEUE, eventSystem.Events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, eventSystem.Events[1].EventChangeDetail)
+}
+
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()

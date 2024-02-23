@@ -19,7 +19,7 @@
 package dao
 
 type PartitionNodesUtilDAOInfo struct {
-	ClusterId     string              `json:"clusterId"` // no omitempty, cluster id should not be empty
+	ClusterID     string              `json:"clusterId"` // no omitempty, cluster id should not be empty
 	Partition     string              `json:"partition"` // no omitempty, partition should not be empty
 	NodesUtilList []*NodesUtilDAOInfo `json:"utilizations,omitempty"`
 }

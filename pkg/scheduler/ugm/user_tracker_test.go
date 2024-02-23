@@ -19,12 +19,16 @@
 package ugm
 
 import (
+	"strings"
 	"testing"
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events/mock"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const (
@@ -39,11 +43,13 @@ const (
 	queuePath4 = "root.parent.child12"
 )
 
-var hierarchy1 = []string{"root", "parent", "child1"}
-var hierarchy2 = []string{"root", "parent", "child2"}
-var hierarchy3 = []string{"root", "parent", "child1", "child12"}
-var hierarchy4 = []string{"root", "parent", "child12"}
-var hierarchy5 = []string{"root", "parent"}
+const (
+	path1 = "root.parent.child1"
+	path2 = "root.parent.child2"
+	path3 = "root.parent.child1.child12"
+	path4 = "root.parent.child12"
+	path5 = "root.parent"
+)
 
 func TestIncreaseTrackedResource(t *testing.T) {
 	// Queue setup:
@@ -53,35 +59,45 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	// Initialize ugm
 	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
-	userTracker := newUserTracker(user.User)
+	eventSystem := mock.NewEventSystem()
+	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem))
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
+	result := userTracker.increaseTrackedResource(path1, TestApp1, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v", hierarchy1, TestApp1, usage1)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", path1, TestApp1, usage1)
 	}
-	groupTracker := newGroupTracker(user.User)
+	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
 	userTracker.setGroupForApp(TestApp1, groupTracker)
-
 	usage2, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = userTracker.increaseTrackedResource(hierarchy2, TestApp2, usage2)
+	result = userTracker.increaseTrackedResource(path2, TestApp2, usage2)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy2, TestApp2, usage2, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path2, TestApp2, usage2, err)
 	}
+	assert.Equal(t, 3, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_ADD, eventSystem.Events[0].EventChangeType)
+	assert.Equal(t, si.EventRecord_UG_APP_LINK, eventSystem.Events[1].EventChangeDetail)
+	assert.Equal(t, "test", eventSystem.Events[1].ObjectID)
+	assert.Equal(t, TestApp1, eventSystem.Events[1].ReferenceID)
+	assert.Equal(t, si.EventRecord_SET, eventSystem.Events[1].EventChangeType)
+	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[2].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_ADD, eventSystem.Events[2].EventChangeType)
+
 	userTracker.setGroupForApp(TestApp2, groupTracker)
 
 	usage3, err := resources.NewResourceFromConf(map[string]string{"mem": "30M", "vcore": "30"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = userTracker.increaseTrackedResource(hierarchy3, TestApp3, usage3)
+	result = userTracker.increaseTrackedResource(path3, TestApp3, usage3)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy3, TestApp3, usage3, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path3, TestApp3, usage3, err)
 	}
 	userTracker.setGroupForApp(TestApp3, groupTracker)
 
@@ -89,9 +105,9 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = userTracker.increaseTrackedResource(hierarchy4, TestApp4, usage4)
+	result = userTracker.increaseTrackedResource(path4, TestApp4, usage4)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy4, TestApp4, usage4, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path4, TestApp4, usage4, err)
 	}
 	userTracker.setGroupForApp(TestApp4, groupTracker)
 
@@ -113,17 +129,18 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	// Initialize ugm
 	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
-	userTracker := newUserTracker(user.User)
+	eventSystem := mock.NewEventSystem()
+	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem))
 
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "70M", "vcore": "70"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
+	result := userTracker.increaseTrackedResource(path1, TestApp1, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage1, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp1, usage1, err)
 	}
-	groupTracker := newGroupTracker(user.User)
+	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
 	userTracker.setGroupForApp(TestApp1, groupTracker)
 	assert.Equal(t, 1, len(userTracker.getTrackedApplications()))
 
@@ -131,9 +148,9 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = userTracker.increaseTrackedResource(hierarchy2, TestApp2, usage2)
+	result = userTracker.increaseTrackedResource(path2, TestApp2, usage2)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy2, TestApp2, usage2, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path2, TestApp2, usage2, err)
 	}
 	userTracker.setGroupForApp(TestApp2, groupTracker)
 	actualResources := getUserResource(userTracker)
@@ -148,15 +165,18 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	removeQT, decreased := userTracker.decreaseTrackedResource(hierarchy1, TestApp1, usage3, false)
+	eventSystem.Reset()
+	removeQT, decreased := userTracker.decreaseTrackedResource(path1, TestApp1, usage3, false)
 	if !decreased {
-		t.Fatalf("unable to decrease tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage3, err)
+		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp1, usage3, err)
 	}
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
+	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
 
-	removeQT, decreased = userTracker.decreaseTrackedResource(hierarchy2, TestApp2, usage3, false)
+	removeQT, decreased = userTracker.decreaseTrackedResource(path2, TestApp2, usage3, false)
 	if !decreased {
-		t.Fatalf("unable to decrease tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy2, TestApp2, usage3, err)
+		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp2, usage3, err)
 	}
 	actualResources1 := getUserResource(userTracker)
 
@@ -171,55 +191,115 @@ func TestDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	removeQT, decreased = userTracker.decreaseTrackedResource(hierarchy1, TestApp1, usage4, true)
+	eventSystem.Reset()
+	removeQT, decreased = userTracker.decreaseTrackedResource(path1, TestApp1, usage4, true)
 	if !decreased {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage1, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp1, usage1, err)
 	}
 	assert.Equal(t, 1, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
+	assert.Equal(t, 2, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
+	assert.Equal(t, si.EventRecord_UG_APP_LINK, eventSystem.Events[1].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[1].EventChangeType)
 
 	usage5, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage5)
 	}
-	removeQT, decreased = userTracker.decreaseTrackedResource(hierarchy2, TestApp2, usage5, true)
+	removeQT, decreased = userTracker.decreaseTrackedResource(path2, TestApp2, usage5, true)
 	if !decreased {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy2, TestApp2, usage2, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path2, TestApp2, usage2, err)
 	}
 	assert.Equal(t, 0, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
 }
 
-func TestSetMaxLimits(t *testing.T) {
+func TestSetAndClearMaxLimits(t *testing.T) {
 	// Queue setup:
 	// root->parent->child1
 	// Initialize ugm
 	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
-	userTracker := newUserTracker(user.User)
+	eventSystem := mock.NewEventSystem()
+	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem))
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
+	result := userTracker.increaseTrackedResource(path1, TestApp1, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v, error %t", hierarchy1, TestApp1, usage1, err)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp1, usage1, err)
 	}
 
-	userTracker.setLimits(hierarchy1, resources.Multiply(usage1, 5), 5, false, false)
-	userTracker.setLimits(hierarchy5, resources.Multiply(usage1, 10), 10, false, false)
+	eventSystem.Reset()
+	userTracker.setLimits(path1, resources.Multiply(usage1, 5), 5, false, false)
+	userTracker.setLimits(path5, resources.Multiply(usage1, 10), 10, false, false)
+	assert.Equal(t, 2, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_UG_USER_LIMIT, eventSystem.Events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_SET, eventSystem.Events[0].EventChangeType)
+	assert.Equal(t, path1, eventSystem.Events[0].ReferenceID)
+	assert.Equal(t, si.EventRecord_UG_USER_LIMIT, eventSystem.Events[1].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_SET, eventSystem.Events[1].EventChangeType)
+	assert.Equal(t, path5, eventSystem.Events[1].ReferenceID)
 
-	result = userTracker.increaseTrackedResource(hierarchy1, TestApp1, usage1)
+	result = userTracker.increaseTrackedResource(path1, TestApp1, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v", hierarchy1, TestApp1, usage1)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", path1, TestApp1, usage1)
 	}
 
-	result = userTracker.increaseTrackedResource(hierarchy1, TestApp2, usage1)
+	result = userTracker.increaseTrackedResource(path1, TestApp2, usage1)
 	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %+q, app %s, res %v", hierarchy1, TestApp2, usage1)
+		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", path1, TestApp2, usage1)
 	}
-	userTracker.setLimits(hierarchy1, usage1, 1, false, false)
-	userTracker.setLimits(hierarchy5, usage1, 1, false, false)
+	path1expectedHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"mem":   20000000,
+		"vcore": 20000,
+	})
+	hierarchy1 := strings.Split(path1, configs.DOT)
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1), path1expectedHeadroom))
+	path5expectedHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"mem":   70000000,
+		"vcore": 70000,
+	})
+	hierarchy5 := strings.Split(path5, configs.DOT)
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), path5expectedHeadroom))
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4))
+
+	// lower limits
+	userTracker.setLimits(path1, usage1, 1, false, false)
+	userTracker.setLimits(path5, resources.Multiply(usage1, 2), 1, false, false)
+	lowerChildHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"mem":   -20000000,
+		"vcore": -20000,
+	})
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1), lowerChildHeadroom))
+	lowerParentHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"mem":   -10000000,
+		"vcore": -10000,
+	})
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), lowerParentHeadroom))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4))
+
+	// clear limits
+	eventSystem.Reset()
+	userTracker.clearLimits(path1, true)
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1), lowerParentHeadroom))
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), lowerParentHeadroom))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4))
+	userTracker.clearLimits(path5, true)
+	assert.Assert(t, userTracker.headroom(hierarchy1) == nil)
+	assert.Assert(t, userTracker.headroom(hierarchy5) == nil)
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, userTracker.canRunApp(hierarchy5, TestApp4))
+	assert.Equal(t, 2, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
+	assert.Equal(t, si.EventRecord_UG_USER_LIMIT, eventSystem.Events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[1].EventChangeType)
+	assert.Equal(t, si.EventRecord_UG_USER_LIMIT, eventSystem.Events[1].EventChangeDetail)
 }
 
 func TestUTCanRunApp(t *testing.T) {

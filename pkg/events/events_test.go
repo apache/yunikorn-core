@@ -58,4 +58,7 @@ func TestCreateEventRecordTypes(t *testing.T) {
 
 	record = CreateQueueEventRecord("queue", "message", "app", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_QUEUE)
+
+	record = CreateUserGroupEventRecord("user", "message", "queue", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
+	assert.Equal(t, record.Type, si.EventRecord_USERGROUP)
 }

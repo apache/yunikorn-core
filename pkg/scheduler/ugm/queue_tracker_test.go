@@ -342,6 +342,39 @@ func TestCanRunApp(t *testing.T) {
 	assert.Assert(t, !root.canRunApp(hierarchy, TestApp3, user))
 }
 
+func TestNewQueueTracker(t *testing.T) {
+	manager := GetUserManager()
+	defer manager.ClearConfigLimits()
+
+	maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"cpu": 100,
+	})
+	manager.userWildCardLimitsConfig = map[string]*LimitConfig{
+		"root": {
+			maxApplications: 3,
+			maxResources:    maxRes.Clone(),
+		},
+	}
+
+	root := newRootQueueTracker(user)
+	assert.Equal(t, "root", root.queuePath)
+	assert.Equal(t, "root", root.queueName)
+	assert.Equal(t, uint64(3), root.maxRunningApps)
+	assert.Equal(t, 0, len(root.runningApplications))
+	assert.Assert(t, root.useWildCard)
+	assert.Assert(t, resources.Equals(maxRes, root.maxResources))
+	assert.Assert(t, resources.IsZero(root.resourceUsage))
+
+	parent := newQueueTracker("root", "parent", user)
+	assert.Equal(t, "root.parent", parent.queuePath)
+	assert.Equal(t, "parent", parent.queueName)
+	assert.Equal(t, uint64(0), parent.maxRunningApps)
+	assert.Equal(t, 0, len(parent.runningApplications))
+	assert.Assert(t, !parent.useWildCard)
+	assert.Assert(t, resources.IsZero(parent.maxResources))
+	assert.Assert(t, resources.IsZero(parent.resourceUsage))
+}
+
 func getQTResource(qt *QueueTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := qt.getResourceUsageDAOInfo("")

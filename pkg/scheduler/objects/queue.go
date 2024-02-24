@@ -628,12 +628,8 @@ func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
 	children := sq.GetCopyOfChildren()
-	queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(children))
-	if exclude {
-		for _, child := range children {
-			queueInfo.ChildrenNames = append(queueInfo.ChildrenNames, child.QueuePath)
-		}
-	} else {
+	if !exclude {
+		queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(children))
 		for _, child := range children {
 			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo(false))
 		}
@@ -642,6 +638,9 @@ func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInf
 	sq.RLock()
 	defer sq.RUnlock()
 
+	for _, child := range children {
+		queueInfo.ChildrenNames = append(queueInfo.ChildrenNames, child.QueuePath)
+	}
 	queueInfo.QueueName = sq.QueuePath
 	queueInfo.Status = sq.stateMachine.Current()
 	queueInfo.PendingResource = sq.pending.DAOMap()

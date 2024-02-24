@@ -94,7 +94,7 @@ func (e *EventStreaming) CreateEventStream(name string, count uint64) *EventStre
 	}
 	local := make(chan *si.EventRecord, defaultChannelBufSize)
 	stop := make(chan struct{})
-	e.createEventStreamInternal(stream, local, consumer, stop, name, count)
+	e.createEventStreamInternal(stream, local, consumer, stop, name)
 	history := e.buffer.GetRecentEvents(count)
 
 	go func(consumer chan<- *si.EventRecord, local <-chan *si.EventRecord, stop <-chan struct{}) {
@@ -137,8 +137,7 @@ func (e *EventStreaming) createEventStreamInternal(stream *EventStream,
 	local chan *si.EventRecord,
 	consumer chan *si.EventRecord,
 	stop chan struct{},
-	name string,
-	count uint64) {
+	name string) {
 	// stuff that needs locking
 	e.Lock()
 	defer e.Unlock()

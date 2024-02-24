@@ -59,11 +59,6 @@ func getFullStateDump(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handlePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	yunikornLog.Log(yunikornLog.Deprecation).Warn("Periodic state dumps are no longer supported. The /ws/v1/periodicstatedump endpoint will be removed in a future release.")
-}
-
 func doStateDump(w io.Writer) error {
 	stateDump.Lock()
 	defer stateDump.Unlock()

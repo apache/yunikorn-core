@@ -26,6 +26,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -227,6 +228,28 @@ func TestAllocationLog(t *testing.T) {
 	assert.Equal(t, "alloc2", log[1].Message, "wrong message for event 2")
 	assert.Equal(t, 2, int(log[0].Count), "wrong count for event 1")
 	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
+}
+
+func TestSendPredicateFailed(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	siAsk := &si.AllocationAsk{
+		AllocationKey:  "ask-1",
+		ApplicationID:  "app-1",
+		MaxAllocations: 1,
+		ResourceAsk:    res.ToProto(),
+	}
+	ask := NewAllocationAskFromSI(siAsk)
+	eventSystem := mock.NewEventSystemDisabled()
+	ask.askEvents = newAskEvents(ask, eventSystem)
+	ask.SendPredicateFailedEvent("failed")
+	assert.Equal(t, 0, len(eventSystem.Events))
+
+	eventSystem = mock.NewEventSystem()
+	ask.askEvents = newAskEvents(ask, eventSystem)
+	ask.SendPredicateFailedEvent("failure")
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
+	assert.Equal(t, "Predicate failed for request 'ask-1' with message: 'failure'", event.Message)
 }
 
 func sortedLog(ask *AllocationAsk) []*AllocationLogEntry {

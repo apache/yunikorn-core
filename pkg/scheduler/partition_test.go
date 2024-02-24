@@ -262,15 +262,15 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	ask = newAllocationAsk("alloc-1-allocationid", appID1, appRes)
 	alloc = objects.NewAllocation(nodeID1, ask)
 	assert.Equal(t, alloc.GetAllocationID(), "alloc-1-allocationid-0")
-	// reset allocationid to empty
+	// reset allocationID to empty
 	alloc.SetAllocationID("")
 	assert.Equal(t, alloc.GetAllocationID(), "")
 	allocs = []*objects.Allocation{alloc}
 	err = partition.AddNode(node, allocs)
 	if err == nil {
-		t.Errorf("add node to partition should have failed (allocationid missing)")
+		t.Errorf("add node to partition should have failed (allocationID missing)")
 	}
-	assert.Equal(t, partition.nodes.GetNodeCount(), 0, "error returned but node still added to the partition (allocationid)")
+	assert.Equal(t, partition.nodes.GetNodeCount(), 0, "error returned but node still added to the partition (allocationID)")
 	assertLimits(t, getTestUserGroup(), nil)
 
 	// fix the alloc add the node will work now
@@ -346,7 +346,7 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.Equal(t, 0, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
 	assert.Equal(t, 1, len(released), "node did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node did not confirm correct allocation")
-	assert.Equal(t, released[0].GetAllocationID(), allocAllocationID, "allocationid returned by release not the same as on allocation")
+	assert.Equal(t, released[0].GetAllocationID(), allocAllocationID, "allocationID returned by release not the same as on allocation")
 	assertLimits(t, getTestUserGroup(), resources.Zero)
 
 	assert.NilError(t, err, "the event should have been processed")
@@ -404,7 +404,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Equal(t, 0, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
 	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node removal should not have confirmed allocation")
-	assert.Equal(t, ph.GetAllocationID(), released[0].GetAllocationID(), "allocationid returned by release not the same as the placeholder")
+	assert.Equal(t, ph.GetAllocationID(), released[0].GetAllocationID(), "allocationID returned by release not the same as the placeholder")
 	assert.Equal(t, 0, partition.getPhAllocationCount(), "number of active placeholders")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 0, len(allocs), "expected no allocations for the app")
@@ -813,13 +813,13 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Equal(t, 1, len(node2.GetAllAllocations()), "remaining node should have allocation")
 	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
 	assert.Equal(t, 1, len(confirmed), "node removal did not confirm correct allocation")
-	assert.Equal(t, ph.GetAllocationID(), released[0].GetAllocationID(), "allocationid returned by release not the same as the placeholder")
-	assert.Equal(t, alloc.GetAllocationID(), confirmed[0].GetAllocationID(), "allocationid returned by confirmed not the same as the real allocation")
+	assert.Equal(t, ph.GetAllocationID(), released[0].GetAllocationID(), "allocationID returned by release not the same as the placeholder")
+	assert.Equal(t, alloc.GetAllocationID(), confirmed[0].GetAllocationID(), "allocationID returned by confirmed not the same as the real allocation")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 	assert.Assert(t, !app.IsCompleting(), "app should not be COMPLETING after confirming allocation")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 1, len(allocs), "expected one allocation for the app (real)")
-	assert.Equal(t, alloc.GetAllocationID(), allocs[0].GetAllocationID(), "allocationid for the app is not the same as the real allocation")
+	assert.Equal(t, alloc.GetAllocationID(), allocs[0].GetAllocationID(), "allocationID for the app is not the same as the real allocation")
 	assert.Equal(t, objects.Allocated, allocs[0].GetResult(), "allocation state should be allocated")
 	assert.Equal(t, 0, allocs[0].GetReleaseCount(), "real allocation should have no releases linked anymore")
 	assertLimits(t, getTestUserGroup(), appRes)
@@ -886,7 +886,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), appRes), "app should have updated pending resources")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 1, len(allocs), "expected one allocation for the app (placeholder")
-	assert.Equal(t, ph.GetAllocationID(), allocs[0].GetAllocationID(), "allocationid for the app is not the same as the real allocation")
+	assert.Equal(t, ph.GetAllocationID(), allocs[0].GetAllocationID(), "allocationID for the app is not the same as the real allocation")
 	assert.Equal(t, 0, ph.GetReleaseCount(), "no inflight replacements linked")
 	assertLimits(t, getTestUserGroup(), appRes)
 }
@@ -1174,7 +1174,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), appRes)
 
 	ask = newAllocationAsk("alloc-1", appNotRemoved, appRes)
-	allocationid := "alloc-1-0"
+	allocationID := "alloc-1-0"
 	alloc = objects.NewAllocation(nodeID1, ask)
 	err = partition.addAllocation(alloc)
 	assert.NilError(t, err, "add allocation to partition should not have failed")
@@ -1202,12 +1202,12 @@ func TestRemoveAppAllocs(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), resources.Multiply(appRes, 2))
 	// create a new release with app, existing allocation: should return 1 alloc
 	assert.Equal(t, 2, partition.GetTotalAllocationCount(), "pre-remove allocation list incorrect: %v", partition.allocations)
-	release.AllocationID = allocationid
+	release.AllocationID = allocationID
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
 	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "allocation removal requests removed more than expected: %v", partition.allocations)
 	assertLimits(t, getTestUserGroup(), resources.Multiply(appRes, 1))
-	// create a new release with app, no allocationid: should return last left alloc
+	// create a new release with app, no allocationID: should return last left alloc
 	release.AllocationID = ""
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
@@ -2173,7 +2173,7 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), allocID, "expected ask alloc-1 to be allocated")
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 8000}), getExpectedQueuesLimitsForPreemptionWithRequiredNode())
-	allocationid := alloc.GetAllocationID()
+	allocationID := alloc.GetAllocationID()
 
 	// required node set on ask
 	ask2 := newAllocationAsk(allocID2, appID1, res)
@@ -2210,7 +2210,7 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 	release := &si.AllocationRelease{
 		PartitionName:   partition.Name,
 		ApplicationID:   appID1,
-		AllocationID:    allocationid,
+		AllocationID:    allocationID,
 		TerminationType: si.TerminationType_PREEMPTED_BY_SCHEDULER,
 	}
 	releases, _ := partition.removeAllocation(release)

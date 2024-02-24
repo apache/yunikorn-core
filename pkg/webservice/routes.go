@@ -172,24 +172,6 @@ var webRoutes = routes{
 	},
 	route{
 		"Scheduler",
-		"PUT",
-		"/ws/v1/periodicstatedump/:switch/:periodSeconds",
-		handlePeriodicStateDump,
-	},
-	route{
-		"Scheduler",
-		"PUT",
-		"/ws/v1/periodicstatedump/:switch/",
-		handlePeriodicStateDump,
-	},
-	route{
-		"Scheduler",
-		"PUT",
-		"/ws/v1/periodicstatedump/",
-		handlePeriodicStateDump,
-	},
-	route{
-		"Scheduler",
 		"GET",
 		"/ws/v1/events/batch",
 		getEvents,

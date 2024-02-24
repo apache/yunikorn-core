@@ -1704,24 +1704,6 @@ func assertQueueInvalid(t *testing.T, resp *MockResponseWriter, invalidQueuePath
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
-func assertQueueExcludeNotAllow(t *testing.T, resp *MockResponseWriter) {
-	var errInfo dao.YAPIError
-	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
-	assert.Equal(t, errInfo.Message, "Only following exclude is allowed: children", jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-}
-
-func assertQueueIncludeNotAllow(t *testing.T, resp *MockResponseWriter) {
-	var errInfo dao.YAPIError
-	err := json.Unmarshal(resp.outputBytes, &errInfo)
-	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
-	assert.Equal(t, errInfo.Message, "Only following include is allowed: children", jsonMessageError)
-	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-}
-
 func assertApplicationNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)

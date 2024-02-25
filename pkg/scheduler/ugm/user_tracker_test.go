@@ -320,9 +320,10 @@ func TestUTCanRunApp(t *testing.T) {
 	// make sure wildcard limits are applied
 	assert.Equal(t, uint64(3), userTracker.queueTracker.childQueueTrackers["parent"].maxRunningApps)
 	assert.Assert(t, resources.Equals(maxRes, userTracker.queueTracker.childQueueTrackers["parent"].maxResources))
+	assert.Assert(t, userTracker.queueTracker.childQueueTrackers["parent"].useWildCard)
 
-	// limit hit
-	userTracker.setLimits(path1, resources.Zero, 1, false, false)
+	// maxApps limit hit
+	userTracker.setLimits(path1, nil, 1, false, false)
 	userTracker.increaseTrackedResource(path1, TestApp1, resources.NewResourceFromMap(map[string]resources.Quantity{
 		"cpu": 1000,
 	}))

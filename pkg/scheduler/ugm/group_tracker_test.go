@@ -282,9 +282,10 @@ func TestGTCanRunApp(t *testing.T) {
 	// make sure wildcard limits are not applied due to the tracker type
 	assert.Equal(t, uint64(0), groupTracker.queueTracker.childQueueTrackers["parent"].maxRunningApps)
 	assert.Assert(t, groupTracker.queueTracker.childQueueTrackers["parent"].maxResources == nil)
+	assert.Assert(t, !groupTracker.queueTracker.childQueueTrackers["parent"].useWildCard)
 
-	// limit hit
-	groupTracker.setLimits(path1, resources.Zero, 1)
+	// maxApps limit hit
+	groupTracker.setLimits(path1, nil, 1)
 	groupTracker.increaseTrackedResource(path1, TestApp1, resources.NewResourceFromMap(map[string]resources.Quantity{
 		"cpu": 1000,
 	}), user.User)

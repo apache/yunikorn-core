@@ -144,6 +144,7 @@ func (ut *UserTracker) clearLimits(queuePath string, doWildCardCheck bool) {
 	ut.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), nil, 0, false, user, doWildCardCheck)
 }
 
+// Note: headroom is not read-only, it also traverses the queue hierarchy and creates childQueueTracker if it does not exist.
 func (ut *UserTracker) headroom(hierarchy []string) *resources.Resource {
 	ut.Lock()
 	defer ut.Unlock()
@@ -190,6 +191,7 @@ func (ut *UserTracker) canBeRemoved() bool {
 	return ut.queueTracker.canBeRemoved()
 }
 
+// Note: canRunApp is not read-only, it also traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
 func (ut *UserTracker) canRunApp(hierarchy []string, applicationID string) bool {
 	ut.Lock()
 	defer ut.Unlock()

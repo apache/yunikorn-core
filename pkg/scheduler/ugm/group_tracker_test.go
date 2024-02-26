@@ -265,6 +265,34 @@ func TestGTSetAndClearMaxLimits(t *testing.T) {
 	assert.Equal(t, si.EventRecord_UG_GROUP_LIMIT, eventSystem.Events[1].EventChangeDetail)
 }
 
+func TestGTCanRunApp(t *testing.T) {
+	manager := GetUserManager()
+	defer manager.ClearConfigLimits()
+	user := security.UserGroup{User: "test", Groups: []string{"test"}}
+	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
+	manager.userWildCardLimitsConfig["root.parent"] = &LimitConfig{
+		maxResources: resources.NewResourceFromMap(map[string]resources.Quantity{
+			"cpu": 1000,
+		}),
+		maxApplications: 3,
+	} // manipulate map directly to avoid hierarchy creation
+
+	hierarchy1 := strings.Split(path1, configs.DOT)
+	assert.Assert(t, groupTracker.canRunApp(hierarchy1, TestApp1))
+	// make sure wildcard limits are not applied due to the tracker type
+	assert.Equal(t, uint64(0), groupTracker.queueTracker.childQueueTrackers["parent"].maxRunningApps)
+	assert.Assert(t, groupTracker.queueTracker.childQueueTrackers["parent"].maxResources == nil)
+	assert.Assert(t, !groupTracker.queueTracker.childQueueTrackers["parent"].useWildCard)
+
+	// maxApps limit hit
+	groupTracker.setLimits(path1, nil, 1)
+	groupTracker.increaseTrackedResource(path1, TestApp1, resources.NewResourceFromMap(map[string]resources.Quantity{
+		"cpu": 1000,
+	}), user.User)
+	assert.Assert(t, groupTracker.canRunApp(hierarchy1, TestApp1))
+	assert.Assert(t, !groupTracker.canRunApp(hierarchy1, TestApp2))
+}
+
 func getGroupResource(gt *GroupTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := gt.GetGroupResourceUsageDAOInfo()

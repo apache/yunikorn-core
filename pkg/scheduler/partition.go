@@ -477,7 +477,7 @@ func (pc *PartitionContext) getQueueInternal(name string) *objects.Queue {
 
 // Get the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
-	partitionQueueDAOInfo := pc.root.GetPartitionQueueDAOInfo()
+	partitionQueueDAOInfo := pc.root.GetPartitionQueueDAOInfo(false)
 	partitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
 	return partitionQueueDAOInfo
 }

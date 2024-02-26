@@ -2601,6 +2601,39 @@ func TestGetRateLimitedAppLog(t *testing.T) {
 	assert.Check(t, l != nil)
 }
 
+func TestTryAllocateWithReservedHeadRoomChecking(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("reserved headroom test regression: %v", r)
+		}
+	}()
+
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "2G"})
+	assert.NilError(t, err, "failed to create basic resource")
+	var headRoom *resources.Resource
+	headRoom, err = resources.NewResourceFromConf(map[string]string{"memory": "1G"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	app := newApplication(appID1, "default", "root")
+	ask := newAllocationAsk(aKey, appID1, res)
+	var queue *Queue
+	queue, err = createRootQueue(map[string]string{"memory": "1G"})
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	node1 := newNodeRes(nodeID1, res)
+	node2 := newNodeRes(nodeID2, res)
+	// reserve that works
+	err = app.Reserve(node1, ask)
+	assert.NilError(t, err, "reservation should not have failed")
+
+	iter := getNodeIteratorFn(node1, node2)
+	alloc := app.tryReservedAllocate(headRoom, iter)
+	assert.Assert(t, alloc == nil, "Alloc is expected to be nil due to insufficient headroom")
+}
+
 func TestUpdateRunnableStatus(t *testing.T) {
 	app := newApplication(appID0, "default", "root.unknown")
 	assert.Assert(t, app.runnableInQueue)

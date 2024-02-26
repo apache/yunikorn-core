@@ -91,7 +91,7 @@ func (evt *applicationEvents) sendNewApplicationEvent() {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_ADD, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
+	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_ADD, si.EventRecord_APP_NEW, evt.app.allocatedResource)
 	evt.eventSystem.AddEvent(event)
 }
 

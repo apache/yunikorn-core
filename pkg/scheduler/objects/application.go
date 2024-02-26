@@ -1223,6 +1223,12 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	return allocResult
 }
 
+// check ask against both user headRoom and queue headRoom
+func (sa *Application) checkHeadRooms(ask *AllocationAsk, userHeadroom *resources.Resource, headRoom *resources.Resource) bool {
+	// check if this fits in the users' headroom first, if that fits check the queues' headroom
+	return userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) && headRoom.FitInMaxUndef(ask.GetAllocatedResource())
+}
+
 // Try a reserved allocation of an outstanding reservation
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
@@ -1250,13 +1256,8 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			alloc := newUnreservedAllocation(reserve.nodeID, unreserveAsk)
 			return alloc
 		}
-		// check if this fits in the users' headroom first, if that fits check the queues' headroom
-		if !userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
-			continue
-		}
 
-		// check if this fits in the queue's headroom
-		if !headRoom.FitInMaxUndef(ask.GetAllocatedResource()) {
+		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
 			continue
 		}
 
@@ -1280,12 +1281,16 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
 		// Other nodes cannot be tried if the ask has a required node
-		if reserve.ask.GetRequiredNode() != "" {
+		ask := reserve.ask
+		if ask.GetRequiredNode() != "" {
 			continue
 		}
 		iterator := nodeIterator()
 		if iterator != nil {
-			alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
+			if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
+				continue
+			}
+			alloc := sa.tryNodesNoReserve(ask, iterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if alloc != nil {
 				return alloc
@@ -1490,7 +1495,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(node.NodeID, ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
-			log.Log(log.SchedApplication).Warn("queue update failed unexpectedly",
+			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(alloc.GetAllocationID())

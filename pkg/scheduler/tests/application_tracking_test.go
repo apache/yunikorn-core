@@ -24,12 +24,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/webservice"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -59,8 +61,9 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, 2, len(eventsDao.EventRecords), "number of events generated")
 	verifyQueueEvents(t, eventsDao.EventRecords)
-	events := getEventsFromStream(t, stream, 2)
+	events, uuid := getEventsFromStream(t, true, stream, 3)
 	assert.NilError(t, err)
+	assert.Assert(t, uuid != "")
 	verifyQueueEvents(t, events)
 
 	// Register a node & check events
@@ -86,7 +89,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, 5, len(eventsDao.EventRecords), "number of events generated")
 	verifyNodeAddedAndQueueMaxSetEvents(t, eventsDao.EventRecords[2:])
-	events = getEventsFromStream(t, stream, 3)
+	events, _ = getEventsFromStream(t, false, stream, 3)
 	assert.NilError(t, err)
 	verifyNodeAddedAndQueueMaxSetEvents(t, events)
 
@@ -101,7 +104,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, 7, len(eventsDao.EventRecords), "number of events generated")
 	verifyAppAddedEvents(t, eventsDao.EventRecords[5:])
-	events = getEventsFromStream(t, stream, 2)
+	events, _ = getEventsFromStream(t, false, stream, 2)
 	assert.NilError(t, err)
 	verifyAppAddedEvents(t, events)
 
@@ -128,7 +131,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, 13, len(eventsDao.EventRecords), "number of events generated")
 	verifyAllocationAskAddedEvents(t, eventsDao.EventRecords[7:])
-	events = getEventsFromStream(t, stream, 6)
+	events, _ = getEventsFromStream(t, false, stream, 6)
 	verifyAllocationAskAddedEvents(t, events)
 
 	allocations := ms.mockRM.getAllocations()
@@ -165,19 +168,31 @@ func TestApplicationHistoryTracking(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, 17, len(eventsDao.EventRecords), "number of events generated")
 	verifyAllocationCancelledEvents(t, eventsDao.EventRecords[13:])
-	events = getEventsFromStream(t, stream, 4)
+	events, _ = getEventsFromStream(t, false, stream, 4)
 	assert.NilError(t, err)
 	verifyAllocationCancelledEvents(t, events)
 }
 
-func getEventsFromStream(t *testing.T, stream io.ReadCloser, numEvents int) []*si.EventRecord {
+func getEventsFromStream(t *testing.T, initial bool, stream io.ReadCloser, numEvents int) ([]*si.EventRecord, string) {
 	lines, err := readLinesFromStream(stream, numEvents)
 	assert.NilError(t, err)
 
-	events, err := siEventFromJson(lines)
-	assert.NilError(t, err)
+	var events []*si.EventRecord
+	var uuid string
+	if initial {
+		uuid, err = getInstanceUUID(lines[0])
+		assert.NilError(t, err)
+		events, err = siEventFromJson(lines[1:])
+		assert.NilError(t, err)
+	} else {
+		events, err = siEventFromJson(lines)
+		assert.NilError(t, err)
+		for _, s := range lines {
+			assert.Assert(t, !strings.Contains(s, "InstanceUUID"), "unexpected InstanceUUID")
+		}
+	}
 
-	return events
+	return events, uuid
 }
 
 type scanResult struct {
@@ -227,6 +242,12 @@ func siEventFromJson(lines []string) ([]*si.EventRecord, error) {
 	}
 
 	return events, nil
+}
+
+func getInstanceUUID(output string) (string, error) {
+	var id webservice.YunikornID
+	err := json.Unmarshal([]byte(output), &id)
+	return id.InstanceUUID, err
 }
 
 func verifyQueueEvents(t *testing.T, events []*si.EventRecord) {

@@ -31,7 +31,7 @@ func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecor
 	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
 	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
-	assert.Equal(t, si.EventRecord_DETAILS_NONE, record.EventChangeDetail, "incorrect change detail, expected none")
+	assert.Equal(t, si.EventRecord_APP_NEW, record.EventChangeDetail, "incorrect change detail, expected none")
 }
 
 func isRemoveApplicationEvent(t *testing.T, app *Application, record *si.EventRecord) {
@@ -277,7 +277,7 @@ func TestSendNewApplicationEvent(t *testing.T) {
 	event := mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)
 	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
-	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, si.EventRecord_APP_NEW, event.EventChangeDetail)
 	assert.Equal(t, "app-0", event.ObjectID)
 	assert.Equal(t, "", event.ReferenceID)
 	assert.Equal(t, "", event.Message)

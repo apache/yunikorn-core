@@ -271,7 +271,7 @@ func verifyAppAddedEvents(t *testing.T, events []*si.EventRecord) {
 	assert.Equal(t, "", events[0].ReferenceID)
 	assert.Equal(t, si.EventRecord_APP, events[0].Type)
 	assert.Equal(t, si.EventRecord_ADD, events[0].EventChangeType)
-	assert.Equal(t, si.EventRecord_DETAILS_NONE, events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_APP_NEW, events[0].EventChangeDetail)
 
 	assert.Equal(t, "root.singleleaf", events[1].ObjectID)
 	assert.Equal(t, "", events[1].Message)

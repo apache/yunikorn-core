@@ -92,6 +92,7 @@ func (gt *GroupTracker) clearLimits(queuePath string) {
 	gt.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), nil, 0, false, group, false)
 }
 
+// Note: headroom of queue tracker is not read-only, it also traverses the queue hierarchy and creates childQueueTracker if it does not exist.
 func (gt *GroupTracker) headroom(hierarchy []string) *resources.Resource {
 	gt.Lock()
 	defer gt.Unlock()
@@ -159,6 +160,7 @@ func (gt *GroupTracker) decreaseAllTrackedResourceUsage(hierarchy []string) map[
 	return removedApplications
 }
 
+// Note: canRunApp of queue tracker is not read-only, it also traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
 func (gt *GroupTracker) canRunApp(hierarchy []string, applicationID string) bool {
 	gt.Lock()
 	defer gt.Unlock()

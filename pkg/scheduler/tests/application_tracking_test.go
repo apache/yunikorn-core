@@ -31,7 +31,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
-	"github.com/apache/yunikorn-core/pkg/webservice"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -245,7 +245,7 @@ func siEventFromJson(lines []string) ([]*si.EventRecord, error) {
 }
 
 func getInstanceUUID(output string) (string, error) {
-	var id webservice.YunikornID
+	var id dao.YunikornID
 	err := json.Unmarshal([]byte(output), &id)
 	return id.InstanceUUID, err
 }

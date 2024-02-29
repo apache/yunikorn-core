@@ -65,10 +65,6 @@ var allowedActiveStatusMsg string
 var allowedAppActiveStatuses map[string]bool
 var streamingLimiter *StreamingLimiter
 
-type YunikornID struct {
-	InstanceUUID string
-}
-
 func init() {
 	allowedAppActiveStatuses = make(map[string]bool)
 
@@ -1176,7 +1172,7 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 	stream := eventSystem.CreateEventStream(r.Host, count)
 	defer eventSystem.RemoveStream(stream)
 
-	if err := enc.Encode(YunikornID{
+	if err := enc.Encode(dao.YunikornID{
 		InstanceUUID: schedulerContext.GetUUID(),
 	}); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)

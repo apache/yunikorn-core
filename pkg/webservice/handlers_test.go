@@ -2314,7 +2314,7 @@ func assertEvent(t *testing.T, output string, tsNano int64, objectID string) {
 }
 
 func assertInstanceUUID(t *testing.T, output string) {
-	var id YunikornID
+	var id dao.YunikornID
 	err := json.Unmarshal([]byte(output), &id)
 	assert.NilError(t, err)
 	assert.Assert(t, id.InstanceUUID != "")

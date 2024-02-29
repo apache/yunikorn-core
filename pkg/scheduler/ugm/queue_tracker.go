@@ -28,6 +28,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
+// The QueueTracker is designed to be lock free and should remain as such.
+// Each QueueTracker object is always only linked to single UserTracker or GroupTracker. The responsibility of managing locks is delegated to those objects.
 type QueueTracker struct {
 	queueName           string
 	queuePath           string
@@ -45,13 +47,13 @@ func newRootQueueTracker(trackType trackingType) *QueueTracker {
 }
 
 func newQueueTracker(queuePath string, queueName string, trackType trackingType) *QueueTracker {
-	qp := queueName
+	fullPath := queueName
 	if queuePath != common.Empty {
-		qp = queuePath + "." + queueName
+		fullPath = queuePath + "." + queueName
 	}
 	queueTracker := &QueueTracker{
 		queueName:           queueName,
-		queuePath:           qp,
+		queuePath:           fullPath,
 		resourceUsage:       nil,
 		runningApplications: make(map[string]bool),
 		maxResources:        nil,
@@ -61,7 +63,7 @@ func newQueueTracker(queuePath string, queueName string, trackType trackingType)
 
 	// Override user/group specific limits with wild card limit settings
 	if trackType == user {
-		if config := m.getUserWildCardLimitsConfig(queuePath + "." + queueName); config != nil {
+		if config := m.getUserWildCardLimitsConfig(fullPath); config != nil {
 			log.Log(log.SchedUGM).Debug("Use wild card limit settings as there is no limit set explicitly",
 				zap.String("queue name", queueName),
 				zap.String("queue path", queuePath),
@@ -86,6 +88,7 @@ const (
 )
 
 func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource) {
+// Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 	log.Log(log.SchedUGM).Debug("Increasing resource usage",
 		zap.Int("tracking type", int(trackType)),
 		zap.String("queue path", qt.queuePath),
@@ -168,6 +171,7 @@ func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationI
 	return removeQT
 }
 
+// Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Resource, maxApps uint64, useWildCard bool, trackType trackingType, doWildCardCheck bool) {
 	log.Log(log.SchedUGM).Debug("Setting limits",
 		zap.String("queue path", qt.queuePath),
@@ -194,6 +198,8 @@ func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Reso
 	}
 }
 
+// Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
+// Note: headroom is not read-only, it also traverses the queue hierarchy and creates childQueueTracker if it does not exist.
 func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *resources.Resource {
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
@@ -218,6 +224,7 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 	return resources.ComponentWiseMinPermissive(headroom, childHeadroom)
 }
 
+// Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {
 	if qt == nil {
 		return &dao.ResourceUsageDAOInfo{}
@@ -244,6 +251,7 @@ func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.Res
 
 // IsQueuePathTrackedCompletely Traverse queue path upto the end queue through its linkage
 // to confirm entire queuePath has been tracked completely or not
+// Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) IsQueuePathTrackedCompletely(hierarchy []string) bool {
 	// depth first: all the way to the leaf, ignore if not exists
 	// more than 1 in the slice means we need to recurse down
@@ -265,6 +273,7 @@ func (qt *QueueTracker) IsQueuePathTrackedCompletely(hierarchy []string) bool {
 // linkage needs to be removed or not based on the running applications.
 // If there are any running applications in end leaf queue, we should remove the linkage between
 // the leaf and its parent queue using UnlinkQT method. Otherwise, we should leave as it is.
+// Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) IsUnlinkRequired(hierarchy []string) bool {
 	// depth first: all the way to the leaf, ignore if not exists
 	// more than 1 in the slice means we need to recurse down
@@ -289,6 +298,7 @@ func (qt *QueueTracker) IsUnlinkRequired(hierarchy []string) bool {
 
 // UnlinkQT Traverse queue path upto the end queue. If end queue has any more child queue trackers,
 // then goes upto each child queue and removes the linkage with its immediate parent
+// Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) UnlinkQT(hierarchy []string) bool {
 	log.Log(log.SchedUGM).Debug("Unlinking current queue tracker from its parent",
 		zap.String("current queue ", qt.queueName),
@@ -326,6 +336,7 @@ func (qt *QueueTracker) UnlinkQT(hierarchy []string) bool {
 // decreaseTrackedResourceUsageDownwards queuePath either could be parent or leaf queue path.
 // If it is parent queue path, then reset resourceUsage and runningApplications for all child queues,
 // If it is leaf queue path, reset resourceUsage and runningApplications for queue trackers in this queue path.
+// Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(hierarchy []string) map[string]bool {
 	// depth first: all the way to the leaf, ignore if not exists
 	// more than 1 in the slice means we need to recurse down
@@ -353,6 +364,8 @@ func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(hierarchy []string
 	return removedApplications
 }
 
+// Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
+// Note: canRunApp is not read-only, it also traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
 func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trackType trackingType) bool {
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
@@ -387,6 +400,7 @@ func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trac
 // canBeRemoved Start from root and reach all levels of queue hierarchy to confirm whether corresponding queue tracker
 // object can be removed from ugm or not. Based on running applications, resource usage, child queue trackers, max running apps, max resources etc
 // it decides the removal. It returns false the moment it sees any unexpected values for any queue in any levels.
+// Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) canBeRemoved() bool {
 	for _, childQT := range qt.childQueueTrackers {
 		// quick check to avoid further traversal

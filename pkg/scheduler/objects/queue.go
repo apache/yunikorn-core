@@ -624,17 +624,23 @@ func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 }
 
 // GetPartitionQueueDAOInfo returns the queue hierarchy as an object for a REST call.
-func (sq *Queue) GetPartitionQueueDAOInfo() dao.PartitionQueueDAOInfo {
+// Exclude is true, which means that returns the specified queue object, but does not return the children of the specified queue.
+func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
-	childes := sq.GetCopyOfChildren()
-	queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(childes))
-	for _, child := range childes {
-		queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo())
+	children := sq.GetCopyOfChildren()
+	if !exclude {
+		queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(children))
+		for _, child := range children {
+			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo(false))
+		}
 	}
 	// we have held the read lock so following method should not take lock again.
 	sq.RLock()
 	defer sq.RUnlock()
 
+	for _, child := range children {
+		queueInfo.ChildrenNames = append(queueInfo.ChildrenNames, child.QueuePath)
+	}
 	queueInfo.QueueName = sq.QueuePath
 	queueInfo.Status = sq.stateMachine.Current()
 	queueInfo.PendingResource = sq.pending.DAOMap()
@@ -1355,7 +1361,10 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true, false) {
-			if app.IsAccepted() && (!sq.canRunApp(app.ApplicationID) || !ugm.GetUserManager().CanRunApp(sq.QueuePath, app.ApplicationID, app.user)) {
+			runnableInQueue := sq.canRunApp(app.ApplicationID)
+			runnableByUserLimit := ugm.GetUserManager().CanRunApp(sq.QueuePath, app.ApplicationID, app.user)
+			app.updateRunnableStatus(runnableInQueue, runnableByUserLimit)
+			if app.IsAccepted() && (!runnableInQueue || !runnableByUserLimit) {
 				continue
 			}
 			alloc := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)

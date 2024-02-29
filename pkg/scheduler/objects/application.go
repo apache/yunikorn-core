@@ -112,6 +112,8 @@ type Application struct {
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 	askMaxPriority       int32                       // highest priority value of outstanding asks
 	hasPlaceholderAlloc  bool                        // Whether there is at least one allocated placeholder
+	runnableInQueue      bool                        // whether the application is runnable/schedulable in the queue. Default is true.
+	runnableByUserLimit  bool                        // whether the application is runnable/schedulable based on user/group quota. Default is true.
 
 	rmEventHandler        handler.EventHandler
 	rmID                  string
@@ -171,6 +173,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		askMaxPriority:        configs.MinPriority,
 		sortedRequests:        sortedRequests{},
 		sendStateChangeEvents: true,
+		runnableByUserLimit:   true,
+		runnableInQueue:       true,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -1219,6 +1223,12 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	return allocResult
 }
 
+// check ask against both user headRoom and queue headRoom
+func (sa *Application) checkHeadRooms(ask *AllocationAsk, userHeadroom *resources.Resource, headRoom *resources.Resource) bool {
+	// check if this fits in the users' headroom first, if that fits check the queues' headroom
+	return userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) && headRoom.FitInMaxUndef(ask.GetAllocatedResource())
+}
+
 // Try a reserved allocation of an outstanding reservation
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
@@ -1246,13 +1256,8 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			alloc := newUnreservedAllocation(reserve.nodeID, unreserveAsk)
 			return alloc
 		}
-		// check if this fits in the users' headroom first, if that fits check the queues' headroom
-		if !userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
-			continue
-		}
 
-		// check if this fits in the queue's headroom
-		if !headRoom.FitInMaxUndef(ask.GetAllocatedResource()) {
+		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
 			continue
 		}
 
@@ -1276,12 +1281,16 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
 		// Other nodes cannot be tried if the ask has a required node
-		if reserve.ask.GetRequiredNode() != "" {
+		ask := reserve.ask
+		if ask.GetRequiredNode() != "" {
 			continue
 		}
 		iterator := nodeIterator()
 		if iterator != nil {
-			alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
+			if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
+				continue
+			}
+			alloc := sa.tryNodesNoReserve(ask, iterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if alloc != nil {
 				return alloc
@@ -1486,7 +1495,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(node.NodeID, ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
-			log.Log(log.SchedApplication).Warn("queue update failed unexpectedly",
+			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(alloc.GetAllocationID())
@@ -2082,4 +2091,42 @@ func getRateLimitedAppLog() *log.RateLimitedLogger {
 		rateLimitedAppLog = log.NewRateLimitedLogger(log.SchedApplication, time.Second)
 	})
 	return rateLimitedAppLog
+}
+
+func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit bool) {
+	sa.Lock()
+	defer sa.Unlock()
+	if sa.runnableInQueue != runnableInQueue {
+		if runnableInQueue {
+			log.Log(log.SchedApplication).Info("Application is now runnable in queue",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath))
+			sa.appEvents.sendAppRunnableInQueueEvent()
+		} else {
+			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the queue limit",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath))
+			sa.appEvents.sendAppNotRunnableInQueueEvent()
+		}
+	}
+	sa.runnableInQueue = runnableInQueue
+
+	if sa.runnableByUserLimit != runnableByUserLimit {
+		if runnableByUserLimit {
+			log.Log(log.SchedApplication).Info("Application is now runnable based on user/group quota",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath),
+				zap.String("user", sa.user.User),
+				zap.Strings("groups", sa.user.Groups))
+			sa.appEvents.sendAppRunnableQuotaEvent()
+		} else {
+			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the user/group limit",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath),
+				zap.String("user", sa.user.User),
+				zap.Strings("groups", sa.user.Groups))
+			sa.appEvents.sendAppNotRunnableQuotaEvent()
+		}
+	}
+	sa.runnableByUserLimit = runnableByUserLimit
 }

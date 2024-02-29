@@ -2601,6 +2601,94 @@ func TestGetRateLimitedAppLog(t *testing.T) {
 	assert.Check(t, l != nil)
 }
 
+func TestTryAllocateWithReservedHeadRoomChecking(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("reserved headroom test regression: %v", r)
+		}
+	}()
+
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "2G"})
+	assert.NilError(t, err, "failed to create basic resource")
+	var headRoom *resources.Resource
+	headRoom, err = resources.NewResourceFromConf(map[string]string{"memory": "1G"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	app := newApplication(appID1, "default", "root")
+	ask := newAllocationAsk(aKey, appID1, res)
+	var queue *Queue
+	queue, err = createRootQueue(map[string]string{"memory": "1G"})
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	node1 := newNodeRes(nodeID1, res)
+	node2 := newNodeRes(nodeID2, res)
+	// reserve that works
+	err = app.Reserve(node1, ask)
+	assert.NilError(t, err, "reservation should not have failed")
+
+	iter := getNodeIteratorFn(node1, node2)
+	alloc := app.tryReservedAllocate(headRoom, iter)
+	assert.Assert(t, alloc == nil, "Alloc is expected to be nil due to insufficient headroom")
+}
+
+func TestUpdateRunnableStatus(t *testing.T) {
+	app := newApplication(appID0, "default", "root.unknown")
+	assert.Assert(t, app.runnableInQueue)
+	assert.Assert(t, app.runnableByUserLimit)
+	eventSystem := mock.NewEventSystem()
+	app.appEvents = newApplicationEvents(app, eventSystem)
+
+	// App runnable - no events
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, 0, len(eventSystem.Events))
+
+	// App not runnable in queue
+	eventSystem.Reset()
+	app.updateRunnableStatus(false, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUEUE, eventSystem.Events[0].EventChangeDetail)
+	// Try again - no new events
+	app.updateRunnableStatus(false, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// App becomes runnable in queue
+	eventSystem.Reset()
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_RUNNABLE_QUEUE, eventSystem.Events[0].EventChangeDetail)
+
+	// Try again - no new events
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// App not runnable by UG quota
+	eventSystem.Reset()
+	app.updateRunnableStatus(true, false)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, eventSystem.Events[0].EventChangeDetail)
+	// Try again - no new events
+	app.updateRunnableStatus(true, false)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// App becomes runnable by user quota
+	eventSystem.Reset()
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, si.EventRecord_APP_RUNNABLE_QUOTA, eventSystem.Events[0].EventChangeDetail)
+	// Try again - no new events
+	app.updateRunnableStatus(true, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+
+	// Both false
+	eventSystem.Reset()
+	app.updateRunnableStatus(false, false)
+	assert.Equal(t, 2, len(eventSystem.Events))
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUEUE, eventSystem.Events[0].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, eventSystem.Events[1].EventChangeDetail)
+}
+
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()

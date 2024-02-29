@@ -298,7 +298,7 @@ func TestUpdateConfig(t *testing.T) {
 func TestUseWildCard(t *testing.T) {
 	setupUGM()
 	manager := GetUserManager()
-	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
+	user1 := security.UserGroup{User: "user1", Groups: []string{"group1"}}
 
 	expectedResource, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcores": "50"})
 	if err != nil {
@@ -314,36 +314,39 @@ func TestUseWildCard(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, expectedHeadroom)
 	}
 
-	user1 := security.UserGroup{User: "user2", Groups: []string{"group2"}}
-	conf := createUpdateConfigWithWildCardUsersAndGroups(user1.User, user1.Groups[0], "*", "*", "50", "50")
+	user2 := security.UserGroup{User: "user2", Groups: []string{"group2"}}
+	conf := createUpdateConfigWithWildCardUsersAndGroups(user2.User, user2.Groups[0], "*", "*", "50", "50")
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	// user1 fallback on wild card user limit. user1 max resources and max applications would be overwritten with wild card user limit settings
-	headroom := manager.Headroom(queuePath1, TestApp1, user)
-	assert.Equal(t, resources.Equals(headroom, expectedHeadroom), true)
+	headroom := manager.Headroom(queuePath1, TestApp1, user1)
+	assert.Assert(t, resources.Equals(headroom, expectedHeadroom))
 
 	// user2 has its own settings, so doesn't fallback on wild card user limit.
-	headroom = manager.Headroom(queuePath1, TestApp1, user1)
-	assert.Equal(t, resources.Equals(headroom, resources.Multiply(usage, 7)), true)
+	headroom = manager.Headroom(queuePath1, TestApp1, user2)
+	assert.Assert(t, resources.Equals(headroom, resources.Multiply(usage, 7)))
 
 	// user1 uses wild card user limit settings.
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.maxRunningApps, uint64(0))
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].maxRunningApps, uint64(10))
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxRunningApps, uint64(0))
-	assert.Equal(t, resources.Equals(manager.GetUserTracker(user.User).queueTracker.maxResources, nil), true)
-	assert.Equal(t, resources.Equals(manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].maxResources, expectedHeadroom), true)
-	assert.Equal(t, resources.Equals(manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxResources, nil), true)
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.useWildCard, false)
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].useWildCard, true)
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].useWildCard, false)
-
-	// user2 uses its own settings.
 	assert.Equal(t, manager.GetUserTracker(user1.User).queueTracker.maxRunningApps, uint64(20))
 	assert.Equal(t, manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].maxRunningApps, uint64(10))
 	assert.Equal(t, manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxRunningApps, uint64(0))
 	assert.Equal(t, resources.Equals(manager.GetUserTracker(user1.User).queueTracker.maxResources, resources.Multiply(usage, 14)), true)
-	assert.Equal(t, resources.Equals(manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].maxResources, resources.Multiply(usage, 7)), true)
-	assert.Equal(t, resources.Equals(manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxResources, nil), true)
+	assert.Assert(t, resources.Equals(manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].maxResources, expectedHeadroom))
+	assert.Assert(t, resources.Equals(manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxResources, nil))
+	assert.Assert(t, manager.GetUserTracker(user1.User).queueTracker.useWildCard)
+	assert.Assert(t, manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].useWildCard)
+	assert.Assert(t, !manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].useWildCard)
+
+	// user2 uses its own settings.
+	assert.Equal(t, manager.GetUserTracker(user2.User).queueTracker.maxRunningApps, uint64(20))
+	assert.Equal(t, manager.GetUserTracker(user2.User).queueTracker.childQueueTrackers["parent"].maxRunningApps, uint64(10))
+	assert.Equal(t, manager.GetUserTracker(user2.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxRunningApps, uint64(0))
+	assert.Assert(t, resources.Equals(manager.GetUserTracker(user2.User).queueTracker.maxResources, resources.Multiply(usage, 14)))
+	assert.Assert(t, resources.Equals(manager.GetUserTracker(user2.User).queueTracker.childQueueTrackers["parent"].maxResources, resources.Multiply(usage, 7)))
+	assert.Assert(t, resources.Equals(manager.GetUserTracker(user2.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxResources, nil))
+	assert.Assert(t, !manager.GetUserTracker(user2.User).queueTracker.useWildCard)
+	assert.Assert(t, !manager.GetUserTracker(user2.User).queueTracker.childQueueTrackers["parent"].useWildCard)
+	assert.Assert(t, !manager.GetUserTracker(user2.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].useWildCard)
 
 	for i := 0; i < 5; i++ {
 		// should run as user has already fallen back on wild card user limit set on "root.parent" map[memory:50 vcores:50]
@@ -351,32 +354,32 @@ func TestUseWildCard(t *testing.T) {
 	}
 
 	// should not run as user has exceeded wild card user limit set on "root.parent" map[memory:50 vcores:50]
-	headroom = manager.Headroom(queuePath1, TestApp3, user)
-	assert.Equal(t, headroom.FitInMaxUndef(usage), false)
+	headroom = manager.Headroom(queuePath1, TestApp3, user1)
+	assert.Assert(t, !headroom.FitInMaxUndef(usage))
 
 	// clear all configs. Since wild card user limit is not there, all users used its settings earlier under the same queue path should start using its own value
 	conf = createConfigWithoutLimits()
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"), err)
 
-	headroom = manager.Headroom(queuePath1, TestApp1, user)
-	assert.Equal(t, resources.Equals(headroom, nil), true)
+	headroom = manager.Headroom(queuePath1, TestApp1, user1)
+	assert.Assert(t, resources.Equals(headroom, nil))
 
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.maxRunningApps, uint64(0))
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].maxRunningApps, uint64(0))
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxRunningApps, uint64(0))
-	assert.Equal(t, resources.Equals(manager.GetUserTracker(user.User).queueTracker.maxResources, nil), true)
-	assert.Equal(t, resources.Equals(manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].maxResources, nil), true)
-	assert.Equal(t, resources.Equals(manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxResources, nil), true)
+	assert.Equal(t, manager.GetUserTracker(user1.User).queueTracker.maxRunningApps, uint64(0))
+	assert.Equal(t, manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].maxRunningApps, uint64(0))
+	assert.Equal(t, manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxRunningApps, uint64(0))
+	assert.Assert(t, resources.Equals(manager.GetUserTracker(user1.User).queueTracker.maxResources, nil))
+	assert.Assert(t, resources.Equals(manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].maxResources, nil))
+	assert.Assert(t, resources.Equals(manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].maxResources, nil))
 
 	// set limit for user1 explicitly. New limit should precede the wild card user limit
-	conf = createUpdateConfigWithWildCardUsersAndGroups(user.User, user.Groups[0], "", "", "50", "50")
+	conf = createUpdateConfigWithWildCardUsersAndGroups(user1.User, user1.Groups[0], "", "", "50", "50")
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
-	headroom = manager.Headroom(queuePath1, TestApp1, user)
-	assert.Equal(t, resources.Equals(headroom, resources.Multiply(usage, 2)), true)
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.useWildCard, false)
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].useWildCard, false)
-	assert.Equal(t, manager.GetUserTracker(user.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].useWildCard, false)
+	headroom = manager.Headroom(queuePath1, TestApp1, user1)
+	assert.Assert(t, resources.Equals(headroom, resources.Multiply(usage, 2)))
+	assert.Assert(t, !manager.GetUserTracker(user1.User).queueTracker.useWildCard)
+	assert.Assert(t, !manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].useWildCard)
+	assert.Assert(t, !manager.GetUserTracker(user1.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].useWildCard)
 }
 
 func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {

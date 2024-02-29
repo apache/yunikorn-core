@@ -31,7 +31,7 @@ func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecor
 	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
 	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
 	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
-	assert.Equal(t, si.EventRecord_DETAILS_NONE, record.EventChangeDetail, "incorrect change detail, expected none")
+	assert.Equal(t, si.EventRecord_APP_NEW, record.EventChangeDetail, "incorrect change detail, expected none")
 }
 
 func isRemoveApplicationEvent(t *testing.T, app *Application, record *si.EventRecord) {
@@ -277,7 +277,7 @@ func TestSendNewApplicationEvent(t *testing.T) {
 	event := mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_APP, event.Type)
 	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
-	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, si.EventRecord_APP_NEW, event.EventChangeDetail)
 	assert.Equal(t, "app-0", event.ObjectID)
 	assert.Equal(t, "", event.ReferenceID)
 	assert.Equal(t, "", event.Message)
@@ -342,4 +342,96 @@ func TestSendStateChangeEvent(t *testing.T) {
 	assert.Equal(t, "app-0", event.ObjectID)
 	assert.Equal(t, "", event.ReferenceID)
 	assert.Equal(t, "Failed to add application to partition (placement rejected)", event.Message)
+}
+
+func TestSendAppCannotRunInQueueEvent(t *testing.T) {
+	app := &Application{
+		ApplicationID:         appID0,
+		queuePath:             "root.test",
+		sendStateChangeEvents: true,
+	}
+	eventSystem := mock.NewEventSystemDisabled()
+	appEvents := newApplicationEvents(app, eventSystem)
+	appEvents.sendAppNotRunnableInQueueEvent()
+	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
+
+	eventSystem = mock.NewEventSystem()
+	appEvents = newApplicationEvents(app, eventSystem)
+	appEvents.sendAppNotRunnableInQueueEvent()
+	event := eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUEUE, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
+}
+
+func TestSendAppCannotRunByQuotaEvent(t *testing.T) {
+	app := &Application{
+		ApplicationID:         appID0,
+		queuePath:             "root.test",
+		sendStateChangeEvents: true,
+	}
+	eventSystem := mock.NewEventSystemDisabled()
+	appEvents := newApplicationEvents(app, eventSystem)
+	appEvents.sendAppNotRunnableQuotaEvent()
+	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
+
+	eventSystem = mock.NewEventSystem()
+	appEvents = newApplicationEvents(app, eventSystem)
+	appEvents.sendAppNotRunnableQuotaEvent()
+	event := eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
+}
+
+func TestSendAppRunnableInQueueEvent(t *testing.T) {
+	app := &Application{
+		ApplicationID:         appID0,
+		queuePath:             "root.test",
+		sendStateChangeEvents: true,
+	}
+	eventSystem := mock.NewEventSystemDisabled()
+	appEvents := newApplicationEvents(app, eventSystem)
+	appEvents.sendAppRunnableInQueueEvent()
+	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
+
+	eventSystem = mock.NewEventSystem()
+	appEvents = newApplicationEvents(app, eventSystem)
+	appEvents.sendAppRunnableInQueueEvent()
+	event := eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_RUNNABLE_QUEUE, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
+}
+
+func TestSendAppRunnableByQuotaEvent(t *testing.T) {
+	app := &Application{
+		ApplicationID:         appID0,
+		queuePath:             "root.test",
+		sendStateChangeEvents: true,
+	}
+	eventSystem := mock.NewEventSystemDisabled()
+	appEvents := newApplicationEvents(app, eventSystem)
+	appEvents.sendAppRunnableQuotaEvent()
+	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
+
+	eventSystem = mock.NewEventSystem()
+	appEvents = newApplicationEvents(app, eventSystem)
+	appEvents.sendAppRunnableQuotaEvent()
+	event := eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_APP, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_APP_RUNNABLE_QUOTA, event.EventChangeDetail)
+	assert.Equal(t, "app-0", event.ObjectID)
+	assert.Equal(t, "", event.ReferenceID)
+	assert.Equal(t, "", event.Message)
 }

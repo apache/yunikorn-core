@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -2034,6 +2033,7 @@ func TestGetEventsWhenTrackingDisabled(t *testing.T) {
 }
 
 func TestGetStream(t *testing.T) {
+	setup(t, configDefault, 1)
 	ev, req := initEventsAndCreateRequest(t)
 	defer ev.Stop()
 	cancelCtx, cancel := context.WithCancel(context.Background())
@@ -2066,9 +2066,10 @@ func TestGetStream(t *testing.T) {
 	assert.NilError(t, err, "cannot read response body")
 
 	lines := strings.Split(string(output[:n]), "\n")
-	assertEvent(t, lines[0], 111, "app-1")
-	assertEvent(t, lines[1], 222, "node-1")
-	assertEvent(t, lines[2], 333, "app-2")
+	assertInstanceUUID(t, lines[0])
+	assertEvent(t, lines[1], 111, "app-1")
+	assertEvent(t, lines[2], 222, "node-1")
+	assertEvent(t, lines[3], 333, "app-2")
 }
 
 func TestGetStream_StreamClosedByProducer(t *testing.T) {
@@ -2093,8 +2094,9 @@ func TestGetStream_StreamClosedByProducer(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.Code)
 	assert.NilError(t, err, "cannot read response body")
 	lines := strings.Split(string(output[:n]), "\n")
-	assertEvent(t, lines[0], 111, "app-1")
-	assertYunikornError(t, lines[1], "Event stream was closed by the producer")
+	assertInstanceUUID(t, lines[0])
+	assertEvent(t, lines[1], 111, "app-1")
+	assertYunikornError(t, lines[2], "Event stream was closed by the producer")
 }
 
 func TestGetStream_NotFlusherImpl(t *testing.T) {
@@ -2110,6 +2112,7 @@ func TestGetStream_NotFlusherImpl(t *testing.T) {
 }
 
 func TestGetStream_Count(t *testing.T) {
+	setup(t, configDefault, 1)
 	ev, req := initEventsAndCreateRequest(t)
 	defer ev.Stop()
 	cancelCtx, cancel := context.WithCancel(context.Background())
@@ -2131,8 +2134,8 @@ func TestGetStream_Count(t *testing.T) {
 	getStream(resp, req)
 	output := make([]byte, 256)
 	n, err := resp.Body.Read(output)
-	assert.Error(t, io.EOF, err.Error())
-	assert.Equal(t, 0, n)
+	lines := strings.Split(string(output[:n]), "\n")
+	assertInstanceUUID(t, lines[0])
 
 	// case #2: "count" is set to "2"
 	req, err = http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
@@ -2149,9 +2152,10 @@ func TestGetStream_Count(t *testing.T) {
 	output = make([]byte, 256)
 	n, err = resp.Body.Read(output)
 	assert.NilError(t, err)
-	lines := strings.Split(string(output[:n]), "\n")
-	assertEvent(t, lines[0], 1, "")
-	assertEvent(t, lines[1], 2, "")
+	lines = strings.Split(string(output[:n]), "\n")
+	assertInstanceUUID(t, lines[0])
+	assertEvent(t, lines[1], 1, "")
+	assertEvent(t, lines[2], 2, "")
 
 	// case #3: illegal value
 	req, err = http.NewRequest("GET", "/ws/v1/events/stream", strings.NewReader(""))
@@ -2182,7 +2186,7 @@ func TestGetStream_TrackingDisabled(t *testing.T) {
 	_, req := initEventsAndCreateRequest(t)
 	resp := httptest.NewRecorder()
 
-	assertGetStreamError(t, req, resp, http.StatusInternalServerError, "Event tracking is disabled")
+	assertGetStreamError(t, false, req, resp, http.StatusInternalServerError, "Event tracking is disabled")
 }
 
 func TestGetStream_NoWriteDeadline(t *testing.T) {
@@ -2190,10 +2194,11 @@ func TestGetStream_NoWriteDeadline(t *testing.T) {
 	defer ev.Stop()
 	resp := httptest.NewRecorder() // does not have SetWriteDeadline()
 
-	assertGetStreamError(t, req, resp, http.StatusInternalServerError, "Cannot set write deadline: feature not supported")
+	assertGetStreamError(t, false, req, resp, http.StatusInternalServerError, "Cannot set write deadline: feature not supported")
 }
 
 func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
+	setup(t, configDefault, 1)
 	ev, req := initEventsAndCreateRequest(t)
 	defer ev.Stop()
 	resp := NewResponseRecorderWithDeadline()
@@ -2209,7 +2214,7 @@ func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
 	}()
 
 	getStream(resp, req)
-	checkGetStreamErrorResult(t, resp.Result(), http.StatusInternalServerError, "Cannot set write deadline: SetWriteDeadline failed")
+	checkGetStreamErrorResult(t, true, resp.Result(), http.StatusOK, "Cannot set write deadline: SetWriteDeadline failed")
 }
 
 func TestGetStream_SetReadDeadlineFails(t *testing.T) {
@@ -2217,7 +2222,7 @@ func TestGetStream_SetReadDeadlineFails(t *testing.T) {
 	resp := NewResponseRecorderWithDeadline()
 	resp.setReadFails = true
 
-	assertGetStreamError(t, req, resp, http.StatusInternalServerError, "Cannot set read deadline: SetReadDeadline failed")
+	assertGetStreamError(t, false, req, resp, http.StatusInternalServerError, "Cannot set read deadline: SetReadDeadline failed")
 }
 
 func TestGetStream_Limit(t *testing.T) {
@@ -2249,10 +2254,10 @@ func TestGetStream_Limit(t *testing.T) {
 		return streamingLimiter.streams == 3
 	})
 	assert.NilError(t, err)
-	assertGetStreamError(t, req, resp, http.StatusServiceUnavailable, "Too many streaming connections")
+	assertGetStreamError(t, false, req, resp, http.StatusServiceUnavailable, "Too many streaming connections")
 }
 
-func assertGetStreamError(t *testing.T, req *http.Request, resp interface{}, statusCode int, expectedMsg string) {
+func assertGetStreamError(t *testing.T, withUUID bool, req *http.Request, resp interface{}, statusCode int, expectedMsg string) {
 	t.Helper()
 	var response *http.Response
 
@@ -2267,16 +2272,22 @@ func assertGetStreamError(t *testing.T, req *http.Request, resp interface{}, sta
 		t.Fatalf("unknown response recorder type")
 	}
 
-	checkGetStreamErrorResult(t, response, statusCode, expectedMsg)
+	checkGetStreamErrorResult(t, withUUID, response, statusCode, expectedMsg)
 }
 
-func checkGetStreamErrorResult(t *testing.T, response *http.Response, statusCode int, expectedMsg string) {
+func checkGetStreamErrorResult(t *testing.T, withUUID bool, response *http.Response, statusCode int, expectedMsg string) {
 	t.Helper()
 	output := make([]byte, 256)
 	n, err := response.Body.Read(output)
 	assert.NilError(t, err)
-	line := string(output[:n])
-	assertYunikornError(t, line, expectedMsg)
+	if withUUID {
+		lines := strings.Split(string(output[:n]), "\n")
+		assertInstanceUUID(t, lines[0])
+		assertYunikornError(t, lines[1], expectedMsg)
+	} else {
+		line := string(output[:n])
+		assertYunikornError(t, line, expectedMsg)
+	}
 	assert.Equal(t, statusCode, response.StatusCode)
 }
 
@@ -2300,6 +2311,13 @@ func assertEvent(t *testing.T, output string, tsNano int64, objectID string) {
 	assert.NilError(t, err)
 	assert.Equal(t, tsNano, evt.TimestampNano)
 	assert.Equal(t, objectID, evt.ObjectID)
+}
+
+func assertInstanceUUID(t *testing.T, output string) {
+	var id dao.YunikornID
+	err := json.Unmarshal([]byte(output), &id)
+	assert.NilError(t, err)
+	assert.Assert(t, id.InstanceUUID != "")
 }
 
 func assertYunikornError(t *testing.T, output, errMsg string) {

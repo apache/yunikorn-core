@@ -1172,6 +1172,14 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 	stream := eventSystem.CreateEventStream(r.Host, count)
 	defer eventSystem.RemoveStream(stream)
 
+	if err := enc.Encode(dao.YunikornID{
+		InstanceUUID: schedulerContext.GetUUID(),
+	}); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	f.Flush()
+
 	// Reading events in an infinite loop until either the client disconnects or Yunikorn closes the channel.
 	// This results in a persistent HTTP connection where the message body is never closed.
 	// Write deadline is adjusted before sending data to the client.
@@ -1186,7 +1194,7 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				// should not fail at this point
 				log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
-				buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
+				buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusOK) // status code is already 200 at this point
 				return
 			}
 

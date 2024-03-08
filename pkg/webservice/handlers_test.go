@@ -19,9 +19,12 @@
 package webservice
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -1783,5 +1786,37 @@ func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
 		assert.Equal(t, expectedHealthCheck.Succeeded, actualHealthCheck.Succeeded)
 		assert.Equal(t, expectedHealthCheck.Description, actualHealthCheck.Description)
 		assert.Equal(t, expectedHealthCheck.DiagnosisMessage, actualHealthCheck.DiagnosisMessage)
+	}
+}
+
+func TestCompressQueueApplications(t *testing.T) {
+	var appsDao []*dao.ApplicationDAOInfo
+	app := newApplication("app-01", "part-01", "queue-1", rmID, security.UserGroup{})
+	app2 := newApplication("app-02", "part-01", "queue-1", rmID, security.UserGroup{})
+	appsDao = append(appsDao, getApplicationDAO(app))
+	appsDao = append(appsDao, getApplicationDAO(app2))
+
+	resp := &MockResponseWriter{}
+	compress(resp, appsDao)
+
+	buf := bytes.NewBuffer(resp.outputBytes)
+	gzipReader, err := gzip.NewReader(buf)
+	assert.NilError(t, err, "Error while decompressing data.")
+	err = gzipReader.Close()
+	assert.NilError(t, err, "Error when close gzip reader.")
+
+	uncompressedData, err := io.ReadAll(gzipReader)
+	assert.NilError(t, err, "Error when read decoded data.")
+
+	var decodedData []*dao.ApplicationDAOInfo
+	err = json.Unmarshal(uncompressedData, &decodedData)
+
+	for i := range decodedData {
+		assert.Equal(t, appsDao[i].ApplicationID, decodedData[i].ApplicationID)
+		assert.Equal(t, appsDao[i].Partition, decodedData[i].Partition)
+		assert.Equal(t, appsDao[i].QueueName, decodedData[i].QueueName)
+		assert.Equal(t, appsDao[i].SubmissionTime, decodedData[i].SubmissionTime)
+		assert.Equal(t, appsDao[i].User, decodedData[i].User)
+		assert.Equal(t, appsDao[i].Groups[0], decodedData[i].Groups[0])
 	}
 }

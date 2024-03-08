@@ -130,6 +130,10 @@ func writeHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With,Content-Type,Accept,Origin")
 }
 
+func writeHeader(w http.ResponseWriter, key, val string) {
+	w.Header().Set(key, val)
+}
+
 func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 	w.WriteHeader(code)
 	errorInfo := dao.NewYAPIError(nil, code, detail)
@@ -616,30 +620,8 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		appsDao = append(appsDao, getApplicationDAO(app))
 	}
 
-	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		w.Header().Set("Content-Encoding", "gzip")
-
-		response, err := json.Marshal(appsDao)
-		if err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-
-		var comp bytes.Buffer
-		writer := gzip.NewWriter(&comp)
-		_, err = writer.Write(response)
-		if err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		err = writer.Close()
-		if err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		if _, err = w.Write(comp.Bytes()); err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-		}
+	if checkHeader(r.Header, "Content-Encoding", "gzip") {
+		compress(w, appsDao)
 		return
 	}
 
@@ -961,6 +943,44 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 		EventRecords: records,
 	}
 	if err := json.NewEncoder(w).Encode(eventDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+
+func checkHeader(h http.Header, key string, value string) bool {
+	values := h.Values(key)
+	for _, v := range values {
+		if v == value {
+			return true
+		}
+	}
+	return false
+}
+
+func compress(w http.ResponseWriter, data any) {
+	response, err := json.Marshal(data)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var compressedData bytes.Buffer
+	writer := gzip.NewWriter(&compressedData)
+	_, err = writer.Write(response)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	err = writer.Close()
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writeHeader(w, "Content-Encoding", "gzip")
+	if _, err = w.Write(compressedData.Bytes()); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

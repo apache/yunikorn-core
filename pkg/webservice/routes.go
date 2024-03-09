@@ -101,6 +101,12 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
+		"/ws/v1/partition/:partition/queue/:queue",
+		getPartitionQueue,
+	},
+	route{
+		"Scheduler",
+		"GET",
 		"/ws/v1/partition/:partition/nodes",
 		getPartitionNodes,
 	},
@@ -121,6 +127,18 @@ var webRoutes = routes{
 		"GET",
 		"/ws/v1/partition/:partition/queue/:queue/application/:application",
 		getApplication,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/:partition/application/:application",
+		getApplication,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/partition/:partition/applications/:state",
+		getPartitionApplicationsByState,
 	},
 	route{
 		"Scheduler",
@@ -154,27 +172,15 @@ var webRoutes = routes{
 	},
 	route{
 		"Scheduler",
-		"PUT",
-		"/ws/v1/periodicstatedump/:switch/:periodSeconds",
-		handlePeriodicStateDump,
-	},
-	route{
-		"Scheduler",
-		"PUT",
-		"/ws/v1/periodicstatedump/:switch/",
-		handlePeriodicStateDump,
-	},
-	route{
-		"Scheduler",
-		"PUT",
-		"/ws/v1/periodicstatedump/",
-		handlePeriodicStateDump,
+		"GET",
+		"/ws/v1/events/batch",
+		getEvents,
 	},
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/events/batch",
-		getEvents,
+		"/ws/v1/events/stream",
+		getStream,
 	},
 	// endpoint to retrieve CPU, Memory profiling data,
 	// this works with pprof tool. By default, pprof endpoints
@@ -253,10 +259,17 @@ var webRoutes = routes{
 		"/ws/v1/scheduler/healthcheck",
 		checkHealthStatus,
 	},
+	// Deprecated - To be removed in next major release. Replaced with /ws/v1/scheduler/node-utilizations
 	route{
 		"Scheduler",
 		"GET",
 		"/ws/v1/scheduler/node-utilization",
 		getNodeUtilisation,
+	},
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/scheduler/node-utilizations",
+		getNodeUtilisations,
 	},
 }

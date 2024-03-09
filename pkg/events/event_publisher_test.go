@@ -19,58 +19,16 @@
 package events
 
 import (
-	"fmt"
-	"sync"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
-	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
-
-type mockEventPlugin struct {
-	tests.MockResourceManagerCallback
-	records chan *si.EventRecord
-
-	sync.Mutex
-}
-
-// create and register mocked event plugin
-func createEventPluginForTest() (*mockEventPlugin, error) {
-	eventPlugin := mockEventPlugin{
-		records: make(chan *si.EventRecord, 3),
-	}
-	plugins.RegisterSchedulerPlugin(&eventPlugin)
-	if plugins.GetResourceManagerCallbackPlugin() == nil {
-		return nil, fmt.Errorf("event plugin is not registered")
-	}
-	return &eventPlugin, nil
-}
-
-func (ep *mockEventPlugin) SendEvent(events []*si.EventRecord) {
-	ep.Lock()
-	defer ep.Unlock()
-
-	for _, event := range events {
-		ep.records <- event
-	}
-}
-
-func (ep *mockEventPlugin) getNextEventRecord() *si.EventRecord {
-	ep.Lock()
-	defer ep.Unlock()
-
-	select {
-	case record := <-ep.records:
-		return record
-	default:
-		return nil
-	}
-}
 
 // creating a Publisher with nil store should still provide a non-nil object
 func TestCreateShimPublisher(t *testing.T) {
@@ -88,11 +46,9 @@ func TestServiceStartStopInternal(t *testing.T) {
 }
 
 func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
-	pushEventInterval := 2 * time.Millisecond
-
 	store := newEventStore()
 	publisher := CreateShimPublisher(store)
-	publisher.pushEventInterval = pushEventInterval
+	publisher.pushEventInterval = time.Millisecond
 	publisher.StartService()
 	defer publisher.Stop()
 
@@ -104,16 +60,21 @@ func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
 		TimestampNano: 123456,
 	}
 	store.Store(event)
-	time.Sleep(2 * pushEventInterval)
-	assert.Equal(t, store.CountStoredEvents(), 0,
-		"the Publisher should erase the store even if no EventPlugin registered")
+
+	err := common.WaitForCondition(func() bool {
+		return store.CountStoredEvents() == 0
+	}, time.Millisecond, time.Second)
+	assert.NilError(t, err, "the Publisher should erase the store even if no EventPlugin registered")
 }
 
 // we push an event to the publisher, and check that the same event
 // is published by observing the mocked EventPlugin
 func TestPublisherSendsEvent(t *testing.T) {
-	eventPlugin, err := createEventPluginForTest()
-	assert.NilError(t, err, "could not create event plugin for test")
+	eventPlugin := mock.NewEventPlugin()
+	plugins.RegisterSchedulerPlugin(eventPlugin)
+	if plugins.GetResourceManagerCallbackPlugin() == nil {
+		t.Fatal("could not register event plugin for test")
+	}
 
 	store := newEventStore()
 	publisher := CreateShimPublisher(store)
@@ -131,8 +92,8 @@ func TestPublisherSendsEvent(t *testing.T) {
 	store.Store(event)
 
 	var eventFromPlugin *si.EventRecord
-	err = common.WaitForCondition(func() bool {
-		eventFromPlugin = eventPlugin.getNextEventRecord()
+	err := common.WaitForCondition(func() bool {
+		eventFromPlugin = eventPlugin.GetNextEventRecord()
 		return eventFromPlugin != nil
 	}, time.Millisecond, time.Second)
 	assert.NilError(t, err, "event was not received in time: %v", err)

@@ -1295,8 +1295,9 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	app1.queue = queue1
 	queue1.AddApplication(app1)
 	for i := 0; i < 20; i++ {
-		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc)
+		ask.SetSchedulingAttempted(true)
+		err = app1.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1304,8 +1305,9 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	app2.queue = queue2
 	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
-		err = app2.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, alloc))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, alloc)
+		ask.SetSchedulingAttempted(true)
+		err = app2.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1376,8 +1378,9 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	app1.queue = queue1
 	queue1.AddApplication(app1)
 	for i := 0; i < 20; i++ {
-		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc)
+		ask.SetSchedulingAttempted(true)
+		err = app1.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1424,8 +1427,9 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 	res, err = resources.NewResourceFromConf(map[string]string{"cpu": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	for i := 0; i < 10; i++ {
-		err = app1.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res)
+		ask.SetSchedulingAttempted(true)
+		err = app1.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1433,8 +1437,9 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 	app2.queue = queue2
 	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
-		err = app2.AddAllocationAsk(
-			newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, res))
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, res)
+		ask.SetSchedulingAttempted(true)
+		err = app2.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
@@ -1680,7 +1685,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 
 	// test properties
 	root.properties = getProperties()
-	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo().Properties)
+	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo(false).Properties)
 
 	// test template
 	root.template, err = template.FromConf(&configs.ChildTemplate{
@@ -1692,23 +1697,23 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 		},
 	})
 	assert.NilError(t, err)
-	assert.Equal(t, root.template.GetMaxApplications(), root.GetPartitionQueueDAOInfo().TemplateInfo.MaxApplications)
-	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo().TemplateInfo.Properties)
-	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.template.GetMaxResource().DAOMap())
-	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.template.GetGuaranteedResource().DAOMap())
+	assert.Equal(t, root.template.GetMaxApplications(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.MaxApplications)
+	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.Properties)
+	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.MaxResource)
+	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.GuaranteedResource)
 
 	// test resources
 	root.maxResource = getResource(t)
 	root.guaranteedResource = getResource(t)
-	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo().MaxResource)
-	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo().GuaranteedResource)
-	assert.DeepEqual(t, root.getHeadRoom().DAOMap(), root.GetPartitionQueueDAOInfo().HeadRoom)
+	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).MaxResource)
+	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).GuaranteedResource)
+	assert.DeepEqual(t, root.getHeadRoom().DAOMap(), root.GetPartitionQueueDAOInfo(false).HeadRoom)
 
 	// test allocatingAcceptedApps
 	root.allocatingAcceptedApps = getAllocatingAcceptedApps()
 	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "allocatingAcceptedApps size")
-	assert.Equal(t, len(root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
-	assert.Equal(t, root.GetPartitionQueueDAOInfo().AllocatingAcceptedApps[0], appID1)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).AllocatingAcceptedApps[0], appID1)
 }
 
 func getAllocatingAcceptedApps() map[string]bool {

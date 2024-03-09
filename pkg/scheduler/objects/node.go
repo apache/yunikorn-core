@@ -360,8 +360,8 @@ func (sn *Node) ReplaceAllocation(allocationID string, replace *Allocation, delt
 	sn.availableResource.SubFrom(delta)
 	if !before.FitIn(sn.allocatedResource) {
 		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",
-			zap.String("placeholder allocationid", allocationID),
-			zap.String("allocation allocationid", replace.GetAllocationID()),
+			zap.String("placeholder allocationID", allocationID),
+			zap.String("allocation allocationID", replace.GetAllocationID()),
 			zap.Stringer("delta", delta))
 	}
 }
@@ -406,7 +406,9 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 				zap.Bool("allocateFlag", allocate),
 				zap.Error(err))
 			// running predicates failed
-			ask.LogAllocationFailure(err.Error(), allocate)
+			msg := err.Error()
+			ask.LogAllocationFailure(msg, allocate)
+			ask.SendPredicateFailedEvent(msg)
 			return false
 		}
 	}

@@ -51,11 +51,15 @@ var (
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 
-var rateLimitedLog = log.RateLimitedLog(log.SchedApplication, time.Second)
+var initAppLogOnce sync.Once
+var rateLimitedAppLog *log.RateLimitedLogger
 
 const (
 	Soft string = "Soft"
 	Hard string = "Hard"
+
+	NotEnoughUserQuota  = "Not enough user quota"
+	NotEnoughQueueQuota = "Not enough queue quota"
 )
 
 type PlaceholderData struct {
@@ -108,6 +112,8 @@ type Application struct {
 	placeholderData      map[string]*PlaceholderData // track placeholder and gang related info
 	askMaxPriority       int32                       // highest priority value of outstanding asks
 	hasPlaceholderAlloc  bool                        // Whether there is at least one allocated placeholder
+	runnableInQueue      bool                        // whether the application is runnable/schedulable in the queue. Default is true.
+	runnableByUserLimit  bool                        // whether the application is runnable/schedulable based on user/group quota. Default is true.
 
 	rmEventHandler        handler.EventHandler
 	rmID                  string
@@ -167,6 +173,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		askMaxPriority:        configs.MinPriority,
 		sortedRequests:        sortedRequests{},
 		sendStateChangeEvents: true,
+		runnableByUserLimit:   true,
+		runnableInQueue:       true,
 	}
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
@@ -898,13 +906,16 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 		return
 	}
 	for _, request := range sa.sortedRequests {
-		if request.GetPendingAskRepeat() == 0 {
+		if request.GetPendingAskRepeat() == 0 || !request.IsSchedulingAttempted() {
 			continue
 		}
+
 		// ignore nil checks resource function calls are nil safe
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
-			// if headroom is still enough for the resources
-			*total = append(*total, request)
+			if !request.HasTriggeredScaleUp() && request.requiredNode == common.Empty && !sa.canReplace(request) {
+				// if headroom is still enough for the resources
+				*total = append(*total, request)
+			}
 			headRoom.SubOnlyExisting(request.GetAllocatedResource())
 			userHeadRoom.SubOnlyExisting(request.GetAllocatedResource())
 		}
@@ -947,8 +958,12 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		// NOTE: preemption most likely will not help in this case. The chance that preemption helps is mall
 		// as the preempted allocation must be for the same user in a different queue in the hierarchy...
 		if !userHeadroom.FitInMaxUndef(request.GetAllocatedResource()) {
+			request.LogAllocationFailure(NotEnoughUserQuota, true) // error message MUST be constant!
+			request.setUserQuotaCheckFailed(userHeadroom)
 			continue
 		}
+		request.setUserQuotaCheckPassed()
+		request.SetSchedulingAttempted(true)
 
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
 		if !headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
@@ -963,9 +978,11 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 					}
 				}
 			}
-			sa.appEvents.sendAppDoesNotFitEvent(request, headRoom)
+			request.LogAllocationFailure(NotEnoughQueueQuota, true) // error message MUST be constant!
+			request.setHeadroomCheckFailed(headRoom, sa.queuePath)
 			continue
 		}
+		request.setHeadroomCheckPassed(sa.queuePath)
 
 		requiredNode := request.GetRequiredNode()
 		// does request have any constraint to run on specific node?
@@ -973,7 +990,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
 			node := getNodeFn(requiredNode)
 			if node == nil {
-				rateLimitedLog.Warn("required node is not found (could be transient)",
+				getRateLimitedAppLog().Info("required node is not found (could be transient)",
 					zap.String("application ID", sa.ApplicationID),
 					zap.String("allocationKey", request.GetAllocationKey()),
 					zap.String("required node", requiredNode))
@@ -1206,6 +1223,12 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	return allocResult
 }
 
+// check ask against both user headRoom and queue headRoom
+func (sa *Application) checkHeadRooms(ask *AllocationAsk, userHeadroom *resources.Resource, headRoom *resources.Resource) bool {
+	// check if this fits in the users' headroom first, if that fits check the queues' headroom
+	return userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) && headRoom.FitInMaxUndef(ask.GetAllocatedResource())
+}
+
 // Try a reserved allocation of an outstanding reservation
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *Allocation {
 	sa.Lock()
@@ -1233,13 +1256,8 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			alloc := newUnreservedAllocation(reserve.nodeID, unreserveAsk)
 			return alloc
 		}
-		// check if this fits in the users' headroom first, if that fits check the queues' headroom
-		if !userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) {
-			continue
-		}
 
-		// check if this fits in the queue's headroom
-		if !headRoom.FitInMaxUndef(ask.GetAllocatedResource()) {
+		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
 			continue
 		}
 
@@ -1263,12 +1281,16 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	// lets try this on all other nodes
 	for _, reserve := range sa.reservations {
 		// Other nodes cannot be tried if the ask has a required node
-		if reserve.ask.GetRequiredNode() != "" {
+		ask := reserve.ask
+		if ask.GetRequiredNode() != "" {
 			continue
 		}
 		iterator := nodeIterator()
 		if iterator != nil {
-			alloc := sa.tryNodesNoReserve(reserve.ask, iterator, reserve.nodeID)
+			if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
+				continue
+			}
+			alloc := sa.tryNodesNoReserve(ask, iterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if alloc != nil {
 				return alloc
@@ -1473,7 +1495,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(node.NodeID, ask)
 	if node.AddAllocation(alloc) {
 		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
-			log.Log(log.SchedApplication).Warn("queue update failed unexpectedly",
+			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(alloc.GetAllocationID())
@@ -1812,10 +1834,7 @@ func (sa *Application) updateAskMaxPriority() {
 		if v.GetPendingAskRepeat() == 0 {
 			continue
 		}
-		p := v.GetPriority()
-		if p > value {
-			value = p
-		}
+		value = max(value, v.GetPriority())
 	}
 	sa.askMaxPriority = value
 	sa.queue.UpdateApplicationPriority(sa.ApplicationID, value)
@@ -1839,7 +1858,9 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 		sa.appEvents.sendRemoveAllocationEvent(alloc, si.TerminationType_STOPPED_BY_RM)
 	}
 
-	if resources.IsZero(sa.pending) {
+	// if an app doesn't have any allocations and the user doesn't have other applications,
+	// the user tracker is nonexistent. We don't want to decrease resource usage in this case.
+	if ugm.GetUserManager().GetUserTracker(sa.user.User) != nil && resources.IsZero(sa.pending) {
 		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), true)
 	}
 	// cleanup allocated resource for app (placeholders and normal)
@@ -2047,12 +2068,12 @@ func (sa *Application) HasPlaceholderAllocation() bool {
 	return sa.hasPlaceholderAlloc
 }
 
-// test only
+// SetCompletingTimeout should be used for testing only.
 func SetCompletingTimeout(duration time.Duration) {
 	completingTimeout = duration
 }
 
-// test only
+// SetTimedOutPlaceholder should be used for testing only.
 func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int64) {
 	sa.Lock()
 	defer sa.Unlock()
@@ -2062,4 +2083,50 @@ func (sa *Application) SetTimedOutPlaceholder(taskGroupName string, timedOut int
 	if _, ok := sa.placeholderData[taskGroupName]; ok {
 		sa.placeholderData[taskGroupName].TimedOut = timedOut
 	}
+}
+
+// getRateLimitedAppLog lazy initializes the application logger the first time is needed.
+func getRateLimitedAppLog() *log.RateLimitedLogger {
+	initAppLogOnce.Do(func() {
+		rateLimitedAppLog = log.NewRateLimitedLogger(log.SchedApplication, time.Second)
+	})
+	return rateLimitedAppLog
+}
+
+func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit bool) {
+	sa.Lock()
+	defer sa.Unlock()
+	if sa.runnableInQueue != runnableInQueue {
+		if runnableInQueue {
+			log.Log(log.SchedApplication).Info("Application is now runnable in queue",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath))
+			sa.appEvents.sendAppRunnableInQueueEvent()
+		} else {
+			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the queue limit",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath))
+			sa.appEvents.sendAppNotRunnableInQueueEvent()
+		}
+	}
+	sa.runnableInQueue = runnableInQueue
+
+	if sa.runnableByUserLimit != runnableByUserLimit {
+		if runnableByUserLimit {
+			log.Log(log.SchedApplication).Info("Application is now runnable based on user/group quota",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath),
+				zap.String("user", sa.user.User),
+				zap.Strings("groups", sa.user.Groups))
+			sa.appEvents.sendAppRunnableQuotaEvent()
+		} else {
+			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the user/group limit",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("queue", sa.queuePath),
+				zap.String("user", sa.user.User),
+				zap.Strings("groups", sa.user.Groups))
+			sa.appEvents.sendAppNotRunnableQuotaEvent()
+		}
+	}
+	sa.runnableByUserLimit = runnableByUserLimit
 }

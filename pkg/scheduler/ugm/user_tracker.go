@@ -19,11 +19,13 @@
 package ugm
 
 import (
+	"strings"
 	"sync"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
@@ -38,37 +40,41 @@ type UserTracker struct {
 	// and group tracker object as value.
 	appGroupTrackers map[string]*GroupTracker
 	queueTracker     *QueueTracker // Holds the actual resource usage of queue path where application runs
+	events           *ugmEvents
 
 	sync.RWMutex
 }
 
-func newUserTracker(user string) *UserTracker {
-	queueTracker := newRootQueueTracker()
+func newUserTracker(userName string, ugmEvents *ugmEvents) *UserTracker {
+	queueTracker := newRootQueueTracker(user)
 	userTracker := &UserTracker{
-		userName:         user,
+		userName:         userName,
 		appGroupTrackers: make(map[string]*GroupTracker),
 		queueTracker:     queueTracker,
+		events:           ugmEvents,
 	}
 	return userTracker
 }
 
-func (ut *UserTracker) increaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource) bool {
+func (ut *UserTracker) increaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource) bool {
 	ut.Lock()
 	defer ut.Unlock()
+	hierarchy := strings.Split(queuePath, configs.DOT)
+	ut.events.sendIncResourceUsageForUser(ut.userName, queuePath, usage)
 	increased := ut.queueTracker.increaseTrackedResource(hierarchy, applicationID, user, usage)
 	if increased {
 		gt := ut.appGroupTrackers[applicationID]
 		log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
 			zap.String("group", gt.getName()),
-			zap.Strings("queue path", hierarchy),
+			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
 			zap.Stringer("resource", usage))
-		increasedGroupUsage := gt.increaseTrackedResource(hierarchy, applicationID, usage, ut.userName)
+		increasedGroupUsage := gt.increaseTrackedResource(queuePath, applicationID, usage, ut.userName)
 		if !increasedGroupUsage {
 			_, decreased := ut.queueTracker.decreaseTrackedResource(hierarchy, applicationID, usage, false)
 			if !decreased {
 				log.Log(log.SchedUGM).Error("User resource usage rollback has failed",
-					zap.Strings("queue path", hierarchy),
+					zap.String("queue path", queuePath),
 					zap.String("application", applicationID),
 					zap.String("user", ut.userName))
 			}
@@ -78,13 +84,19 @@ func (ut *UserTracker) increaseTrackedResource(hierarchy []string, applicationID
 	return increased
 }
 
-func (ut *UserTracker) decreaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
+func (ut *UserTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
 	ut.Lock()
 	defer ut.Unlock()
+	ut.events.sendDecResourceUsageForUser(ut.userName, queuePath, usage)
 	if removeApp {
+		tracker := ut.appGroupTrackers[applicationID]
+		if tracker != nil {
+			appGroup := tracker.groupName
+			ut.events.sendAppGroupUnlinked(appGroup, applicationID)
+		}
 		delete(ut.appGroupTrackers, applicationID)
 	}
-	return ut.queueTracker.decreaseTrackedResource(hierarchy, applicationID, usage, removeApp)
+	return ut.queueTracker.decreaseTrackedResource(strings.Split(queuePath, configs.DOT), applicationID, usage, removeApp)
 }
 
 func (ut *UserTracker) hasGroupForApp(applicationID string) bool {
@@ -97,12 +109,15 @@ func (ut *UserTracker) hasGroupForApp(applicationID string) bool {
 func (ut *UserTracker) setGroupForApp(applicationID string, groupTrack *GroupTracker) {
 	ut.Lock()
 	defer ut.Unlock()
+	if groupTrack != nil {
+		ut.events.sendAppGroupLinked(groupTrack.groupName, applicationID)
+	}
 	ut.appGroupTrackers[applicationID] = groupTrack
 }
 
 func (ut *UserTracker) getGroupForApp(applicationID string) string {
-	ut.Lock()
-	defer ut.Unlock()
+	ut.RLock()
+	defer ut.RUnlock()
 	if ut.appGroupTrackers[applicationID] != nil {
 		return ut.appGroupTrackers[applicationID].groupName
 	}
@@ -115,12 +130,21 @@ func (ut *UserTracker) getTrackedApplications() map[string]*GroupTracker {
 	return ut.appGroupTrackers
 }
 
-func (ut *UserTracker) setLimits(hierarchy []string, resource *resources.Resource, maxApps uint64) {
+func (ut *UserTracker) setLimits(queuePath string, resource *resources.Resource, maxApps uint64, useWildCard bool, doWildCardCheck bool) {
 	ut.Lock()
 	defer ut.Unlock()
-	ut.queueTracker.setLimit(hierarchy, resource, maxApps)
+	ut.events.sendLimitSetForUser(ut.userName, queuePath)
+	ut.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), resource, maxApps, useWildCard, user, doWildCardCheck)
 }
 
+func (ut *UserTracker) clearLimits(queuePath string, doWildCardCheck bool) {
+	ut.Lock()
+	defer ut.Unlock()
+	ut.events.sendLimitRemoveForUser(ut.userName, queuePath)
+	ut.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), nil, 0, false, user, doWildCardCheck)
+}
+
+// Note: headroom of queue tracker is not read-only, it also traverses the queue hierarchy and creates childQueueTracker if it does not exist.
 func (ut *UserTracker) headroom(hierarchy []string) *resources.Resource {
 	ut.Lock()
 	defer ut.Unlock()
@@ -156,8 +180,8 @@ func (ut *UserTracker) IsUnlinkRequired(hierarchy []string) bool {
 }
 
 func (ut *UserTracker) UnlinkQT(hierarchy []string) bool {
-	ut.RLock()
-	defer ut.RUnlock()
+	ut.Lock()
+	defer ut.Unlock()
 	return ut.queueTracker.UnlinkQT(hierarchy)
 }
 
@@ -167,6 +191,7 @@ func (ut *UserTracker) canBeRemoved() bool {
 	return ut.queueTracker.canBeRemoved()
 }
 
+// Note: canRunApp of queue tracker is not read-only, it also traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
 func (ut *UserTracker) canRunApp(hierarchy []string, applicationID string) bool {
 	ut.Lock()
 	defer ut.Unlock()

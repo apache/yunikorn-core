@@ -34,7 +34,7 @@ func TestQTIncreaseTrackedResource(t *testing.T) {
 	// root->parent->child2
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed)
 	GetUserManager()
-	queueTracker := newQueueTracker("", "root")
+	queueTracker := newQueueTracker("", "root", user)
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
@@ -87,7 +87,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	// root->parent->child1
 	// root->parent->child2
 	GetUserManager()
-	queueTracker := newQueueTracker("", "root")
+	queueTracker := newQueueTracker("", "root", user)
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "70M", "vcore": "70"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
@@ -191,7 +191,7 @@ func TestQTQuotaEnforcement(t *testing.T) {
 	// root->parent->child2. max apps - 2 , max res - 20M, 20cores
 	// root->parent->child12 (similar name like above leaf queue, but it is being treated differently as similar names are allowed). config not set
 	GetUserManager()
-	queueTracker := newQueueTracker("", "root")
+	queueTracker := newQueueTracker("", "root", user)
 
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
@@ -201,17 +201,17 @@ func TestQTQuotaEnforcement(t *testing.T) {
 	queueTracker.maxResources = resources.Multiply(usage1, 6)
 	queueTracker.maxRunningApps = 6
 
-	parentQueueTracker := newQueueTracker("root", "parent")
+	parentQueueTracker := newQueueTracker("root", "parent", user)
 	parentQueueTracker.maxResources = resources.Multiply(usage1, 5)
 	parentQueueTracker.maxRunningApps = 5
 	queueTracker.childQueueTrackers["parent"] = parentQueueTracker
 
-	child1QueueTracker := newQueueTracker("root.parent", "child1")
+	child1QueueTracker := newQueueTracker("root.parent", "child1", user)
 	child1QueueTracker.maxResources = resources.Multiply(usage1, 2)
 	child1QueueTracker.maxRunningApps = 2
 	parentQueueTracker.childQueueTrackers["child1"] = child1QueueTracker
 
-	child2QueueTracker := newQueueTracker("root.parent.child2", "child2")
+	child2QueueTracker := newQueueTracker("root.parent.child2", "child2", user)
 	child2QueueTracker.maxResources = resources.Multiply(usage1, 2)
 	child2QueueTracker.maxRunningApps = 2
 	parentQueueTracker.childQueueTrackers["child2"] = child2QueueTracker
@@ -231,10 +231,8 @@ func TestQTQuotaEnforcement(t *testing.T) {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp3, user, usage1)
-	if result {
-		t.Fatalf("Increasing resource usage should fail as child2's resource usage exceeded configured max resources limit. queuepath %s, app %s, res %v", queuePath2, TestApp3, usage1)
-	}
+	headroom := queueTracker.headroom(strings.Split(queuePath2, configs.DOT), user)
+	assert.Equal(t, headroom.FitInMaxUndef(usage1), false)
 
 	result = queueTracker.increaseTrackedResource(strings.Split(queuePath3, configs.DOT), TestApp3, user, usage1)
 	if !result {
@@ -246,29 +244,24 @@ func TestQTQuotaEnforcement(t *testing.T) {
 		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath4, TestApp4, usage1)
 	}
 
-	result = queueTracker.increaseTrackedResource(strings.Split(queuePath4, configs.DOT), TestApp4, user, usage1)
-	if result {
-		t.Fatalf("Increasing resource usage should fail as parent's resource usage exceeded configured max resources limit. queuepath %s, app %s, res %v", queuePath4, TestApp4, usage1)
-	}
+	headroom = queueTracker.headroom(strings.Split(queuePath4, configs.DOT), user)
+	assert.Equal(t, headroom.FitInMaxUndef(usage1), false)
 }
 
 func TestHeadroom(t *testing.T) {
+	GetUserManager()
 	var nilResource *resources.Resource
 	path := "root.parent.leaf"
 	hierarchy := strings.Split(path, configs.DOT)
 
-	// nothing exists make sure the hierarchy gets created
-	root := newRootQueueTracker()
-	root.childQueueTrackers["parent"] = newQueueTracker("root", "parent")
+	// validate that the hierarchy gets created
+	root := newRootQueueTracker(user)
+	headroom := root.headroom(hierarchy, user)
+	assert.Equal(t, headroom, nilResource, "auto create: expected nil resource")
 	parent := root.childQueueTrackers["parent"]
 	assert.Assert(t, parent != nil, "parent queue tracker should have been created")
-	parent.childQueueTrackers["leaf"] = newQueueTracker("root.parent", "leaf")
 	leaf := parent.childQueueTrackers["leaf"]
 	assert.Assert(t, leaf != nil, "leaf queue tracker should have been created")
-
-	// auto created trackers no max resource set
-	headroom := root.headroom(hierarchy, none)
-	assert.Equal(t, headroom, nilResource, "auto create: expected nil resource")
 
 	// prep resources to set as usage and max
 	usage, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
@@ -315,6 +308,71 @@ func TestHeadroom(t *testing.T) {
 	root.resourceUsage = other
 	headroom = root.headroom(hierarchy, none)
 	assert.Assert(t, resources.Equals(headroom, combined), "headroom should be same as combined")
+}
+
+func TestQTCanRunApp(t *testing.T) {
+	GetUserManager()
+
+	// validate that the hierarchy gets created
+	root := newRootQueueTracker(user)
+	hierarchy := strings.Split("root.parent.leaf", configs.DOT)
+	assert.Assert(t, root.canRunApp(hierarchy, TestApp1, user))
+	parent := root.childQueueTrackers["parent"]
+	assert.Assert(t, parent != nil, "parent queue tracker should have been created")
+	leaf := parent.childQueueTrackers["leaf"]
+	assert.Assert(t, leaf != nil, "leaf queue tracker should have been created")
+
+	// limit in the leaf queue
+	leaf.maxRunningApps = 2
+	leaf.runningApplications[TestApp1] = true
+	leaf.runningApplications[TestApp2] = true
+	parent.runningApplications[TestApp1] = true
+	parent.runningApplications[TestApp2] = true
+	root.runningApplications[TestApp1] = true
+	root.runningApplications[TestApp2] = true
+	assert.Assert(t, root.canRunApp(hierarchy, TestApp1, user))
+	assert.Assert(t, root.canRunApp(hierarchy, TestApp2, user))
+	assert.Assert(t, !root.canRunApp(hierarchy, TestApp3, user))
+
+	// limit in the parent queue
+	leaf.maxRunningApps = 0
+	parent.maxRunningApps = 2
+	assert.Assert(t, root.canRunApp(hierarchy, TestApp1, user))
+	assert.Assert(t, root.canRunApp(hierarchy, TestApp2, user))
+	assert.Assert(t, !root.canRunApp(hierarchy, TestApp3, user))
+}
+
+func TestNewQueueTracker(t *testing.T) {
+	manager := GetUserManager()
+	defer manager.ClearConfigLimits()
+
+	maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"cpu": 100,
+	})
+	manager.userWildCardLimitsConfig = map[string]*LimitConfig{
+		"root": {
+			maxApplications: 3,
+			maxResources:    maxRes.Clone(),
+		},
+	}
+
+	root := newRootQueueTracker(user)
+	assert.Equal(t, "root", root.queuePath)
+	assert.Equal(t, "root", root.queueName)
+	assert.Equal(t, uint64(3), root.maxRunningApps)
+	assert.Equal(t, 0, len(root.runningApplications))
+	assert.Assert(t, root.useWildCard)
+	assert.Assert(t, resources.Equals(maxRes, root.maxResources))
+	assert.Assert(t, resources.IsZero(root.resourceUsage))
+
+	parent := newQueueTracker("root", "parent", user)
+	assert.Equal(t, "root.parent", parent.queuePath)
+	assert.Equal(t, "parent", parent.queueName)
+	assert.Equal(t, uint64(0), parent.maxRunningApps)
+	assert.Equal(t, 0, len(parent.runningApplications))
+	assert.Assert(t, !parent.useWildCard)
+	assert.Assert(t, resources.IsZero(parent.maxResources))
+	assert.Assert(t, resources.IsZero(parent.resourceUsage))
 }
 
 func getQTResource(qt *QueueTracker) map[string]*resources.Resource {

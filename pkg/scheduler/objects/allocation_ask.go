@@ -27,6 +27,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -48,12 +49,20 @@ type AllocationAsk struct {
 	originator        bool
 	tags              map[string]string
 	allocatedResource *resources.Resource
+	resKeyWithoutNode string // the reservation key without node
 
 	// Mutable fields which need protection
 	pendingAskRepeat    int32
 	allocLog            map[string]*AllocationLogEntry
 	preemptionTriggered bool
 	preemptCheckTime    time.Time
+	schedulingAttempted bool              // whether scheduler core has tried to schedule this ask
+	scaleUpTriggered    bool              // whether this ask has triggered autoscaling or not
+	resKeyPerNode       map[string]string // reservation key for a given node
+
+	askEvents            *askEvents
+	userQuotaCheckFailed bool
+	headroomCheckFailed  bool
 
 	sync.RWMutex
 }
@@ -65,12 +74,16 @@ type AllocationLogEntry struct {
 }
 
 func NewAllocationAsk(allocationKey string, applicationID string, allocatedResource *resources.Resource) *AllocationAsk {
-	return &AllocationAsk{
+	aa := &AllocationAsk{
 		allocationKey:     allocationKey,
 		applicationID:     applicationID,
 		allocatedResource: allocatedResource,
 		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
 	}
+	aa.resKeyWithoutNode = reservationKeyWithoutNode(applicationID, allocationKey)
+	aa.askEvents = newAskEvents(aa, events.GetEventSystem())
+	return aa
 }
 
 func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
@@ -93,6 +106,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		allowPreemptOther: common.IsAllowPreemptOther(ask.PreemptionPolicy),
 		originator:        ask.Originator,
 		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
 	}
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
@@ -101,6 +115,8 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 			zap.Stringer("SI ask", ask))
 		return nil
 	}
+	saa.resKeyWithoutNode = reservationKeyWithoutNode(ask.ApplicationID, ask.AllocationKey)
+	saa.askEvents = newAskEvents(saa, events.GetEventSystem())
 	return saa
 }
 
@@ -252,6 +268,10 @@ func (aa *AllocationAsk) LogAllocationFailure(message string, allocate bool) {
 	entry.Count++
 }
 
+func (aa *AllocationAsk) SendPredicateFailedEvent(message string) {
+	aa.askEvents.sendPredicateFailed(message)
+}
+
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met
 func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
 	aa.RLock()
@@ -292,9 +312,81 @@ func (aa *AllocationAsk) LessThan(other *AllocationAsk) bool {
 	return aa.priority < other.priority
 }
 
+func (aa *AllocationAsk) SetSchedulingAttempted(attempted bool) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.schedulingAttempted = attempted
+}
+
+func (aa *AllocationAsk) IsSchedulingAttempted() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.schedulingAttempted
+}
+
+func (aa *AllocationAsk) SetScaleUpTriggered(triggered bool) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.scaleUpTriggered = triggered
+}
+
+func (aa *AllocationAsk) HasTriggeredScaleUp() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.scaleUpTriggered
+}
+
 // completedPendingAsk How many pending asks has been completed or processed so far?
 func (aa *AllocationAsk) completedPendingAsk() int {
 	aa.RLock()
 	defer aa.RUnlock()
 	return int(aa.maxAllocations - aa.pendingAskRepeat)
+}
+
+func (aa *AllocationAsk) setReservationKeyForNode(node, resKey string) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.resKeyPerNode[node] = resKey
+}
+
+func (aa *AllocationAsk) getReservationKeyForNode(node string) string {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.resKeyPerNode[node]
+}
+
+func (aa *AllocationAsk) setHeadroomCheckFailed(headroom *resources.Resource, queue string) {
+	aa.Lock()
+	defer aa.Unlock()
+	if !aa.headroomCheckFailed {
+		aa.headroomCheckFailed = true
+		aa.askEvents.sendRequestExceedsQueueHeadroom(headroom, queue)
+	}
+}
+
+func (aa *AllocationAsk) setHeadroomCheckPassed(queue string) {
+	aa.Lock()
+	defer aa.Unlock()
+	if aa.headroomCheckFailed {
+		aa.headroomCheckFailed = false
+		aa.askEvents.sendRequestFitsInQueue(queue)
+	}
+}
+
+func (aa *AllocationAsk) setUserQuotaCheckFailed(available *resources.Resource) {
+	aa.Lock()
+	defer aa.Unlock()
+	if !aa.userQuotaCheckFailed {
+		aa.userQuotaCheckFailed = true
+		aa.askEvents.sendRequestExceedsUserQuota(available)
+	}
+}
+
+func (aa *AllocationAsk) setUserQuotaCheckPassed() {
+	aa.Lock()
+	defer aa.Unlock()
+	if aa.userQuotaCheckFailed {
+		aa.userQuotaCheckFailed = false
+		aa.askEvents.sendRequestFitsInUserQuota()
+	}
 }

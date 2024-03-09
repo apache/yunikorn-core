@@ -70,7 +70,25 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 	e.id++
 }
 
-// GetEventsFromID returns "count" number of event records from "id" if possible. The id can be determined from
+// GetRecentEvents returns the most recent "count" elements from the ring buffer.
+// It is allowed for "count" to be larger than the number of elements.
+func (e *eventRingBuffer) GetRecentEvents(count uint64) []*si.EventRecord {
+	e.RLock()
+	defer e.RUnlock()
+
+	lastID := e.getLastEventID()
+	var startID uint64
+	if lastID < count {
+		startID = 0
+	} else {
+		startID = lastID - count + 1
+	}
+
+	history, _, _ := e.getEventsFromID(startID, count)
+	return history
+}
+
+// GetEventsFromID returns "count" number of event records from id if possible. The id can be determined from
 // the first call of the method - if it returns nothing because the id is not in the buffer, the lowest valid
 // identifier is returned which can be used to get the first batch.
 // If the caller does not want to pose limit on the number of events returned, "count" must be set to a high
@@ -78,6 +96,12 @@ func (e *eventRingBuffer) Add(event *si.EventRecord) {
 func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64, uint64) {
 	e.RLock()
 	defer e.RUnlock()
+
+	return e.getEventsFromID(id, count)
+}
+
+// getEventsFromID unlocked version of GetEventsFromID
+func (e *eventRingBuffer) getEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64, uint64) {
 	lowest := e.getLowestID()
 
 	pos, idFound := e.id2pos(id)
@@ -114,15 +138,6 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventR
 		start: pos,
 		end:   end,
 	}, nil), lowest, e.getLastEventID()
-}
-
-// min a utility function to return the smallest value of two unsigned int
-func min(a, b uint64) uint64 {
-	m := a
-	if b < a {
-		m = b
-	}
-	return m
 }
 
 // GetLastEventID returns the value of the unique id counter.
@@ -216,12 +231,7 @@ func (e *eventRingBuffer) Resize(newSize uint64) {
 
 	initialSize := e.capacity
 	newEvents := make([]*si.EventRecord, newSize)
-	var numEventsToCopy uint64
-	if e.id-e.getLowestID() > newSize {
-		numEventsToCopy = newSize
-	} else {
-		numEventsToCopy = e.id - e.getLowestID()
-	}
+	numEventsToCopy := min(e.id-e.getLowestID(), newSize)
 
 	// Calculate the index from where to start copying (the oldest event)
 	startIndex := (e.head + e.capacity - numEventsToCopy) % e.capacity

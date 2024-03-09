@@ -25,56 +25,56 @@ import (
 	"golang.org/x/time/rate"
 )
 
-type rateLimitedLogger struct {
+type RateLimitedLogger struct {
 	logger  *zap.Logger
 	limiter *rate.Limiter
 }
 
-// RateLimitedLogger provides a logger that only logs once within a specified duration
-func RateLimitedLog(handle *LoggerHandle, every time.Duration) *rateLimitedLogger {
-	return &rateLimitedLogger{
+// NewRateLimitedLogger provides a logger that only logs once within a specified duration.
+func NewRateLimitedLogger(handle *LoggerHandle, every time.Duration) *RateLimitedLogger {
+	return &RateLimitedLogger{
 		logger:  Log(handle),
 		limiter: rate.NewLimiter(rate.Every(every), 1),
 	}
 }
 
-func (rl *rateLimitedLogger) Debug(msg string, fields ...zap.Field) {
+func (rl *RateLimitedLogger) Debug(msg string, fields ...zap.Field) {
 	if rl.limiter.Allow() {
 		rl.logger.Debug(msg, fields...)
 	}
 }
 
-func (rl *rateLimitedLogger) Info(msg string, fields ...zap.Field) {
+func (rl *RateLimitedLogger) Info(msg string, fields ...zap.Field) {
 	if rl.limiter.Allow() {
 		rl.logger.Info(msg, fields...)
 	}
 }
 
-func (rl *rateLimitedLogger) Warn(msg string, fields ...zap.Field) {
+func (rl *RateLimitedLogger) Warn(msg string, fields ...zap.Field) {
 	if rl.limiter.Allow() {
 		rl.logger.Warn(msg, fields...)
 	}
 }
 
-func (rl *rateLimitedLogger) Error(msg string, fields ...zap.Field) {
+func (rl *RateLimitedLogger) Error(msg string, fields ...zap.Field) {
 	if rl.limiter.Allow() {
 		rl.logger.Error(msg, fields...)
 	}
 }
 
-func (rl *rateLimitedLogger) DPanic(msg string, fields ...zap.Field) {
+func (rl *RateLimitedLogger) DPanic(msg string, fields ...zap.Field) {
 	if rl.limiter.Allow() {
 		rl.logger.DPanic(msg, fields...)
 	}
 }
 
-func (rl *rateLimitedLogger) Panic(msg string, fields ...zap.Field) {
+func (rl *RateLimitedLogger) Panic(msg string, fields ...zap.Field) {
 	if rl.limiter.Allow() {
 		rl.logger.Panic(msg, fields...)
 	}
 }
 
-func (rl *rateLimitedLogger) Fatal(msg string, fields ...zap.Field) {
+func (rl *RateLimitedLogger) Fatal(msg string, fields ...zap.Field) {
 	if rl.limiter.Allow() {
 		rl.logger.Fatal(msg, fields...)
 	}

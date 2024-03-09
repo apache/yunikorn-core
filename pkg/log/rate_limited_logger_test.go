@@ -22,12 +22,12 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"golang.org/x/time/rate"
 	"gotest.tools/v3/assert"
 )
 
@@ -37,6 +37,9 @@ type logMessage struct {
 }
 
 func TestRateLimitedLog(t *testing.T) {
+	defer resetTestLogger()
+	once = sync.Once{}
+	config := zap.NewDevelopmentConfig()
 	encoderConfig := zap.NewDevelopmentEncoderConfig()
 	buf := bytes.Buffer{}
 	writer := bufio.NewWriter(&buf)
@@ -47,12 +50,9 @@ func TestRateLimitedLog(t *testing.T) {
 			zap.NewAtomicLevelAt(zap.InfoLevel),
 		),
 	)
+	InitializeLogger(zapLogger, &config)
 	// log once within one minute
-	logger := &rateLimitedLogger{
-		logger:  zapLogger,
-		limiter: rate.NewLimiter(rate.Every(time.Minute), 1),
-	}
-
+	logger := NewRateLimitedLogger(Core, 1*time.Minute)
 	startTime := time.Now()
 	for {
 		elapsed := time.Since(startTime)
@@ -62,10 +62,10 @@ func TestRateLimitedLog(t *testing.T) {
 		logger.Info("YuniKorn")
 		time.Sleep(10 * time.Millisecond)
 	}
-	writer.Flush()
-
+	err := writer.Flush()
+	assert.NilError(t, err, "failed to flush writer")
 	var lm logMessage
-	err := json.Unmarshal(buf.Bytes(), &lm)
+	err = json.Unmarshal(buf.Bytes(), &lm)
 	assert.NilError(t, err, "failed to unmarshal logMessage from buffer: %s", buf.Bytes())
 	assert.Equal(t, "INFO", lm.Level)
 	assert.Equal(t, "YuniKorn", lm.Message)

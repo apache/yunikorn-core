@@ -213,7 +213,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 
 	// Initial check: Will allocation fit on node without preemption? This is possible if preemption was triggered due
 	// to queue limits and not node resource limits.
-	if resources.FitIn(nodeCurrentAvailable, p.ask.GetAllocatedResource()) {
+	if nodeCurrentAvailable.FitIn(p.ask.GetAllocatedResource()) {
 		// return empty list so this node is considered for preemption
 		return -1, make([]*Allocation, 0)
 	}
@@ -573,20 +573,11 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 		"preempting allocations to free up resources to run ask: "+p.ask.GetAllocationKey())
 
 	// reserve the selected node for the new allocation if it will fit
-	if p.headRoom.FitInMaxUndef(p.ask.GetAllocatedResource()) {
-		log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
-			zap.String("allocationKey", p.ask.GetAllocationKey()),
-			zap.String("nodeID", nodeID),
-			zap.Int("victimCount", len(victims)))
-		return newReservedAllocation(nodeID, p.ask), true
-	}
-
-	// can't reserve as queue is still too full, but scheduling should succeed after preemption occurs
-	log.Log(log.SchedPreemption).Info("Preempting allocations for ask, but not reserving yet as queue is still above capacity",
+	log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
 		zap.String("allocationKey", p.ask.GetAllocationKey()),
+		zap.String("nodeID", nodeID),
 		zap.Int("victimCount", len(victims)))
-
-	return nil, true
+	return newReservedAllocation(nodeID, p.ask), true
 }
 
 type predicateCheckResult struct {
@@ -708,12 +699,12 @@ func (qps *QueuePreemptionSnapshot) IsAtOrAboveGuaranteedResource() bool {
 		return false
 	}
 	guaranteed := qps.GetGuaranteedResource()
-	max := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
+	maxResource := qps.GetMaxResource()
+	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
 
 	// if we don't fit, we're clearly above
-	if !resources.FitIn(absGuaranteed, used) {
+	if !absGuaranteed.FitIn(used) {
 		return true
 	}
 
@@ -736,10 +727,10 @@ func (qps *QueuePreemptionSnapshot) IsWithinGuaranteedResource() bool {
 	if qps.Leaf && guaranteed.IsEmpty() {
 		return false
 	}
-	max := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
+	maxResource := qps.GetMaxResource()
+	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
-	return resources.FitIn(absGuaranteed, used)
+	return absGuaranteed.FitIn(used)
 }
 
 func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteed() *resources.Resource {
@@ -751,8 +742,8 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteed() *resources.Resource
 		parentResult = resources.NewResource()
 	}
 	guaranteed := qps.GetGuaranteedResource()
-	max := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, max)
+	maxResource := qps.GetMaxResource()
+	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
 	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
 	remaining := resources.Sub(absGuaranteed, used)
 	return resources.ComponentWiseMin(remaining, parentResult)
@@ -882,10 +873,7 @@ func preemptPredicateCheck(plugin api.ResourceManagerCallback, ch chan<- *predic
 func batchPreemptionChecks(checks []*si.PreemptionPredicatesArgs, batchSize int) [][]*si.PreemptionPredicatesArgs {
 	var result [][]*si.PreemptionPredicatesArgs
 	for i := 0; i < len(checks); i += batchSize {
-		end := i + batchSize
-		if end > len(checks) {
-			end = len(checks)
-		}
+		end := min(i+batchSize, len(checks))
 		result = append(result, checks[i:end])
 	}
 	return result

@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/btree"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -41,6 +42,7 @@ const (
 	aKey          = "alloc-1"
 	aAllocationID = "alloc-allocationid-1"
 	nodeID1       = "node-1"
+	nodeID2       = "node-2"
 	instType1     = "itype-1"
 )
 
@@ -274,4 +276,19 @@ func assertUserResourcesAndGroupResources(t *testing.T, userGroup security.UserG
 	groupResource := ugm.GetGroupResources(userGroup.Groups[i])
 	assert.Equal(t, resources.Equals(userResource, expectedUserResources), true)
 	assert.Equal(t, resources.Equals(groupResource, expectedGroupResources), true)
+}
+
+func getNodeIteratorFn(nodes ...*Node) func() NodeIterator {
+	tree := btree.New(7)
+	for _, node := range nodes {
+		tree.ReplaceOrInsert(nodeRef{
+			node, 1,
+		})
+	}
+
+	return func() NodeIterator {
+		return NewTreeIterator(acceptAll, func() *btree.BTree {
+			return tree
+		})
+	}
 }

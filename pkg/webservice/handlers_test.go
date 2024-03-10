@@ -2625,6 +2625,7 @@ func TestCompressQueueApplications(t *testing.T) {
 
 	var decodedData []*dao.ApplicationDAOInfo
 	err = json.Unmarshal(uncompressedData, &decodedData)
+	assert.NilError(t, err, "Error when unmarshal decoded data.")
 
 	for i := range decodedData {
 		assert.Equal(t, appsDao[i].ApplicationID, decodedData[i].ApplicationID)

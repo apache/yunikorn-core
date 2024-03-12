@@ -752,13 +752,8 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	for _, app := range queue.GetCopyOfApps() {
 		appsDao = append(appsDao, getApplicationDAO(app))
 	}
-
-	if len(r.Header.Get("Content-Encoding")) > 0 {
-		if checkHeader(r.Header, "Content-Encoding", "gzip") {
-			compress(w, appsDao)
-		} else {
-			buildJSONErrorResponse(w, UnsupportedCompType, http.StatusInternalServerError)
-		}
+	if checkHeader(r.Header, "Accept-Encoding", "gzip") {
+		compress(w, appsDao)
 		return
 	}
 
@@ -1236,8 +1231,12 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 func checkHeader(h http.Header, key string, value string) bool {
 	values := h.Values(key)
 	for _, v := range values {
-		if v == value {
-			return true
+		v2 := strings.Split(v, ",")
+		for _, item := range v2 {
+			item = strings.TrimSpace(item)
+			if item == value {
+				return true
+			}
 		}
 	}
 	return false

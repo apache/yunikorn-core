@@ -61,6 +61,7 @@ const (
 	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
+	UnsupportedCompType      = "Compression type not support"
 )
 
 var allowedActiveStatusMsg string
@@ -752,8 +753,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		appsDao = append(appsDao, getApplicationDAO(app))
 	}
 
-	if checkHeader(r.Header, "Content-Encoding", "gzip") {
-		compress(w, appsDao)
+	if len(r.Header.Get("Content-Encoding")) > 0 {
+		if checkHeader(r.Header, "Content-Encoding", "gzip") {
+			compress(w, appsDao)
+		} else {
+			buildJSONErrorResponse(w, UnsupportedCompType, http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -1249,6 +1254,7 @@ func compress(w http.ResponseWriter, data any) {
 	writer := gzip.NewWriter(&compressedData)
 	_, err = writer.Write(response)
 	if err != nil {
+		_ = writer.Close()
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

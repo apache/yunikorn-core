@@ -29,6 +29,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -2606,12 +2607,36 @@ func NewResponseRecorderWithDeadline() *ResponseRecorderWithDeadline {
 
 func TestCompressQueueApplications(t *testing.T) {
 	var appsDao []*dao.ApplicationDAOInfo
-	app := newApplication("app-01", "part-01", "queue-1", rmID, security.UserGroup{})
-	app2 := newApplication("app-02", "part-01", "queue-1", rmID, security.UserGroup{})
-	appsDao = append(appsDao, getApplicationDAO(app))
-	appsDao = append(appsDao, getApplicationDAO(app2))
+
+	// case 1: data size is smaller than MTU size, so compression step is skipped
+	for i := 0; i < 2; i++ {
+		appName := "app-" + strconv.Itoa(i)
+		app := newApplication(appName, "part-01", "queue-1", rmID, security.UserGroup{})
+		appsDao = append(appsDao, getApplicationDAO(app))
+	}
 
 	resp := &MockResponseWriter{}
+	compress(resp, appsDao)
+
+	var decodedData []*dao.ApplicationDAOInfo
+	err := json.Unmarshal(resp.outputBytes, &decodedData)
+	assert.NilError(t, err, "Error when unmarshal data.")
+
+	for i := range decodedData {
+		assert.Equal(t, appsDao[i].ApplicationID, decodedData[i].ApplicationID)
+		assert.Equal(t, appsDao[i].Partition, decodedData[i].Partition)
+		assert.Equal(t, appsDao[i].QueueName, decodedData[i].QueueName)
+		assert.Equal(t, appsDao[i].SubmissionTime, decodedData[i].SubmissionTime)
+		assert.Equal(t, appsDao[i].User, decodedData[i].User)
+		assert.Equal(t, appsDao[i].Groups[0], decodedData[i].Groups[0])
+	}
+
+	// case 2: data size is greater than MTU size, so do the compression
+	for i := 2; i < 10; i++ {
+		appName := "app-" + strconv.Itoa(i)
+		app := newApplication(appName, "part-01", "queue-1", rmID, security.UserGroup{})
+		appsDao = append(appsDao, getApplicationDAO(app))
+	}
 	compress(resp, appsDao)
 
 	buf := bytes.NewBuffer(resp.outputBytes)
@@ -2623,7 +2648,6 @@ func TestCompressQueueApplications(t *testing.T) {
 	uncompressedData, err := io.ReadAll(gzipReader)
 	assert.NilError(t, err, "Error when read decoded data.")
 
-	var decodedData []*dao.ApplicationDAOInfo
 	err = json.Unmarshal(uncompressedData, &decodedData)
 	assert.NilError(t, err, "Error when unmarshal decoded data.")
 

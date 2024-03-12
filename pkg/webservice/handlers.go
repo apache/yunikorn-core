@@ -1250,6 +1250,14 @@ func compress(w http.ResponseWriter, data any) {
 		return
 	}
 
+	// don't compress the data if it is smaller than MTU size
+	if len(response) < 1500 {
+		if err = json.NewEncoder(w).Encode(data); err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		}
+		return
+	}
+
 	var compressedData bytes.Buffer
 	writer := gzip.NewWriter(&compressedData)
 	_, err = writer.Write(response)

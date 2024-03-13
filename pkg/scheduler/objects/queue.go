@@ -1126,7 +1126,7 @@ func (sq *Queue) IsPrioritySortEnabled() bool {
 // Only applications with a pending resource request are considered.
 // Lock free call all locks are taken when needed in called functions
 // If withPlaceholdersOnly is true, then only applications with at least one placeholder allocation are considered.
-func (sq *Queue) sortApplications(filterApps, withPlaceholdersOnly bool) []*Application {
+func (sq *Queue) sortApplications(withPlaceholdersOnly bool) []*Application {
 	if !sq.IsLeafQueue() {
 		return nil
 	}
@@ -1144,16 +1144,7 @@ func (sq *Queue) sortApplications(filterApps, withPlaceholdersOnly bool) []*Appl
 	}
 
 	// sort applications based on the sorting policy
-	// some apps might be filtered out based on the policy specific conditions.
-	// currently, only the stateAware policy does the filtering (based on app state).
-	// if the filterApps flag is true, the app filtering is skipped while doing the sorting.
-	queueSortType := sq.getSortType()
-	if !filterApps && queueSortType == policies.StateAwarePolicy {
-		// fallback to FIFO policy if the filterApps flag is false
-		// this is to skip the app filtering in the StateAware policy sorting
-		queueSortType = policies.FifoSortPolicy
-	}
-	return sortApplications(apps, queueSortType, sq.IsPrioritySortEnabled(), sq.GetGuaranteedResource())
+	return sortApplications(apps, sq.getSortType(), sq.IsPrioritySortEnabled(), sq.GetGuaranteedResource())
 }
 
 // sortQueues returns a sorted shallow copy of the queues for this parent queue.
@@ -1360,7 +1351,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 		preemptAttemptsRemaining := maxPreemptionsPerQueue
 
 		// process the apps (filters out app without pending requests)
-		for _, app := range sq.sortApplications(true, false) {
+		for _, app := range sq.sortApplications(false) {
 			runnableInQueue := sq.canRunApp(app.ApplicationID)
 			runnableByUserLimit := ugm.GetUserManager().CanRunApp(sq.QueuePath, app.ApplicationID, app.user)
 			app.updateRunnableStatus(runnableInQueue, runnableByUserLimit)
@@ -1402,7 +1393,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode func(string) *Node) *Allocation {
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
-		for _, app := range sq.sortApplications(true, true) {
+		for _, app := range sq.sortApplications(true) {
 			alloc := app.tryPlaceholderAllocate(iterator, getnode)
 			if alloc != nil {
 				log.Log(log.SchedQueue).Info("allocation found on queue",
@@ -1428,11 +1419,9 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 	if sq.IsLeafQueue() {
 		headRoom := sq.getMaxHeadRoom()
-		// while calculating outstanding requests, we do not need to filter apps.
-		// e.g. StateAware filters apps by state in order to schedule app one by one.
-		// we calculate all the requests that can fit into the queue's headroom,
+		// while calculating outstanding requests, we calculate all the requests that can fit into the queue's headroom,
 		// all these requests are qualified to trigger the up scaling.
-		for _, app := range sq.sortApplications(false, false) {
+		for _, app := range sq.sortApplications(false) {
 			// calculate the users' headroom
 			userHeadroom := ugm.GetUserManager().Headroom(app.queuePath, app.ApplicationID, app.user)
 			app.getOutstandingRequests(headRoom, userHeadroom, total)
@@ -1586,7 +1575,7 @@ func (sq *Queue) getSortType() policies.SortPolicy {
 }
 
 // SupportTaskGroup returns true if the queue supports task groups.
-// FIFO and StateAware sorting policies can support this.
+// FIFO policy is required to support this.
 // NOTE: this call does not make sense for a parent queue, and always returns false
 func (sq *Queue) SupportTaskGroup() bool {
 	sq.RLock()
@@ -1594,7 +1583,7 @@ func (sq *Queue) SupportTaskGroup() bool {
 	if !sq.isLeaf {
 		return false
 	}
-	return sq.sortType == policies.FifoSortPolicy || sq.sortType == policies.StateAwarePolicy
+	return sq.sortType == policies.FifoSortPolicy
 }
 
 // updateGuaranteedResourceMetrics updates guaranteed resource metrics.

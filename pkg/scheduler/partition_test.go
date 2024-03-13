@@ -1064,32 +1064,6 @@ func TestAddAppTaskGroup(t *testing.T) {
 	if err == nil || partition.getApplication(appID2) != nil {
 		t.Errorf("add application should have failed due to queue sort policy but did not")
 	}
-
-	// queue with stateaware as sort policy, with a max set smaller than placeholder ask: app add should fail
-	err = queue.ApplyConf(configs.QueueConfig{
-		Name:       "default",
-		Parent:     false,
-		Queues:     nil,
-		Properties: map[string]string{configs.ApplicationSortPolicy: "stateaware"},
-		Resources:  configs.Resources{Max: map[string]string{"vcore": "5"}},
-	})
-	assert.NilError(t, err, "updating queue should not have failed (stateaware & max)")
-	queue.UpdateQueueProperties()
-	err = partition.AddApplication(app)
-	if err == nil || partition.getApplication(appID2) != nil {
-		t.Errorf("add application should have failed due to max queue resource but did not")
-	}
-
-	// queue with stateaware as sort policy, with a max set larger than placeholder ask: app add works
-	err = queue.ApplyConf(configs.QueueConfig{
-		Name:      "default",
-		Parent:    false,
-		Queues:    nil,
-		Resources: configs.Resources{Max: map[string]string{"vcore": "20"}},
-	})
-	assert.NilError(t, err, "updating queue should not have failed (max resource)")
-	err = partition.AddApplication(app)
-	assert.NilError(t, err, "add application to partition should not have failed")
 }
 
 func TestRemoveApp(t *testing.T) {

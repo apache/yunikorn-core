@@ -1013,26 +1013,6 @@ func TestStateTimeOut(t *testing.T) {
 	if !app.stateMachine.Is(Running.String()) || app.stateTimer != nil {
 		t.Fatalf("State is not running or timer was not cleared, state: %s, timer %v", app.stateMachine.Current(), app.stateTimer)
 	}
-
-	startingTimeout = time.Minute * 5
-	app = newApplicationWithTags(appID2, "default", "root.a", map[string]string{siCommon.AppTagStateAwareDisable: "true"})
-	err = app.handleApplicationEventWithLocking(RunApplication)
-	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
-	err = app.handleApplicationEventWithLocking(RunApplication)
-	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
-	// give it some time to run and progress
-	time.Sleep(time.Millisecond * 100)
-	if app.IsStarting() {
-		t.Fatal("Starting state should have timed out")
-	}
-	if app.stateTimer != nil {
-		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", app.stateTimer)
-	}
-	log := app.GetStateLog()
-	assert.Equal(t, len(log), 3, "wrong number of app events")
-	assert.Equal(t, log[0].ApplicationState, Accepted.String())
-	assert.Equal(t, log[1].ApplicationState, Starting.String())
-	assert.Equal(t, log[2].ApplicationState, Running.String())
 }
 
 func TestCompleted(t *testing.T) {

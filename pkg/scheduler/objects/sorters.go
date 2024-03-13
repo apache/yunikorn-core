@@ -113,13 +113,6 @@ func sortApplications(apps map[string]*Application, sortType policies.SortPolicy
 		} else {
 			sortApplicationsBySubmissionTimeAndPriority(sortedApps)
 		}
-	case policies.StateAwarePolicy:
-		sortedApps = stateAwareFilter(apps)
-		if considerPriority {
-			sortApplicationsByPriorityAndSubmissionTime(sortedApps)
-		} else {
-			sortApplicationsBySubmissionTimeAndPriority(sortedApps)
-		}
 	}
 	metrics.GetSchedulerMetrics().ObserveAppSortingLatency(sortingStart)
 	return sortedApps
@@ -189,43 +182,6 @@ func filterOnPendingResources(apps map[string]*Application) []*Application {
 		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
 			filteredApps = append(filteredApps, app)
 		}
-	}
-	return filteredApps
-}
-
-// This filter only allows one (1) application with a state that is not running in the list of candidates.
-// The preference is a state of Starting. If we can not find an app with a starting state we will use an app
-// with an Accepted state. However if there is an app with a Starting state even with no pending resource
-// requests, no Accepted apps can be scheduled. An app in New state does not have any asks and can never be
-// scheduled.
-func stateAwareFilter(apps map[string]*Application) []*Application {
-	filteredApps := make([]*Application, 0)
-	var acceptedApp *Application
-	var foundStarting bool
-	for _, app := range apps {
-		// found a starting app clear out the accepted app (independent of pending resources)
-		if app.IsStarting() {
-			foundStarting = true
-			acceptedApp = nil
-		}
-		// Now just look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
-			// filter accepted apps
-			if app.IsAccepted() {
-				// check if we have not seen a starting app
-				// replace the currently tracked accepted app if this is an older one
-				if !foundStarting && (acceptedApp == nil || acceptedApp.SubmissionTime.After(app.SubmissionTime)) {
-					acceptedApp = app
-				}
-				continue
-			}
-			// this is a running or starting app add it to the list
-			filteredApps = append(filteredApps, app)
-		}
-	}
-	// just add the accepted app if we need to: apps are not sorted yet
-	if acceptedApp != nil {
-		filteredApps = append(filteredApps, acceptedApp)
 	}
 	return filteredApps
 }

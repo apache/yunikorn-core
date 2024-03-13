@@ -32,7 +32,7 @@ func TestAppFromString(t *testing.T) {
 		{"EmptyString", "", FifoSortPolicy, false},
 		{"FifoString", "fifo", FifoSortPolicy, false},
 		{"FairString", "fair", FairSortPolicy, false},
-		{"StatusString", "stateaware", StateAwarePolicy, false},
+		{"StatusString", "stateaware", FifoSortPolicy, false},
 		{"UnknownString", "unknown", Undefined, true},
 	}
 	for _, tt := range tests {
@@ -56,7 +56,7 @@ func TestAppToString(t *testing.T) {
 	}{
 		{"FifoString", FifoSortPolicy, "fifo"},
 		{"FairString", FairSortPolicy, "fair"},
-		{"StatusString", StateAwarePolicy, "stateaware"},
+		{"StatusString", deprecatedStateAwarePolicy, "stateaware"},
 		{"DefaultString", Undefined, "undefined"},
 		{"NoneString", someSP, "fifo"},
 	}

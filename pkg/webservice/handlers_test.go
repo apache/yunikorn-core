@@ -142,11 +142,11 @@ partitions:
       - 
         name: root
         properties:
-          application.sort.policy: stateaware
+          application.sort.policy: fifo
         childtemplate:
           maxapplications: 10
           properties:
-            application.sort.policy: stateaware
+            application.sort.policy: fifo
           resources:
             guaranteed:
               memory: 400000
@@ -1058,7 +1058,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 		MaxResource:        tMaxResource.DAOMap(),
 		GuaranteedResource: tGuaranteedResource.DAOMap(),
 		Properties: map[string]string{
-			configs.ApplicationSortPolicy: policies.StateAwarePolicy.String(),
+			configs.ApplicationSortPolicy: policies.FifoSortPolicy.String(),
 		},
 	}
 
@@ -1095,7 +1095,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, partitionQueuesDao.CurrentPriority, configs.MinPriority)
 	assert.Assert(t, partitionQueuesDao.AllocatingAcceptedApps == nil)
 	assert.Equal(t, len(partitionQueuesDao.Properties), 1)
-	assert.Equal(t, partitionQueuesDao.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.Equal(t, partitionQueuesDao.Properties[configs.ApplicationSortPolicy], policies.FifoSortPolicy.String())
 	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo, &templateInfo)
 
 	// assert child root.a fields
@@ -1119,7 +1119,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, child.CurrentPriority, configs.MinPriority)
 	assert.Assert(t, child.AllocatingAcceptedApps == nil)
 	assert.Equal(t, len(child.Properties), 1)
-	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.FifoSortPolicy.String())
 	assert.DeepEqual(t, child.TemplateInfo, &templateInfo)
 
 	// assert child root.a.a1 fields

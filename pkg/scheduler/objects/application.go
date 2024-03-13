@@ -39,7 +39,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
-	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -185,11 +184,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	}
 	app.gangSchedulingStyle = gangSchedStyle
 	app.execTimeout = placeholderTimeout
-	if app.GetTag(siCommon.AppTagStateAwareDisable) != "" {
-		app.startTimeout = 0 // transition immediately to Running
-	} else {
-		app.startTimeout = startingTimeout
-	}
+	app.startTimeout = startingTimeout
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID

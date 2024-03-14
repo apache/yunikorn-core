@@ -345,7 +345,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	queue.AddApplication(app)
 	// check only for gang request
 	// - make sure the taskgroup request fits in the maximum set for the queue hierarchy
-	// - task groups should only be used in FIFO or StateAware queues
+	// - task groups should only be used in FIFO queues
 	// if the check fails remove the app from the queue again
 	if placeHolder := app.GetPlaceholderAsk(); !resources.IsZero(placeHolder) {
 		// check the queue sorting

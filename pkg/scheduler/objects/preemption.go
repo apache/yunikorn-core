@@ -195,7 +195,7 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 	for _, snapshot := range queues {
 		for _, alloc := range snapshot.PotentialVictims {
 			snapshot.RemoveAllocation(alloc.GetAllocatedResource())
-			if currentQueue.IsWithinGuaranteedResource() {
+			if resources.StrictlyGreaterThanOrEquals(currentQueue.GetRemainingGuaranteed(), resources.Zero) {
 				return true
 			}
 		}
@@ -241,7 +241,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 				// did removing this allocation still keep the queue over-allocated?
-				if queueSnapshot.IsAtOrAboveGuaranteedResource() {
+				if resources.StrictlyGreaterThanOrEquals(queueSnapshot.GetPreemptableResource(), resources.Zero) {
 					// check to see if the shortfall on the node has changed
 					shortfall := resources.SubEliminateNegative(p.ask.GetAllocatedResource(), nodeCurrentAvailable)
 					newAvailable := resources.Add(nodeCurrentAvailable, victim.GetAllocatedResource())
@@ -293,7 +293,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
-				if queueSnapshot.IsAtOrAboveGuaranteedResource() {
+				if resources.StrictlyGreaterThanOrEquals(queueSnapshot.GetPreemptableResource(), resources.Zero) {
 					// removing task does not violate queue constraints, adjust queue and node
 					nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
 					// check if ask now fits and we haven't had this happen before
@@ -443,7 +443,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 	victims := make([]*Allocation, 0)
 	for _, victim := range potentialVictims {
 		// stop search if the ask fits into the queue
-		if askQueue.IsWithinGuaranteedResource() {
+		if resources.StrictlyGreaterThanOrEquals(askQueue.GetRemainingGuaranteed(), resources.Zero) {
 			break
 		}
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
@@ -452,7 +452,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 				remaining := askQueue.GetRemainingGuaranteed()
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 				// did removing this allocation still keep the queue over-allocated?
-				if queueSnapshot.IsAtOrAboveGuaranteedResource() {
+				if resources.StrictlyGreaterThanOrEquals(queueSnapshot.GetPreemptableResource(), resources.Zero) {
 					// check to see if the shortfall on the queue has changed
 					newRemaining := askQueue.GetRemainingGuaranteed()
 					if resources.EqualsOrEmpty(remaining, newRemaining) {
@@ -470,7 +470,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 		}
 	}
 
-	if askQueue.IsWithinGuaranteedResource() {
+	if resources.StrictlyGreaterThanOrEquals(askQueue.GetRemainingGuaranteed(), resources.Zero) {
 		return victims, true
 	}
 	return nil, false
@@ -692,77 +692,64 @@ func (qps *QueuePreemptionSnapshot) Duplicate(copy map[string]*QueuePreemptionSn
 	return snapshot
 }
 
-// IsAtOrAboveGuaranteedResource determines if this queue is exceeding resource guarantees and therefore
-// may be eligible for further preemption
-func (qps *QueuePreemptionSnapshot) IsAtOrAboveGuaranteedResource() bool {
+func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource {
 	if qps == nil {
-		return false
+		return nil
 	}
-	guaranteed := qps.GetGuaranteedResource()
-	maxResource := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
-	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
+	parentPreemptableResource := qps.Parent.GetPreemptableResource()
+	used := qps.AllocatedResource.Clone()
 
-	// if we don't fit, we're clearly above
-	if !absGuaranteed.FitIn(used) {
-		return true
+	// No usage, so nothing to preempt
+	if used.IsEmpty() {
+		return nil
 	}
+	used.SubOnlyExisting(qps.PreemptingResource)
 
-	usedOrMax := resources.ComponentWiseMax(guaranteed, used)
-	return resources.Equals(usedOrMax, used)
-}
+	// Calculate preemptable resource. +ve means Over utilized, -ve means Under utilized, 0 means correct utilization
+	guaranteed := qps.GuaranteedResource.Clone()
+	actualPreemptableResource := used.Clone()
+	actualPreemptableResource.SubOnlyExisting(guaranteed)
+	preemptableResource := actualPreemptableResource.Clone()
 
-// IsWithinGuaranteedResource determines if this queue is within its current resource guarantees
-func (qps *QueuePreemptionSnapshot) IsWithinGuaranteedResource() bool {
-	if qps == nil {
-		return true
+	// Keep only the resource type which needs to be preempted
+	for k, v := range actualPreemptableResource.Resources {
+		// Under-utilized or completely used resource types
+		if v <= 0 {
+			delete(preemptableResource.Resources, k)
+		} else { // Over utilized resource types
+			preemptableResource.Resources[k] = v
+		}
 	}
-	// check the parent, as violations at any level mean we are not within limits
-	if !qps.Parent.IsWithinGuaranteedResource() {
-		return false
+	if resources.IsZero(preemptableResource) {
+		return preemptableResource
 	}
-	guaranteed := qps.GetGuaranteedResource()
-
-	// if this is a leaf queue and we have not found any guaranteed resources, then we are never within guaranteed usage
-	if qps.Leaf && guaranteed.IsEmpty() {
-		return false
+	if resources.IsZero(parentPreemptableResource) {
+		return preemptableResource
 	}
-	maxResource := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
-	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
-	return absGuaranteed.FitIn(used)
+	return resources.ComponentWiseMinPermissive(preemptableResource, parentPreemptableResource)
 }
 
 func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteed() *resources.Resource {
 	if qps == nil {
 		return nil
 	}
-	parentResult := qps.Parent.GetRemainingGuaranteed()
-	if parentResult == nil {
-		parentResult = resources.NewResource()
-	}
-	guaranteed := qps.GetGuaranteedResource()
-	maxResource := qps.GetMaxResource()
-	absGuaranteed := resources.ComponentWiseMinPermissive(guaranteed, maxResource)
-	used := resources.Sub(qps.AllocatedResource, qps.PreemptingResource)
-	remaining := resources.Sub(absGuaranteed, used)
-	return resources.ComponentWiseMin(remaining, parentResult)
-}
+	parent := qps.Parent.GetRemainingGuaranteed()
+	remainingGuaranteed := resources.ComponentWiseMinPermissive(qps.GuaranteedResource.Clone(), qps.MaxResource.Clone())
 
-// GetGuaranteedResource computes the current guaranteed resources considering parent guaranteed
-func (qps *QueuePreemptionSnapshot) GetGuaranteedResource() *resources.Resource {
-	if qps == nil {
-		return resources.NewResource()
+	// No remainingGuaranteed set, so nothing remaining
+	if remainingGuaranteed.IsEmpty() {
+		return nil
 	}
-	return resources.ComponentWiseMinPermissive(qps.Parent.GetGuaranteedResource(), qps.GuaranteedResource)
-}
-
-// GetMaxResource computes the current max resources considering parent max
-func (qps *QueuePreemptionSnapshot) GetMaxResource() *resources.Resource {
-	if qps == nil {
-		return resources.NewResource()
+	used := qps.AllocatedResource.Clone()
+	used.SubOnlyExisting(qps.PreemptingResource)
+	remainingGuaranteed.SubOnlyExisting(used)
+	if remainingGuaranteed.IsEmpty() {
+		return nil
 	}
-	return resources.ComponentWiseMinPermissive(qps.Parent.GetMaxResource(), qps.MaxResource)
+	if parent.IsEmpty() {
+		return remainingGuaranteed
+	}
+	return resources.ComponentWiseMinPermissive(remainingGuaranteed, parent)
 }
 
 // AddAllocation adds an allocation to this snapshot's resource usage

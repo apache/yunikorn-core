@@ -19,7 +19,6 @@
 package webservice
 
 import (
-	"bytes"
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
@@ -1231,12 +1230,8 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 func checkHeader(h http.Header, key string, value string) bool {
 	values := h.Values(key)
 	for _, v := range values {
-		v2 := strings.Split(v, ",")
-		for _, item := range v2 {
-			item = strings.TrimSpace(item)
-			if item == value {
-				return true
-			}
+		if strings.Contains(v, value) {
+			return true
 		}
 	}
 	return false
@@ -1249,31 +1244,20 @@ func compress(w http.ResponseWriter, data any) {
 		return
 	}
 
-	// don't compress the data if it is smaller than MTU size
-	if len(response) < 1500 {
-		if err = json.NewEncoder(w).Encode(data); err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-		}
-		return
-	}
-
-	var compressedData bytes.Buffer
-	writer := gzip.NewWriter(&compressedData)
+	writer := gzip.NewWriter(w)
+	w.Header().Set("Content-Encoding", "gzip")
 	_, err = writer.Write(response)
 	if err != nil {
 		_ = writer.Close()
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	err = writer.Close()
+	err = writer.Flush()
 	if err != nil {
+		_ = writer.Close()
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	writeHeader(w, "Content-Encoding", "gzip")
-	if _, err = w.Write(compressedData.Bytes()); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-	}
+	_ = writer.Close()
 }

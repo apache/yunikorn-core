@@ -17,10 +17,11 @@
 package objects
 
 import (
-	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"testing"
 
 	"gotest.tools/v3/assert"
+
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
 func TestGetPreemptableResource(t *testing.T) {
@@ -105,7 +106,6 @@ func TestGetPreemptableResource(t *testing.T) {
 
 func TestGetRemainingGuaranteedResource(t *testing.T) {
 	// no guaranteed and no usage. so nothing to preempt
-	//maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
 	var parentQ, childQ1, childQ2 *Queue

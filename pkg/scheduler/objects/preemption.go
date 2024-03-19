@@ -195,7 +195,9 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 	for _, snapshot := range queues {
 		for _, alloc := range snapshot.PotentialVictims {
 			snapshot.RemoveAllocation(alloc.GetAllocatedResource())
-			if resources.StrictlyGreaterThanOrEquals(currentQueue.GetRemainingGuaranteed(), resources.Zero) {
+			//print("step 1 is " + currentQueue.GetRemainingGuaranteed().String())
+			remaining := currentQueue.GetRemainingGuaranteed()
+			if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
 				return true
 			}
 		}
@@ -443,7 +445,8 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 	victims := make([]*Allocation, 0)
 	for _, victim := range potentialVictims {
 		// stop search if the ask fits into the queue
-		if resources.StrictlyGreaterThanOrEquals(askQueue.GetRemainingGuaranteed(), resources.Zero) {
+		remaining := askQueue.GetRemainingGuaranteed()
+		if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
 			break
 		}
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
@@ -470,7 +473,8 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 		}
 	}
 
-	if resources.StrictlyGreaterThanOrEquals(askQueue.GetRemainingGuaranteed(), resources.Zero) {
+	remaining := askQueue.GetRemainingGuaranteed()
+	if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
 		return victims, true
 	}
 	return nil, false
@@ -737,18 +741,12 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteed() *resources.Resource
 	remainingGuaranteed := resources.ComponentWiseMinPermissive(qps.GuaranteedResource.Clone(), qps.MaxResource.Clone())
 
 	// No remainingGuaranteed set, so nothing remaining
-	if remainingGuaranteed.IsEmpty() {
+	if parent.IsEmpty() && remainingGuaranteed.IsEmpty() {
 		return nil
 	}
 	used := qps.AllocatedResource.Clone()
 	used.SubOnlyExisting(qps.PreemptingResource)
 	remainingGuaranteed.SubOnlyExisting(used)
-	if remainingGuaranteed.IsEmpty() {
-		return nil
-	}
-	if parent.IsEmpty() {
-		return remainingGuaranteed
-	}
 	return resources.ComponentWiseMinPermissive(remainingGuaranteed, parent)
 }
 

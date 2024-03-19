@@ -30,27 +30,18 @@ func TestGetPreemptableResource(t *testing.T) {
 	// no guaranteed and no usage. so nothing to preempt
 	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
-	var parentQ, childQ, childQ2 *Queue
+	var parentQ, childQ1, childQ2 *Queue
 	parentQ, err = createManagedQueue(rootQ, "parent", true, map[string]string{"first": "15"})
 	assert.NilError(t, err)
-	childQ, err = createManagedQueue(parentQ, "child1", false, map[string]string{"first": "10"})
+	childQ1, err = createManagedQueue(parentQ, "child1", false, map[string]string{"first": "10"})
 	assert.NilError(t, err)
 	childQ2, err = createManagedQueue(parentQ, "child2", false, map[string]string{"first": "5"})
 	assert.NilError(t, err)
-	cache := make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot := rootQ.createPreemptionSnapshot(cache)
-	rootPreemptable := qpsRoot.GetPreemptableResource()
-	qpsParent := parentQ.createPreemptionSnapshot(cache)
-	pPreemptable := qpsParent.GetPreemptableResource()
-	qpsChild1 := childQ.createPreemptionSnapshot(cache)
-	preemptable := qpsChild1.GetPreemptableResource()
-	qpsChild2 := childQ2.createPreemptionSnapshot(cache)
-	preemptable2 := qpsChild2.GetPreemptableResource()
-	assert.Equal(t, len(cache), 4, "expected 4 entries in snapsht cache")
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
 	assert.Assert(t, rootPreemptable.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
 	assert.Assert(t, pPreemptable.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
-	assert.Assert(t, preemptable.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
-	assert.Assert(t, preemptable2.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
+	assert.Assert(t, cPreemptable1.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
+	assert.Assert(t, cPreemptable2.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
 
 	// guaranteed set but no usage. so nothing to preempt
 	// clean start for the snapshot: whole hierarchy with guarantee
@@ -59,21 +50,12 @@ func TestGetPreemptableResource(t *testing.T) {
 	parentQ.guaranteedResource = smallestRes
 	childQ2.guaranteedResource = smallestRes
 	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
-	childQ.guaranteedResource = childRes
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot = rootQ.createPreemptionSnapshot(cache)
-	rootPreemptable = qpsRoot.GetPreemptableResource()
-	qpsParent = parentQ.createPreemptionSnapshot(cache)
-	pPreemptable = qpsParent.GetPreemptableResource()
-	qpsChild1 = childQ.createPreemptionSnapshot(cache)
-	bothRes := resources.Add(smallestRes, childRes)
-	preemptable = qpsChild1.GetPreemptableResource()
-	qpsChild2 = childQ2.createPreemptionSnapshot(cache)
-	preemptable2 = qpsChild2.GetPreemptableResource()
+	childQ1.guaranteedResource = childRes
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
 	assert.Assert(t, rootPreemptable.IsEmpty(), "nothing to preempt as no usage")
 	assert.Assert(t, pPreemptable.IsEmpty(), "nothing to preempt as no usage")
-	assert.Assert(t, preemptable.IsEmpty(), "nothing to preempt as no usage")
-	assert.Assert(t, preemptable2.IsEmpty(), "nothing to preempt as no usage")
+	assert.Assert(t, cPreemptable1.IsEmpty(), "nothing to preempt as no usage")
+	assert.Assert(t, cPreemptable2.IsEmpty(), "nothing to preempt as no usage")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage to parent + root: use all guaranteed at parent level
@@ -81,43 +63,29 @@ func TestGetPreemptableResource(t *testing.T) {
 	rootQ.allocatedResource = resources.Multiply(smallestRes, 2)
 	parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
 	childQ2.allocatedResource = resources.Multiply(smallestRes, 2)
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot = rootQ.createPreemptionSnapshot(cache)
-	rootPreemptable = qpsRoot.GetPreemptableResource()
-	qpsParent = parentQ.createPreemptionSnapshot(cache)
-	pPreemptable = qpsParent.GetPreemptableResource()
-	qpsChild1 = childQ.createPreemptionSnapshot(cache)
-	preemptable = qpsChild1.GetPreemptableResource()
-	qpsChild2 = childQ2.createPreemptionSnapshot(cache)
-	preemptable2 = qpsChild2.GetPreemptableResource()
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
 	assert.Assert(t, resources.IsZero(rootPreemptable), "usage is equal to guaranteed in root queue. so nothing to preempt")
 	assert.Assert(t, resources.Equals(pPreemptable, smallestRes), "usage has exceeded twice than guaranteed in parent queue. preemtable resource should be equal to guaranteed res")
-	assert.Assert(t, resources.IsZero(preemptable), "nothing to preempt as no usage in child1 queue")
-	assert.Assert(t, resources.Equals(preemptable2, smallestRes), "usage has exceeded twice than guaranteed in child2 queue. preemtable resource should be equal to guaranteed res")
+	assert.Assert(t, resources.IsZero(cPreemptable1), "nothing to preempt as no usage in child1 queue")
+	assert.Assert(t, resources.Equals(cPreemptable2, smallestRes), "usage has exceeded twice than guaranteed in child2 queue. preemtable resource should be equal to guaranteed res")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage for all: use exactly guaranteed at parent and child level
 	// parent guarantee used for one type child guarantee used for second type
-	bothRes = resources.Multiply(smallestRes, 2)
+	bothRes := resources.Multiply(smallestRes, 2)
 	bothRes.AddTo(childRes)
 	rootQ.allocatedResource = bothRes
 	bothRes = resources.Add(smallestRes, childRes)
 	parentQ.allocatedResource = bothRes
-	childQ.allocatedResource = childRes
+	childQ1.allocatedResource = childRes
 	childQ2.allocatedResource = smallestRes
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot = rootQ.createPreemptionSnapshot(cache)
-	rootPreemptable = qpsRoot.GetPreemptableResource()
-	qpsParent = parentQ.createPreemptionSnapshot(cache)
-	pPreemptable = qpsParent.GetPreemptableResource()
-	qpsChild1 = childQ.createPreemptionSnapshot(cache)
-	preemptable = qpsChild1.GetPreemptableResource()
-	qpsChild2 = childQ2.createPreemptionSnapshot(cache)
-	preemptable2 = qpsChild2.GetPreemptableResource()
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
 	assert.Assert(t, resources.Equals(rootPreemptable, resources.Multiply(childRes, 1)), "usage in root queue has extra resource type not defined as part of guaranteed res. So, that extra resource type should be preempted")
 	assert.Assert(t, resources.Equals(pPreemptable, resources.Multiply(childRes, 1)), "usage in parent1 queue has extra resource type not defined as part of guaranteed res. So, that extra resource type should be preempted")
-	assert.Assert(t, resources.IsZero(preemptable), "usage in child1 queue is equal to guaranteed res. so nothing to preempt")
-	assert.Assert(t, resources.IsZero(preemptable2), "nothing to preempt as no usage in child2 queue")
+	print(cPreemptable1.String())
+	print(cPreemptable2.String())
+	assert.Assert(t, resources.IsZero(cPreemptable1), "usage in child1 queue is equal to guaranteed res. so nothing to preempt")
+	assert.Assert(t, resources.IsZero(cPreemptable2), "nothing to preempt as no usage in child2 queue")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage for root + parent: use exactly guaranteed at parent and child level
@@ -128,84 +96,31 @@ func TestGetPreemptableResource(t *testing.T) {
 	rootQ.allocatedResource = bothRes
 	bothRes = resources.Add(smallestRes, resources.Multiply(childRes, 2))
 	parentQ.allocatedResource = bothRes
-	childQ.allocatedResource = resources.Multiply(childRes, 2)
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot = rootQ.createPreemptionSnapshot(cache)
-	rootPreemptable = qpsRoot.GetPreemptableResource()
-	qpsParent = parentQ.createPreemptionSnapshot(cache)
-	pPreemptable = qpsParent.GetPreemptableResource()
-	qpsChild1 = childQ.createPreemptionSnapshot(cache)
-	preemptable = qpsChild1.GetPreemptableResource()
-	qpsChild2 = childQ2.createPreemptionSnapshot(cache)
-	preemptable2 = qpsChild2.GetPreemptableResource()
+	childQ1.allocatedResource = resources.Multiply(childRes, 2)
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
 	assert.Assert(t, resources.Equals(rootPreemptable, resources.Multiply(childRes, 2)), "usage in root queue has extra resource type not defined as part of guaranteed res. So, that extra resource type should be preempted")
 	assert.Assert(t, resources.Equals(pPreemptable, resources.Multiply(childRes, 2)), "usage in parent1 queue has extra resource type not defined as part of guaranteed res. So, that extra resource type should be preempted")
-	assert.Assert(t, resources.Equals(preemptable, childRes), "usage has exceeded twice than guaranteed in child1 queue. preemptable resource should be equal to guaranteed res")
-	assert.Assert(t, resources.IsZero(preemptable2), "nothing to preempt as no usage in child2 queue")
+	assert.Assert(t, resources.Equals(cPreemptable1, childRes), "usage has exceeded twice than guaranteed in child1 queue. cPreemptable1 resource should be equal to guaranteed res")
+	assert.Assert(t, resources.IsZero(cPreemptable2), "nothing to preempt as no usage in child2 queue")
 }
 
-func TestGetRemainingGuaranteed3(t *testing.T) {
-
+func TestGetRemainingGuaranteed(t *testing.T) {
 	// no guaranteed and no usage. so nothing to preempt
-	rootQ, err := createRootQueue(map[string]string{})
+	maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
-	var parentQ, childQ, childQ2 *Queue
-	parentQ, err = createManagedQueueGuaranteed(rootQ, "parent", true, nil, map[string]string{"first": "10"})
+	var parentQ, childQ1, childQ2 *Queue
+	parentQ, err = createManagedQueue(rootQ, "parent", true, map[string]string{"first": "10"})
 	assert.NilError(t, err)
-	childQ, err = createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "5"})
+	childQ1, err = createManagedQueue(parentQ, "child1", false, map[string]string{"first": "5"})
 	assert.NilError(t, err)
-	childQ2, err = createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "5"})
+	childQ2, err = createManagedQueue(parentQ, "child2", false, map[string]string{"first": "5"})
 	assert.NilError(t, err)
-	cache := make(map[string]*QueuePreemptionSnapshot)
-	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-
-	// clean start for the snapshot: all set guaranteed
-	// add usage to parent + root: use all guaranteed at parent level
-	// add usage to child2: use double than guaranteed
-	rootQ.allocatedResource = resources.Multiply(smallestRes, 2)
-	parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
-	childQ.allocatedResource = resources.Multiply(smallestRes, 2)
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot := rootQ.createPreemptionSnapshot(cache)
-	rootRemaining := qpsRoot.GetRemainingGuaranteed()
-	qpsParent := parentQ.createPreemptionSnapshot(cache)
-	pRemaining := qpsParent.GetRemainingGuaranteed()
-	qpsChild1 := childQ.createPreemptionSnapshot(cache)
-	remaining := qpsChild1.GetRemainingGuaranteed()
-	qpsChild2 := childQ2.createPreemptionSnapshot(cache)
-	remaining2 := qpsChild2.GetRemainingGuaranteed()
-
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. so all guaranteed should be in remaining")
-	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
-	assert.Assert(t, resources.Equals(remaining, resources.Multiply(smallestRes, -1)), "guaranteed set, but no usage. However remaining should include its all guaranteed + parent remaining guaranteed")
-	assert.Assert(t, resources.IsZero(remaining2), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
-}
-
-func TestGetRemainingGuaranteed1(t *testing.T) {
-	// no guaranteed and no usage. so nothing to preempt
-	rootQ, err := createRootQueue(nil)
-	assert.NilError(t, err)
-	var parentQ, childQ, childQ2 *Queue
-	parentQ, err = createManagedQueue(rootQ, "parent", true, nil)
-	assert.NilError(t, err)
-	childQ, err = createManagedQueue(parentQ, "child1", false, nil)
-	assert.NilError(t, err)
-	childQ2, err = createManagedQueue(parentQ, "child2", false, nil)
-	assert.NilError(t, err)
-	cache := make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot := rootQ.createPreemptionSnapshot(cache)
-	rootRemaining := qpsRoot.GetRemainingGuaranteed()
-	qpsParent := parentQ.createPreemptionSnapshot(cache)
-	pRemaining := qpsParent.GetRemainingGuaranteed()
-	qpsChild1 := childQ.createPreemptionSnapshot(cache)
-	remaining := qpsChild1.GetRemainingGuaranteed()
-	qpsChild2 := childQ2.createPreemptionSnapshot(cache)
-	remaining2 := qpsChild2.GetRemainingGuaranteed()
-	assert.Equal(t, len(cache), 4, "expected 4 entries in snapshot cache")
-	assert.Assert(t, rootRemaining.IsEmpty(), "guaranteed not set, so nothing should be in remaining")
-	assert.Assert(t, pRemaining.IsEmpty(), "guaranteed not set, so nothing should be in remaining")
-	assert.Assert(t, remaining.IsEmpty(), "guaranteed not set, so nothing should be in remaininge")
-	assert.Assert(t, remaining2.IsEmpty(), "guaranteed not set, so nothing should be in remaining")
+	rootRemaining, pRemaining, cRemaining1, cRemaining2 := getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
+	assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(maxRes, 4)), "guaranteed not set but max res set, so entire max res should be in cRemaining1")
+	assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(maxRes, 2)), "guaranteed not set but max res set, so entire max res should be in cRemaining1")
+	assert.Assert(t, resources.Equals(cRemaining1, maxRes), "guaranteed not set but max res set, so entire max res should be in cRemaining1")
+	assert.Assert(t, resources.Equals(cRemaining2, maxRes), "guaranteed not set but max res set, so entire max res should be in cRemaining1")
 
 	// guaranteed set but no usage. so nothing to preempt
 	// clean start for the snapshot: whole hierarchy with guarantee
@@ -214,21 +129,12 @@ func TestGetRemainingGuaranteed1(t *testing.T) {
 	parentQ.guaranteedResource = smallestRes
 	childQ2.guaranteedResource = smallestRes
 	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
-	bothRes := resources.Add(smallestRes, childRes)
-	childQ.guaranteedResource = childRes
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot = rootQ.createPreemptionSnapshot(cache)
-	rootRemaining = qpsRoot.GetRemainingGuaranteed()
-	qpsParent = parentQ.createPreemptionSnapshot(cache)
-	pRemaining = qpsParent.GetRemainingGuaranteed()
-	qpsChild1 = childQ.createPreemptionSnapshot(cache)
-	remaining = qpsChild1.GetRemainingGuaranteed()
-	qpsChild2 = childQ2.createPreemptionSnapshot(cache)
-	remaining2 = qpsChild2.GetRemainingGuaranteed()
-	assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 2)), "guaranteed set, but no usage. so all guaranteed should be in remaining")
-	assert.Assert(t, resources.Equals(pRemaining, smallestRes), "guaranteed set, but no usage. so all guaranteed should be in remaining")
-	assert.Assert(t, resources.Equals(remaining, resources.Add(smallestRes, childRes)), "guaranteed set, but no usage. so all guaranteed + parent remaining guaranteed should be in remaining")
-	assert.Assert(t, resources.Equals(remaining2, smallestRes), "guaranteed set, but no usage. so all guaranteed should be in remaining")
+	childQ1.guaranteedResource = childRes
+	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
+	assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 2)), "guaranteed set, but no usage. so all guaranteed should be in cRemaining1")
+	assert.Assert(t, resources.Equals(pRemaining, smallestRes), "guaranteed set, but no usage. so all guaranteed should be in cRemaining1")
+	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(smallestRes, childRes)), "guaranteed set, but no usage. so all guaranteed + parent cRemaining1 guaranteed should be in cRemaining1")
+	assert.Assert(t, resources.Equals(cRemaining2, smallestRes), "guaranteed set, but no usage. so all guaranteed should be in cRemaining1")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage to parent + root: use all guaranteed at parent level
@@ -236,43 +142,27 @@ func TestGetRemainingGuaranteed1(t *testing.T) {
 	rootQ.allocatedResource = resources.Multiply(smallestRes, 2)
 	parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
 	childQ2.allocatedResource = resources.Multiply(smallestRes, 2)
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot = rootQ.createPreemptionSnapshot(cache)
-	rootRemaining = qpsRoot.GetRemainingGuaranteed()
-	qpsParent = parentQ.createPreemptionSnapshot(cache)
-	pRemaining = qpsParent.GetRemainingGuaranteed()
-	qpsChild1 = childQ.createPreemptionSnapshot(cache)
-	remaining = qpsChild1.GetRemainingGuaranteed()
-	qpsChild2 = childQ2.createPreemptionSnapshot(cache)
-	remaining2 = qpsChild2.GetRemainingGuaranteed()
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. so all guaranteed should be in remaining")
-	assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
-	assert.Assert(t, resources.Equals(remaining, resources.Add(resources.Multiply(smallestRes, -1), childRes)), "guaranteed set, but no usage. However remaining should include its all guaranteed + parent remaining guaranteed")
-	assert.Assert(t, resources.Equals(remaining2, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
+	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. so all guaranteed should be in cRemaining1")
+	assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so cRemaining1 should be in -ve")
+	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(resources.Multiply(smallestRes, -1), childRes)), "guaranteed set, but no usage. However cRemaining1 should include its all guaranteed + parent cRemaining1 guaranteed")
+	assert.Assert(t, resources.Equals(cRemaining2, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so cRemaining1 should be in -ve")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage for all: use exactly guaranteed at parent and child level
 	// parent guarantee used for one type child guarantee used for second type
-	bothRes = resources.Multiply(smallestRes, 2)
+	bothRes := resources.Multiply(smallestRes, 2)
 	bothRes.AddTo(childRes)
 	rootQ.allocatedResource = bothRes
 	bothRes = resources.Add(smallestRes, childRes)
 	parentQ.allocatedResource = bothRes
-	childQ.allocatedResource = childRes
+	childQ1.allocatedResource = childRes
 	childQ2.allocatedResource = smallestRes
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot = rootQ.createPreemptionSnapshot(cache)
-	rootRemaining = qpsRoot.GetRemainingGuaranteed()
-	qpsParent = parentQ.createPreemptionSnapshot(cache)
-	pRemaining = qpsParent.GetRemainingGuaranteed()
-	qpsChild1 = childQ.createPreemptionSnapshot(cache)
-	remaining = qpsChild1.GetRemainingGuaranteed()
-	qpsChild2 = childQ2.createPreemptionSnapshot(cache)
-	remaining2 = qpsChild2.GetRemainingGuaranteed()
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-	assert.Assert(t, resources.IsZero(remaining), "guaranteed set, used completely. so, no remaining")
-	assert.Assert(t, resources.IsZero(remaining2), "guaranteed set, but no usage. Still, no remaining in guaranteed because of its parent queue")
+	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no cRemaining1")
+	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no cRemaining1")
+	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed set, used completely. so, no cRemaining1")
+	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed set, but no usage. Still, no cRemaining1 in guaranteed because of its parent queue")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage for root + parent: use exactly guaranteed at parent and child level
@@ -283,19 +173,38 @@ func TestGetRemainingGuaranteed1(t *testing.T) {
 	rootQ.allocatedResource = bothRes
 	bothRes = resources.Add(smallestRes, resources.Multiply(childRes, 2))
 	parentQ.allocatedResource = bothRes
-	childQ.allocatedResource = resources.Multiply(childRes, 2)
+	childQ1.allocatedResource = resources.Multiply(childRes, 2)
 	childQ2.allocatedResource = smallestRes
-	cache = make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot = rootQ.createPreemptionSnapshot(cache)
-	rootRemaining = qpsRoot.GetRemainingGuaranteed()
-	qpsParent = parentQ.createPreemptionSnapshot(cache)
-	pRemaining = qpsParent.GetRemainingGuaranteed()
-	qpsChild1 = childQ.createPreemptionSnapshot(cache)
-	remaining = qpsChild1.GetRemainingGuaranteed()
-	qpsChild2 = childQ2.createPreemptionSnapshot(cache)
-	remaining2 = qpsChild2.GetRemainingGuaranteed()
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-	assert.Assert(t, resources.Equals(remaining, resources.Multiply(childRes, -1)), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
-	assert.Assert(t, resources.IsZero(remaining2), "guaranteed set, but no usage. Still, no remaining in guaranteed because of its parent queue")
+	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no cRemaining1")
+	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no cRemaining1")
+	assert.Assert(t, resources.Equals(cRemaining1, resources.Multiply(childRes, -1)), "guaranteed set, used double than guaranteed. so cRemaining1 should be in -ve")
+	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed set, but no usage. Still, no cRemaining1 in guaranteed because of its parent queue")
+}
+
+func createQPSCache(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue) (*QueuePreemptionSnapshot, *QueuePreemptionSnapshot, *QueuePreemptionSnapshot, *QueuePreemptionSnapshot) {
+	cache := make(map[string]*QueuePreemptionSnapshot)
+	qpsRoot := rootQ.createPreemptionSnapshot(cache)
+	qpsParent := parentQ.createPreemptionSnapshot(cache)
+	qpsChild1 := childQ1.createPreemptionSnapshot(cache)
+	qpsChild2 := childQ2.createPreemptionSnapshot(cache)
+	return qpsRoot, qpsParent, qpsChild1, qpsChild2
+}
+
+func getRemainingGuaranteed(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue) (*resources.Resource, *resources.Resource, *resources.Resource, *resources.Resource) {
+	qpsRoot, qpsParent, qpsChild1, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2)
+	rootRemaining := qpsRoot.GetRemainingGuaranteed()
+	pRemaining := qpsParent.GetRemainingGuaranteed()
+	cRemaining1 := qpsChild1.GetRemainingGuaranteed()
+	cRemaining2 := qpsChild2.GetRemainingGuaranteed()
+	return rootRemaining, pRemaining, cRemaining1, cRemaining2
+}
+
+func getPreemptableResource(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue) (*resources.Resource, *resources.Resource, *resources.Resource, *resources.Resource) {
+	qpsRoot, qpsParent, qpsChild1, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2)
+	rootRemaining := qpsRoot.GetPreemptableResource()
+	pRemaining := qpsParent.GetPreemptableResource()
+	cRemaining1 := qpsChild1.GetPreemptableResource()
+	cRemaining2 := qpsChild2.GetPreemptableResource()
+	return rootRemaining, pRemaining, cRemaining1, cRemaining2
 }

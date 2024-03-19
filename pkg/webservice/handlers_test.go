@@ -19,10 +19,13 @@
 package webservice
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -1469,6 +1472,27 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getQueueApplications(resp, req)
 	assertParamsMissing(t, resp)
+
+	// test compression
+	var req4 *http.Request
+	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	req4 = req4.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.default"},
+	}))
+	req4.Header.Set("Accept-Encoding", "gzip")
+	assert.NilError(t, err, "Get Queue Applications Handler request failed")
+	resp4 := &MockResponseWriter{}
+	getQueueApplications(resp4, req4)
+
+	var appsDao4 []*dao.ApplicationDAOInfo
+	buf := bytes.NewBuffer(resp4.outputBytes)
+	gzipReader, err := gzip.NewReader(buf)
+	assert.NilError(t, err, "Create gzip reader failed.")
+	uncompress, err := io.ReadAll(gzipReader)
+	assert.NilError(t, err, "Decode gzip data failed.")
+	err = json.Unmarshal(uncompress, &appsDao4)
+	assert.NilError(t, err, unmarshalError)
 }
 
 func checkLegalGetAppsRequest(t *testing.T, url string, params httprouter.Params, expected []*dao.ApplicationDAOInfo) {

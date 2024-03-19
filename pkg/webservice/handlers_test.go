@@ -19,17 +19,13 @@
 package webservice
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"time"

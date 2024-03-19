@@ -750,14 +750,14 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	// add an alloc
 	allocInfo := NewAllocation(nodeID1, ask)
 	app.AddAllocation(allocInfo)
-	// app should be starting
-	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
+	// app should be running
+	assert.Assert(t, app.IsRunning(), "Application did not return running state after alloc: %s", app.CurrentState())
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
 	// removing the ask should not move anywhere as there is an allocation
 	released = app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
-	assert.Assert(t, app.IsStarting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
+	assert.Assert(t, app.IsRunning(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
 
 	// remove the allocation, ask has been removed so nothing left
 	app.RemoveAllocation(askID+"-0", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
@@ -767,7 +767,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 3, "wrong number of app events")
 	assert.Equal(t, log[0].ApplicationState, Accepted.String())
-	assert.Equal(t, log[1].ApplicationState, Starting.String())
+	assert.Equal(t, log[1].ApplicationState, Running.String())
 	assert.Equal(t, log[2].ApplicationState, Completing.String())
 }
 
@@ -918,7 +918,7 @@ func TestGangAllocChange(t *testing.T) {
 	app.AddAllocation(alloc)
 	assert.Assert(t, resources.Equals(app.allocatedPlaceholder, totalPH), "allocated placeholders resources is not updated correctly: %s", app.allocatedPlaceholder.String())
 	assert.Equal(t, len(app.GetAllAllocations()), 2)
-	assert.Assert(t, app.IsStarting(), "app should have changed to starting state")
+	assert.Assert(t, app.IsRunning(), "app should have changed to running state")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
 	// add a real alloc this should NOT trigger state update
@@ -926,15 +926,15 @@ func TestGangAllocChange(t *testing.T) {
 	alloc.SetResult(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 3)
-	assert.Assert(t, app.IsStarting(), "app should still be in starting state")
+	assert.Assert(t, app.IsRunning(), "app should still be in running state")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 3))
 
-	// add a second real alloc this should trigger state update
+	// add a second real alloc this should NOT trigger state update
 	alloc = newAllocation(appID1, nodeID1, res)
 	alloc.SetResult(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 4)
-	assert.Assert(t, app.IsRunning(), "app should be in running state")
+	assert.Assert(t, app.IsRunning(), "app should still be in running state")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 4))
 }
 
@@ -956,7 +956,7 @@ func TestAllocChange(t *testing.T) {
 	app.AddAllocation(alloc)
 	assert.Assert(t, resources.Equals(app.allocatedResource, res), "allocated resources is not updated correctly: %s", app.allocatedResource.String())
 	assert.Equal(t, len(app.GetAllAllocations()), 1)
-	assert.Assert(t, app.IsStarting(), "app should be in starting state")
+	assert.Assert(t, app.IsRunning(), "app should be in running state")
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
 	// add a second real alloc this should trigger state update
@@ -976,43 +976,6 @@ func TestQueueUpdate(t *testing.T) {
 	assert.NilError(t, err, "failed to create test queue")
 	app.SetQueue(queue)
 	assert.Equal(t, app.GetQueuePath(), "root.test")
-}
-
-func TestStateTimeOut(t *testing.T) {
-	startingTimeout = time.Microsecond * 100
-	defer func() { startingTimeout = time.Minute * 5 }()
-	app := newApplication(appID1, "default", "root.a")
-	err := app.handleApplicationEventWithLocking(RunApplication)
-	assert.NilError(t, err, "no error expected new to accepted (timeout test)")
-	err = app.handleApplicationEventWithLocking(RunApplication)
-	assert.NilError(t, err, "no error expected accepted to starting (timeout test)")
-	// give it some time to run and progress
-	time.Sleep(time.Millisecond * 100)
-	if app.IsStarting() {
-		t.Fatal("Starting state should have timed out")
-	}
-	if app.stateTimer != nil {
-		t.Fatalf("Startup timer has not be cleared on time out as expected, %v", app.stateTimer)
-	}
-
-	startingTimeout = time.Millisecond * 100
-	app = newApplication(appID1, "default", "root.a")
-	err = app.handleApplicationEventWithLocking(RunApplication)
-	assert.NilError(t, err, "no error expected new to accepted (timeout test2)")
-	err = app.handleApplicationEventWithLocking(RunApplication)
-	assert.NilError(t, err, "no error expected accepted to starting (timeout test2)")
-	// give it some time to run and progress
-	time.Sleep(time.Microsecond * 100)
-	if !app.IsStarting() || app.stateTimer == nil {
-		t.Fatalf("Starting state and timer should not have timed out yet, state: %s", app.stateMachine.Current())
-	}
-	err = app.handleApplicationEventWithLocking(RunApplication)
-	assert.NilError(t, err, "no error expected starting to run (timeout test2)")
-	// give it some time to run and progress
-	time.Sleep(time.Microsecond * 100)
-	if !app.stateMachine.Is(Running.String()) || app.stateTimer != nil {
-		t.Fatalf("State is not running or timer was not cleared, state: %s, timer %v", app.stateMachine.Current(), app.stateTimer)
-	}
 }
 
 func TestCompleted(t *testing.T) {
@@ -1498,12 +1461,12 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 
 	alloc := newAllocation(appID1, nodeID1, res)
 	app.AddAllocation(alloc)
-	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
+	assert.Assert(t, app.IsRunning(), "App should be in running state after the first allocation")
 	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
 		return app.getPlaceholderTimer() == nil
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
-	assert.Assert(t, app.IsStarting(), "App should be in starting state after the first allocation")
+	assert.Assert(t, app.IsRunning(), "App should be in running state after the first allocation")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 3))
 	// two state updates and 1 release event
 	events := testHandler.GetEvents()

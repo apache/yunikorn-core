@@ -327,13 +327,13 @@ func verifyAllocationAskAddedEvents(t *testing.T, events []*si.EventRecord) {
 	assert.Equal(t, si.EventRecord_ADD, events[2].EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_ALLOC, events[2].EventChangeDetail)
 
-	// state change to Starting
+	// state change to Running
 	assert.Equal(t, "app-1", events[3].ObjectID)
 	assert.Equal(t, "", events[3].Message)
 	assert.Equal(t, "", events[3].ReferenceID)
 	assert.Equal(t, si.EventRecord_APP, events[3].Type)
 	assert.Equal(t, si.EventRecord_SET, events[3].EventChangeType)
-	assert.Equal(t, si.EventRecord_APP_STARTING, events[3].EventChangeDetail)
+	assert.Equal(t, si.EventRecord_APP_RUNNING, events[3].EventChangeDetail)
 
 	// Track resource usage for the user - increment
 	assert.Equal(t, "testuser", events[4].ObjectID)

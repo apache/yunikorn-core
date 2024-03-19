@@ -22,7 +22,7 @@ module github.com/apache/yunikorn-core
 go 1.21
 
 require (
-	github.com/apache/yunikorn-scheduler-interface v0.0.0-20240222205935-94c25b6d2579
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20240320010951-d392f3c7272d
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
@@ -50,7 +50,7 @@ require (
 	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
-	google.golang.org/protobuf v1.31.0 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 )
 
 replace (

@@ -74,44 +74,14 @@ func TestRejectStateTransition(t *testing.T) {
 	assert.Equal(t, app.CurrentState(), Rejected.String())
 }
 
-func TestStartStateTransition(t *testing.T) {
-	// starting only from accepted
-	appInfo := newApplication("app-00001", "default", "root.a")
-	assert.Equal(t, appInfo.CurrentState(), New.String())
-	err := appInfo.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected new to accepted (start test)")
-	assert.Equal(t, appInfo.CurrentState(), Accepted.String())
-
-	// start app
-	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.Assert(t, err, "no error expected new to starting")
-	assert.Equal(t, appInfo.CurrentState(), Starting.String())
-
-	// starting to rejected: error expected
-	err = appInfo.HandleApplicationEvent(RejectApplication)
-	assert.Assert(t, err != nil, "error expected starting to rejected")
-	assert.Equal(t, appInfo.CurrentState(), Starting.String())
-
-	// start to failing
-	err = appInfo.HandleApplicationEvent(FailApplication)
-	assert.NilError(t, err, "no error expected starting to failing")
-	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
-	assert.NilError(t, err, "App should be in Failing state")
-}
-
 func TestRunStateTransition(t *testing.T) {
-	// run only from starting
+	// run from new
 	appInfo := newApplication("app-00001", "default", "root.a")
 	assert.Equal(t, appInfo.CurrentState(), New.String())
 	err := appInfo.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (run test)")
 	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected accepted to starting (run test)")
-	assert.Equal(t, appInfo.CurrentState(), Starting.String())
-
-	// run app
-	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected starting to running")
+	assert.NilError(t, err, "no error expected accepted to running (run test)")
 	assert.Equal(t, appInfo.CurrentState(), Running.String())
 
 	// run app: same state is allowed for running
@@ -143,9 +113,9 @@ func TestCompletedStateTransition(t *testing.T) {
 	err := appInfo1.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
 	err = appInfo1.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected accepted to starting (completed test)")
+	assert.NilError(t, err, "no error expected accepted to running (completed test)")
 	err = appInfo1.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected starting to running (completed test)")
+	assert.NilError(t, err, "no error expected running to running (completed test)")
 	assert.Equal(t, appInfo1.CurrentState(), Running.String())
 	// completed from run through completing
 	err = appInfo1.HandleApplicationEvent(CompleteApplication)
@@ -197,21 +167,21 @@ func TestCompletingStateTransition(t *testing.T) {
 	assert.NilError(t, err, "no error expected accepted to completing")
 	assert.Equal(t, appInfo1.CurrentState(), Completing.String())
 
-	// starting to completing
+	// running to completing
 	appInfo2 := newApplication("app-00002", "default", "root.a")
 	assert.Equal(t, appInfo2.CurrentState(), New.String())
 	err = appInfo2.HandleApplicationEvent(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completing test)")
 	err = appInfo2.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected accepted to starting")
-	assert.Equal(t, appInfo2.CurrentState(), Starting.String())
+	assert.NilError(t, err, "no error expected accepted to running")
+	assert.Equal(t, appInfo2.CurrentState(), Running.String())
 	err = appInfo2.HandleApplicationEvent(CompleteApplication)
-	assert.NilError(t, err, "no error expected starting to completing")
+	assert.NilError(t, err, "no error expected running to completing")
 	assert.Equal(t, appInfo2.CurrentState(), Completing.String())
 
 	// completing to run and back again
 	err = appInfo2.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected starting to running (completing test)")
+	assert.NilError(t, err, "no error expected completing to running (completing test)")
 	err = appInfo2.HandleApplicationEvent(CompleteApplication)
 	assert.NilError(t, err, "no error expected running to completing")
 	assert.Equal(t, appInfo2.CurrentState(), Completing.String())
@@ -260,7 +230,7 @@ func TestAppStateTransitionEvents(t *testing.T) {
 
 	// completing to run
 	err = appInfo.HandleApplicationEvent(RunApplication)
-	assert.NilError(t, err, "no error expected starting to running (completing test)")
+	assert.NilError(t, err, "no error expected completing to running (completing test)")
 
 	// run to failing
 	err = appInfo.HandleApplicationEvent(FailApplication)
@@ -306,15 +276,15 @@ func TestAppStateTransitionEvents(t *testing.T) {
 }
 
 // Test to verify metrics after applications state transition
-// app-00001: New -> Resuming -> Accepted -> Starting -> Running -> Completing-> Completed
-// app-00002: New -> Accepted -> Starting -> Completing -> Running -> Failing-> Failed
-// app-00003: New -> Accepted -> Starting -> Failing -> Failed
+// app-00001: New -> Resuming -> Accepted -> Running -> Completing-> Completed
+// app-00002: New -> Accepted -> Running -> Completing -> Running -> Failing-> Failed
+// app-00003: New -> Accepted -> Running -> Failing -> Failed
 // app-00004: New -> Rejected
 // Final metrics will be: 0 running, 3 accepted, 1 completed, 2 failed and 1 rejected applications
 func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	queue := createQueue(t, "root.metrics")
 	metrics.GetSchedulerMetrics().Reset()
-	// app-00001: New -> Resuming -> Accepted --> Starting -> Running -> Completing-> Completed
+	// app-00001: New -> Resuming -> Accepted --> Running -> Completing-> Completed
 	app := newApplication("app-00001", "default", "root.metrics")
 	app.SetQueue(queue)
 	assertState(t, app, nil, New.String())
@@ -345,9 +315,9 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 0)
-	// Accepted -> Starting
+	// Accepted -> Running
 	err = app.HandleApplicationEvent(RunApplication)
-	assertState(t, app, err, Starting.String())
+	assertState(t, app, err, Running.String())
 	assertTotalAppsRunningMetrics(t, 1)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
@@ -357,7 +327,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 0)
-	// Starting -> Running
+	// Running -> Running
 	err = app.HandleApplicationEvent(RunApplication)
 	assertState(t, app, err, Running.String())
 	assertTotalAppsRunningMetrics(t, 1)
@@ -394,17 +364,17 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 1)
 
-	// app-00002: New -> Accepted -> Starting -> Completing -> Running -> Failing-> Failed
+	// app-00002: New -> Accepted -> Completing -> Running -> Failing-> Failed
 	app = newApplication("app-00002", "default", "root.metrics")
 	app.SetQueue(queue)
 	assertState(t, app, nil, New.String())
 	// New -> Accepted
 	err = app.HandleApplicationEvent(RunApplication)
 	assertState(t, app, err, Accepted.String())
-	// Accepted -> Starting
+	// Accepted -> Running
 	err = app.HandleApplicationEvent(RunApplication)
-	assertState(t, app, err, Starting.String())
-	// Starting -> Completing
+	assertState(t, app, err, Running.String())
+	// Running -> Completing
 	err = app.HandleApplicationEvent(CompleteApplication)
 	assertState(t, app, err, Completing.String())
 	// Completing -> Running
@@ -426,17 +396,17 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertQueueApplicationsFailedMetrics(t, app, 1)
 	assertQueueApplicationsCompletedMetrics(t, app, 1)
 
-	// app-00003: New -> Accepted -> Starting -> Failing -> Failed
+	// app-00003: New -> Accepted -> Running -> Failing -> Failed
 	app = newApplication("app-00003", "default", "root.metrics")
 	app.SetQueue(queue)
 	assertState(t, app, nil, New.String())
 	// New -> Accepted
 	err = app.HandleApplicationEvent(RunApplication)
 	assertState(t, app, err, Accepted.String())
-	// Accepted -> Starting
+	// Accepted -> Running
 	err = app.HandleApplicationEvent(RunApplication)
-	assertState(t, app, err, Starting.String())
-	// Starting -> Failing
+	assertState(t, app, err, Running.String())
+	// Running -> Failing
 	err = app.HandleApplicationEvent(FailApplication)
 	assertState(t, app, err, Failing.String())
 	// Failing -> Failed

@@ -3689,7 +3689,7 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), "alloc-2", "expected ask alloc-2 to be allocated")
-	assert.Equal(t, app.CurrentState(), objects.Starting.String(), "application should have moved to starting state")
+	assert.Equal(t, app.CurrentState(), objects.Running.String(), "application should have moved to running state")
 
 	// allocation should still fail: max running apps on parent reached
 	alloc = partition.tryAllocate()

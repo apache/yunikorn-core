@@ -124,7 +124,7 @@ func TestDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
 	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
-	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled())
+	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
 	userTracker.setGroupForApp(TestApp1, groupTracker)
 	assert.Equal(t, 1, len(userTracker.getTrackedApplications()))
 
@@ -146,8 +146,8 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	removeQT := userTracker.decreaseTrackedResource(path1, TestApp1, usage3, false)
 	eventSystem.Reset()
+	removeQT := userTracker.decreaseTrackedResource(path1, TestApp1, usage3, false)
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[0].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
@@ -166,8 +166,8 @@ func TestDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	removeQT = userTracker.decreaseTrackedResource(path1, TestApp1, usage4, true)
 	eventSystem.Reset()
+	removeQT = userTracker.decreaseTrackedResource(path1, TestApp1, usage4, true)
 	assert.Equal(t, 1, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 	assert.Equal(t, 2, len(eventSystem.Events))
@@ -211,7 +211,7 @@ func TestSetAndClearMaxLimits(t *testing.T) {
 	assert.Equal(t, path5, eventSystem.Events[1].ReferenceID)
 
 	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
-  userTracker.increaseTrackedResource(path1, TestApp2, usage1)
+	userTracker.increaseTrackedResource(path1, TestApp2, usage1)
 	path1expectedHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"mem":   20000000,
 		"vcore": 20000,

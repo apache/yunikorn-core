@@ -113,8 +113,8 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	removeQT := groupTracker.decreaseTrackedResource(path1, TestApp1, usage3, false)
 	eventSystem.Reset()
+	removeQT := groupTracker.decreaseTrackedResource(path1, TestApp1, usage3, false)
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 	assert.Equal(t, 1, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_UG_GROUP_RESOURCE, eventSystem.Events[0].EventChangeDetail)

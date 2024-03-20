@@ -350,7 +350,7 @@ func TestUseWildCard(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		// should run as user has already fallen back on wild card user limit set on "root.parent" map[memory:50 vcores:50]
-		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
+		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
 	}
 
 	// should not run as user has exceeded wild card user limit set on "root.parent" map[memory:50 vcores:50]

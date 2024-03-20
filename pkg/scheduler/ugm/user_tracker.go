@@ -56,11 +56,11 @@ func newUserTracker(userName string, ugmEvents *ugmEvents) *UserTracker {
 	return userTracker
 }
 
-
 func (ut *UserTracker) increaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource) {
 	ut.Lock()
 	defer ut.Unlock()
-  hierarchy := strings.Split(queuePath, configs.DOT)
+	ut.events.sendIncResourceUsageForUser(ut.userName, queuePath, usage)
+	hierarchy := strings.Split(queuePath, configs.DOT)
 	ut.queueTracker.increaseTrackedResource(hierarchy, applicationID, user, usage)
 	gt := ut.appGroupTrackers[applicationID]
 	log.Log(log.SchedUGM).Debug("Increasing resource usage for group",

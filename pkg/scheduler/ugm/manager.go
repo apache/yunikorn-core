@@ -97,7 +97,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 		m.ensureGroupTrackerForApp(queuePath, applicationID, user)
 	}
 
-  userTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	userTracker.increaseTrackedResource(queuePath, applicationID, usage)
 }
 
 // DecreaseTrackedResource Decrease the resource usage for the given user group and queue path combination.

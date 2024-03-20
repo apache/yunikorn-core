@@ -779,7 +779,7 @@ func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource
 	}
 	// When nothing to preempt or usage equals guaranteed in current queue, return as is.
 	// Otherwise, doing min calculation with parent level (for a different res types) would lead to a wrong perception
-	// of possibility of choosing victims from this current queue when that is not the fact.
+	// of choosing this current queue to select the victims when that is not the fact.
 	// As you move down the hierarchy, results calculated at lower level has higher precedence.
 	if preemptableResource.IsEmpty() {
 		return preemptableResource
@@ -794,7 +794,10 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 	parent := qps.Parent.GetRemainingGuaranteedResource()
 	remainingGuaranteed := qps.GuaranteedResource.Clone()
 
-	// No remainingGuaranteed set, so nothing remaining
+	// No Guaranteed set, so nothing remaining
+	// In case of guaranteed not set for queues at specific level, inherits the same from parent queue.
+	// If the parent too (or ancestors all the way upto root) doesn't have guaranteed set, then nil is returned.
+	// Otherwise, parent's guaranteed (or ancestors) would be used.
 	if parent.IsEmpty() && remainingGuaranteed.IsEmpty() {
 		return nil
 	}

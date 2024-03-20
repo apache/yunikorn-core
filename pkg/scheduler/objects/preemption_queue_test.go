@@ -121,19 +121,29 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed not set, so no remaining")
 	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed not set, so no remaining")
 
+	// guaranteed set only for queue at specific levels but no usage.
+	// so remaining for queues without guaranteed quota inherits from parent queue based on min perm calculation
+	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
+	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
+	childQ1.guaranteedResource = childRes
+	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
+	assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 2)), "guaranteed set, but no usage. so all guaranteed should be in remaining")
+	assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, 2)), "guaranteed not set, also no usage. However, parent's remaining should be used")
+	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(resources.Multiply(smallestRes, 2), childRes)), "guaranteed not set, also no usage. However, parent's remaining should be used")
+	assert.Assert(t, resources.Equals(cRemaining2, resources.Multiply(smallestRes, 2)), "guaranteed not set, also no usage. However, parent's remaining should be used")
+
 	// guaranteed set but no usage. so nothing to preempt
 	// clean start for the snapshot: whole hierarchy with guarantee
-	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
 	parentQ.guaranteedResource = smallestRes
 	childQ2.guaranteedResource = smallestRes
-	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
 	childQ1.guaranteedResource = childRes
 	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
-	assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 2)), "guaranteed set, but no usage. so all guaranteed should be in cRemaining1")
-	assert.Assert(t, resources.Equals(pRemaining, smallestRes), "guaranteed set, but no usage. so all guaranteed should be in cRemaining1")
-	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(smallestRes, childRes)), "guaranteed set, but no usage. so all guaranteed + parent cRemaining1 guaranteed should be in cRemaining1")
-	assert.Assert(t, resources.Equals(cRemaining2, smallestRes), "guaranteed set, but no usage. so all guaranteed should be in cRemaining1")
+	assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 2)), "guaranteed set, but no usage. so all guaranteed should be in remaining")
+	assert.Assert(t, resources.Equals(pRemaining, smallestRes), "guaranteed set, but no usage. so all guaranteed should be in remaining")
+	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(smallestRes, childRes)), "guaranteed set, but no usage. so all guaranteed + parent remaining guaranteed should be in remaining")
+	assert.Assert(t, resources.Equals(cRemaining2, smallestRes), "guaranteed set, but no usage. so all its guaranteed (because it is lesser than parent's guaranteed) should be in remaining")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage to parent + root: use all guaranteed at parent level
@@ -142,10 +152,10 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 	parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
 	childQ2.allocatedResource = resources.Multiply(smallestRes, 2)
 	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. so all guaranteed should be in cRemaining1")
-	assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so cRemaining1 should be in -ve")
-	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(resources.Multiply(smallestRes, -1), childRes)), "guaranteed set, but no usage. However cRemaining1 should include its all guaranteed + parent cRemaining1 guaranteed")
-	assert.Assert(t, resources.Equals(cRemaining2, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so cRemaining1 should be in -ve")
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. so all guaranteed should be in remaining")
+	assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
+	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(resources.Multiply(smallestRes, -1), childRes)), "guaranteed set, but no usage. However remaining should include its all guaranteed + parent remaining guaranteed")
+	assert.Assert(t, resources.Equals(cRemaining2, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage for all: use exactly guaranteed at parent and child level
@@ -158,10 +168,10 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 	childQ1.allocatedResource = childRes
 	childQ2.allocatedResource = smallestRes
 	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no cRemaining1")
-	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no cRemaining1")
-	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed set, used completely. so, no cRemaining1")
-	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed set, but no usage. Still, no cRemaining1 in guaranteed because of its parent queue")
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
+	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
+	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed set, used completely. so, no remaining")
+	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed set, but no usage. Still, no remaining in guaranteed because of its parent queue")
 
 	// clean start for the snapshot: all set guaranteed
 	// add usage for root + parent: use exactly guaranteed at parent and child level
@@ -175,10 +185,10 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 	childQ1.allocatedResource = resources.Multiply(childRes, 2)
 	childQ2.allocatedResource = smallestRes
 	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no cRemaining1")
-	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no cRemaining1")
-	assert.Assert(t, resources.Equals(cRemaining1, resources.Multiply(childRes, -1)), "guaranteed set, used double than guaranteed. so cRemaining1 should be in -ve")
-	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed set, but no usage. Still, no cRemaining1 in guaranteed because of its parent queue")
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
+	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
+	assert.Assert(t, resources.Equals(cRemaining1, resources.Multiply(childRes, -1)), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
+	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed set, but no usage. Still, no remaining in guaranteed because of its parent queue")
 }
 
 func createQPSCache(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue) (*QueuePreemptionSnapshot, *QueuePreemptionSnapshot, *QueuePreemptionSnapshot, *QueuePreemptionSnapshot) {

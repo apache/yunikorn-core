@@ -44,7 +44,6 @@ import (
 
 var (
 	reservationDelay          = 2 * time.Second
-	startingTimeout           = 5 * time.Minute
 	completingTimeout         = 30 * time.Second
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
@@ -100,7 +99,6 @@ type Application struct {
 	placeholderAsk       *resources.Resource         // total placeholder request for the app (all task groups)
 	stateMachine         *fsm.FSM                    // application state machine
 	stateTimer           *time.Timer                 // timer for state time
-	startTimeout         time.Duration               // timeout for the application starting state
 	execTimeout          time.Duration               // execTimeout for the application run
 	placeholderTimer     *time.Timer                 // placeholder replace timer
 	gangSchedulingStyle  string                      // gang scheduling style can be hard (after timeout we fail the application), or soft (after timeeout we schedule it as a normal application)
@@ -184,7 +182,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	}
 	app.gangSchedulingStyle = gangSchedStyle
 	app.execTimeout = placeholderTimeout
-	app.startTimeout = startingTimeout
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
@@ -231,10 +228,6 @@ func SetReservationDelay(delay time.Duration) {
 // The state machine handles the locking.
 func (sa *Application) CurrentState() string {
 	return sa.stateMachine.Current()
-}
-
-func (sa *Application) IsStarting() bool {
-	return sa.stateMachine.Is(Starting.String())
 }
 
 func (sa *Application) IsAccepted() bool {
@@ -327,9 +320,9 @@ func (sa *Application) OnStateChange(event *fsm.Event, eventInfo string) {
 		})
 }
 
-// Set the starting timer to make sure the application will not get stuck in a starting state too long.
-// This prevents an app from not progressing to Running when it only has 1 allocation.
-// Called when entering the Starting state by the state machine.
+// Set the state timer to make sure the application will not get stuck in a time-sensitive state too long.
+// This prevents an app from not progressing to the next state if a timeout is required.
+// Used for placeholder timeout and completion handling.
 func (sa *Application) setStateTimer(timeout time.Duration, currentState string, event applicationEvent) {
 	log.Log(log.SchedApplication).Debug("Application state timer initiated",
 		zap.String("appID", sa.ApplicationID),
@@ -371,9 +364,8 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 	}
 }
 
-// Clear the starting timer. If the application has progressed out of the starting state we need to stop the
-// timer and clean up.
-// Called when leaving the Starting state by the state machine.
+// Clear the state timer. If the application has progressed out of a time-sensitive state we need to stop the timer and
+// clean up. Called when transitioning from Completed to Completing or when expiring an application.
 func (sa *Application) clearStateTimer() {
 	if sa == nil || sa.stateTimer == nil {
 		return
@@ -416,7 +408,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 	defer sa.Unlock()
 	switch {
 	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
-	case (sa.IsRunning() || sa.IsStarting() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder):
+	case (sa.IsRunning() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder):
 		var toRelease []*Allocation
 		replacing := 0
 		for _, alloc := range sa.getPlaceholderAllocations() {

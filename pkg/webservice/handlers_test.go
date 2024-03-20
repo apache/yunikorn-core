@@ -948,29 +948,25 @@ func TestPartitions(t *testing.T) {
 	app1 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-1")
 	app1.SetState(objects.Accepted.String())
 
-	// add a new app2 - starting
+	// add a new app2 - running
 	app2 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-2")
-	app2.SetState(objects.Starting.String())
+	app2.SetState(objects.Running.String())
 
-	// add a new app3 - running
+	// add a new app3 - completing
 	app3 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-3")
-	app3.SetState(objects.Running.String())
+	app3.SetState(objects.Completing.String())
 
-	// add a new app4 - completing
+	// add a new app4 - rejected
 	app4 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-4")
-	app4.SetState(objects.Completing.String())
+	app4.SetState(objects.Rejected.String())
 
-	// add a new app5 - rejected
+	// add a new app5 - completed
 	app5 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-5")
-	app5.SetState(objects.Rejected.String())
-
-	// add a new app6 - completed
-	app6 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-6")
-	app6.SetState(objects.Completed.String())
+	app5.SetState(objects.Completed.String())
 
 	// add a new app7 - failed
-	app7 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-7")
-	app7.SetState(objects.Failed.String())
+	app6 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-6")
+	app6.SetState(objects.Failed.String())
 
 	NewWebApp(schedulerContext, nil)
 
@@ -984,8 +980,8 @@ func TestPartitions(t *testing.T) {
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100, siCommon.CPU: 400})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 200, siCommon.CPU: 300})
-	ask1 := objects.NewAllocationAsk("alloc-1", app6.ApplicationID, resAlloc1)
-	ask2 := objects.NewAllocationAsk("alloc-2", app3.ApplicationID, resAlloc2)
+	ask1 := objects.NewAllocationAsk("alloc-1", app5.ApplicationID, resAlloc1)
+	ask2 := objects.NewAllocationAsk("alloc-2", app2.ApplicationID, resAlloc2)
 	allocs := []*objects.Allocation{objects.NewAllocation(node1ID, ask1)}
 	err = defaultPartition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -1011,10 +1007,9 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, cs["default"].NodeSortingPolicy.Type, "fair")
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
-	assert.Equal(t, cs["default"].Applications["total"], 8)
+	assert.Equal(t, cs["default"].Applications["total"], 7)
 	assert.Equal(t, cs["default"].Applications[objects.New.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Accepted.String()], 1)
-	assert.Equal(t, cs["default"].Applications[objects.Starting.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Running.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Completing.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Rejected.String()], 1)
@@ -2481,7 +2476,7 @@ func prepareUserAndGroupContext(t *testing.T, config string) {
 	// add an alloc
 	allocInfo := objects.NewAllocation("node-1", ask)
 	app.AddAllocation(allocInfo)
-	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
+	assert.Assert(t, app.IsRunning(), "Application did not return running state after alloc: %s", app.CurrentState())
 
 	NewWebApp(schedulerContext, nil)
 }

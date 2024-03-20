@@ -2590,7 +2590,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 
 	alloc := NewAllocation(nodeID1, ask)
 	app.AddAllocation(alloc)
-	assert.Equal(t, app.CurrentState(), Starting.String(), "app state should be starting")
+	assert.Equal(t, app.CurrentState(), Running.String(), "app state should be running")
 	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
 
 	_, err = app.updateAskRepeatInternal(ask, -1)

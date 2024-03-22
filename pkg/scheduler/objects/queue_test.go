@@ -1844,33 +1844,51 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 
 	// disabling preemption on victim queue should remove victims from consideration
 	leaf2.preemptionPolicy = policies.DisabledPreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	leaf2.preemptionPolicy = policies.DefaultPreemptionPolicy
 
 	// fencing parent1 queue should limit scope
 	parent1.preemptionPolicy = policies.FencePreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root.parent1")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	parent1.preemptionPolicy = policies.DefaultPreemptionPolicy
 
 	// fencing leaf1 queue should limit scope
 	leaf1.preemptionPolicy = policies.FencePreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root.parent1.leaf1")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	leaf1.preemptionPolicy = policies.DefaultPreemptionPolicy
 
 	// fencing parent2 queue should not limit scope
 	parent2.preemptionPolicy = policies.FencePreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
 	parent2.preemptionPolicy = policies.DefaultPreemptionPolicy
 
 	// fencing leaf2 queue should not limit scope
 	leaf2.preemptionPolicy = policies.FencePreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 5, len(snapshot), "wrong victim count")
 	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
 	leaf2.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing using max resources and usage comparison check
+	// parent1 queue is full. usage has reached max resources.
+	// even though root.parent1 and root.parent1.leaf1 policy is DefaultPreemptionPolicy, still root.parent1 would be fenced
+	used := parent1.allocatedResource
+	parent1.allocatedResource = parent1.maxResource
+	assert.Equal(t, parent1.preemptionPolicy, policies.DefaultPreemptionPolicy)
+	assert.Equal(t, leaf1.preemptionPolicy, policies.DefaultPreemptionPolicy)
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, parent1.QueuePath)
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "wrong victim count")
+	parent1.allocatedResource = used
 
 	// requiring a specific node take alloc out of consideration
 	alloc2.GetAsk().SetRequiredNode(nodeID1)

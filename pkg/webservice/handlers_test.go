@@ -501,6 +501,7 @@ func TestGetConfigYAML(t *testing.T) {
 
 	// check that we return yaml by default, unmarshal will error when we don't
 	req.Header.Set("Accept", "unknown")
+	resp = &MockResponseWriter{}
 	getClusterConfig(resp, req)
 	err = yaml.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, unmarshalError)
@@ -532,6 +533,7 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 	configs.SetConfigMap(updatedExtraConf)
 
+	resp = &MockResponseWriter{}
 	getClusterConfig(resp, req)
 	err = json.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, unmarshalError)
@@ -728,6 +730,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	node2 := addNode(t, partition, node2ID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5}))
 
 	// get nodes utilization
+	resp = &MockResponseWriter{}
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
@@ -744,6 +747,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	err = rootQ.IncAllocatedResource(resAlloc, false)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
 	// get nodes utilization
+	resp = &MockResponseWriter{}
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
@@ -760,6 +764,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	err = rootQ.IncAllocatedResource(resAlloc, false)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
 	// get nodes utilization
+	resp = &MockResponseWriter{}
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
@@ -879,6 +884,7 @@ func TestGetNodeUtilisations(t *testing.T) {
 	addAllocatedResource(t, node4, "alloc-1", "app-1", map[string]resources.Quantity{"gpu": 1})
 
 	// get nodes utilizations
+	resp = &MockResponseWriter{}
 	getNodeUtilisations(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionNodesUtilDAOInfo)
 	assert.NilError(t, err, "should decode a list of *dao.PartitionNodesUtilDAOInfo")
@@ -1958,6 +1964,7 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
 
 	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
+	resp = &MockResponseWriter{}
 	getGroupsResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
 	assert.NilError(t, err, unmarshalError)

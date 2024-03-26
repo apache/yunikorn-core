@@ -40,7 +40,7 @@ type PartitionQueueDAOInfo struct {
 	Parent                 string                  `json:"parent,omitempty"`
 	TemplateInfo           *TemplateInfo           `json:"template,omitempty"`
 	Children               []PartitionQueueDAOInfo `json:"children,omitempty"`
-	ChildrenNames          []string                `json:"childrenNames,omitempty"`
+	ChildNames             []string                `json:"childNames,omitempty"`
 	AbsUsedCapacity        map[string]int64        `json:"absUsedCapacity,omitempty"`
 	MaxRunningApps         uint64                  `json:"maxRunningApps,omitempty"`
 	RunningApps            uint64                  `json:"runningApps,omitempty"`

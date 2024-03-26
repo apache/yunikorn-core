@@ -624,14 +624,14 @@ func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 }
 
 // GetPartitionQueueDAOInfo returns the queue hierarchy as an object for a REST call.
-// Exclude is true, which means that returns the specified queue object, but does not return the children of the specified queue.
-func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInfo {
+// Include is false, which means that returns the specified queue object, but does not return the children of the specified queue.
+func (sq *Queue) GetPartitionQueueDAOInfo(include bool) dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
 	children := sq.GetCopyOfChildren()
-	if !exclude {
+	if include {
 		queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(children))
 		for _, child := range children {
-			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo(false))
+			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo(true))
 		}
 	}
 	// we have held the read lock so following method should not take lock again.
@@ -639,7 +639,7 @@ func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInf
 	defer sq.RUnlock()
 
 	for _, child := range children {
-		queueInfo.ChildrenNames = append(queueInfo.ChildrenNames, child.QueuePath)
+		queueInfo.ChildNames = append(queueInfo.ChildNames, child.QueuePath)
 	}
 	queueInfo.QueueName = sq.QueuePath
 	queueInfo.Status = sq.stateMachine.Current()

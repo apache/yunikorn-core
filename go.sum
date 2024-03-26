@@ -1,5 +1,5 @@
-github.com/apache/yunikorn-scheduler-interface v0.0.0-20240320010951-d392f3c7272d h1:ywKv8csdOkrUcQqHit60/PuHXuELpHcZ4ftm7/b3c6Q=
-github.com/apache/yunikorn-scheduler-interface v0.0.0-20240320010951-d392f3c7272d/go.mod h1:0f4l3ManMROX60xU7GbhejCEYYyMksH275oY2xIVkbM=
+github.com/apache/yunikorn-scheduler-interface v0.0.0-20240325175743-cc087bb5a191 h1:EfDQhLaxdM6LxPK6BTKG+fAzj67sLMi576DWnDjnNgU=
+github.com/apache/yunikorn-scheduler-interface v0.0.0-20240325175743-cc087bb5a191/go.mod h1:0f4l3ManMROX60xU7GbhejCEYYyMksH275oY2xIVkbM=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/cespare/xxhash/v2 v2.2.0 h1:DC2CZ1Ep5Y4k3ZQ899DldepgrayRUGE6BBZ/cd9Cj44=

@@ -19,6 +19,7 @@
 package webservice
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -59,6 +60,7 @@ const (
 	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
+	UnsupportedCompType      = "Compression type not support"
 )
 
 var allowedActiveStatusMsg string
@@ -150,6 +152,10 @@ func writeHeaders(w http.ResponseWriter) {
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
 	w.Header().Set("Access-Control-Allow-Methods", "GET,POST,HEAD,OPTIONS")
 	w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With,Content-Type,Accept,Origin")
+}
+
+func writeHeader(w http.ResponseWriter, key, val string) {
+	w.Header().Set(key, val)
 }
 
 func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
@@ -744,6 +750,10 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	for _, app := range queue.GetCopyOfApps() {
 		appsDao = append(appsDao, getApplicationDAO(app))
 	}
+	if checkHeader(r.Header, "Accept-Encoding", "gzip") {
+		compress(w, appsDao)
+		return
+	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -1214,4 +1224,39 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 			f.Flush()
 		}
 	}
+}
+
+func checkHeader(h http.Header, key string, value string) bool {
+	values := h.Values(key)
+	for _, v := range values {
+		if strings.Contains(v, value) {
+			return true
+		}
+	}
+	return false
+}
+
+func compress(w http.ResponseWriter, data any) {
+	response, err := json.Marshal(data)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	writer := gzip.NewWriter(w)
+	w.Header().Set("Content-Encoding", "gzip")
+	_, err = writer.Write(response)
+	if err != nil {
+		_ = writer.Close()
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	err = writer.Flush()
+	if err != nil {
+		_ = writer.Close()
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	_ = writer.Close()
 }

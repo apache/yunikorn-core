@@ -30,16 +30,16 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
+// A rule to place an application based on the queue in the configuration.
+// If the queue provided is fully qualified, starts with "root.", the parent rule is skipped and the queue is created as
+// configured. If the queue is not qualified all "." characters will be replaced and the parent rule run before making
+// the queue name fully qualified.
 type fixedRule struct {
 	basicRule
 	queue     string
 	qualified bool
 }
 
-// A rule to place an application based on the queue in the configuration.
-// If the queue provided is fully qualified, starts with "root.", the parent rule is skipped and the queue is created as
-// configured. If the queue is not qualified all "." characters will be replaced and the parent rule run before making
-// the queue name fully qualified.
 func (fr *fixedRule) getName() string {
 	return types.Fixed
 }
@@ -63,31 +63,30 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error) {
+func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// before anything run the filter
 	if !fr.filter.allowUser(app.GetUser()) {
-		log.Log(log.Config).Debug("Fixed rule filtered",
+		log.Log(log.SchedApplication).Debug("Fixed rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()),
 			zap.String("queueName", fr.queue))
-		return "", true, nil
+		return "", nil
 	}
-	var parentName string
-	var aclCheck = true
-	var err error
 	queueName := fr.queue
 	// if the fixed queue is already fully qualified skip the parent check
 	if !fr.qualified {
+		var parentName string
+		var err error
 		// run the parent rule if set
 		if fr.parent != nil {
-			parentName, aclCheck, err = fr.parent.placeApplication(app, queueFn)
+			parentName, err = fr.parent.placeApplication(app, queueFn)
 			// failed parent rule, fail this rule
 			if err != nil {
-				return "", aclCheck, err
+				return "", err
 			}
 			// rule did not return a parent: this could be filter or create flag related
 			if parentName == "" {
-				return "", aclCheck, nil
+				return "", nil
 			}
 			// check if this is a parent queue and qualify it
 			if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
@@ -96,7 +95,7 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 			// if the parent queue exists it cannot be a leaf
 			parentQueue := queueFn(parentName)
 			if parentQueue != nil && parentQueue.IsLeafQueue() {
-				return "", aclCheck, fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 			}
 		}
 		// the parent is set from the rule otherwise set it to the root
@@ -105,18 +104,18 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 		}
 		queueName = parentName + configs.DOT + fr.queue
 	}
-	// Log the result before we really create
-	log.Log(log.Config).Debug("Fixed rule intermediate result",
+	// Log the result before we check the create flag
+	log.Log(log.SchedApplication).Debug("Fixed rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
 	queue := queueFn(queueName)
 	// if we cannot create the queue must exist
 	if !fr.create && queue == nil {
-		return "", aclCheck, nil
+		return "", nil
 	}
-	log.Log(log.Config).Info("Fixed rule application placed",
+	log.Log(log.SchedApplication).Info("Fixed rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, aclCheck, nil
+	return queueName, nil
 }

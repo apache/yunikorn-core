@@ -65,20 +65,14 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(path1, TestApp1, usage1)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", path1, TestApp1, usage1)
-	}
+	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
 	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
 	userTracker.setGroupForApp(TestApp1, groupTracker)
 	usage2, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = userTracker.increaseTrackedResource(path2, TestApp2, usage2)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path2, TestApp2, usage2, err)
-	}
+	userTracker.increaseTrackedResource(path2, TestApp2, usage2)
 	assert.Equal(t, 3, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[0].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_ADD, eventSystem.Events[0].EventChangeType)
@@ -95,24 +89,17 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = userTracker.increaseTrackedResource(path3, TestApp3, usage3)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path3, TestApp3, usage3, err)
-	}
+	userTracker.increaseTrackedResource(path3, TestApp3, usage3)
 	userTracker.setGroupForApp(TestApp3, groupTracker)
 
 	usage4, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	result = userTracker.increaseTrackedResource(path4, TestApp4, usage4)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path4, TestApp4, usage4, err)
-	}
+	userTracker.increaseTrackedResource(path4, TestApp4, usage4)
 	userTracker.setGroupForApp(TestApp4, groupTracker)
 
 	actualResources := getUserResource(userTracker)
-
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:40000000 vcore:40000]", actualResources["root.parent.child1"].String(), "wrong resource")
@@ -136,10 +123,7 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(path1, TestApp1, usage1)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp1, usage1, err)
-	}
+	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
 	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
 	userTracker.setGroupForApp(TestApp1, groupTracker)
 	assert.Equal(t, 1, len(userTracker.getTrackedApplications()))
@@ -148,10 +132,7 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	result = userTracker.increaseTrackedResource(path2, TestApp2, usage2)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path2, TestApp2, usage2, err)
-	}
+	userTracker.increaseTrackedResource(path2, TestApp2, usage2)
 	userTracker.setGroupForApp(TestApp2, groupTracker)
 	actualResources := getUserResource(userTracker)
 
@@ -166,18 +147,12 @@ func TestDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 	eventSystem.Reset()
-	removeQT, decreased := userTracker.decreaseTrackedResource(path1, TestApp1, usage3, false)
-	if !decreased {
-		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp1, usage3, err)
-	}
+	removeQT := userTracker.decreaseTrackedResource(path1, TestApp1, usage3, false)
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[0].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
 
-	removeQT, decreased = userTracker.decreaseTrackedResource(path2, TestApp2, usage3, false)
-	if !decreased {
-		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp2, usage3, err)
-	}
+	removeQT = userTracker.decreaseTrackedResource(path2, TestApp2, usage3, false)
 	actualResources1 := getUserResource(userTracker)
 
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
@@ -192,10 +167,7 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	}
 
 	eventSystem.Reset()
-	removeQT, decreased = userTracker.decreaseTrackedResource(path1, TestApp1, usage4, true)
-	if !decreased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp1, usage1, err)
-	}
+	removeQT = userTracker.decreaseTrackedResource(path1, TestApp1, usage4, true)
 	assert.Equal(t, 1, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 	assert.Equal(t, 2, len(eventSystem.Events))
@@ -208,10 +180,7 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage5)
 	}
-	removeQT, decreased = userTracker.decreaseTrackedResource(path2, TestApp2, usage5, true)
-	if !decreased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path2, TestApp2, usage2, err)
-	}
+	removeQT = userTracker.decreaseTrackedResource(path2, TestApp2, usage5, true)
 	assert.Equal(t, 0, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
 }
@@ -228,10 +197,7 @@ func TestSetAndClearMaxLimits(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	result := userTracker.increaseTrackedResource(path1, TestApp1, usage1)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", path1, TestApp1, usage1, err)
-	}
+	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
 
 	eventSystem.Reset()
 	userTracker.setLimits(path1, resources.Multiply(usage1, 5), 5, false, false)
@@ -244,15 +210,8 @@ func TestSetAndClearMaxLimits(t *testing.T) {
 	assert.Equal(t, si.EventRecord_SET, eventSystem.Events[1].EventChangeType)
 	assert.Equal(t, path5, eventSystem.Events[1].ReferenceID)
 
-	result = userTracker.increaseTrackedResource(path1, TestApp1, usage1)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", path1, TestApp1, usage1)
-	}
-
-	result = userTracker.increaseTrackedResource(path1, TestApp2, usage1)
-	if !result {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", path1, TestApp2, usage1)
-	}
+	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
+	userTracker.increaseTrackedResource(path1, TestApp2, usage1)
 	path1expectedHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"mem":   20000000,
 		"vcore": 20000,

@@ -89,8 +89,7 @@ func TestGetGroup(t *testing.T) {
 	usage1, err := resources.NewResourceFromConf(map[string]string{"memory": "5", "vcores": "5"})
 	assert.NilError(t, err)
 
-	increased := manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage1, user1)
-	assert.Equal(t, increased, true)
+	manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage1, user1)
 	assert.Equal(t, len(manager.userTrackers), 1)
 	assert.Equal(t, len(manager.groupTrackers), 0)
 
@@ -136,13 +135,11 @@ func TestGetGroup(t *testing.T) {
 
 	// do some activities with different users - user "test1" and "test2" belongs to "test_root" group
 	// ensure user "test1" and "test2" and its group linkage is intact through appGroupTrackers map
-	increased = manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage1, user)
-	assert.Equal(t, increased, true)
+	manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage1, user)
 	assert.Equal(t, len(manager.userTrackers), 2)
 
 	user2 := security.UserGroup{User: "test2", Groups: []string{"test", "test_root"}}
-	increased = manager.IncreaseTrackedResource("root.parent.leaf", TestApp2, usage1, user2)
-	assert.Equal(t, increased, true)
+	manager.IncreaseTrackedResource("root.parent.leaf", TestApp2, usage1, user2)
 
 	userGroupTrackersAssertsMap := map[string]string{}
 	userGroupTrackersAssertsMap[user.User] = TestApp1
@@ -160,8 +157,7 @@ func TestGetGroup(t *testing.T) {
 	assert.Equal(t, len(manager.groupTrackers), 2)
 
 	user3 := security.UserGroup{User: "test3", Groups: []string{"test"}}
-	increased = manager.IncreaseTrackedResource("root.parent.leaf", TestApp2, usage1, user3)
-	assert.Equal(t, increased, true)
+	manager.IncreaseTrackedResource("root.parent.leaf", TestApp2, usage1, user3)
 	assert.Equal(t, len(manager.userTrackers), 4)
 	ut := manager.GetUserTracker(user3.User)
 	actualGT := ut.appGroupTrackers[TestApp2]
@@ -195,15 +191,8 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	manager.ClearUserTrackers()
 	manager.ClearGroupTrackers()
 
-	increased := manager.IncreaseTrackedResource("", "", usage1, user)
-	if increased {
-		t.Errorf("mandatory parameters are missing. queuepath: , application id: , resource usage: %s, user: %s", usage1.String(), user.User)
-	}
-
-	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage1, user)
-	if !increased {
-		t.Errorf("unable to increase tracked resource. queuepath: %s, application id: %s, resource usage: %s, user: %s", queuePath1, TestApp1, usage1.String(), user.User)
-	}
+	manager.IncreaseTrackedResource("", "", usage1, user)
+	manager.IncreaseTrackedResource(queuePath1, TestApp1, usage1, user)
 
 	groupTrackers := manager.GetGroupsResources()
 	assert.Equal(t, len(groupTrackers), 0)
@@ -211,10 +200,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	assert.Equal(t, user.User, manager.GetUserTracker(user.User).userName)
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) == nil, true)
 
-	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage1, user)
-	if !increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, usage1)
-	}
+	manager.IncreaseTrackedResource(queuePath1, TestApp1, usage1, user)
 	assertUGM(t, user, resources.Multiply(usage1, 2), 1)
 
 	user1 := security.UserGroup{User: "test1", Groups: []string{"test1"}}
@@ -222,10 +208,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	increased = manager.IncreaseTrackedResource(queuePath2, TestApp2, usage2, user1)
-	if !increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath2, TestApp2, usage2)
-	}
+	manager.IncreaseTrackedResource(queuePath2, TestApp2, usage2, user1)
 	assertUGM(t, user1, usage2, 2)
 	assert.Equal(t, user.User, manager.GetUserTracker(user.User).userName)
 	assert.Equal(t, user1.User, manager.GetUserTracker(user1.User).userName)
@@ -249,26 +232,15 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 
-	decreased := manager.DecreaseTrackedResource("", "", usage1, user, false)
-	assert.Equal(t, decreased, false)
-
-	decreased = manager.DecreaseTrackedResource(queuePath1, TestApp1, usage3, user, false)
-	if !decreased {
-		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
-	}
+	manager.DecreaseTrackedResource("", "", usage1, user, false)
+	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage3, user, false)
 	assertUGM(t, user, usage1, 2)
 
-	decreased = manager.DecreaseTrackedResource(queuePath1, TestApp1, usage3, user, true)
-	if !decreased {
-		t.Fatalf("unable to decrease tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage3, err)
-	}
+	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage3, user, true)
 	assert.Equal(t, 1, len(manager.GetUsersResources()), "userTrackers count should be 1")
 	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 1")
 
-	decreased = manager.DecreaseTrackedResource(queuePath2, TestApp2, usage2, user1, true)
-	if !decreased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath2, TestApp2, usage2, err)
-	}
+	manager.DecreaseTrackedResource(queuePath2, TestApp2, usage2, user1, true)
 	assert.Equal(t, 0, len(manager.GetUsersResources()), "userTrackers count should be 0")
 	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 0")
 
@@ -298,10 +270,7 @@ func TestUpdateConfig(t *testing.T) {
 	assertMaxLimits(t, user, expectedResource, 5)
 
 	for i := 1; i <= 5; i++ {
-		increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
-		if !increased {
-			t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v, error %t", queuePath1, TestApp1, usage, err)
-		}
+		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
 	}
 
 	// configure max resource for root.parent lesser than current resource usage. should be allowed to set but user cannot be allowed to do any activity further
@@ -316,10 +285,7 @@ func TestUpdateConfig(t *testing.T) {
 	err = manager.UpdateConfig(conf.Queues[0], "root")
 	assert.NilError(t, err, "unable to set the limit for user user1 because current resource usage is greater than config max resource for root.parent")
 
-	increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
-	if !increased {
-		t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, user)
-	}
+	manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
 
 	// configure max resource for root lesser than current resource usage. should be allowed to set but user cannot be allowed to do any activity further
 	conf = createConfig(user.User, user.Groups[0], "memory", "50", 10, 10)
@@ -384,8 +350,7 @@ func TestUseWildCard(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		// should run as user has already fallen back on wild card user limit set on "root.parent" map[memory:50 vcores:50]
-		increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
-		assert.Assert(t, increased)
+		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
 	}
 
 	// should not run as user has exceeded wild card user limit set on "root.parent" map[memory:50 vcores:50]
@@ -437,10 +402,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	assertMaxLimits(t, user, expectedResource, 5)
 
 	for i := 1; i <= 5; i++ {
-		increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
-		if !increased {
-			t.Fatalf("unable to increase tracked resource: queuepath %s, app %s, res %v", queuePath1, TestApp1, expectedResource)
-		}
+		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
 	}
 
 	// configure max resource for root.parent as map[memory:60 vcores:60] to allow one more application to run
@@ -449,8 +411,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	assert.NilError(t, err, "unable to set the limit for user user1 because current resource usage is greater than config max resource for root.parent")
 
 	// should run as user 'user' setting is map[memory:60 vcores:60] and total usage of "root.parent" is map[memory:50 vcores:50]
-	increased := manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user)
-	assert.Equal(t, increased, true)
+	manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user)
 
 	// should not run as user 'user' setting is map[memory:60 vcores:60] and total usage of "root.parent" is map[memory:60 vcores:60]
 	headroom := manager.Headroom(queuePath1, TestApp3, user)
@@ -470,8 +431,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 
 	// user1 still should be able to run app as wild card user '*' setting is map[memory:70 vcores:70] for "root.parent" and
 	// total usage of "root.parent" is map[memory:60 vcores:60]
-	increased = manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user)
-	assert.Equal(t, increased, true)
+	manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user)
 
 	// user1 should not be able to run app as wild card user '*' setting is map[memory:70 vcores:70] for "root.parent"
 	// and total usage of "root.parent" is map[memory:70 vcores:70]
@@ -494,8 +454,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 
 	// can be allowed to run upto resource usage map[memory:70 vcores:70]
 	for i := 1; i <= 7; i++ {
-		increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
-		assert.Equal(t, increased, true)
+		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
 	}
 
 	// user2 should not be able to run app as user2 max limit is map[memory:70 vcores:70] and usage so far is map[memory:70 vcores:70]
@@ -507,8 +466,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	// user3 should be able to run app as group3 uses wild card group limit settings map[memory:10 vcores:10]
-	increased = manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user3)
-	assert.Equal(t, increased, true)
+	manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user3)
 
 	// user4 (though belongs to different group, group4) should not be able to run app as group4 also
 	// uses wild card group limit settings map[memory:10 vcores:10]
@@ -525,8 +483,7 @@ func TestUpdateConfigWithWildCardUsersAndGroups(t *testing.T) {
 
 	// Now group4 would be used as user4 is running TestApp2 for the first time. So can be allowed to run upto resource usage map[memory:70 vcores:70]
 	for i := 1; i <= 7; i++ {
-		increased = manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user4)
-		assert.Equal(t, increased, true)
+		manager.IncreaseTrackedResource(queuePath1, TestApp2, usage, user4)
 	}
 
 	// user4 should not be able to run app as user4 max limit is map[memory:70 vcores:70] and usage so far is map[memory:70 vcores:70]
@@ -618,8 +575,7 @@ func TestUpdateConfigClearEarlierSetGroupLimits(t *testing.T) {
 	}
 	cQueue := "root.parent.leaf"
 	for i := 1; i <= 2; i++ {
-		increased := manager.IncreaseTrackedResource(cQueue, TestApp1, usage, user)
-		assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+cQueue+", app "+TestApp1+", res "+usage.String())
+		manager.IncreaseTrackedResource(cQueue, TestApp1, usage, user)
 	}
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 	headroom := manager.Headroom(cQueue, TestApp1, user)
@@ -646,47 +602,36 @@ func TestSetMaxLimitsForRemovedUsers(t *testing.T) {
 	assertMaxLimits(t, user, expectedResource, 5)
 
 	for i := 1; i <= 2; i++ {
-		increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
-		assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePath1+", app "+TestApp1+", res "+usage.String())
+		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
 	}
 	assert.Equal(t, manager.GetUserTracker(user.User) != nil, true)
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) != nil, true)
 
-	decreased := manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, user, false)
-	assert.Equal(t, decreased, true)
-
-	decreased = manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, user, true)
-	assert.Equal(t, decreased, true)
+	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, user, false)
+	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, user, true)
 	assert.Equal(t, manager.GetUserTracker(user.User) != nil, true)
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) != nil, true)
 
-	increased := manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage, user)
-	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath root.parent.leaf, app "+TestApp1+", res "+usage.String())
-
+	manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage, user)
 	headroom := manager.Headroom("root.parent.leaf", TestApp1, user)
 	assert.Equal(t, headroom.FitInMaxUndef(usage), false)
 
 	assert.Equal(t, manager.GetUserTracker(user.User) != nil, true)
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) != nil, true)
 
-	decreased = manager.DecreaseTrackedResource("root.parent.leaf", TestApp1, usage, user, true)
-	assert.Equal(t, decreased, true, "unable to decrease tracked resource: queuepath root.parent.leaf, app "+TestApp1+", res "+usage.String())
+	manager.DecreaseTrackedResource("root.parent.leaf", TestApp1, usage, user, true)
 
 	conf = createConfigWithoutLimits()
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	for i := 1; i <= 2; i++ {
-		increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
-		assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePath1+", app "+TestApp1+", res "+usage.String())
+		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user)
 	}
 	assert.Equal(t, manager.GetUserTracker(user.User) != nil, true)
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) == nil, true)
 
-	decreased = manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, user, false)
-	assert.Equal(t, decreased, true)
-
-	decreased = manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, user, true)
-	assert.Equal(t, decreased, true)
+	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, user, false)
+	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, user, true)
 	assert.Equal(t, manager.GetUserTracker(user.User) == nil, true)
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) == nil, true)
 }
@@ -712,9 +657,7 @@ func TestUserGroupHeadroom(t *testing.T) {
 	headroom := manager.Headroom("root.parent.leaf", TestApp1, user)
 	assert.Equal(t, resources.Equals(headroom, usage), true)
 
-	increased := manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage, user)
-	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePath1+", app "+TestApp1+", res "+usage.String())
-
+	manager.IncreaseTrackedResource("root.parent.leaf", TestApp1, usage, user)
 	headroom = manager.Headroom("root.parent.leaf", TestApp1, user)
 	assert.Equal(t, manager.GetUserTracker(user.User) != nil, true)
 	assert.Equal(t, manager.GetGroupTracker(user.Groups[0]) != nil, true)
@@ -762,16 +705,13 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
 	}
 
-	increased := manager.IncreaseTrackedResource("root.parent", TestApp1, usage, user)
-	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath root.parent, app "+TestApp1+", res "+usage.String())
-
+	manager.IncreaseTrackedResource("root.parent", TestApp1, usage, user)
 	groupTracker := m.GetGroupTracker(user.Groups[0])
 	assert.Equal(t, groupTracker != nil, true)
 	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], true)
 	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, usage), true)
 
-	decreased := manager.DecreaseTrackedResource("root.parent", TestApp1, usage, user, true)
-	assert.Equal(t, decreased, true, "unable to decrease tracked resource: queuepath root.parent, app "+TestApp1+", res "+usage.String())
+	manager.DecreaseTrackedResource("root.parent", TestApp1, usage, user, true)
 
 	groupTracker = m.GetGroupTracker(user.Groups[0])
 	assert.Equal(t, groupTracker != nil, true)
@@ -804,10 +744,8 @@ func TestUserGroupLimitWithMultipleApps(t *testing.T) {
 	}
 
 	// run different apps with different groups linkage (different queue limit settings)
-	increased := manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, userGroup)
-	assert.Equal(t, increased, true)
-	increased = manager.IncreaseTrackedResource(queuePath2, TestApp2, usage, userGroup)
-	assert.Equal(t, increased, true)
+	manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, userGroup)
+	manager.IncreaseTrackedResource(queuePath2, TestApp2, usage, userGroup)
 
 	// ensure different groups are linked and resource usage is correct
 	assert.Equal(t, len(manager.getUserTracker("user").appGroupTrackers), 2)
@@ -825,10 +763,8 @@ func TestUserGroupLimitWithMultipleApps(t *testing.T) {
 	assert.Equal(t, resources.Equals(headroom, resources.Zero), true, "init headroom is not expected")
 
 	// remove the apps
-	decreased := manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, userGroup, true)
-	assert.Equal(t, decreased, true)
-	decreased = manager.DecreaseTrackedResource(queuePath2, TestApp2, usage, userGroup, true)
-	assert.Equal(t, decreased, true)
+	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage, userGroup, true)
+	manager.DecreaseTrackedResource(queuePath2, TestApp2, usage, userGroup, true)
 
 	// assert group linkage has been removed
 	assert.Equal(t, len(manager.getUserTracker("user").appGroupTrackers), 0)
@@ -952,9 +888,7 @@ func TestCanRunApp(t *testing.T) {
 			canRunApp := manager.CanRunApp("root.default", TestApp1, user)
 			assert.Equal(t, canRunApp, true, fmt.Sprintf("user %s should be able to run app %s", user.User, TestApp1))
 
-			increased := manager.IncreaseTrackedResource("root.default", TestApp1, usage, user)
-			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath root.parent, app "+TestApp1+", res "+usage.String())
-
+			manager.IncreaseTrackedResource("root.default", TestApp1, usage, user)
 			canRunApp = manager.CanRunApp("root.default", TestApp2, user)
 			assert.Equal(t, canRunApp, false, fmt.Sprintf("user %s shouldn't be able to run app %s", user.User, TestApp2))
 		})
@@ -1011,9 +945,7 @@ func TestSeparateUserGroupHeadroom(t *testing.T) {
 				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
 			}
 
-			increased := manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
-			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp1+", res "+usage.String())
-
+			manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
 			headroom := manager.Headroom(queuePathParent, TestApp1, tc.user)
 			expectedHeadroom, err := resources.NewResourceFromConf(tinyResource)
 			if err != nil {
@@ -1247,8 +1179,7 @@ func TestUserGroupLimit(t *testing.T) { //nolint:funlen
 			headroom := manager.Headroom(queuePathParent, TestApp1, tc.user)
 			assert.Equal(t, resources.Equals(headroom, initExpectedHeadroom), true, "init headroom is not expected")
 
-			increased := manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
-			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp1+", res "+usage.String())
+			manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
 			userTracker := manager.GetUserTracker(tc.user.User)
 			assert.Equal(t, userTracker != nil, true, fmt.Sprintf("can't get user tracker: %s", tc.user.User))
 			assert.Equal(t, resources.Equals(userTracker.queueTracker.resourceUsage, usage), true, "user tracker resource usage is not expected at root level")
@@ -1571,14 +1502,9 @@ func TestUserGroupLimitChange(t *testing.T) { //nolint:funlen
 				t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage)
 			}
 
-			increased := manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
-			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp1+", res "+usage.String())
-
-			increased = manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
-			assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
-
-			decreased := manager.DecreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user, true)
-			assert.Equal(t, decreased, true, "unable to decreased tracked resource: queuepath "+queuePathParent+", app "+TestApp2+", res "+usage.String())
+			manager.IncreaseTrackedResource(queuePathParent, TestApp1, usage, tc.user)
+			manager.IncreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user)
+			manager.DecreaseTrackedResource(queuePathParent, TestApp2, usage, tc.user, true)
 
 			conf.Queues[0].Queues[0].Limits = tc.newLimits
 			assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
@@ -1610,22 +1536,16 @@ func TestMultipleGroupLimitChange(t *testing.T) {
 	}
 
 	// all users can increate usage within the quota
-	increased := manager.IncreaseTrackedResource(queuePathParent, "test-app-1-1", usage, user1)
-	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app test-app-1-1, res "+usage.String())
-
-	increased = manager.IncreaseTrackedResource(queuePathParent, "test-app-2-1", usage, user2)
-	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app test-app-2-1, res "+usage.String())
-
-	increased = manager.IncreaseTrackedResource(queuePathParent, "test-app-3-1", usage, user3)
-	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app test-app-3-1, res "+usage.String())
+	manager.IncreaseTrackedResource(queuePathParent, "test-app-1-1", usage, user1)
+	manager.IncreaseTrackedResource(queuePathParent, "test-app-2-1", usage, user2)
+	manager.IncreaseTrackedResource(queuePathParent, "test-app-3-1", usage, user3)
 
 	// remove group2 from the specific group
 	conf.Queues[0].Queues[0].Limits[0].Groups = []string{"group1"}
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	// user1 still can increase usage within the quota
-	increased = manager.IncreaseTrackedResource(queuePathParent, "test-app-1-2", usage, user1)
-	assert.Equal(t, increased, true, "unable to increase tracked resource: queuepath "+queuePathParent+", app test-app-1-2, res "+usage.String())
+	manager.IncreaseTrackedResource(queuePathParent, "test-app-1-2", usage, user1)
 
 	// user2 can't increase usage more than wildcard limit
 	headroom := manager.Headroom(queuePathParent, "test-app-2-2", user2)

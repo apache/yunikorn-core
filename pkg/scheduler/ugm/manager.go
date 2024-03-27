@@ -77,7 +77,7 @@ type LimitConfig struct {
 // IncreaseTrackedResource Increase the resource usage for the given user group and queue path combination.
 // As and when every allocation or asks requests fulfilled on application, corresponding user and group
 // resource usage would be increased against specific application.
-func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) bool {
+func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup) {
 	log.Log(log.SchedUGM).Debug("Increasing resource usage",
 		zap.String("user", user.User),
 		zap.String("queue path", queuePath),
@@ -85,7 +85,7 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 		zap.Stringer("resource", usage))
 	if queuePath == common.Empty || applicationID == common.Empty || usage == nil || user.User == common.Empty {
 		log.Log(log.SchedUGM).Debug("Mandatory parameters are missing to increase the resource usage")
-		return false
+		return
 	}
 	// since we check headroom before an increase this should never result in a creation...
 	// some tests might not go through a scheduling that cycle so leave this
@@ -97,14 +97,14 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 		m.ensureGroupTrackerForApp(queuePath, applicationID, user)
 	}
 
-	return userTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	userTracker.increaseTrackedResource(queuePath, applicationID, usage)
 }
 
 // DecreaseTrackedResource Decrease the resource usage for the given user group and queue path combination.
 // As and when every allocation or asks release happens, corresponding user and group
 // resource usage would be decreased against specific application. When the final asks release happens, removeApp should be set to true and
 // application itself would be removed from the tracker and no more usage would be tracked further for that specific application.
-func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) bool {
+func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user security.UserGroup, removeApp bool) {
 	log.Log(log.SchedUGM).Debug("Decreasing resource usage",
 		zap.String("user", user.User),
 		zap.String("queue path", queuePath),
@@ -113,14 +113,14 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		zap.Bool("removeApp", removeApp))
 	if queuePath == common.Empty || applicationID == common.Empty || usage == nil || user.User == common.Empty {
 		log.Log(log.SchedUGM).Debug("Mandatory parameters are missing to decrease the resource usage")
-		return false
+		return
 	}
 
 	userTracker := m.GetUserTracker(user.User)
 	if userTracker == nil {
 		log.Log(log.SchedUGM).Error("user tracker must be available in userTrackers map",
 			zap.String("user", user.User))
-		return false
+		return
 	}
 
 	// get the group now as the decrease might remove the app from the user if removeApp is true
@@ -132,10 +132,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		zap.String("tracked group", appGroup),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
-	removeQT, decreased := userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
-	if !decreased {
-		return decreased
-	}
+	removeQT := userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
 	if removeQT {
 		log.Log(log.SchedUGM).Info("Removing user from manager",
 			zap.String("user", user.User))
@@ -143,14 +140,14 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 	}
 	// if the app did not have a group we're done otherwise update the groupTracker
 	if appGroup == common.Empty {
-		return decreased
+		return
 	}
 	groupTracker := m.GetGroupTracker(appGroup)
 	if groupTracker == nil {
 		log.Log(log.SchedUGM).Error("group tracker should be available in groupTrackers map",
 			zap.String("applicationID", applicationID),
 			zap.String("applicationID", appGroup))
-		return decreased
+		return
 	}
 	log.Log(log.SchedUGM).Debug("Decreasing resource usage for group",
 		zap.String("group", appGroup),
@@ -158,11 +155,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
-	removeQT, decreased = groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
-	if !decreased {
-		return decreased
-	}
-	if removeQT {
+	if removeGT := groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp); removeGT {
 		log.Log(log.SchedUGM).Info("Removing group from manager",
 			zap.String("group", appGroup),
 			zap.String("queue path", queuePath),
@@ -170,7 +163,6 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 			zap.Bool("removeApp", removeApp))
 		delete(m.groupTrackers, appGroup)
 	}
-	return true
 }
 
 func (m *Manager) GetUsersResources() []*UserTracker {

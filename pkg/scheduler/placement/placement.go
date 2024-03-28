@@ -19,7 +19,7 @@
 package placement
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 	"sync"
 
@@ -31,6 +31,9 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
+
+// RejectedError is the standard error returned if placement has failed
+var RejectedError = errors.New("application rejected: no placement rule matched")
 
 type AppPlacementManager struct {
 	rules   []rule
@@ -191,7 +194,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	// no more rules to check no queueName found reject placement
 	if queueName == "" {
 		app.SetQueuePath("")
-		return fmt.Errorf("application rejected: no placement rule matched")
+		return RejectedError
 	}
 	// Add the queue into the application, overriding what was submitted
 	app.SetQueuePath(queueName)

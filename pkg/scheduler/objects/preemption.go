@@ -754,22 +754,21 @@ func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource
 		return nil
 	}
 	parentPreemptableResource := qps.Parent.GetPreemptableResource()
-	used := qps.AllocatedResource.Clone()
+	actual := qps.AllocatedResource.Clone()
 
 	// No usage, so nothing to preempt
-	if used.IsEmpty() {
+	if actual.IsEmpty() {
 		return nil
 	}
-	used.SubOnlyExisting(qps.PreemptingResource)
+	actual.SubOnlyExisting(qps.PreemptingResource)
 
 	// Calculate preemptable resource. +ve means Over utilized, -ve means Under utilized, 0 means correct utilization
-	guaranteed := qps.GuaranteedResource.Clone()
-	actualPreemptableResource := used
-	actualPreemptableResource.SubOnlyExisting(guaranteed)
-	preemptableResource := actualPreemptableResource
+	guaranteed := qps.GuaranteedResource
+	actual.SubOnlyExisting(guaranteed)
+	preemptableResource := actual
 
 	// Keep only the resource type which needs to be preempted
-	for k, v := range actualPreemptableResource.Resources {
+	for k, v := range actual.Resources {
 		// Under-utilized or completely used resource types
 		if v <= 0 {
 			delete(preemptableResource.Resources, k)

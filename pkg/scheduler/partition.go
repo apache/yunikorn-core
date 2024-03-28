@@ -290,7 +290,7 @@ func (pc *PartitionContext) getPlacementManager() *placement.AppPlacementManager
 }
 
 // AddApplication adds a new application to the partition.
-// Runs the placement rules for the queue resolution. Creates a new dynamic queue if the queue does bit yet
+// Runs the placement rules for the queue resolution. Creates a new dynamic queue if the queue does not yet
 // exists.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddApplication(app *objects.Application) error {

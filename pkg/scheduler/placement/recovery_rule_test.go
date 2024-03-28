@@ -63,18 +63,15 @@ partitions:
 	app := newApplication("app1", "default", "ignored", user, tags, nil, "")
 
 	var queue string
-	var aclCheck bool
-	queue, aclCheck, err = rr.placeApplication(app, queueFunc)
+	queue, err = rr.placeApplication(app, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("recovery rule did not bypass non-forced application, resolved queue '%s', err %v ", queue, err)
 	}
-	assert.Check(t, !aclCheck, "acl check should not be set for recovery rule")
 
 	tags[siCommon.AppTagCreateForce] = "true"
 	app = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, aclCheck, err = rr.placeApplication(app, queueFunc)
+	queue, err = rr.placeApplication(app, queueFunc)
 	if queue != common.RecoveryQueueFull || err != nil {
 		t.Errorf("recovery rule did not place forced application into recovery queue, resolved queue '%s', err %v ", queue, err)
 	}
-	assert.Check(t, !aclCheck, "acl check should not be set for recovery rule")
 }

@@ -48,12 +48,12 @@ func (tr *testRule) initialise(conf configs.PlacementRule) error {
 }
 
 // Simple test rule that just checks the app passed in and returns fixed queue names.
-func (tr *testRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error) {
+func (tr *testRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	if app == nil {
-		return "", true, fmt.Errorf("nil app passed in")
+		return "", fmt.Errorf("nil app passed in")
 	}
 	if queuePath := app.GetQueuePath(); queuePath != "" {
-		return replaceDot(queuePath), true, nil
+		return replaceDot(queuePath), nil
 	}
-	return types.Test, true, nil
+	return types.Test, nil
 }

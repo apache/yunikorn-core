@@ -289,7 +289,9 @@ func (pc *PartitionContext) getPlacementManager() *placement.AppPlacementManager
 	return pc.placementManager
 }
 
-// Add a new application to the partition.
+// AddApplication adds a new application to the partition.
+// Runs the placement rules for the queue resolution. Creates a new dynamic queue if the queue does not yet
+// exists.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	if pc.isDraining() || pc.isStopped() {
@@ -302,16 +304,13 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("adding application %s to partition %s, but application already existed", appID, pc.Name)
 	}
 
-	// Put app under the queue
-	pm := pc.getPlacementManager()
-	err := pm.PlaceApplication(app)
+	// Resolve the queue for this app using the placement rules
+	// We either have an error or a queue name is set on the application.
+	err := pc.getPlacementManager().PlaceApplication(app)
 	if err != nil {
 		return fmt.Errorf("failed to place application %s: %v", appID, err)
 	}
 	queueName := app.GetQueuePath()
-	if queueName == "" {
-		return fmt.Errorf("application rejected by placement rules: %s", appID)
-	}
 
 	// lock the partition and make the last change: we need to do this before creating the queues.
 	// queue cleanup might otherwise remove the queue again before we can add the application
@@ -322,7 +321,6 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 
 	// create the queue if necessary
 	if queue == nil {
-		var err error
 		if common.IsRecoveryQueue(queueName) {
 			queue, err = pc.createRecoveryQueue()
 			if err != nil {

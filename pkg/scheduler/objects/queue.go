@@ -1858,9 +1858,7 @@ func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPr
 	}
 	priorityMap[sq.QueuePath] = currentPriority
 
-	// Is FencePreemptionPolicy set on the queue?
-	// Does Queue's Usage already reached Max Res? If Yes, No use in picking up the victims outside this queue path, have to find the victim queue path with in this queue hierarchy.
-	// At last, root queue would be the fence if none met above
+	// Return this queue as fence root if: 1. FencePreemptionPolicy is set 2. root queue 3. allocations in the queue reached maximum resources
 	if sq.parent == nil || sq.GetPreemptionPolicy() == policies.FencePreemptionPolicy || resources.Equals(sq.allocatedResource, sq.maxResource) {
 		return sq
 	}

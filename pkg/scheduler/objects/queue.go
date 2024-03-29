@@ -1761,13 +1761,13 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 			return
 		}
 
+		victims := sq.createPreemptionSnapshot(results)
+
 		// skip this queue if we are within guaranteed limits
-		guaranteed := resources.ComponentWiseMinPermissive(sq.GetActualGuaranteedResource(), sq.GetMaxResource())
-		if guaranteed.FitInMaxUndef(sq.GetAllocatedResource()) {
+		remaining := results[sq.QueuePath].GetRemainingGuaranteedResource()
+		if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
 			return
 		}
-
-		victims := sq.createPreemptionSnapshot(results)
 
 		// walk allocations and select those that are equal or lower than current priority
 		for _, app := range sq.GetCopyOfApps() {

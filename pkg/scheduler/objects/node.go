@@ -20,7 +20,6 @@ package objects
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -54,7 +53,6 @@ type Node struct {
 	availableResource *resources.Resource
 	allocations       map[string]*Allocation
 	schedulable       bool
-	ready             bool
 
 	reservations map[string]*reservation // a map of reservations
 	listeners    []NodeListener          // a list of node listeners
@@ -64,18 +62,11 @@ type Node struct {
 }
 
 func NewNode(proto *si.NodeInfo) *Node {
-	// safe guard against panic
+	// safeguard against panic
 	if proto == nil {
 		return nil
 	}
 
-	var ready bool
-	var err error
-	if ready, err = strconv.ParseBool(proto.Attributes[common.NodeReadyAttribute]); err != nil {
-		log.Log(log.SchedNode).Debug("Could not parse ready flag, assuming true",
-			zap.String("nodeID", proto.NodeID))
-		ready = true
-	}
 	sn := &Node{
 		NodeID:            proto.NodeID,
 		reservations:      make(map[string]*reservation),
@@ -85,10 +76,10 @@ func NewNode(proto *si.NodeInfo) *Node {
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		listeners:         make([]NodeListener, 0),
-		ready:             ready,
 	}
 	sn.nodeEvents = newNodeEvents(sn, events.GetEventSystem())
 	// initialise available resources
+	var err error
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
 	if err != nil {
 		log.Log(log.SchedNode).Error("New node created with no available resources",
@@ -593,19 +584,6 @@ func (sn *Node) getListeners() []NodeListener {
 	list := make([]NodeListener, len(sn.listeners))
 	copy(list, sn.listeners)
 	return list
-}
-
-func (sn *Node) IsReady() bool {
-	sn.RLock()
-	defer sn.RUnlock()
-	return sn.ready
-}
-
-func (sn *Node) SetReady(ready bool) {
-	sn.Lock()
-	defer sn.Unlock()
-	sn.ready = ready
-	sn.nodeEvents.sendNodeReadyChangedEvent(sn.ready)
 }
 
 func (sn *Node) SendNodeAddedEvent() {

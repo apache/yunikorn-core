@@ -656,37 +656,6 @@ func TestAddRemoveListener(t *testing.T) {
 	assert.Equal(t, 1, tl.updateCount, "listener should not have fired again")
 }
 
-func TestReadyAttribute(t *testing.T) {
-	// missing
-	proto := newProto(testNode, nil, nil, nil)
-	node := NewNode(proto)
-	assert.Equal(t, true, node.ready, "Node should be in ready state")
-
-	// exists, but faulty
-	attr := map[string]string{
-		"readyX": "true",
-	}
-	proto = newProto(testNode, nil, nil, attr)
-	node = NewNode(proto)
-	assert.Equal(t, true, node.ready, "Node should be in ready state")
-
-	// exists, true
-	attr = map[string]string{
-		"ready": "true",
-	}
-	proto = newProto(testNode, nil, nil, attr)
-	node = NewNode(proto)
-	assert.Equal(t, true, node.ready, "Node should be in ready state")
-
-	// exists, false
-	attr = map[string]string{
-		"ready": "false",
-	}
-	proto = newProto(testNode, nil, nil, attr)
-	node = NewNode(proto)
-	assert.Equal(t, false, node.ready, "Node should not be in ready state")
-}
-
 func TestNodeEvents(t *testing.T) {
 	mockEvents := evtMock.NewEventSystem()
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
@@ -709,14 +678,6 @@ func TestNodeEvents(t *testing.T) {
 	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
-
-	mockEvents.Reset()
-	node.SetReady(false)
-	assert.Equal(t, 1, len(mockEvents.Events))
-	event = mockEvents.Events[0]
-	assert.Equal(t, si.EventRecord_NODE, event.Type)
-	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
-	assert.Equal(t, si.EventRecord_NODE_READY, event.EventChangeDetail)
 
 	mockEvents.Reset()
 	node.AddAllocation(&Allocation{

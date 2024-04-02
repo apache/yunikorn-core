@@ -31,7 +31,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -544,10 +543,8 @@ func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.
 }
 func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
 	proto := &si.NodeInfo{
-		NodeID: nodeID,
-		Attributes: map[string]string{
-			common.NodeReadyAttribute: "true",
-		},
+		NodeID:              nodeID,
+		Attributes:          map[string]string{},
 		SchedulableResource: max.ToProto(),
 		OccupiedResource:    occupied.ToProto(),
 	}

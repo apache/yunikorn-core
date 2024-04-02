@@ -124,29 +124,6 @@ func TestSendAllocationRemovedEvent(t *testing.T) {
 	assert.DeepEqual(t, protoRes, resource)
 }
 
-func TestSendNodeReadyChangedEvent(t *testing.T) {
-	node := &Node{
-		NodeID: nodeID1,
-	}
-	eventSystem := mock.NewEventSystemDisabled()
-	ne := newNodeEvents(node, eventSystem)
-	ne.sendNodeReadyChangedEvent(true)
-	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
-
-	eventSystem = mock.NewEventSystem()
-	ne = newNodeEvents(node, eventSystem)
-	ne.sendNodeReadyChangedEvent(true)
-	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
-	assert.Equal(t, "ready: true", eventSystem.Events[0].Message)
-	assert.Equal(t, nodeID1, eventSystem.Events[0].ObjectID)
-
-	eventSystem.Reset()
-	ne.sendNodeReadyChangedEvent(false)
-	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
-	assert.Equal(t, "ready: false", eventSystem.Events[0].Message)
-	assert.Equal(t, nodeID1, eventSystem.Events[0].ObjectID)
-}
-
 func TestSendOccupiedResourceChangedEvent(t *testing.T) {
 	resource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	node := &Node{

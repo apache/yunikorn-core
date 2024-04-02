@@ -132,8 +132,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		zap.String("tracked group", appGroup),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
-	removeQT := userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp)
-	if removeQT {
+	if userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp) {
 		log.Log(log.SchedUGM).Info("Removing user from manager",
 			zap.String("user", user.User))
 		delete(m.userTrackers, user.User)
@@ -155,7 +154,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
-	if removeGT := groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp); removeGT {
+	if groupTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp) {
 		log.Log(log.SchedUGM).Info("Removing group from manager",
 			zap.String("group", appGroup),
 			zap.String("queue path", queuePath),

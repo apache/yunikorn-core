@@ -87,8 +87,8 @@ const (
 	group
 )
 
-func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource) {
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
+func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource) {
 	log.Log(log.SchedUGM).Debug("Increasing resource usage",
 		zap.Int("tracking type", int(trackType)),
 		zap.String("queue path", qt.queuePath),
@@ -122,6 +122,7 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		zap.Int("total applications after increasing", len(qt.runningApplications)))
 }
 
+// Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, removeApp bool) bool {
 	log.Log(log.SchedUGM).Debug("Decreasing resource usage",
 		zap.String("queue path", qt.queuePath),

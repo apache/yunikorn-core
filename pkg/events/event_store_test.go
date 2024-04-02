@@ -30,8 +30,8 @@ import (
 
 // the fields of an event should match after stored and retrieved
 func TestStoreAndRetrieve(t *testing.T) {
-	store := newEventStore()
-	event := &si.EventRecord{
+	store := newEventStore(1000)
+	event1 := &si.EventRecord{
 		Type:              si.EventRecord_REQUEST,
 		EventChangeDetail: si.EventRecord_DETAILS_NONE,
 		EventChangeType:   si.EventRecord_NONE,
@@ -39,12 +39,21 @@ func TestStoreAndRetrieve(t *testing.T) {
 		ReferenceID:       "app1",
 		Message:           "message",
 	}
-	store.Store(event)
+	event2 := &si.EventRecord{
+		Type:              si.EventRecord_REQUEST,
+		EventChangeDetail: si.EventRecord_DETAILS_NONE,
+		EventChangeType:   si.EventRecord_NONE,
+		ObjectID:          "alloc2",
+		ReferenceID:       "app1",
+		Message:           "message",
+	}
+	store.Store(event1)
+	store.Store(event2)
 
 	records := store.CollectEvents()
-	assert.Equal(t, len(records), 1)
-	record := records[0]
-	assert.DeepEqual(t, record, event, cmpopts.IgnoreUnexported(si.EventRecord{}))
+	assert.Equal(t, len(records), 2)
+	assert.DeepEqual(t, records[0], event1, cmpopts.IgnoreUnexported(si.EventRecord{}))
+	assert.DeepEqual(t, records[1], event2, cmpopts.IgnoreUnexported(si.EventRecord{}))
 
 	// calling CollectEvents erases the eventChannel map
 	records = store.CollectEvents()
@@ -54,7 +63,7 @@ func TestStoreAndRetrieve(t *testing.T) {
 // if we push more events to the EventStore than its
 // allowed maximum, those that couldn't fit will be omitted
 func TestStoreWithLimitedSize(t *testing.T) {
-	store := newEventStoreWithSize(3)
+	store := newEventStore(3)
 
 	for i := 0; i < 5; i++ {
 		event := &si.EventRecord{
@@ -67,4 +76,27 @@ func TestStoreWithLimitedSize(t *testing.T) {
 	}
 	records := store.CollectEvents()
 	assert.Equal(t, len(records), 3)
+}
+
+func TestSetStoreSize(t *testing.T) {
+	store := newEventStore(5)
+	// store 5 events
+	for i := 0; i < 5; i++ {
+		store.Store(&si.EventRecord{
+			Type:              si.EventRecord_REQUEST,
+			EventChangeDetail: si.EventRecord_DETAILS_NONE,
+			EventChangeType:   si.EventRecord_NONE,
+			ObjectID:          "alloc" + strconv.Itoa(i),
+			ReferenceID:       "app1",
+		})
+	}
+
+	// set smaller size
+	store.SetStoreSize(3)
+	assert.Equal(t, uint64(3), store.size)
+
+	// collect events & make sure events are not lost
+	events := store.CollectEvents()
+	assert.Equal(t, 5, len(events))
+	assert.Equal(t, 3, len(store.events))
 }

@@ -632,8 +632,8 @@ func TestQueueStates(t *testing.T) {
 		t.Errorf("leaf queue is not marked draining: %v", err)
 	}
 	err = leaf.handleQueueEvent(Start)
-	if err == nil || !leaf.IsDraining() {
-		t.Errorf("leaf queue changed state which should not happen: %v", err)
+	if err != nil || !leaf.IsRunning() {
+		t.Errorf("leaf queue is not marked running: %v", err)
 	}
 }
 
@@ -2190,6 +2190,35 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Equal(t, len(childNonLeaf.properties), 0)
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
+}
+
+func TestResetRunningState(t *testing.T) {
+	emptyConf := configs.QueueConfig{
+		Name: "not_used",
+	}
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	// single parent under root
+	var parent *Queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+	var leaf *Queue
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	if len(parent.children) == 0 {
+		t.Error("leaf queue is not added to the parent queue")
+	}
+	parent.MarkQueueForRemoval()
+	assert.Assert(t, parent.IsDraining(), "parent should be marked as draining")
+	assert.Assert(t, leaf.IsDraining(), "leaf should be marked as draining")
+	err = parent.applyConf(emptyConf)
+	assert.NilError(t, err, "failed to update parent")
+	assert.Assert(t, parent.IsRunning(), "parent should be running again")
+	assert.Assert(t, leaf.IsDraining(), "leaf should still be marked as draining")
+	err = leaf.applyConf(emptyConf)
+	assert.NilError(t, err, "failed to update leaf")
+	assert.Assert(t, leaf.IsRunning(), "leaf should be running again")
 }
 
 func TestNewRecoveryQueue(t *testing.T) {

@@ -66,22 +66,6 @@ func (n *nodeEvents) sendAllocationRemovedEvent(allocID string, res *resources.R
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeReadyChangedEvent(ready bool) {
-	if !n.eventSystem.IsEventTrackingEnabled() {
-		return
-	}
-	reason := ""
-	if ready {
-		reason = "ready: true"
-	} else {
-		reason = "ready: false"
-	}
-
-	event := events.CreateNodeEventRecord(n.node.NodeID, reason, common.Empty, si.EventRecord_SET,
-		si.EventRecord_NODE_READY, nil)
-	n.eventSystem.AddEvent(event)
-}
-
 func (n *nodeEvents) sendNodeSchedulableChangedEvent(ready bool) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return

@@ -39,7 +39,6 @@ const (
 	NodeActive         = "active"
 	NodeDraining       = "draining"
 	NodeDecommissioned = "decommissioned"
-	NodeUnhealthy      = "unhealthy"
 )
 
 var resourceUsageRangeBuckets = []string{
@@ -376,12 +375,4 @@ func (m *SchedulerMetrics) GetDrainingNodes() (int, error) {
 
 func (m *SchedulerMetrics) IncTotalDecommissionedNodes() {
 	m.node.WithLabelValues(NodeDecommissioned).Inc()
-}
-
-func (m *SchedulerMetrics) IncUnhealthyNodes() {
-	m.node.WithLabelValues(NodeUnhealthy).Inc()
-}
-
-func (m *SchedulerMetrics) DecUnhealthyNodes() {
-	m.node.WithLabelValues(NodeUnhealthy).Dec()
 }

@@ -51,17 +51,6 @@ func TestTotalDecommissionedNodes(t *testing.T) {
 	verifyMetric(t, 1, "decommissioned")
 }
 
-func TestUnhealthyNodes(t *testing.T) {
-	sm = getSchedulerMetrics(t)
-	defer unregisterMetrics()
-
-	sm.IncUnhealthyNodes()
-	verifyMetric(t, 1, "unhealthy")
-
-	sm.DecUnhealthyNodes()
-	verifyMetric(t, 0, "unhealthy")
-}
-
 func TestTryPreemptionLatency(t *testing.T) {
 	sm = getSchedulerMetrics(t)
 	defer unregisterMetrics()

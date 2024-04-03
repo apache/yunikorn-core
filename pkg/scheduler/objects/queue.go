@@ -328,6 +328,14 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 		sq.isManaged = true
 	}
 
+	// if the queue is marked for removal reverse that state
+	if !sq.IsRunning() {
+		err = sq.handleQueueEvent(Start)
+		if err != nil {
+			log.Log(log.SchedQueue).Info("managed queue state change failed",
+				zap.String("queue", sq.QueuePath))
+		}
+	}
 	prevLeaf := sq.isLeaf
 	sq.isLeaf = !conf.Parent
 	// Make sure the parent flag is set correctly: config might expect auto parent type creation

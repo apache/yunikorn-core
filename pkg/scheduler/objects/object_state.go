@@ -68,7 +68,7 @@ func NewObjectState() *fsm.FSM {
 				Dst:  Draining.String(),
 			}, {
 				Name: Start.String(),
-				Src:  []string{Active.String(), Stopped.String()},
+				Src:  []string{Active.String(), Stopped.String(), Draining.String()},
 				Dst:  Active.String(),
 			}, {
 				Name: Stop.String(),

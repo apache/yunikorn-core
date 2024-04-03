@@ -1426,6 +1426,67 @@ func TestUpdateQueues(t *testing.T) {
 	assertUpdateQueues(t, "both", map[string]string{})
 }
 
+func TestReAddQueues(t *testing.T) {
+	conf := []configs.QueueConfig{
+		{
+			Name:   "parent",
+			Parent: true,
+			Queues: []configs.QueueConfig{
+				{
+					Name:   "leaf",
+					Parent: false,
+					Queues: nil,
+				},
+			},
+		},
+	}
+
+	confDefault := []configs.QueueConfig{
+		{
+			Name:   "default",
+			Parent: false,
+			Queues: nil,
+		},
+		{
+			Name:   "parent",
+			Parent: true,
+			Queues: nil,
+		},
+	}
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	// There is a queue setup as the config must be valid when we run
+	root := partition.GetQueue("root")
+	if root == nil {
+		t.Error("root queue not found in partition")
+	}
+	def := partition.GetQueue(defQueue)
+	if def == nil {
+		t.Fatal("default queue should exist")
+	}
+	err = partition.updateQueues(conf, root)
+	assert.NilError(t, err, "queue update from config failed")
+	leaf := partition.GetQueue("root.parent.leaf")
+	if leaf == nil {
+		t.Fatal("leaf queue should be created")
+	}
+	assert.Assert(t, def.IsDraining(), "'root.default' queue should have been marked for removal")
+	err = partition.updateQueues(confDefault, root)
+	assert.NilError(t, err, "queue update from config default failed")
+	assert.Assert(t, def.IsRunning(), "'root.default' queue should have been marked running again")
+	assert.Assert(t, leaf.IsDraining(), "'root.parent.leaf' queue should have been marked for removal")
+	partition.partitionManager.cleanQueues(root)
+	leaf = partition.GetQueue("root.parent.leaf")
+	if leaf != nil {
+		t.Fatal("leaf queue should have been cleaned up")
+	}
+	def = partition.GetQueue(defQueue)
+	if def == nil {
+		t.Fatal("default queue should still exist")
+	}
+}
+
 func TestGetApplication(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")

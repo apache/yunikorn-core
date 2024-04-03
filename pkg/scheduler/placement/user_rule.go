@@ -49,28 +49,27 @@ func (ur *userRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (ur *userRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error) {
+func (ur *userRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// before anything run the filter
 	userName := app.GetUser().User
 	if !ur.filter.allowUser(app.GetUser()) {
-		log.Log(log.Config).Debug("User rule filtered",
+		log.Log(log.SchedApplication).Debug("User rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()))
-		return "", true, nil
+		return "", nil
 	}
 	var parentName string
-	var aclCheck = true
 	var err error
 	// run the parent rule if set
 	if ur.parent != nil {
-		parentName, aclCheck, err = ur.parent.placeApplication(app, queueFn)
+		parentName, err = ur.parent.placeApplication(app, queueFn)
 		// failed parent rule, fail this rule
 		if err != nil {
-			return "", aclCheck, err
+			return "", err
 		}
 		// rule did not match: this could be filter or create flag related
 		if parentName == "" {
-			return "", aclCheck, nil
+			return "", nil
 		}
 		// check if this is a parent queue and qualify it
 		if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
@@ -79,7 +78,7 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 		// if the parent queue exists it cannot be a leaf
 		parentQueue := queueFn(parentName)
 		if parentQueue != nil && parentQueue.IsLeafQueue() {
-			return "", aclCheck, fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+			return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 		}
 	}
 	// the parent is set from the rule otherwise set it to the root
@@ -87,17 +86,18 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 		parentName = configs.RootQueue
 	}
 	queueName := parentName + configs.DOT + replaceDot(userName)
-	log.Log(log.Config).Debug("User rule intermediate result",
+	// Log the result before we check the create flag
+	log.Log(log.SchedApplication).Debug("User rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
 	queue := queueFn(queueName)
 	// if we cannot create the queue it must exist, rule does not match otherwise
 	if !ur.create && queue == nil {
-		return "", aclCheck, nil
+		return "", nil
 	}
-	log.Log(log.Config).Info("User rule application placed",
+	log.Log(log.SchedApplication).Info("User rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, aclCheck, nil
+	return queueName, nil
 }

@@ -52,35 +52,34 @@ func (pr *providedRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error) {
+func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// since this is the provided rule we must have a queue in the info already
 	queueName := app.GetQueuePath()
 	if queueName == "" {
-		return "", true, nil
+		return "", nil
 	}
 
 	// before anything run the filter
 	if !pr.filter.allowUser(app.GetUser()) {
-		log.Log(log.Config).Debug("Provided rule filtered",
+		log.Log(log.SchedApplication).Debug("Provided rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()))
-		return "", true, nil
+		return "", nil
 	}
 	var parentName string
-	var aclCheck = true
 	var err error
 	// if we have a fully qualified queue passed in do not run the parent rule
 	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
 		// run the parent rule if set
 		if pr.parent != nil {
-			parentName, aclCheck, err = pr.parent.placeApplication(app, queueFn)
+			parentName, err = pr.parent.placeApplication(app, queueFn)
 			// failed parent rule, fail this rule
 			if err != nil {
-				return "", aclCheck, err
+				return "", err
 			}
 			// rule did not return a parent: this could be filter or create flag related
 			if parentName == "" {
-				return "", aclCheck, nil
+				return "", nil
 			}
 			// check if this is a parent queue and qualify it
 			if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
@@ -89,7 +88,7 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 			// if the parent queue exists it cannot be a leaf
 			parentQueue := queueFn(parentName)
 			if parentQueue != nil && parentQueue.IsLeafQueue() {
-				return "", aclCheck, fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 			}
 		}
 		// the parent is set from the rule otherwise set it to the root
@@ -99,17 +98,18 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 		// Make it a fully qualified queue
 		queueName = parentName + configs.DOT + replaceDot(queueName)
 	}
-	log.Log(log.Config).Debug("Provided rule intermediate result",
+	// Log the result before we check the create flag
+	log.Log(log.SchedApplication).Debug("Provided rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
 	queue := queueFn(queueName)
 	// if we cannot create the queue must exist
 	if !pr.create && queue == nil {
-		return "", aclCheck, nil
+		return "", nil
 	}
-	log.Log(log.Config).Info("Provided rule application placed",
+	log.Log(log.SchedApplication).Info("Provided rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, aclCheck, nil
+	return queueName, nil
 }

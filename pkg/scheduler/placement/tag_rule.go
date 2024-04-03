@@ -57,36 +57,35 @@ func (tr *tagRule) initialise(conf configs.PlacementRule) error {
 	return err
 }
 
-func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error) {
+func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// if the tag is not present we can skipp all other processing
 	tagVal := app.GetTag(tr.tagName)
 	if tagVal == "" {
-		return "", true, nil
+		return "", nil
 	}
 	// before anything run the filter
 	if !tr.filter.allowUser(app.GetUser()) {
-		log.Log(log.Config).Debug("Tag rule filtered",
+		log.Log(log.SchedApplication).Debug("Tag rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()),
 			zap.String("tagName", tr.tagName))
-		return "", true, nil
+		return "", nil
 	}
 	var parentName string
-	var aclCheck = true
 	var err error
 	queueName := tagVal
 	// if we have a fully qualified queue in the value do not run the parent rule
 	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
 		// run the parent rule if set
 		if tr.parent != nil {
-			parentName, aclCheck, err = tr.parent.placeApplication(app, queueFn)
+			parentName, err = tr.parent.placeApplication(app, queueFn)
 			// failed parent rule, fail this rule
 			if err != nil {
-				return "", aclCheck, err
+				return "", err
 			}
 			// rule did not match: this could be filter or create flag related
 			if parentName == "" {
-				return "", aclCheck, nil
+				return "", nil
 			}
 			// check if this is a parent queue and qualify it
 			if !strings.HasPrefix(parentName, configs.RootQueue+configs.DOT) {
@@ -95,7 +94,7 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 			// if the parent queue exists it cannot be a leaf
 			parentQueue := queueFn(parentName)
 			if parentQueue != nil && parentQueue.IsLeafQueue() {
-				return "", aclCheck, fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
+				return "", fmt.Errorf("parent rule returned a leaf queue: %s", parentName)
 			}
 		}
 		// the parent is set from the rule otherwise set it to the root
@@ -104,17 +103,18 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 		}
 		queueName = parentName + configs.DOT + replaceDot(tagVal)
 	}
-	log.Log(log.Config).Debug("Tag rule intermediate result",
+	// Log the result before we check the create flag
+	log.Log(log.SchedApplication).Debug("Tag rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
 	queue := queueFn(queueName)
 	// if we cannot create the queue it must exist, rule does not match otherwise
 	if !tr.create && queue == nil {
-		return "", aclCheck, nil
+		return "", nil
 	}
-	log.Log(log.Config).Info("Tag rule application placed",
+	log.Log(log.SchedApplication).Info("Tag rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, aclCheck, nil
+	return queueName, nil
 }

@@ -19,8 +19,7 @@
 package rmproxy
 
 import (
-	"sync"
-
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 )
 
@@ -28,7 +27,7 @@ import (
 type MockedRMProxy struct {
 	handled bool
 	events  []interface{}
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func NewMockedRMProxy() *MockedRMProxy {

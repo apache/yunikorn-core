@@ -1,3 +1,5 @@
+//go:build !race
+
 /*
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -16,44 +18,28 @@
  limitations under the License.
 */
 
-package mock
+//nolint:staticcheck
+package locking
 
 import (
-	"github.com/apache/yunikorn-core/pkg/locking"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+	"testing"
+	"time"
+
+	"gotest.tools/v3/assert"
 )
 
-type EventPlugin struct {
-	ResourceManagerCallback
-	records chan *si.EventRecord
+func TestDeadlockDetection(t *testing.T) {
+	enableTracking()
+	deadlockDetected.Store(false)
+	defer disableTracking()
 
-	locking.Mutex
-}
-
-func (m *EventPlugin) SendEvent(events []*si.EventRecord) {
-	m.Lock()
-	defer m.Unlock()
-
-	for _, event := range events {
-		m.records <- event
-	}
-}
-
-func (m *EventPlugin) GetNextEventRecord() *si.EventRecord {
-	m.Lock()
-	defer m.Unlock()
-
-	select {
-	case record := <-m.records:
-		return record
-	default:
-		return nil
-	}
-}
-
-// NewEventPlugin creates a mocked event plugin
-func NewEventPlugin() *EventPlugin {
-	return &EventPlugin{
-		records: make(chan *si.EventRecord, 3),
-	}
+	var mutex Mutex
+	go func() {
+		mutex.Lock()
+		mutex.Lock()   // will deadlock
+		mutex.Unlock() // will unwind second lock
+	}()
+	time.Sleep(2 * time.Second)
+	mutex.Unlock() // will unwind first lock
+	assert.Assert(t, IsDeadlockDetected(), "Deadlock should have been detected")
 }

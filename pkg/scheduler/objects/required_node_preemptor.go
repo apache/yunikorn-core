@@ -20,9 +20,9 @@ package objects
 
 import (
 	"sort"
-	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/locking"
 )
 
 type PreemptionContext struct {
@@ -30,7 +30,7 @@ type PreemptionContext struct {
 	requiredAsk *AllocationAsk
 	allocations []*Allocation
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func NewRequiredNodePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionContext {

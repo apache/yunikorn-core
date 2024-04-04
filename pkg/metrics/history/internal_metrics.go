@@ -19,8 +19,9 @@
 package history
 
 import (
-	"sync"
 	"time"
+
+	"github.com/apache/yunikorn-core/pkg/locking"
 )
 
 // This class collects basic information about the cluster
@@ -33,7 +34,7 @@ type InternalMetricsHistory struct {
 	// internal implementation of limited array
 	pointer int
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 type MetricsRecord struct {

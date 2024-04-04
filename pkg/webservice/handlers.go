@@ -39,6 +39,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
@@ -580,8 +581,10 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 func getClusterConfigDAO() *dao.ConfigDAOInfo {
 	// merge core config with extra config
 	conf := dao.ConfigDAOInfo{
-		SchedulerConfig: configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()),
-		Extra:           configs.GetConfigMap(),
+		SchedulerConfig:          configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()),
+		Extra:                    configs.GetConfigMap(),
+		DeadlockDetectionEnabled: locking.IsTrackingEnabled(),
+		DeadlockTimeoutSeconds:   locking.GetDeadlockTimeoutSeconds(),
 	}
 
 	return &conf

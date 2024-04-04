@@ -20,11 +20,11 @@ package ugm
 
 import (
 	"strings"
-	"sync"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
@@ -34,7 +34,7 @@ type GroupTracker struct {
 	queueTracker *QueueTracker     // Holds the actual resource usage of queue path where application run
 	events       *ugmEvents
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func newGroupTracker(groupName string, events *ugmEvents) *GroupTracker {

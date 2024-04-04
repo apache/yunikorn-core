@@ -23,10 +23,10 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	yunikornLog "github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -35,7 +35,7 @@ const (
 	stateLogCallDepth = 2
 )
 
-var stateDump sync.Mutex // ensures only one state dump can be handled at a time
+var stateDump locking.Mutex // ensures only one state dump can be handled at a time
 
 type AggregatedStateInfo struct {
 	Timestamp        int64                            `json:"timestamp,omitempty"`

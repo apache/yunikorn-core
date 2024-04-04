@@ -20,13 +20,13 @@ package scheduler
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -42,7 +42,7 @@ type HealthChecker struct {
 	period   time.Duration
 	enabled  bool
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {

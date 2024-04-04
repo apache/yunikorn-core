@@ -20,13 +20,13 @@ package metrics
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -65,13 +65,13 @@ type SchedulerMetrics struct {
 	sortingLatency        *prometheus.HistogramVec
 	tryNodeLatency        prometheus.Histogram
 	tryPreemptionLatency  prometheus.Histogram
-	lock                  sync.RWMutex
+	lock                  locking.RWMutex
 }
 
 // InitSchedulerMetrics to initialize scheduler metrics
 func InitSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{
-		lock: sync.RWMutex{},
+		lock: locking.RWMutex{},
 	}
 
 	s.nodeResourceUsage = make(map[string]*prometheus.GaugeVec) // Note: This map might be updated at runtime

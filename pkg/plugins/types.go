@@ -19,8 +19,7 @@
 package plugins
 
 import (
-	"sync"
-
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
 )
 
@@ -28,5 +27,5 @@ type SchedulerPlugins struct {
 	ResourceManagerCallbackPlugin api.ResourceManagerCallback
 	StateDumpPlugin               api.StateDumpPlugin
 
-	sync.RWMutex
+	locking.RWMutex
 }

@@ -19,8 +19,7 @@
 package events
 
 import (
-	"sync"
-
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -36,7 +35,7 @@ const defaultEventStoreSize = 1000
 type EventStore struct {
 	events []*si.EventRecord
 	idx    int // points where to store the next event
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func newEventStore() *EventStore {

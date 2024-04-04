@@ -2372,7 +2372,7 @@ func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
 		ReferenceID:       "app",
 	}
 	ev.AddEvent(queueEvent)
-	noEvents := 0
+	noEvents := uint64(0)
 	err := common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = ev.Store.CountStoredEvents()
 		return noEvents == 3

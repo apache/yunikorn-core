@@ -289,22 +289,16 @@ func (ec *EventSystemImpl) CloseAllStreams() {
 }
 
 func (ec *EventSystemImpl) reloadConfig() {
-	requestCapacity, ringBufferCapacity := ec.updateCapacity()
+	ec.Lock()
+	ec.requestCapacity = getRequestCapacity()
+	ec.ringBufferCapacity = getRingBufferCapacity()
+	ec.Unlock()
 
 	// resize the ring buffer & event store with new capacity
-	ec.Store.SetStoreSize(requestCapacity)
-	ec.eventBuffer.Resize(ringBufferCapacity)
+	ec.Store.SetStoreSize(ec.requestCapacity)
+	ec.eventBuffer.Resize(ec.ringBufferCapacity)
 
 	if ec.isRestartNeeded() {
 		ec.Restart()
 	}
-}
-
-func (ec *EventSystemImpl) updateCapacity() (uint64, uint64) {
-	ec.Lock()
-	defer ec.Unlock()
-	ec.requestCapacity = getRequestCapacity()
-	ec.ringBufferCapacity = getRingBufferCapacity()
-
-	return ec.requestCapacity, ec.ringBufferCapacity
 }

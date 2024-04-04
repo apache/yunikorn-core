@@ -35,7 +35,7 @@ import (
 // is high, calling CollectEvents() periodically should be fine.
 type EventStore struct {
 	events   []*si.EventRecord
-	idx      int // points where to store the next event
+	idx      uint64 // points where to store the next event
 	size     uint64
 	lastSize uint64
 	locking.RWMutex
@@ -52,7 +52,7 @@ func (es *EventStore) Store(event *si.EventRecord) {
 	es.Lock()
 	defer es.Unlock()
 
-	if es.idx == len(es.events) {
+	if es.idx == uint64(len(es.events)) {
 		metrics.GetEventMetrics().IncEventsNotStored()
 		return
 	}
@@ -69,8 +69,8 @@ func (es *EventStore) CollectEvents() []*si.EventRecord {
 	messages := es.events[:es.idx]
 	if es.size != es.lastSize {
 		log.Log(log.Events).Info("Resizing event store", zap.Uint64("last", es.lastSize), zap.Uint64("new", es.size))
+		es.events = make([]*si.EventRecord, es.size)
 	}
-	es.events = make([]*si.EventRecord, es.size)
 	es.idx = 0
 	es.lastSize = es.size
 
@@ -78,7 +78,7 @@ func (es *EventStore) CollectEvents() []*si.EventRecord {
 	return messages
 }
 
-func (es *EventStore) CountStoredEvents() int {
+func (es *EventStore) CountStoredEvents() uint64 {
 	es.RLock()
 	defer es.RUnlock()
 

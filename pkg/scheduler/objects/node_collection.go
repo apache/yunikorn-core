@@ -20,11 +20,11 @@ package objects
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/google/btree"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
@@ -79,7 +79,7 @@ type baseNodeCollection struct {
 	unreservedIterator *treeIterator
 	fullIterator       *treeIterator
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func (nc *baseNodeCollection) scoreNode(node *Node) float64 {

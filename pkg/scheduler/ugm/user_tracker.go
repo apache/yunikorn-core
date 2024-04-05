@@ -20,13 +20,13 @@ package ugm
 
 import (
 	"strings"
-	"sync"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -42,7 +42,7 @@ type UserTracker struct {
 	queueTracker     *QueueTracker // Holds the actual resource usage of queue path where application runs
 	events           *ugmEvents
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func newUserTracker(userName string, ugmEvents *ugmEvents) *UserTracker {

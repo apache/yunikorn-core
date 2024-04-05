@@ -20,6 +20,8 @@ package metrics
 
 import (
 	"sync"
+
+	"github.com/apache/yunikorn-core/pkg/locking"
 )
 
 const (
@@ -41,7 +43,7 @@ type Metrics struct {
 	queues    map[string]*QueueMetrics
 	event     *EventMetrics
 	runtime   *RuntimeMetrics
-	lock      sync.RWMutex
+	lock      locking.RWMutex
 }
 
 func init() {
@@ -50,7 +52,7 @@ func init() {
 			scheduler: InitSchedulerMetrics(),
 			queues:    make(map[string]*QueueMetrics),
 			event:     initEventMetrics(),
-			lock:      sync.RWMutex{},
+			lock:      locking.RWMutex{},
 			runtime:   initRuntimeMetrics(),
 		}
 	})

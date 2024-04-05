@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -35,6 +34,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
@@ -89,7 +89,7 @@ type Queue struct {
 	template               *template.Template
 	queueEvents            *queueEvents
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 // newBlankQueue creates a new empty queue objects with all values initialised.

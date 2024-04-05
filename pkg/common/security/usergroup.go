@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -46,7 +47,7 @@ var stopped atomic.Bool      // whether UserGroupCache is stopped (needed for mu
 
 // Cache for the user entries.
 type UserGroupCache struct {
-	lock     sync.RWMutex
+	lock     locking.RWMutex
 	interval time.Duration
 	ugs      map[string]*UserGroup
 	// methods that allow mocking of the class or extending to use non OS solutions

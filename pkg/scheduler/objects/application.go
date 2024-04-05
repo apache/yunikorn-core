@@ -35,6 +35,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
@@ -118,7 +119,7 @@ type Application struct {
 	appEvents             *applicationEvents
 	sendStateChangeEvents bool // whether to send state-change events or not (simplifies testing)
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {

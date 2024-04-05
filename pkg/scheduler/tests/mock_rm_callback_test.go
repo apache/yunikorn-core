@@ -19,13 +19,13 @@
 package tests
 
 import (
-	"sync"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -39,7 +39,7 @@ type mockRMCallback struct {
 	nodeAllocations      map[string][]*si.Allocation
 	Allocations          map[string]*si.Allocation
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func newMockRMCallbackHandler() *mockRMCallback {

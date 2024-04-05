@@ -31,6 +31,7 @@ require (
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.45.0
+	github.com/sasha-s/go-deadlock v0.3.1
 	go.uber.org/zap v1.26.0
 	golang.org/x/net v0.21.0
 	golang.org/x/time v0.5.0
@@ -45,6 +46,7 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
+	github.com/petermattis/goid v0.0.0-20240327183114-c42a807a84ba // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect
@@ -54,6 +56,7 @@ require (
 )
 
 replace (
+	github.com/petermattis/goid => github.com/petermattis/goid v0.0.0-20240327183114-c42a807a84ba
 	golang.org/x/crypto => golang.org/x/crypto v0.19.0
 	golang.org/x/net => golang.org/x/net v0.21.0
 	golang.org/x/sys => golang.org/x/sys v0.17.0

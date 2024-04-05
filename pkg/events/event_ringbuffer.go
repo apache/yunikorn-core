@@ -20,10 +20,10 @@ package events
 
 import (
 	"strconv"
-	"sync"
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -51,7 +51,7 @@ type eventRingBuffer struct {
 	lowestId     uint64 // lowest id of an event record available in the buffer at any given time
 	resizeOffset uint64 // used to aid the calculation of id->pos after resize (see id2pos)
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 // Add adds an event to the ring buffer. If the buffer is full, the oldest element is overwritten.

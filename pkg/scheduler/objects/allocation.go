@@ -21,13 +21,13 @@ package objects
 import (
 	"fmt"
 	"strconv"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -74,7 +74,7 @@ type Allocation struct {
 	preempted             bool
 	instType              string
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {

@@ -20,7 +20,6 @@ package objects
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -28,6 +27,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -64,7 +64,7 @@ type AllocationAsk struct {
 	userQuotaCheckFailed bool
 	headroomCheckFailed  bool
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 type AllocationLogEntry struct {

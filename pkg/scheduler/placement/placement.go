@@ -21,12 +21,12 @@ package placement
 import (
 	"errors"
 	"strings"
-	"sync"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
@@ -39,7 +39,7 @@ type AppPlacementManager struct {
 	rules   []rule
 	queueFn func(string) *objects.Queue
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func NewPlacementManager(rules []configs.PlacementRule, queueFunc func(string) *objects.Queue) *AppPlacementManager {

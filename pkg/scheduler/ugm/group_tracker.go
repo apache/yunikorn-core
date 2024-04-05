@@ -48,20 +48,20 @@ func newGroupTracker(groupName string, events *ugmEvents) *GroupTracker {
 	return groupTracker
 }
 
-func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user string) bool {
+func (gt *GroupTracker) increaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, user string) {
 	if gt == nil {
-		return true
+		return
 	}
 	gt.Lock()
 	defer gt.Unlock()
 	gt.events.sendIncResourceUsageForGroup(gt.groupName, queuePath, usage)
 	gt.applications[applicationID] = user
-	return gt.queueTracker.increaseTrackedResource(strings.Split(queuePath, configs.DOT), applicationID, group, usage)
+	gt.queueTracker.increaseTrackedResource(strings.Split(queuePath, configs.DOT), applicationID, group, usage)
 }
 
-func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
+func (gt *GroupTracker) decreaseTrackedResource(queuePath, applicationID string, usage *resources.Resource, removeApp bool) bool {
 	if gt == nil {
-		return false, true
+		return false
 	}
 	gt.Lock()
 	defer gt.Unlock()

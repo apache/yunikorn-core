@@ -88,7 +88,7 @@ const (
 )
 
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
-func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource) bool {
+func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource) {
 	log.Log(log.SchedUGM).Debug("Increasing resource usage",
 		zap.Int("tracking type", int(trackType)),
 		zap.String("queue path", qt.queuePath),
@@ -103,9 +103,7 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		if qt.childQueueTrackers[childName] == nil {
 			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType)
 		}
-		if !qt.childQueueTrackers[childName].increaseTrackedResource(hierarchy[1:], applicationID, trackType, usage) {
-			return false
-		}
+		qt.childQueueTrackers[childName].increaseTrackedResource(hierarchy[1:], applicationID, trackType, usage)
 	}
 	if qt.resourceUsage == nil {
 		qt.resourceUsage = resources.NewResource()
@@ -122,11 +120,10 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		zap.Bool("use wild card", qt.useWildCard),
 		zap.Stringer("total resource after increasing", qt.resourceUsage),
 		zap.Int("total applications after increasing", len(qt.runningApplications)))
-	return true
 }
 
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
-func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, removeApp bool) (bool, bool) {
+func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationID string, usage *resources.Resource, removeApp bool) bool {
 	log.Log(log.SchedUGM).Debug("Decreasing resource usage",
 		zap.String("queue path", qt.queuePath),
 		zap.Strings("hierarchy", hierarchy),
@@ -140,12 +137,9 @@ func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationI
 		if qt.childQueueTrackers[childName] == nil {
 			log.Log(log.SchedUGM).Error("Child queueTracker tracker must be available in child queues map",
 				zap.String("child queueTracker name", childName))
-			return false, false
+			return false
 		}
-		removeQT, decreased := qt.childQueueTrackers[childName].decreaseTrackedResource(hierarchy[1:], applicationID, usage, removeApp)
-		if !decreased {
-			return false, decreased
-		}
+		removeQT := qt.childQueueTrackers[childName].decreaseTrackedResource(hierarchy[1:], applicationID, usage, removeApp)
 		if removeQT {
 			log.Log(log.SchedUGM).Debug("Removed queue tracker linkage from its parent",
 				zap.String("queue path ", qt.queuePath),
@@ -175,7 +169,7 @@ func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationI
 	log.Log(log.SchedUGM).Debug("Remove queue tracker",
 		zap.String("queue path ", qt.queuePath),
 		zap.Bool("remove QT", removeQT))
-	return removeQT, true
+	return removeQT
 }
 
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.

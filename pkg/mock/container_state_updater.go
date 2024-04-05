@@ -19,15 +19,14 @@
 package mock
 
 import (
-	"sync"
-
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type ContainerStateUpdater struct {
 	ResourceManagerCallback
 	sentUpdate *si.UpdateContainerSchedulingStateRequest
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func (m *ContainerStateUpdater) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {

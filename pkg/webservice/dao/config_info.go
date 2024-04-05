@@ -28,4 +28,6 @@ type ValidateConfResponse struct {
 type ConfigDAOInfo struct {
 	*configs.SchedulerConfig `yaml:",inline"`
 	Extra                    map[string]string `yaml:",omitempty" json:",omitempty"`
+	DeadlockDetectionEnabled bool
+	DeadlockTimeoutSeconds   int
 }

@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"math"
 	"strconv"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
@@ -31,6 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
@@ -55,7 +55,7 @@ type ClusterContext struct {
 	rmInfo    map[string]*RMInformation
 	startTime time.Time
 
-	sync.RWMutex
+	locking.RWMutex
 
 	lastHealthCheckResult *dao.SchedulerHealthDAOInfo
 }

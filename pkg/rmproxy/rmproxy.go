@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
-	"sync"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/plugins"
@@ -47,7 +47,7 @@ type RMProxy struct {
 
 	rmIDToCallback map[string]api.ResourceManagerCallback
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func (rmp *RMProxy) GetRMEventHandler() handler.EventHandler {

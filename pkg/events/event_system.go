@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -94,7 +95,7 @@ type EventSystemImpl struct {
 	requestCapacity    int
 	ringBufferCapacity uint64
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 // CreateEventStream creates an event stream. See the interface for details.

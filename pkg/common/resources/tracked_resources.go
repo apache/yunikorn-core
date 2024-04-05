@@ -21,8 +21,9 @@ package resources
 import (
 	"fmt"
 	"strings"
-	"sync"
 	"time"
+
+	"github.com/apache/yunikorn-core/pkg/locking"
 )
 
 // TrackedResource is a utility struct to keep track of application resource usage.
@@ -32,7 +33,7 @@ type TrackedResource struct {
 	//   resource type (CPU, memory, etc.) -> aggregated used time (in seconds) of the resource type.
 	TrackedResourceMap map[string]map[string]int64
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 // NewTrackedResource creates a new instance of TrackedResource.

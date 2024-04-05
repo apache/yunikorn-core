@@ -30,6 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -47,7 +48,7 @@ type Manager struct {
 	userLimits                map[string]map[string]*LimitConfig // Holds queue path * user limit config
 	groupLimits               map[string]map[string]*LimitConfig // Holds queue path * group limit config
 	events                    *ugmEvents
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func newManager() *Manager {

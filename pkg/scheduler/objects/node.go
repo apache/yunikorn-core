@@ -22,12 +22,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -60,7 +60,7 @@ type Node struct {
 	listeners    []NodeListener          // a list of node listeners
 	nodeEvents   *nodeEvents
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func NewNode(proto *si.NodeInfo) *Node {

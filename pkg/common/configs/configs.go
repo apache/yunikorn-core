@@ -19,9 +19,9 @@
 package configs
 
 import (
-	"sync"
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -52,14 +52,14 @@ var ConfigContext *SchedulerConfigContext
 
 var configMap map[string]string
 var configMapCallbacks map[string]func()
-var configMapLock sync.RWMutex
+var configMapLock locking.RWMutex
 
 func init() {
 	configMap = make(map[string]string)
 	configMapCallbacks = make(map[string]func())
 	ConfigContext = &SchedulerConfigContext{
 		configs: make(map[string]*SchedulerConfig),
-		lock:    &sync.RWMutex{},
+		lock:    &locking.RWMutex{},
 	}
 
 	// add a callback to reconfigure logging
@@ -71,7 +71,7 @@ func init() {
 // scheduler config context provides thread-safe access for scheduler configurations
 type SchedulerConfigContext struct {
 	configs map[string]*SchedulerConfig
-	lock    *sync.RWMutex
+	lock    *locking.RWMutex
 }
 
 func (ctx *SchedulerConfigContext) Set(policyGroup string, config *SchedulerConfig) {

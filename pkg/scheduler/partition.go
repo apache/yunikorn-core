@@ -24,7 +24,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -34,6 +33,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -75,7 +75,7 @@ type PartitionContext struct {
 	// while manipulating the application.
 	// Similarly adding, updating or removing a node or a queue should only hold the partition write lock
 	// while manipulating the partition information not while manipulating the underlying objects.
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterContext) (*PartitionContext, error) {

@@ -19,11 +19,11 @@
 package events
 
 import (
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -36,7 +36,7 @@ type EventStreaming struct {
 	buffer       *eventRingBuffer
 	stopCh       chan struct{}
 	eventStreams map[*EventStream]eventConsumerDetails
-	sync.RWMutex
+	locking.RWMutex
 }
 
 type eventConsumerDetails struct {

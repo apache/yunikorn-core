@@ -21,12 +21,12 @@ package webservice
 import (
 	"fmt"
 	"strconv"
-	"sync"
 	"sync/atomic"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -41,7 +41,7 @@ type StreamingLimiter struct {
 	maxStreams        uint64 // maximum number of event streams
 	maxPerHostStreams uint64 // maximum number of event streams per host
 
-	sync.Mutex
+	locking.Mutex
 }
 
 func NewStreamingLimiter() *StreamingLimiter {

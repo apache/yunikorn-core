@@ -19,9 +19,8 @@
 package examples
 
 import (
-	"sync"
-
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -35,7 +34,7 @@ type exampleRMCallback struct {
 	nodeAllocations      map[string][]*si.Allocation
 	Allocations          map[string]*si.Allocation
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) error {

@@ -19,9 +19,12 @@
 package webservice
 
 import (
+	"compress/gzip"
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -43,7 +46,7 @@ type WebService struct {
 func newRouter() *httprouter.Router {
 	router := httprouter.New()
 	for _, webRoute := range webRoutes {
-		handler := loggingHandler(webRoute.HandlerFunc, webRoute.Name)
+		handler := gzipHandler(loggingHandler(webRoute.HandlerFunc, webRoute.Name))
 		router.Handler(webRoute.Method, webRoute.Pattern, handler)
 	}
 	return router
@@ -93,4 +96,28 @@ func (m *WebService) StopWebApp() error {
 	}
 
 	return nil
+}
+
+type gzipResponseWriter struct {
+	io.Writer
+	http.ResponseWriter
+}
+
+func (w gzipResponseWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+func gzipHandler(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			fn(w, r)
+			return
+		}
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Del("Content-Length")
+		gz := gzip.NewWriter(w)
+		defer gz.Close()
+		gzr := gzipResponseWriter{Writer: gz, ResponseWriter: w}
+		fn(gzr, r)
+	}
 }

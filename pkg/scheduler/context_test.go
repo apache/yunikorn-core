@@ -19,7 +19,6 @@
 package scheduler
 
 import (
-	"strconv"
 	"strings"
 	"testing"
 
@@ -268,48 +267,15 @@ func TestContext_ProcessNode(t *testing.T) {
 	}
 }
 
-func TestContextUpdateNodeMetrics(t *testing.T) {
-	metrics.GetSchedulerMetrics().Reset()
-	context := createTestContext(t, pName)
-
-	n := getNodeInfoForAddingNode(true)
-
-	err := context.addNode(n, true)
-	assert.NilError(t, err, "unexpected error returned from addNode")
-	verifyMetrics(t, 1, "active")
-
-	// Update: node became unhealthy
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_UPDATE, false)
-	context.updateNode(n)
-	verifyMetrics(t, 1, "unhealthy")
-
-	// Update: node became healthy
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_UPDATE, true)
-	context.updateNode(n)
-	verifyMetrics(t, 0, "unhealthy")
-}
-
-func TestContextAddUnhealthyNodeMetrics(t *testing.T) {
-	metrics.GetSchedulerMetrics().Reset()
-	context := createTestContext(t, pName)
-
-	n := getNodeInfoForAddingNode(false)
-
-	err := context.addNode(n, true)
-	assert.NilError(t, err, "unexpected error returned from addNode")
-	verifyMetrics(t, 1, "active")
-	verifyMetrics(t, 1, "unhealthy")
-}
-
 func TestContextDrainingNodeMetrics(t *testing.T) {
 	metrics.GetSchedulerMetrics().Reset()
 	context := createTestContext(t, pName)
 
-	n := getNodeInfoForAddingNode(true)
+	n := getNodeInfoForAddingNode()
 	err := context.addNode(n, true)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE, true)
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE)
 	context.updateNode(n)
 	verifyMetrics(t, 1, "draining")
 }
@@ -318,39 +284,37 @@ func TestContextDrainingNodeBackToSchedulableMetrics(t *testing.T) {
 	metrics.GetSchedulerMetrics().Reset()
 	context := createTestContext(t, pName)
 
-	n := getNodeInfoForAddingNode(true)
+	n := getNodeInfoForAddingNode()
 	err := context.addNode(n, true)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE, true)
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE)
 	context.updateNode(n)
 
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_TO_SCHEDULABLE, true)
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_TO_SCHEDULABLE)
 	context.updateNode(n)
 	verifyMetrics(t, 0, "draining")
 }
 
-func getNodeInfoForAddingNode(ready bool) *si.NodeInfo {
+func getNodeInfoForAddingNode() *si.NodeInfo {
 	n := &si.NodeInfo{
 		NodeID:              "test-1",
 		Action:              si.NodeInfo_UNKNOWN_ACTION_FROM_RM,
 		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
 		Attributes: map[string]string{
-			siCommon.NodePartition:      pName,
-			siCommon.NodeReadyAttribute: strconv.FormatBool(ready),
+			siCommon.NodePartition: pName,
 		},
 	}
 
 	return n
 }
 
-func getNodeInfoForUpdatingNode(action si.NodeInfo_ActionFromRM, ready bool) *si.NodeInfo {
+func getNodeInfoForUpdatingNode(action si.NodeInfo_ActionFromRM) *si.NodeInfo {
 	n := &si.NodeInfo{
 		NodeID: "test-1",
 		Action: action,
 		Attributes: map[string]string{
-			siCommon.NodePartition:      pName,
-			siCommon.NodeReadyAttribute: strconv.FormatBool(ready),
+			siCommon.NodePartition: pName,
 		},
 	}
 

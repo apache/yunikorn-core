@@ -43,7 +43,7 @@ func (trw *MockResponseWriter) Header() http.Header {
 }
 
 func (trw *MockResponseWriter) Write(bytes []byte) (int, error) {
-	trw.outputBytes = bytes
+	trw.outputBytes = append(trw.outputBytes, bytes...)
 	return len(bytes), nil
 }
 

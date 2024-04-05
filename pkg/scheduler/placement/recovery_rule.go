@@ -28,31 +28,31 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 )
 
+// A rule to place an application into the recovery queue if no other rules matched and application submission is forced.
+// This rule will be run implicitly after all other placement rules are evaluated to ensure that an application
+// corresponding to an already-executing workload can be accepted successfully.
 type recoveryRule struct {
 	basicRule
 }
 
-// A rule to place an application into the recovery queue if no other rules matched and application submission is forced.
-// This rule will be run implicitly after all other placement rules are evaluated to ensure that an application
-// corresponding to an already-executing workload can be accepted successfully.
 func (rr *recoveryRule) getName() string {
 	return types.Recovery
 }
 
-func (rr *recoveryRule) initialise(conf configs.PlacementRule) error {
+func (rr *recoveryRule) initialise(_ configs.PlacementRule) error {
 	// no configuration needed for the recovery rule
 	return nil
 }
 
-func (rr *recoveryRule) placeApplication(app *objects.Application, _ func(string) *objects.Queue) (string, bool, error) {
+func (rr *recoveryRule) placeApplication(app *objects.Application, _ func(string) *objects.Queue) (string, error) {
 	// only forced applications should resolve to the recovery queue
 	if !app.IsCreateForced() {
-		return "", false, nil
+		return "", nil
 	}
 
 	queueName := common.RecoveryQueueFull
-	log.Log(log.Config).Info("Recovery rule application placed",
+	log.Log(log.SchedApplication).Info("Recovery rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	return queueName, false, nil
+	return queueName, nil
 }

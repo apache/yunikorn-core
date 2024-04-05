@@ -632,8 +632,8 @@ func TestQueueStates(t *testing.T) {
 		t.Errorf("leaf queue is not marked draining: %v", err)
 	}
 	err = leaf.handleQueueEvent(Start)
-	if err == nil || !leaf.IsDraining() {
-		t.Errorf("leaf queue changed state which should not happen: %v", err)
+	if err != nil || !leaf.IsRunning() {
+		t.Errorf("leaf queue is not marked running: %v", err)
 	}
 }
 
@@ -647,21 +647,21 @@ func TestSortApplications(t *testing.T) {
 	// empty parent queue
 	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue: %v")
-	if apps := parent.sortApplications(true, false); apps != nil {
+	if apps := parent.sortApplications(false); apps != nil {
 		t.Errorf("parent queue should not return sorted apps: %v", apps)
 	}
 
 	// empty leaf queue
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
-	if len(leaf.sortApplications(true, false)) != 0 {
+	if len(leaf.sortApplications(false)) != 0 {
 		t.Errorf("empty queue should return no app from sort: %v", leaf)
 	}
 	// new app does not have pending res, does not get returned
 	app := newApplication(appID1, "default", leaf.QueuePath)
 	app.queue = leaf
 	leaf.AddApplication(app)
-	if len(leaf.sortApplications(true, false)) != 0 {
+	if len(leaf.sortApplications(false)) != 0 {
 		t.Errorf("app without ask should not be in sorted apps: %v", app)
 	}
 	var res *resources.Resource
@@ -670,71 +670,15 @@ func TestSortApplications(t *testing.T) {
 	// add an ask app must be returned
 	err = app.AddAllocationAsk(newAllocationAsk("alloc-1", appID1, res))
 	assert.NilError(t, err, "failed to add allocation ask")
-	sortedApp := leaf.sortApplications(true, false)
+	sortedApp := leaf.sortApplications(false)
 	if len(sortedApp) != 1 || sortedApp[0].ApplicationID != appID1 {
 		t.Errorf("sorted application is missing expected app: %v", sortedApp)
 	}
 	// set 0 repeat
 	_, err = app.UpdateAskRepeat("alloc-1", -1)
-	if err != nil || len(leaf.sortApplications(true, false)) != 0 {
+	if err != nil || len(leaf.sortApplications(false)) != 0 {
 		t.Errorf("app with ask but 0 pending resources should not be in sorted apps: %v (err = %v)", app, err)
 	}
-}
-
-func TestSortApplicationsWithoutFiltering(t *testing.T) {
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-
-	var leaf *Queue
-	properties := map[string]string{configs.ApplicationSortPolicy: "stateaware"}
-	leaf, err = createManagedQueueWithProps(root, "leaf", false, nil, properties)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-
-	// new app does not have pending res, does not get returned
-	app1 := newApplication(appID1, "default", leaf.QueuePath)
-	app1.queue = leaf
-	leaf.AddApplication(app1)
-
-	app2 := newApplication(appID2, "default", leaf.QueuePath)
-	app2.queue = leaf
-	leaf.AddApplication(app2)
-
-	// both apps have no pending resource, they will be excluded by the sorting result
-	apps := leaf.sortApplications(true, false)
-	assertAppListLength(t, apps, []string{}, "sort with the filter")
-	apps = leaf.sortApplications(false, false)
-	assertAppListLength(t, apps, []string{}, "sort without the filter")
-
-	// add pending ask to app1
-	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
-	assert.NilError(t, err, "failed to create basic resource")
-	// add an ask app must be returned
-	err = app1.AddAllocationAsk(newAllocationAsk("app1-alloc-1", appID1, res))
-	assert.NilError(t, err, "failed to add allocation ask")
-
-	// the sorting result will return app1
-	apps = leaf.sortApplications(true, false)
-	assertAppListLength(t, apps, []string{appID1}, "sort with the filter")
-	apps = leaf.sortApplications(false, false)
-	assertAppListLength(t, apps, []string{appID1}, "sort without the filter")
-
-	// add pending ask to app2
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "1"})
-	assert.NilError(t, err, "failed to create basic resource")
-	// add an ask app must be returned
-	err = app2.AddAllocationAsk(newAllocationAsk("app2-alloc-1", appID2, res))
-	assert.NilError(t, err, "failed to add allocation ask")
-
-	// now there are 2 apps in the queue
-	// according to the state aware policy, if we sort with the filter
-	// only 1 app will be returning in the result; if sort without the filter
-	// it should return the both 2 apps
-	apps = leaf.sortApplications(true, false)
-	assertAppListLength(t, apps, []string{appID1}, "sort with the filter")
-	apps = leaf.sortApplications(false, false)
-	assertAppListLength(t, apps, []string{appID1, appID2}, "sort without the filter")
 }
 
 func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
@@ -758,9 +702,7 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	app1.AddAllocation(alloc)
 	err = app1.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
 	assert.NilError(t, err, "could not add ask")
-	phApps := leaf.sortApplications(true, true)
-	assert.Equal(t, 1, len(phApps))
-	phApps = leaf.sortApplications(false, true)
+	phApps := leaf.sortApplications(true)
 	assert.Equal(t, 1, len(phApps))
 
 	// adding a placeholder allocation & pending request to "app2"
@@ -769,9 +711,7 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	app2.AddAllocation(alloc2)
 	err = app2.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
 	assert.NilError(t, err, "could not add ask")
-	phApps = leaf.sortApplications(true, true)
-	assert.Equal(t, 2, len(phApps))
-	phApps = leaf.sortApplications(false, true)
+	phApps = leaf.sortApplications(true)
 	assert.Equal(t, 2, len(phApps))
 }
 
@@ -1668,11 +1608,6 @@ func TestSupportTaskGroup(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Assert(t, leaf.SupportTaskGroup(), "leaf queue (FIFO policy) should support task group")
 
-	properties = map[string]string{configs.ApplicationSortPolicy: "StateAware"}
-	leaf, err = createManagedQueueWithProps(parent, "leaf2", false, nil, properties)
-	assert.NilError(t, err, "failed to create queue: %v", err)
-	assert.Assert(t, leaf.SupportTaskGroup(), "leaf queue (StateAware policy) should support task group")
-
 	properties = map[string]string{configs.ApplicationSortPolicy: "fair"}
 	leaf, err = createManagedQueueWithProps(parent, "leaf3", false, nil, properties)
 	assert.NilError(t, err, "failed to create queue: %v", err)
@@ -1909,33 +1844,51 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 
 	// disabling preemption on victim queue should remove victims from consideration
 	leaf2.preemptionPolicy = policies.DisabledPreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	leaf2.preemptionPolicy = policies.DefaultPreemptionPolicy
 
 	// fencing parent1 queue should limit scope
 	parent1.preemptionPolicy = policies.FencePreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root.parent1")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	parent1.preemptionPolicy = policies.DefaultPreemptionPolicy
 
 	// fencing leaf1 queue should limit scope
 	leaf1.preemptionPolicy = policies.FencePreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root.parent1.leaf1")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	leaf1.preemptionPolicy = policies.DefaultPreemptionPolicy
 
 	// fencing parent2 queue should not limit scope
 	parent2.preemptionPolicy = policies.FencePreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
 	parent2.preemptionPolicy = policies.DefaultPreemptionPolicy
 
 	// fencing leaf2 queue should not limit scope
 	leaf2.preemptionPolicy = policies.FencePreemptionPolicy
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 5, len(snapshot), "wrong victim count")
 	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
 	leaf2.preemptionPolicy = policies.DefaultPreemptionPolicy
+
+	// fencing using max resources and usage comparison check
+	// parent1 queue is full. usage has reached max resources.
+	// even though root.parent1 and root.parent1.leaf1 policy is DefaultPreemptionPolicy, still root.parent1 would be fenced
+	used := parent1.allocatedResource
+	parent1.allocatedResource = parent1.maxResource
+	assert.Equal(t, parent1.preemptionPolicy, policies.DefaultPreemptionPolicy)
+	assert.Equal(t, leaf1.preemptionPolicy, policies.DefaultPreemptionPolicy)
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, parent1.QueuePath)
+	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 0, len(victims(snapshot)), "wrong victim count")
+	parent1.allocatedResource = used
 
 	// requiring a specific node take alloc out of consideration
 	alloc2.GetAsk().SetRequiredNode(nodeID1)
@@ -2255,6 +2208,35 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Equal(t, len(childNonLeaf.properties), 0)
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
+}
+
+func TestResetRunningState(t *testing.T) {
+	emptyConf := configs.QueueConfig{
+		Name: "not_used",
+	}
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	// single parent under root
+	var parent *Queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+	var leaf *Queue
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	if len(parent.children) == 0 {
+		t.Error("leaf queue is not added to the parent queue")
+	}
+	parent.MarkQueueForRemoval()
+	assert.Assert(t, parent.IsDraining(), "parent should be marked as draining")
+	assert.Assert(t, leaf.IsDraining(), "leaf should be marked as draining")
+	err = parent.applyConf(emptyConf)
+	assert.NilError(t, err, "failed to update parent")
+	assert.Assert(t, parent.IsRunning(), "parent should be running again")
+	assert.Assert(t, leaf.IsDraining(), "leaf should still be marked as draining")
+	err = leaf.applyConf(emptyConf)
+	assert.NilError(t, err, "failed to update leaf")
+	assert.Assert(t, leaf.IsRunning(), "leaf should be running again")
 }
 
 func TestNewRecoveryQueue(t *testing.T) {
@@ -2655,7 +2637,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 
 	alloc := NewAllocation(nodeID1, ask)
 	app.AddAllocation(alloc)
-	assert.Equal(t, app.CurrentState(), Starting.String(), "app state should be starting")
+	assert.Equal(t, app.CurrentState(), Running.String(), "app state should be running")
 	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
 
 	_, err = app.updateAskRepeatInternal(ask, -1)

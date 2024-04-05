@@ -50,15 +50,15 @@ func TestStateTransition(t *testing.T) {
 	assert.Assert(t, err == nil)
 	assert.Equal(t, stateMachine.Current(), Draining.String())
 
-	// start on draining not allowed
-	err = stateMachine.Event(context.Background(), Start.String(), "test_object")
-	assert.Assert(t, err != nil)
-	assert.Equal(t, stateMachine.Current(), Draining.String())
-
 	// stop on draining not allowed
 	err = stateMachine.Event(context.Background(), Stop.String(), "test_object")
 	assert.Assert(t, err != nil)
 	assert.Equal(t, stateMachine.Current(), Draining.String())
+
+	// draining to active
+	err = stateMachine.Event(context.Background(), Start.String(), "test_object")
+	assert.Assert(t, err == nil)
+	assert.Equal(t, stateMachine.Current(), Active.String())
 }
 
 func TestTransitionToSelf(t *testing.T) {

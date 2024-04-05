@@ -45,7 +45,7 @@ partitions:
       - name: root
         submitacl: '*'
         properties:
-          application.sort.policy: stateaware
+          application.sort.policy: fifo
           sample: value2
 `
 
@@ -1714,7 +1714,7 @@ partitions:
       - name: root
         submitacl: '*'
         properties:
-            application.sort.policy: stateaware
+            application.sort.policy: fifo
 `
 	testCases := []struct {
 		name          string

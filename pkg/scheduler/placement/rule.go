@@ -38,9 +38,8 @@ type rule interface {
 
 	// Execute the rule and return the queue getName the application is placed in.
 	// Returns the fully qualified queue getName if the rule finds a queue or an empty string if the rule did not match.
-	// Additionally, returns true if ACLs should be checked or false otherwise.
 	// The error must only be set if there is a failure while executing the rule not if the rule did not match.
-	placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, bool, error)
+	placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error)
 
 	// Return the getName of the rule which is defined in the rule.
 	// The basicRule provides a "unnamed rule" implementation.

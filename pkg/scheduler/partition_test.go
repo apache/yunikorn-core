@@ -1064,32 +1064,6 @@ func TestAddAppTaskGroup(t *testing.T) {
 	if err == nil || partition.getApplication(appID2) != nil {
 		t.Errorf("add application should have failed due to queue sort policy but did not")
 	}
-
-	// queue with stateaware as sort policy, with a max set smaller than placeholder ask: app add should fail
-	err = queue.ApplyConf(configs.QueueConfig{
-		Name:       "default",
-		Parent:     false,
-		Queues:     nil,
-		Properties: map[string]string{configs.ApplicationSortPolicy: "stateaware"},
-		Resources:  configs.Resources{Max: map[string]string{"vcore": "5"}},
-	})
-	assert.NilError(t, err, "updating queue should not have failed (stateaware & max)")
-	queue.UpdateQueueProperties()
-	err = partition.AddApplication(app)
-	if err == nil || partition.getApplication(appID2) != nil {
-		t.Errorf("add application should have failed due to max queue resource but did not")
-	}
-
-	// queue with stateaware as sort policy, with a max set larger than placeholder ask: app add works
-	err = queue.ApplyConf(configs.QueueConfig{
-		Name:      "default",
-		Parent:    false,
-		Queues:    nil,
-		Resources: configs.Resources{Max: map[string]string{"vcore": "20"}},
-	})
-	assert.NilError(t, err, "updating queue should not have failed (max resource)")
-	err = partition.AddApplication(app)
-	assert.NilError(t, err, "add application to partition should not have failed")
 }
 
 func TestRemoveApp(t *testing.T) {
@@ -1450,6 +1424,67 @@ func TestUpdateQueues(t *testing.T) {
 	assertUpdateQueues(t, "both", map[string]string{"vcore": "5", "memory": "2"})
 	assertUpdateQueues(t, "both", map[string]string{"vcore": "5"})
 	assertUpdateQueues(t, "both", map[string]string{})
+}
+
+func TestReAddQueues(t *testing.T) {
+	conf := []configs.QueueConfig{
+		{
+			Name:   "parent",
+			Parent: true,
+			Queues: []configs.QueueConfig{
+				{
+					Name:   "leaf",
+					Parent: false,
+					Queues: nil,
+				},
+			},
+		},
+	}
+
+	confDefault := []configs.QueueConfig{
+		{
+			Name:   "default",
+			Parent: false,
+			Queues: nil,
+		},
+		{
+			Name:   "parent",
+			Parent: true,
+			Queues: nil,
+		},
+	}
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	// There is a queue setup as the config must be valid when we run
+	root := partition.GetQueue("root")
+	if root == nil {
+		t.Error("root queue not found in partition")
+	}
+	def := partition.GetQueue(defQueue)
+	if def == nil {
+		t.Fatal("default queue should exist")
+	}
+	err = partition.updateQueues(conf, root)
+	assert.NilError(t, err, "queue update from config failed")
+	leaf := partition.GetQueue("root.parent.leaf")
+	if leaf == nil {
+		t.Fatal("leaf queue should be created")
+	}
+	assert.Assert(t, def.IsDraining(), "'root.default' queue should have been marked for removal")
+	err = partition.updateQueues(confDefault, root)
+	assert.NilError(t, err, "queue update from config default failed")
+	assert.Assert(t, def.IsRunning(), "'root.default' queue should have been marked running again")
+	assert.Assert(t, leaf.IsDraining(), "'root.parent.leaf' queue should have been marked for removal")
+	partition.partitionManager.cleanQueues(root)
+	leaf = partition.GetQueue("root.parent.leaf")
+	if leaf != nil {
+		t.Fatal("leaf queue should have been cleaned up")
+	}
+	def = partition.GetQueue(defQueue)
+	if def == nil {
+		t.Fatal("default queue should still exist")
+	}
 }
 
 func TestGetApplication(t *testing.T) {
@@ -3715,7 +3750,7 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 	assert.Equal(t, alloc.GetReleaseCount(), 0, "released allocations should have been 0")
 	assert.Equal(t, alloc.GetApplicationID(), appID1, "expected application app-1 to be allocated")
 	assert.Equal(t, alloc.GetAllocationKey(), "alloc-2", "expected ask alloc-2 to be allocated")
-	assert.Equal(t, app.CurrentState(), objects.Starting.String(), "application should have moved to starting state")
+	assert.Equal(t, app.CurrentState(), objects.Running.String(), "application should have moved to running state")
 
 	// allocation should still fail: max running apps on parent reached
 	alloc = partition.tryAllocate()

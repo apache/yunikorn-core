@@ -70,7 +70,6 @@ func init() {
 
 	allowedAppActiveStatuses["new"] = true
 	allowedAppActiveStatuses["accepted"] = true
-	allowedAppActiveStatuses["starting"] = true
 	allowedAppActiveStatuses["running"] = true
 	allowedAppActiveStatuses["completing"] = true
 	allowedAppActiveStatuses["failing"] = true

@@ -143,11 +143,11 @@ partitions:
       - 
         name: root
         properties:
-          application.sort.policy: stateaware
+          application.sort.policy: fifo
         childtemplate:
           maxapplications: 10
           properties:
-            application.sort.policy: stateaware
+            application.sort.policy: fifo
           resources:
             guaranteed:
               memory: 400000
@@ -502,6 +502,7 @@ func TestGetConfigYAML(t *testing.T) {
 
 	// check that we return yaml by default, unmarshal will error when we don't
 	req.Header.Set("Accept", "unknown")
+	resp = &MockResponseWriter{}
 	getClusterConfig(resp, req)
 	err = yaml.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, unmarshalError)
@@ -533,6 +534,7 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 	configs.SetConfigMap(updatedExtraConf)
 
+	resp = &MockResponseWriter{}
 	getClusterConfig(resp, req)
 	err = json.Unmarshal(resp.outputBytes, conf)
 	assert.NilError(t, err, unmarshalError)
@@ -729,6 +731,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	node2 := addNode(t, partition, node2ID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5}))
 
 	// get nodes utilization
+	resp = &MockResponseWriter{}
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
@@ -745,6 +748,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	err = rootQ.IncAllocatedResource(resAlloc, false)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
 	// get nodes utilization
+	resp = &MockResponseWriter{}
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
@@ -761,6 +765,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	err = rootQ.IncAllocatedResource(resAlloc, false)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
 	// get nodes utilization
+	resp = &MockResponseWriter{}
 	getNodeUtilisation(resp, req)
 	utilisation = &dao.NodesUtilDAOInfo{}
 	err = json.Unmarshal(resp.outputBytes, utilisation)
@@ -880,6 +885,7 @@ func TestGetNodeUtilisations(t *testing.T) {
 	addAllocatedResource(t, node4, "alloc-1", "app-1", map[string]resources.Quantity{"gpu": 1})
 
 	// get nodes utilizations
+	resp = &MockResponseWriter{}
 	getNodeUtilisations(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionNodesUtilDAOInfo)
 	assert.NilError(t, err, "should decode a list of *dao.PartitionNodesUtilDAOInfo")
@@ -949,29 +955,25 @@ func TestPartitions(t *testing.T) {
 	app1 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-1")
 	app1.SetState(objects.Accepted.String())
 
-	// add a new app2 - starting
+	// add a new app2 - running
 	app2 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-2")
-	app2.SetState(objects.Starting.String())
+	app2.SetState(objects.Running.String())
 
-	// add a new app3 - running
+	// add a new app3 - completing
 	app3 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-3")
-	app3.SetState(objects.Running.String())
+	app3.SetState(objects.Completing.String())
 
-	// add a new app4 - completing
+	// add a new app4 - rejected
 	app4 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-4")
-	app4.SetState(objects.Completing.String())
+	app4.SetState(objects.Rejected.String())
 
-	// add a new app5 - rejected
+	// add a new app5 - completed
 	app5 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-5")
-	app5.SetState(objects.Rejected.String())
-
-	// add a new app6 - completed
-	app6 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-6")
-	app6.SetState(objects.Completed.String())
+	app5.SetState(objects.Completed.String())
 
 	// add a new app7 - failed
-	app7 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-7")
-	app7.SetState(objects.Failed.String())
+	app6 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-6")
+	app6.SetState(objects.Failed.String())
 
 	NewWebApp(schedulerContext, nil)
 
@@ -985,8 +987,8 @@ func TestPartitions(t *testing.T) {
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100, siCommon.CPU: 400})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 200, siCommon.CPU: 300})
-	ask1 := objects.NewAllocationAsk("alloc-1", app6.ApplicationID, resAlloc1)
-	ask2 := objects.NewAllocationAsk("alloc-2", app3.ApplicationID, resAlloc2)
+	ask1 := objects.NewAllocationAsk("alloc-1", app5.ApplicationID, resAlloc1)
+	ask2 := objects.NewAllocationAsk("alloc-2", app2.ApplicationID, resAlloc2)
 	allocs := []*objects.Allocation{objects.NewAllocation(node1ID, ask1)}
 	err = defaultPartition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
@@ -1012,10 +1014,9 @@ func TestPartitions(t *testing.T) {
 	assert.Equal(t, cs["default"].NodeSortingPolicy.Type, "fair")
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
-	assert.Equal(t, cs["default"].Applications["total"], 8)
+	assert.Equal(t, cs["default"].Applications["total"], 7)
 	assert.Equal(t, cs["default"].Applications[objects.New.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Accepted.String()], 1)
-	assert.Equal(t, cs["default"].Applications[objects.Starting.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Running.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Completing.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Rejected.String()], 1)
@@ -1059,7 +1060,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 		MaxResource:        tMaxResource.DAOMap(),
 		GuaranteedResource: tGuaranteedResource.DAOMap(),
 		Properties: map[string]string{
-			configs.ApplicationSortPolicy: policies.StateAwarePolicy.String(),
+			configs.ApplicationSortPolicy: policies.FifoSortPolicy.String(),
 		},
 	}
 
@@ -1096,7 +1097,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, partitionQueuesDao.CurrentPriority, configs.MinPriority)
 	assert.Assert(t, partitionQueuesDao.AllocatingAcceptedApps == nil)
 	assert.Equal(t, len(partitionQueuesDao.Properties), 1)
-	assert.Equal(t, partitionQueuesDao.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.Equal(t, partitionQueuesDao.Properties[configs.ApplicationSortPolicy], policies.FifoSortPolicy.String())
 	assert.DeepEqual(t, partitionQueuesDao.TemplateInfo, &templateInfo)
 
 	// assert child root.a fields
@@ -1120,7 +1121,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.Equal(t, child.CurrentPriority, configs.MinPriority)
 	assert.Assert(t, child.AllocatingAcceptedApps == nil)
 	assert.Equal(t, len(child.Properties), 1)
-	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.StateAwarePolicy.String())
+	assert.Equal(t, child.Properties[configs.ApplicationSortPolicy], policies.FifoSortPolicy.String())
 	assert.DeepEqual(t, child.TemplateInfo, &templateInfo)
 
 	// assert child root.a.a1 fields
@@ -1964,6 +1965,7 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	assert.NilError(t, err, "Get Groups Resource Usage Handler request failed")
 
 	var groupsResourceUsageDao []*dao.GroupResourceUsageDAOInfo
+	resp = &MockResponseWriter{}
 	getGroupsResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
 	assert.NilError(t, err, unmarshalError)
@@ -2482,7 +2484,7 @@ func prepareUserAndGroupContext(t *testing.T, config string) {
 	// add an alloc
 	allocInfo := objects.NewAllocation("node-1", ask)
 	app.AddAllocation(allocInfo)
-	assert.Assert(t, app.IsStarting(), "Application did not return starting state after alloc: %s", app.CurrentState())
+	assert.Assert(t, app.IsRunning(), "Application did not return running state after alloc: %s", app.CurrentState())
 
 	NewWebApp(schedulerContext, nil)
 }

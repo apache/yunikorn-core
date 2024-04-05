@@ -21,7 +21,6 @@ package scheduler
 import (
 	"fmt"
 	"math"
-	"strconv"
 	"sync"
 	"time"
 
@@ -620,9 +619,6 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 		return wrapped
 	}
 
-	if !sn.IsReady() {
-		metrics.GetSchedulerMetrics().IncUnhealthyNodes()
-	}
 	if !sn.IsSchedulable() {
 		metrics.GetSchedulerMetrics().IncDrainingNodes()
 	}
@@ -665,24 +661,6 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 
 	switch nodeInfo.Action {
 	case si.NodeInfo_UPDATE:
-		var newReadyStatus bool
-		var err error
-		if newReadyStatus, err = strconv.ParseBool(nodeInfo.Attributes[siCommon.NodeReadyAttribute]); err != nil {
-			log.Log(log.SchedContext).Error("Could not parse ready attribute, assuming true", zap.Any("attributes", nodeInfo.Attributes))
-			newReadyStatus = true
-		}
-
-		if node.IsReady() && !newReadyStatus {
-			log.Log(log.SchedContext).Info("Node has become unhealthy", zap.String("Node ID", node.NodeID))
-			metrics.GetSchedulerMetrics().IncUnhealthyNodes()
-			node.SetReady(newReadyStatus)
-		}
-		if !node.IsReady() && newReadyStatus {
-			log.Log(log.SchedContext).Info("Node has become healthy", zap.String("Node ID", node.NodeID))
-			metrics.GetSchedulerMetrics().DecUnhealthyNodes()
-			node.SetReady(newReadyStatus)
-		}
-
 		if sr := nodeInfo.SchedulableResource; sr != nil {
 			partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
 		}
@@ -704,9 +682,6 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 	case si.NodeInfo_DECOMISSION:
 		if !node.IsSchedulable() {
 			metrics.GetSchedulerMetrics().DecDrainingNodes()
-		}
-		if !node.IsReady() {
-			metrics.GetSchedulerMetrics().DecUnhealthyNodes()
 		}
 		metrics.GetSchedulerMetrics().IncTotalDecommissionedNodes()
 		// set the state to not schedulable then tell the partition to clean up

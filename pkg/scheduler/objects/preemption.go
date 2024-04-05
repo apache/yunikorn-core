@@ -749,6 +749,63 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteed() *resources.Resource
 	return resources.ComponentWiseMin(remaining, parentResult)
 }
 
+func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource {
+	if qps == nil {
+		return nil
+	}
+	parentPreemptableResource := qps.Parent.GetPreemptableResource()
+	actual := qps.AllocatedResource.Clone()
+
+	// No usage, so nothing to preempt
+	if actual.IsEmpty() {
+		return nil
+	}
+	actual.SubOnlyExisting(qps.PreemptingResource)
+
+	// Calculate preemptable resource. +ve means Over utilized, -ve means Under utilized, 0 means correct utilization
+	guaranteed := qps.GuaranteedResource
+	actual.SubOnlyExisting(guaranteed)
+	preemptableResource := actual
+
+	// Keep only the resource type which needs to be preempted
+	for k, v := range actual.Resources {
+		// Under-utilized or completely used resource types
+		if v <= 0 {
+			delete(preemptableResource.Resources, k)
+		} else { // Over utilized resource types
+			preemptableResource.Resources[k] = v
+		}
+	}
+	// When nothing to preempt or usage equals guaranteed in current queue, return as is.
+	// Otherwise, doing min calculation with parent level (for a different res types) would lead to a wrong perception
+	// of choosing this current queue to select the victims when that is not the fact.
+	// As you move down the hierarchy, results calculated at lower level has higher precedence.
+	if preemptableResource.IsEmpty() {
+		return preemptableResource
+	}
+	return resources.ComponentWiseMinPermissive(preemptableResource, parentPreemptableResource)
+}
+
+func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.Resource {
+	if qps == nil {
+		return nil
+	}
+	parent := qps.Parent.GetRemainingGuaranteedResource()
+	remainingGuaranteed := qps.GuaranteedResource.Clone()
+
+	// No Guaranteed set, so nothing remaining
+	// In case of guaranteed not set for queues at specific level, inherits the same from parent queue.
+	// If the parent too (or ancestors all the way upto root) doesn't have guaranteed set, then nil is returned.
+	// Otherwise, parent's guaranteed (or ancestors) would be used.
+	if parent.IsEmpty() && remainingGuaranteed.IsEmpty() {
+		return nil
+	}
+	used := qps.AllocatedResource.Clone()
+	used.SubOnlyExisting(qps.PreemptingResource)
+	remainingGuaranteed.SubOnlyExisting(used)
+	return resources.ComponentWiseMinPermissive(remainingGuaranteed, parent)
+}
+
 // GetGuaranteedResource computes the current guaranteed resources considering parent guaranteed
 func (qps *QueuePreemptionSnapshot) GetGuaranteedResource() *resources.Resource {
 	if qps == nil {

@@ -19,7 +19,6 @@
 package webservice
 
 import (
-	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"

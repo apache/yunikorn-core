@@ -50,7 +50,13 @@ func (c *RClient) GetEventsStream(count uint64) (io.ReadCloser, error) {
 		return nil, err
 	}
 	req.URL.RawQuery = "count=" + strconv.FormatUint(count, 10)
-	resp, err := http.DefaultClient.Do(req)
+	tr := &http.Transport{
+		DisableCompression: true,
+	}
+	client := &http.Client{
+		Transport: tr,
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

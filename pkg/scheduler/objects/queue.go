@@ -131,15 +131,17 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	// add to the parent, we might have an overall lock already
 	// still need to make sure we lock the parent so we do not interfere with scheduling
 	if parent != nil {
+		sq.mergeProperties(parent.getProperties(), conf.Properties)
+		sq.UpdateQueueProperties()
 		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 		err := parent.addChildQueue(sq)
 		if err != nil {
 			return nil, fmt.Errorf("configured queue creation failed: %w", err)
 		}
 		// pull the properties from the parent that should be set on the child
-		sq.mergeProperties(parent.getProperties(), conf.Properties)
+	} else {
+		sq.UpdateQueueProperties()
 	}
-	sq.UpdateQueueProperties()
 	sq.queueEvents = newQueueEvents(sq, events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
@@ -643,6 +645,7 @@ func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInf
 		}
 	}
 	// we have held the read lock so following method should not take lock again.
+	queueInfo.HeadRoom = sq.getHeadRoom().DAOMap()
 	sq.RLock()
 	defer sq.RUnlock()
 
@@ -656,7 +659,6 @@ func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInf
 	queueInfo.GuaranteedResource = sq.guaranteedResource.DAOMap()
 	queueInfo.AllocatedResource = sq.allocatedResource.DAOMap()
 	queueInfo.PreemptingResource = sq.preemptingResource.DAOMap()
-	queueInfo.HeadRoom = sq.getHeadRoom().DAOMap()
 	queueInfo.IsLeaf = sq.isLeaf
 	queueInfo.IsManaged = sq.isManaged
 	queueInfo.CurrentPriority = sq.getCurrentPriority()
@@ -734,7 +736,6 @@ func (sq *Queue) AddApplication(app *Application) {
 	defer sq.Unlock()
 	appID := app.ApplicationID
 	sq.applications[appID] = app
-	sq.appPriorities[appID] = app.GetAskMaxPriority()
 	sq.queueEvents.sendNewApplicationEvent(appID)
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
@@ -926,7 +927,7 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 
 	// no need to lock child as it is a new queue which cannot be accessed yet
 	sq.children[child.Name] = child
-	sq.childPriorities[child.Name] = child.GetCurrentPriority()
+	sq.childPriorities[child.Name] = child.getCurrentPriority()
 
 	if child.isLeaf {
 		// managed (configured) leaf queue can't use template

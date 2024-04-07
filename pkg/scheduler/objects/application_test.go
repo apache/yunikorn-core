@@ -373,7 +373,7 @@ func TestAddAllocAsk(t *testing.T) {
 	}
 
 	// test add alloc ask event
-	noEvents := 0
+	noEvents := uint64(0)
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
 		noEvents = eventSystem.Store.CountStoredEvents()
@@ -1994,7 +1994,7 @@ func TestAskEvents(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err)
 	app.RemoveAllocationAsk(ask.allocationKey)
-	noEvents := 0
+	noEvents := uint64(0)
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3
@@ -2066,7 +2066,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	app.AddAllocation(alloc2)
 	app.RemoveAllocation(alloc1.GetAllocationID(), si.TerminationType_STOPPED_BY_RM)
 	app.RemoveAllocation(alloc2.GetAllocationID(), si.TerminationType_PLACEHOLDER_REPLACED)
-	noEvents := 0
+	noEvents := uint64(0)
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 5
@@ -2189,7 +2189,7 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 		return nil
 	})
 
-	noEvents := 0
+	noEvents := uint64(0)
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 4

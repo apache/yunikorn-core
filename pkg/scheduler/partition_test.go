@@ -3782,7 +3782,7 @@ func TestNewQueueEvents(t *testing.T) {
 		User: "test",
 	})
 	assert.NilError(t, err)
-	noEvents := 0
+	noEvents := uint64(0)
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3

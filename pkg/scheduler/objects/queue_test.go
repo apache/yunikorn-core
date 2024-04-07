@@ -2565,7 +2565,7 @@ func TestQueueEvents(t *testing.T) {
 	app := newApplication(appID0, "default", "root")
 	queue.AddApplication(app)
 	queue.RemoveApplication(app)
-	noEvents := 0
+	noEvents := uint64(0)
 	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 5

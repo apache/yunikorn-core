@@ -23,6 +23,8 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/locking"
@@ -92,7 +94,7 @@ type EventSystemImpl struct {
 	stopped bool
 
 	trackingEnabled    bool
-	requestCapacity    int
+	requestCapacity    uint64
 	ringBufferCapacity uint64
 
 	locking.RWMutex
@@ -129,7 +131,7 @@ func (ec *EventSystemImpl) IsEventTrackingEnabled() bool {
 }
 
 // GetRequestCapacity returns the capacity of an intermediate storage which is used by the shim publisher.
-func (ec *EventSystemImpl) GetRequestCapacity() int {
+func (ec *EventSystemImpl) GetRequestCapacity() uint64 {
 	ec.RLock()
 	defer ec.RUnlock()
 	return ec.requestCapacity
@@ -145,16 +147,16 @@ func (ec *EventSystemImpl) GetRingBufferCapacity() uint64 {
 // Init Initializes the event system.
 // Only exported for testing.
 func Init() {
-	store := newEventStore()
-	buffer := newEventRingBuffer(defaultRingBufferSize)
+	store := newEventStore(getRequestCapacity())
+	buffer := newEventRingBuffer(getRingBufferCapacity())
 	ev = &EventSystemImpl{
 		Store:         store,
 		channel:       make(chan *si.EventRecord, defaultEventChannelSize),
 		stop:          make(chan bool),
 		stopped:       false,
-		publisher:     CreateShimPublisher(store),
 		eventBuffer:   buffer,
 		eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
+		publisher:     CreateShimPublisher(store),
 		streaming:     NewEventStreaming(buffer),
 	}
 }
@@ -174,9 +176,9 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 		go ec.reloadConfig()
 	})
 
-	ec.trackingEnabled = ec.readIsTrackingEnabled()
-	ec.ringBufferCapacity = ec.readRingBufferCapacity()
-	ec.requestCapacity = ec.readRequestCapacity()
+	ec.trackingEnabled = isTrackingEnabled()
+	ec.ringBufferCapacity = getRingBufferCapacity()
+	ec.requestCapacity = getRequestCapacity()
 
 	go func() {
 		log.Log(log.Events).Info("Starting event system handler")
@@ -234,22 +236,36 @@ func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	}
 }
 
-func (ec *EventSystemImpl) readIsTrackingEnabled() bool {
+func isTrackingEnabled() bool {
 	return common.GetConfigurationBool(configs.GetConfigMap(), configs.CMEventTrackingEnabled, configs.DefaultEventTrackingEnabled)
 }
 
-func (ec *EventSystemImpl) readRequestCapacity() int {
-	return common.GetConfigurationInt(configs.GetConfigMap(), configs.CMEventRequestCapacity, configs.DefaultEventRequestCapacity)
+func getRequestCapacity() uint64 {
+	capacity := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRequestCapacity, configs.DefaultEventRequestCapacity)
+	if capacity == 0 {
+		log.Log(log.Events).Warn("Request capacity is set to 0, using default",
+			zap.String("property", configs.CMEventRequestCapacity),
+			zap.Uint64("default", configs.DefaultEventRequestCapacity))
+		return configs.DefaultEventRequestCapacity
+	}
+	return capacity
 }
 
-func (ec *EventSystemImpl) readRingBufferCapacity() uint64 {
-	return common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRingBufferCapacity, configs.DefaultEventRingBufferCapacity)
+func getRingBufferCapacity() uint64 {
+	capacity := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRingBufferCapacity, configs.DefaultEventRingBufferCapacity)
+	if capacity == 0 {
+		log.Log(log.Events).Warn("Ring buffer capacity is set to 0, using default",
+			zap.String("property", configs.CMEventRingBufferCapacity),
+			zap.Uint64("default", configs.DefaultEventRingBufferCapacity))
+		return configs.DefaultEventRingBufferCapacity
+	}
+	return capacity
 }
 
 func (ec *EventSystemImpl) isRestartNeeded() bool {
 	ec.RLock()
 	defer ec.RUnlock()
-	return ec.readIsTrackingEnabled() != ec.trackingEnabled
+	return isTrackingEnabled() != ec.trackingEnabled
 }
 
 // Restart restarts the event system, used during config update.
@@ -273,18 +289,16 @@ func (ec *EventSystemImpl) CloseAllStreams() {
 }
 
 func (ec *EventSystemImpl) reloadConfig() {
-	ec.updateRequestCapacity()
+	ec.Lock()
+	ec.requestCapacity = getRequestCapacity()
+	ec.ringBufferCapacity = getRingBufferCapacity()
+	ec.Unlock()
 
-	// resize the ring buffer with new capacity
-	ec.eventBuffer.Resize(ec.readRingBufferCapacity())
+	// resize the ring buffer & event store with new capacity
+	ec.Store.SetStoreSize(ec.requestCapacity)
+	ec.eventBuffer.Resize(ec.ringBufferCapacity)
 
 	if ec.isRestartNeeded() {
 		ec.Restart()
 	}
-}
-
-func (ec *EventSystemImpl) updateRequestCapacity() {
-	ec.Lock()
-	defer ec.Unlock()
-	ec.requestCapacity = ec.readRequestCapacity()
 }

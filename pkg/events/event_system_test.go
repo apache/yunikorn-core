@@ -120,17 +120,17 @@ func TestConfigUpdate(t *testing.T) {
 
 	assert.Assert(t, eventSystem.IsEventTrackingEnabled())
 	assert.Equal(t, eventSystem.GetRingBufferCapacity(), uint64(configs.DefaultEventRingBufferCapacity))
-	assert.Equal(t, eventSystem.GetRequestCapacity(), configs.DefaultEventRequestCapacity)
+	assert.Equal(t, eventSystem.GetRequestCapacity(), uint64(configs.DefaultEventRequestCapacity))
 	assert.Equal(t, eventSystem.eventBuffer.capacity, uint64(configs.DefaultEventRingBufferCapacity))
 
 	// update config and wait for refresh
 	var newRingBufferCapacity uint64 = 123
-	newRequestCapacity := 555
+	newRequestCapacity := uint64(555)
 
 	configs.SetConfigMap(
 		map[string]string{configs.CMEventTrackingEnabled: "false",
 			configs.CMEventRingBufferCapacity: strconv.FormatUint(newRingBufferCapacity, 10),
-			configs.CMEventRequestCapacity:    strconv.Itoa(int(newRequestCapacity)),
+			configs.CMEventRequestCapacity:    strconv.FormatUint(newRequestCapacity, 10),
 		})
 	err := common.WaitForCondition(func() bool {
 		return !eventSystem.IsEventTrackingEnabled()
@@ -153,4 +153,52 @@ func TestEventStreaming(t *testing.T) {
 
 	assert.Equal(t, 1, len(streams))
 	assert.Equal(t, "test", streams[0].Name)
+}
+
+func TestRequestCapacity(t *testing.T) {
+	config := map[string]string{
+		configs.CMEventRequestCapacity: "123",
+	}
+	configs.SetConfigMap(config)
+
+	capacity := getRequestCapacity()
+	assert.Equal(t, uint64(123), capacity)
+
+	config = map[string]string{
+		configs.CMEventRequestCapacity: "0",
+	}
+	configs.SetConfigMap(config)
+	capacity = getRequestCapacity()
+	assert.Equal(t, uint64(configs.DefaultEventRequestCapacity), capacity)
+
+	config = map[string]string{
+		configs.CMEventRequestCapacity: "xyz",
+	}
+	configs.SetConfigMap(config)
+	capacity = getRequestCapacity()
+	assert.Equal(t, uint64(configs.DefaultEventRequestCapacity), capacity)
+}
+
+func TestRingBufferCapacity(t *testing.T) {
+	config := map[string]string{
+		configs.CMEventRingBufferCapacity: "123",
+	}
+	configs.SetConfigMap(config)
+
+	capacity := getRingBufferCapacity()
+	assert.Equal(t, uint64(123), capacity)
+
+	config = map[string]string{
+		configs.CMEventRingBufferCapacity: "0",
+	}
+	configs.SetConfigMap(config)
+	capacity = getRingBufferCapacity()
+	assert.Equal(t, uint64(configs.DefaultEventRingBufferCapacity), capacity)
+
+	config = map[string]string{
+		configs.CMEventRingBufferCapacity: "xyz",
+	}
+	configs.SetConfigMap(config)
+	capacity = getRingBufferCapacity()
+	assert.Equal(t, uint64(configs.DefaultEventRingBufferCapacity), capacity)
 }

@@ -41,7 +41,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 var (
@@ -737,62 +736,20 @@ func (sq *Queue) AddApplication(app *Application) {
 	appID := app.ApplicationID
 	sq.applications[appID] = app
 	sq.queueEvents.sendNewApplicationEvent(sq.QueuePath, appID)
-	// YUNIKORN-199: update the quota from the namespace
-	// get the tag with the quota
-	quota := app.GetTag(siCommon.AppTagNamespaceResourceQuota)
-	// get the tag with the guaranteed resource
-	guaranteed := app.GetTag(siCommon.AppTagNamespaceResourceGuaranteed)
-	if quota == "" && guaranteed == "" {
-		return
-	}
-
-	var quotaRes, guaranteedRes *resources.Resource
-	var quotaErr, guaranteedErr error
-
-	// need to set a quota: convert json string to resource
-	if quota != "" {
-		quotaRes, quotaErr = resources.NewResourceFromString(quota)
-		if quotaErr != nil {
-			log.Log(log.SchedQueue).Warn("application resource quota conversion failure",
-				zap.String("json quota string", quota),
-				zap.Error(quotaErr))
-		} else if !resources.StrictlyGreaterThanZero(quotaRes) {
-			log.Log(log.SchedQueue).Warn("Max resource quantities should be greater than zero: cannot set queue max resource",
-				zap.Stringer("maxResource", quotaRes))
-			quotaRes = nil // Skip setting quota if it has a value <= 0
-		}
-	}
-
-	// need to set guaranteed resource: convert json string to resource
-	if guaranteed != "" {
-		guaranteedRes, guaranteedErr = resources.NewResourceFromString(guaranteed)
-		if guaranteedErr != nil {
-			log.Log(log.SchedQueue).Warn("application guaranteed resource conversion failure",
-				zap.String("json guaranteed string", guaranteed),
-				zap.Error(guaranteedErr))
-			if quotaErr != nil {
-				return
-			}
-		} else if !resources.StrictlyGreaterThanZero(guaranteedRes) {
-			log.Log(log.SchedQueue).Warn("Guaranteed resource quantities should be greater than zero: cannot set queue guaranteed resource",
-				zap.Stringer("guaranteedResource", guaranteedRes))
-			guaranteedRes = nil // Skip setting guaranteed resource if it has a value <= 0
-		}
-	}
-
-	// set the quota
-	if sq.isManaged {
+	maxRes := app.GetMaxResource()
+	guaranteed := app.GetGuaranteedResource()
+	if (maxRes != nil || guaranteed != nil) && sq.isManaged {
 		log.Log(log.SchedQueue).Warn("Trying to set max resources on a queue that is not an unmanaged leaf",
 			zap.String("queueName", sq.QueuePath))
 		return
 	}
 
-	if quotaRes != nil {
-		sq.maxResource = quotaRes
+	if maxRes != nil {
+		sq.maxResource = maxRes
 	}
 
-	if guaranteedRes != nil {
-		sq.guaranteedResource = guaranteedRes
+	if guaranteed != nil {
+		sq.guaranteedResource = guaranteed
 	}
 }
 
@@ -1298,6 +1255,37 @@ func (sq *Queue) internalGetMax(parentLimit *resources.Resource) *resources.Reso
 	}
 	// calculate the smallest value for each type
 	return resources.ComponentWiseMin(parentLimit, sq.maxResource)
+}
+
+// GetProposedMaxQueueResource calculates the maximum resource for the queue based on a proposed new value.
+// This is similar to GetMaxQueueSet but uses a value that has not been applied as a maxResource for the queue.
+func (sq *Queue) GetProposedMaxQueueResource(maxRes *resources.Resource) *resources.Resource {
+	// get the limit for the parent first and check against the queue's own
+	var limit *resources.Resource
+	if sq.parent == nil {
+		return nil
+	}
+	limit = sq.parent.GetMaxQueueSet()
+	return sq.internalGetProposedMax(limit, maxRes)
+}
+
+// internalGetProposedMax does the real max calculation.
+func (sq *Queue) internalGetProposedMax(parentLimit, maxRes *resources.Resource) *resources.Resource {
+	sq.RLock()
+	defer sq.RUnlock()
+	// no parent queue limit set, not even for root
+	if parentLimit == nil {
+		if maxRes == nil {
+			return nil
+		}
+		return maxRes
+	}
+	// parent limit set, no queue limit return parent
+	if maxRes == nil {
+		return parentLimit
+	}
+	// calculate the smallest value for each type
+	return resources.ComponentWiseMin(parentLimit, maxRes)
 }
 
 // SetMaxResource sets the max resource for the root queue. Called as part of adding or removing a node.

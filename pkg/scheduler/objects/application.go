@@ -40,6 +40,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -75,10 +76,12 @@ type StateLogEntry struct {
 }
 
 type Application struct {
-	ApplicationID  string            // application ID
-	Partition      string            // partition Name
-	SubmissionTime time.Time         // time application was submitted
-	tags           map[string]string // application tags used in scheduling
+	ApplicationID  string              // application ID
+	Partition      string              // partition Name
+	SubmissionTime time.Time           // time application was submitted
+	tags           map[string]string   // application tags used in scheduling
+	maxResource    *resources.Resource // max resource setting from namespace based on tags
+	guaranteed     *resources.Resource // guaranteed resource setting from namespace based on tags
 
 	// Private mutable fields need protection
 	queuePath         string
@@ -186,9 +189,55 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
+	app.setResourcesFromTags()
 	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
 	app.appEvents.sendNewApplicationEvent()
 	return app
+}
+
+func (sa *Application) setResourcesFromTags() {
+	quota := sa.GetTag(siCommon.AppTagNamespaceResourceQuota)
+	// get the tag with the guaranteed resource
+	guaranteed := sa.GetTag(siCommon.AppTagNamespaceResourceGuaranteed)
+	if quota == "" && guaranteed == "" {
+		return
+	}
+
+	var quotaRes, guaranteedRes *resources.Resource
+	var quotaErr, guaranteedErr error
+
+	// need to set a quota: convert json string to resource
+	if quota != "" {
+		quotaRes, quotaErr = resources.NewResourceFromString(quota)
+		if quotaErr != nil {
+			log.Log(log.SchedQueue).Warn("application resource quota conversion failure",
+				zap.String("json quota string", quota),
+				zap.Error(quotaErr))
+		} else if !resources.StrictlyGreaterThanZero(quotaRes) {
+			log.Log(log.SchedQueue).Warn("Max resource quantities should be greater than zero: cannot set queue max resource",
+				zap.Stringer("maxResource", quotaRes))
+			quotaRes = nil // Skip setting quota if it has a value <= 0
+		}
+		sa.maxResource = quotaRes
+	}
+
+	// need to set guaranteed resource: convert json string to resource
+	if guaranteed != "" {
+		guaranteedRes, guaranteedErr = resources.NewResourceFromString(guaranteed)
+		if guaranteedErr != nil {
+			log.Log(log.SchedQueue).Warn("application guaranteed resource conversion failure",
+				zap.String("json guaranteed string", guaranteed),
+				zap.Error(guaranteedErr))
+			if quotaErr != nil {
+				return
+			}
+		} else if !resources.StrictlyGreaterThanZero(guaranteedRes) {
+			log.Log(log.SchedQueue).Warn("Guaranteed resource quantities should be greater than zero: cannot set queue guaranteed resource",
+				zap.Stringer("guaranteedResource", guaranteedRes))
+			guaranteedRes = nil // Skip setting guaranteed resource if it has a value <= 0
+		}
+		sa.guaranteed = guaranteedRes
+	}
 }
 
 func (sa *Application) String() string {
@@ -2117,4 +2166,14 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 		}
 	}
 	sa.runnableByUserLimit = runnableByUserLimit
+}
+
+// GetGuaranteedResource returns the guaranteed resource that was set in the application tags
+func (sa *Application) GetGuaranteedResource() *resources.Resource {
+	return sa.guaranteed.Clone() // read only, no lock
+}
+
+// GetMaxResource returns the max resource that was set in the application tags
+func (sa *Application) GetMaxResource() *resources.Resource {
+	return sa.maxResource.Clone() // read only, no lock
 }

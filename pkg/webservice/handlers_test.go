@@ -19,13 +19,18 @@
 package webservice
 
 import (
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -2600,5 +2605,84 @@ func (rrd *ResponseRecorderWithDeadline) SetReadDeadline(_ time.Time) error {
 func NewResponseRecorderWithDeadline() *ResponseRecorderWithDeadline {
 	return &ResponseRecorderWithDeadline{
 		ResponseRecorder: httptest.NewRecorder(),
+	}
+}
+
+func TestCompressGetQueueApplicationAPI(t *testing.T) {
+	schedulerContext, err := scheduler.NewClusterContext(rmID, policyGroup, []byte(configDefault))
+	assert.NilError(t, err, "Error when creating cluster context.")
+	partitionName := common.GetNormalizedPartitionName("default", rmID)
+	part := schedulerContext.GetPartition(partitionName)
+	_ = addApp(t, "app-1", part, "root.default", false)
+	_ = addApp(t, "app-2", part, "root.default", false)
+	_ = addApp(t, "app-3", part, "root.default", false)
+
+	m := NewWebApp(schedulerContext, nil)
+	m.StartWebApp()
+	defer func() {
+		err = m.StopWebApp()
+		assert.NilError(t, err, "Error when closing webapp service.")
+	}()
+
+	err = common.WaitFor(500*time.Millisecond, 2*time.Second, func() bool {
+		conn, connErr := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", "9080"), time.Second)
+		if connErr == nil {
+			defer conn.Close()
+			return true
+		}
+		return false
+	})
+	assert.NilError(t, err, "Ｗebapp failed to start in 2 seconds.")
+
+	u := &url.URL{
+		Host:   "localhost:9080",
+		Scheme: "http",
+		Path:   "/ws/v1/partition/default/queue/root.default/applications",
+	}
+
+	// request without gzip compression
+	var buf io.ReadWriter
+	req, err := http.NewRequest("GET", u.String(), buf)
+	assert.NilError(t, err, "Create new http request failed.")
+	req.Header.Set("Accept", "application/json")
+	// prevent http.DefaultClient from automatically adding gzip header
+	req.Header.Set("Accept-Encoding", "deflate")
+	resp, err := http.DefaultClient.Do(req)
+	assert.NilError(t, err, "Request failed to send.")
+	data, err := io.ReadAll(resp.Body)
+	assert.NilError(t, err, "Failed when reading data.")
+	defer resp.Body.Close()
+	var originalResp []*dao.ApplicationDAOInfo
+	err = json.Unmarshal(data, &originalResp)
+	assert.NilError(t, err, unmarshalError)
+
+	// request with gzip compression enabled
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp2, err := http.DefaultClient.Do(req)
+	assert.NilError(t, err, "Request failed to send.")
+	gzipReader, err := gzip.NewReader(resp2.Body)
+	assert.NilError(t, err, "Failed to create gzip reader.")
+	data2, err := io.ReadAll(gzipReader)
+	assert.NilError(t, err, "Failed when reading data.")
+	defer resp2.Body.Close()
+	defer gzipReader.Close()
+	var compressedResp []*dao.ApplicationDAOInfo
+	err = json.Unmarshal(data2, &compressedResp)
+	assert.NilError(t, err, unmarshalError)
+
+	sort.Slice(originalResp, func(i, j int) bool {
+		return (originalResp[i].SubmissionTime < originalResp[j].SubmissionTime)
+	})
+	sort.Slice(compressedResp, func(i, j int) bool {
+		return (compressedResp[i].SubmissionTime < compressedResp[j].SubmissionTime)
+	})
+
+	for i := 0; i < 3; i++ {
+		assert.Equal(t, originalResp[i].ApplicationID, compressedResp[i].ApplicationID)
+		assert.Equal(t, originalResp[i].Partition, compressedResp[i].Partition)
+		assert.Equal(t, originalResp[i].QueueName, compressedResp[i].QueueName)
+		assert.Equal(t, originalResp[i].SubmissionTime, compressedResp[i].SubmissionTime)
+		assert.Equal(t, originalResp[i].User, compressedResp[i].User)
+		assert.DeepEqual(t, originalResp[i].Groups, compressedResp[i].Groups)
 	}
 }

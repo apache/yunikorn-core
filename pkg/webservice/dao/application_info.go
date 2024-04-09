@@ -18,6 +18,10 @@
 
 package dao
 
+import (
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+)
+
 type ApplicationsDAOInfo struct {
 	Applications []ApplicationDAOInfo `json:"applications,omitempty"`
 }
@@ -42,6 +46,16 @@ type ApplicationDAOInfo struct {
 	HasReserved        bool                    `json:"hasReserved,omitempty"`
 	Reservations       []string                `json:"reservations,omitempty"`
 	MaxRequestPriority int32                   `json:"maxRequestPriority,omitempty"`
+}
+
+type ApplicationDetailsDAOInfo struct {
+	ApplicationDAOInfo
+	StartTime           int64
+	Queue               string
+	State               string
+	ResourceUsage       *resources.TrackedResource
+	PreemptedResource   *resources.TrackedResource
+	PlaceholderResource *resources.TrackedResource
 }
 
 type StateDAOInfo struct {

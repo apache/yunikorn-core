@@ -957,12 +957,10 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 // This can be executed multiple times and is only effective the first time.
 // This is a noop on an unmanaged queue.
 func (sq *Queue) MarkQueueForRemoval() {
-	// need to lock for write as we don't want to add a queue while marking for removal
-	sq.Lock()
-	defer sq.Unlock()
+	children := sq.GetCopyOfChildren()
 	// Mark the managed queue for deletion: it is removed from the config let it drain.
 	// Also mark all the managed children for deletion.
-	if sq.isManaged {
+	if sq.IsManaged() {
 		log.Log(log.SchedQueue).Info("marking managed queue for deletion",
 			zap.String("queue", sq.QueuePath))
 		if err := sq.handleQueueEvent(Remove); err != nil {
@@ -971,7 +969,7 @@ func (sq *Queue) MarkQueueForRemoval() {
 				zap.Error(err))
 		}
 		if len(sq.children) > 0 {
-			for _, child := range sq.children {
+			for _, child := range children {
 				child.MarkQueueForRemoval()
 			}
 		}
@@ -1030,13 +1028,10 @@ func (sq *Queue) isRoot() bool {
 // IncAllocatedResource increments the allocated resources for this queue (recursively).
 // Guard against going over max resources if set
 func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
-	sq.Lock()
-	defer sq.Unlock()
-
 	// check this queue: failure stops checks if the allocation is not part of a node addition
 	newAllocated := resources.Add(sq.allocatedResource, alloc)
 	if !nodeReported {
-		if !sq.maxResource.FitInMaxUndef(newAllocated) {
+		if !sq.resourceFitsMaxRes(newAllocated) {
 			return fmt.Errorf("allocation (%v) puts queue '%s' over maximum allocation (%v), current usage (%v)",
 				alloc, sq.QueuePath, sq.maxResource, sq.allocatedResource)
 		}
@@ -1057,10 +1052,19 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 			return err
 		}
 	}
+	sq.Lock()
+	defer sq.Unlock()
 	// all OK update this queue
 	sq.allocatedResource = newAllocated
 	sq.updateAllocatedResourceMetrics()
 	return nil
+}
+
+// small helper method to access sq.maxResource and avoid Clone() call
+func (sq *Queue) resourceFitsMaxRes(res *resources.Resource) bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.maxResource.FitInMaxUndef(res)
 }
 
 // DecAllocatedResource decrement the allocated resources for this queue (recursively)
@@ -1069,11 +1073,9 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	if sq == nil {
 		return fmt.Errorf("queue is nil")
 	}
-	sq.Lock()
-	defer sq.Unlock()
 
 	// check this queue: failure stops checks
-	if alloc != nil && !sq.allocatedResource.FitIn(alloc) {
+	if alloc != nil && !sq.resourceFitsAllocated(alloc) {
 		return fmt.Errorf("released allocation (%v) is larger than '%s' queue allocation (%v)",
 			alloc, sq.QueuePath, sq.allocatedResource)
 	}
@@ -1093,10 +1095,19 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 			return err
 		}
 	}
+	sq.Lock()
+	defer sq.Unlock()
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
 	sq.updateAllocatedResourceMetrics()
 	return nil
+}
+
+// small helper method to access sq.allocatedResource and avoid Clone() call
+func (sq *Queue) resourceFitsAllocated(res *resources.Resource) bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.allocatedResource.FitIn(res)
 }
 
 // IncPreemptingResource increments the preempting resources for this queue (recursively).

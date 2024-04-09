@@ -963,16 +963,22 @@ func (sq *Queue) MarkQueueForRemoval() {
 	if sq.IsManaged() {
 		log.Log(log.SchedQueue).Info("marking managed queue for deletion",
 			zap.String("queue", sq.QueuePath))
-		if err := sq.handleQueueEvent(Remove); err != nil {
-			log.Log(log.SchedQueue).Warn("failed to mark managed queue for deletion",
-				zap.String("queue", sq.QueuePath),
-				zap.Error(err))
-		}
+		sq.doRemoveQueue()
 		if len(sq.children) > 0 {
 			for _, child := range children {
 				child.MarkQueueForRemoval()
 			}
 		}
+	}
+}
+
+func (sq *Queue) doRemoveQueue() {
+	sq.Lock()
+	defer sq.Unlock()
+	if err := sq.handleQueueEvent(Remove); err != nil {
+		log.Log(log.SchedQueue).Warn("failed to mark managed queue for deletion",
+			zap.String("queue", sq.QueuePath),
+			zap.Error(err))
 	}
 }
 

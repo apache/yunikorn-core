@@ -80,8 +80,7 @@ func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 	events.GetEventSystem().StartService()
 
 	sched := scheduler.NewScheduler()
-	proxy := rmproxy.NewRMProxy()
-
+	proxy := rmproxy.NewRMProxy(sched)
 	eventHandler := handler.EventHandlers{
 		SchedulerEventHandler: sched,
 		RMProxyEventHandler:   proxy,
@@ -90,7 +89,7 @@ func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 	// start services
 	log.Log(log.Entrypoint).Info("ServiceContext start scheduling services")
 	sched.StartService(eventHandler, opts.manualScheduleFlag)
-	proxy.StartService(eventHandler)
+	proxy.StartService()
 
 	context := &ServiceContext{
 		RMProxy:   proxy,

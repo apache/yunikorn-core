@@ -957,17 +957,18 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 // This can be executed multiple times and is only effective the first time.
 // This is a noop on an unmanaged queue.
 func (sq *Queue) MarkQueueForRemoval() {
+	if !sq.IsManaged() {
+		return
+	}
 	children := sq.GetCopyOfChildren()
 	// Mark the managed queue for deletion: it is removed from the config let it drain.
 	// Also mark all the managed children for deletion.
-	if sq.IsManaged() {
-		log.Log(log.SchedQueue).Info("marking managed queue for deletion",
-			zap.String("queue", sq.QueuePath))
-		sq.doRemoveQueue()
-		if len(sq.children) > 0 {
-			for _, child := range children {
-				child.MarkQueueForRemoval()
-			}
+	log.Log(log.SchedQueue).Info("marking managed queue for deletion",
+		zap.String("queue", sq.QueuePath))
+	sq.doRemoveQueue()
+	if len(sq.children) > 0 {
+		for _, child := range children {
+			child.MarkQueueForRemoval()
 		}
 	}
 }

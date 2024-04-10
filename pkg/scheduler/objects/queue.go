@@ -131,6 +131,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	// add to the parent, we might have an overall lock already
 	// still need to make sure we lock the parent so we do not interfere with scheduling
 	if parent != nil {
+		// pull the properties from the parent that should be set on the child
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
 		sq.UpdateQueueProperties()
 		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
@@ -138,7 +139,6 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		if err != nil {
 			return nil, fmt.Errorf("configured queue creation failed: %w", err)
 		}
-		// pull the properties from the parent that should be set on the child
 	} else {
 		sq.UpdateQueueProperties()
 	}

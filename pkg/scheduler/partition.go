@@ -159,7 +159,8 @@ func (pc *PartitionContext) updatePreemption(conf configs.PartitionConfig) {
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
-	// this must be performed without locking to avoid lock order differences between PartitionContext and AppPlacementManager
+	// the following piece of code (before pc.Lock()) must be performed without locking
+	// to avoid lock order differences between PartitionContext and AppPlacementManager
 	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {
 		return fmt.Errorf("partition cannot be created without root queue")
 	}
@@ -611,7 +612,6 @@ func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
 }
 
 // removeNodeFromList removes the node from the list of partition nodes.
-// This locks the partition.
 func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
 	node := pc.nodes.RemoveNode(nodeID)
 	if node == nil {

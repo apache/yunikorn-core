@@ -20,93 +20,92 @@ package objects
 
 import (
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type queueEvents struct {
 	eventSystem events.EventSystem
-	queue       *Queue
 }
 
-func (q *queueEvents) sendNewQueueEvent() {
+func (q *queueEvents) sendNewQueueEvent(queuePath string, managed bool) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
 	detail := si.EventRecord_QUEUE_DYNAMIC
-	if q.queue.IsManaged() {
+	if managed {
 		detail = si.EventRecord_DETAILS_NONE
 	}
-	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_ADD,
+	event := events.CreateQueueEventRecord(queuePath, common.Empty, common.Empty, si.EventRecord_ADD,
 		detail, nil)
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendNewApplicationEvent(appID string) {
+func (q *queueEvents) sendNewApplicationEvent(queuePath, appID string) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, appID, si.EventRecord_ADD,
+	event := events.CreateQueueEventRecord(queuePath, common.Empty, appID, si.EventRecord_ADD,
 		si.EventRecord_QUEUE_APP, nil)
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendRemoveQueueEvent() {
+func (q *queueEvents) sendRemoveQueueEvent(queuePath string, managed bool) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
 	detail := si.EventRecord_QUEUE_DYNAMIC
-	if q.queue.IsManaged() {
+	if managed {
 		detail = si.EventRecord_DETAILS_NONE
 	}
-	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_REMOVE,
+	event := events.CreateQueueEventRecord(queuePath, common.Empty, common.Empty, si.EventRecord_REMOVE,
 		detail, nil)
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendRemoveApplicationEvent(appID string) {
+func (q *queueEvents) sendRemoveApplicationEvent(queuePath, appID string) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, appID, si.EventRecord_REMOVE,
+	event := events.CreateQueueEventRecord(queuePath, common.Empty, appID, si.EventRecord_REMOVE,
 		si.EventRecord_QUEUE_APP, nil)
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendMaxResourceChangedEvent() {
+func (q *queueEvents) sendMaxResourceChangedEvent(queuePath string, maxResource *resources.Resource) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_SET,
-		si.EventRecord_QUEUE_MAX, q.queue.maxResource)
+	event := events.CreateQueueEventRecord(queuePath, common.Empty, common.Empty, si.EventRecord_SET,
+		si.EventRecord_QUEUE_MAX, maxResource)
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendGuaranteedResourceChangedEvent() {
+func (q *queueEvents) sendGuaranteedResourceChangedEvent(queuePath string, guaranteed *resources.Resource) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateQueueEventRecord(q.queue.QueuePath, common.Empty, common.Empty, si.EventRecord_SET,
-		si.EventRecord_QUEUE_GUARANTEED, q.queue.guaranteedResource)
+	event := events.CreateQueueEventRecord(queuePath, common.Empty, common.Empty, si.EventRecord_SET,
+		si.EventRecord_QUEUE_GUARANTEED, guaranteed)
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendTypeChangedEvent() {
+func (q *queueEvents) sendTypeChangedEvent(queuePath string, isLeaf bool) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
 	message := "leaf queue: false"
-	if q.queue.isLeaf {
+	if isLeaf {
 		message = "leaf queue: true"
 	}
-	event := events.CreateQueueEventRecord(q.queue.QueuePath, message, common.Empty, si.EventRecord_SET,
+	event := events.CreateQueueEventRecord(queuePath, message, common.Empty, si.EventRecord_SET,
 		si.EventRecord_QUEUE_TYPE, nil)
 	q.eventSystem.AddEvent(event)
 }
 
-func newQueueEvents(queue *Queue, evt events.EventSystem) *queueEvents {
+func newQueueEvents(evt events.EventSystem) *queueEvents {
 	return &queueEvents{
 		eventSystem: evt,
-		queue:       queue,
 	}
 }

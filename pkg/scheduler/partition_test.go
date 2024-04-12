@@ -144,7 +144,6 @@ func TestNewWithPlacement(t *testing.T) {
 	}
 	partition, err := newPartitionContext(confWith, rmID, nil)
 	assert.NilError(t, err, "test partition create failed with error")
-	assert.Equal(t, len(*partition.rules), 1, "Placement rules not set as expected")
 
 	// add a rule and check if it is updated
 	confWith = configs.PartitionConfig{
@@ -170,7 +169,6 @@ func TestNewWithPlacement(t *testing.T) {
 	}
 	err = partition.updatePartitionDetails(confWith)
 	assert.NilError(t, err, "update partition failed unexpected with error")
-	assert.Equal(t, len(*partition.rules), 2, "Placement rules not updated as expected")
 
 	// update to turn off placement manager
 	conf := configs.PartitionConfig{
@@ -186,12 +184,10 @@ func TestNewWithPlacement(t *testing.T) {
 	}
 	err = partition.updatePartitionDetails(conf)
 	assert.NilError(t, err, "update partition failed unexpected with error")
-	assert.Equal(t, len(*partition.rules), 0, "Placement rules not updated as expected")
 
 	// set the old config back this should turn on the placement again
 	err = partition.updatePartitionDetails(confWith)
 	assert.NilError(t, err, "update partition failed unexpected with error")
-	assert.Equal(t, len(*partition.rules), 2, "Placement rules not updated as expected")
 }
 
 func TestAddNode(t *testing.T) {

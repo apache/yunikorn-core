@@ -170,11 +170,11 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		log.Log(log.SchedPartition).Info("New placement rules not activated, config reload failed", zap.Error(err))
 		return err
 	}
+	pc.updateNodeSortingPolicy(conf)
 
 	pc.Lock()
 	defer pc.Unlock()
 	pc.rules = &conf.PlacementRules
-	pc.updateNodeSortingPolicy(conf)
 	pc.updatePreemption(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
@@ -587,13 +587,21 @@ func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 	}
 }
 
-// Update the partition details when removing a node.
-// This locks the partition. The partition may not be locked when we process the allocation
-// additions to the node as that takes further app, queue or node locks
+// Update the partition details when adding a node.
 func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
+	// we don't grab a lock here because we only update pc.nodes which is internally protected
 	if err := pc.nodes.AddNode(node); err != nil {
 		return fmt.Errorf("failed to add node %s to partition %s, error: %v", node.NodeID, pc.Name, err)
 	}
+
+	pc.addNodeResources(node)
+	return nil
+}
+
+// Update metrics & resource tracking information.
+// This locks the partition. The partition may not be locked when we process the allocation
+// additions to the node as that takes further app, queue or node locks.
+func (pc *PartitionContext) addNodeResources(node *objects.Node) {
 	pc.Lock()
 	defer pc.Unlock()
 	metrics.GetSchedulerMetrics().IncActiveNodes()
@@ -608,7 +616,6 @@ func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
 		zap.Stringer("partitionResource", pc.totalPartitionResource))
-	return nil
 }
 
 // removeNodeFromList removes the node from the list of partition nodes.
@@ -623,7 +630,6 @@ func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
 
 	// Remove node from list of tracked nodes
 	metrics.GetSchedulerMetrics().DecActiveNodes()
-
 	log.Log(log.SchedPartition).Info("Removed node from available partition nodes",
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID))

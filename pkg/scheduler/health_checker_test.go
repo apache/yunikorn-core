@@ -216,7 +216,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
 
 	// remove the allocation from the node, so we will have an orphan allocation assigned to the app
-	node.RemoveAllocation("key-0")
+	node.RemoveAllocation("key")
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
 	assert.Assert(t, !healthInfo.HealthChecks[10].Succeeded, "The orphan allocation check on the app should not be successful")

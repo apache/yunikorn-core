@@ -544,10 +544,10 @@ func TestSortApplications(t *testing.T) {
 	if len(sortedApp) != 1 || sortedApp[0].ApplicationID != appID1 {
 		t.Errorf("sorted application is missing expected app: %v", sortedApp)
 	}
-	// set 0 repeat
-	_, err = app.UpdateAskRepeat("alloc-1", -1)
+	// set allocated
+	_, err = app.AllocateAsk("alloc-1")
 	if err != nil || len(leaf.sortApplications(false)) != 0 {
-		t.Errorf("app with ask but 0 pending resources should not be in sorted apps: %v (err = %v)", app, err)
+		t.Errorf("app with ask but no pending resources should not be in sorted apps: %v (err = %v)", app, err)
 	}
 }
 
@@ -1666,12 +1666,9 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parentMax := map[string]string{siCommon.Memory: "200"}
 	parentGuar := map[string]string{siCommon.Memory: "100"}
 	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
-	ask.pendingAskRepeat = 1
 	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
-	ask2.pendingAskRepeat = 1
 	alloc2 := NewAllocation(nodeID1, ask2)
 	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
-	ask3.pendingAskRepeat = 1
 	alloc3 := NewAllocation(nodeID1, ask3)
 	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
@@ -2522,7 +2519,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	assert.Equal(t, app.CurrentState(), Running.String(), "app state should be running")
 	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
 
-	_, err = app.updateAskRepeatInternal(ask, -1)
+	_, err = app.allocateAsk(ask)
 	assert.NilError(t, err, "failed to decrease pending resources")
 
 	app.RemoveAllocation(alloc.GetAllocationID(), si.TerminationType_STOPPED_BY_RM)

@@ -124,7 +124,6 @@ func TestSortAllocations(t *testing.T) {
 
 	requiredAsk := createAllocationAsk("ask", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	requiredAsk.pendingAskRepeat = 5
 
 	p := NewRequiredNodePreemptor(node, requiredAsk)
 	prepareAllocationAsks(node)

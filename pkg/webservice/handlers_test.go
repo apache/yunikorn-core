@@ -1302,15 +1302,15 @@ func TestGetPartitionNodes(t *testing.T) {
 		if node.NodeID == node1ID {
 			assert.Equal(t, node.NodeID, node1ID)
 			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationKey)
-			assert.Equal(t, "alloc-1-0", node.Allocations[0].UUID)
-			assert.Equal(t, "alloc-1-0", node.Allocations[0].AllocationID)
+			assert.Equal(t, "alloc-1", node.Allocations[0].UUID)
+			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationID)
 			assert.DeepEqual(t, attributesOfnode1, node.Attributes)
 			assert.DeepEqual(t, map[string]int64{"memory": 50, "vcore": 30}, node.Utilized)
 		} else {
 			assert.Equal(t, node.NodeID, node2ID)
 			assert.Equal(t, "alloc-2", node.Allocations[0].AllocationKey)
-			assert.Equal(t, "alloc-2-0", node.Allocations[0].UUID)
-			assert.Equal(t, "alloc-2-0", node.Allocations[0].AllocationID)
+			assert.Equal(t, "alloc-2", node.Allocations[0].UUID)
+			assert.Equal(t, "alloc-2", node.Allocations[0].AllocationID)
 			assert.DeepEqual(t, attributesOfnode2, node.Attributes)
 			assert.DeepEqual(t, map[string]int64{"memory": 30, "vcore": 50}, node.Utilized)
 		}
@@ -1385,12 +1385,11 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
 	}
 	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		ApplicationID:  "app-1",
-		PartitionName:  part.Name,
-		TaskGroupName:  tg,
-		ResourceAsk:    res,
-		Placeholder:    true,
-		MaxAllocations: 1})
+		ApplicationID: "app-1",
+		PartitionName: part.Name,
+		TaskGroupName: tg,
+		ResourceAsk:   res,
+		Placeholder:   true})
 	err := app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	app.SetTimedOutPlaceholder(tg, 1)
@@ -1565,10 +1564,9 @@ func TestGetApplicationHandler(t *testing.T) {
 		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
 	}
 	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		ApplicationID:  "app-1",
-		PartitionName:  part.Name,
-		ResourceAsk:    res,
-		MaxAllocations: 1})
+		ApplicationID: "app-1",
+		PartitionName: part.Name,
+		ResourceAsk:   res})
 	err := app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 
@@ -2473,10 +2471,9 @@ func prepareUserAndGroupContext(t *testing.T, config string) {
 		Resources: map[string]*si.Quantity{"vcore": {Value: 1}},
 	}
 	ask := objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		ApplicationID:  "app-1",
-		PartitionName:  part.Name,
-		ResourceAsk:    res,
-		MaxAllocations: 1})
+		ApplicationID: "app-1",
+		PartitionName: part.Name,
+		ResourceAsk:   res})
 	err := app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 

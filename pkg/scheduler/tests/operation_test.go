@@ -96,8 +96,17 @@ partitions:
 						"vcore":  {Value: 1000},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -224,8 +233,17 @@ partitions:
 						"vcore":  {Value: 1000},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",

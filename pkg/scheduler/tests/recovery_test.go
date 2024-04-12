@@ -19,6 +19,7 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -126,6 +127,16 @@ func TestSchedulerRecovery(t *testing.T) {
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
+				AllocationKey: "alloc-0",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+			},
+			{
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -133,8 +144,7 @@ func TestSchedulerRecovery(t *testing.T) {
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -170,32 +180,23 @@ func TestSchedulerRecovery(t *testing.T) {
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
-	// ask for two more resources
+	// ask for 4 more allocations
+	asks := make([]*si.AllocationAsk, 4)
+	mem := [4]int64{50, 100, 50, 100}
+	for i := 0; i < 4; i++ {
+		asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-%d", i+2),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: mem[i]},
+					"vcore":  {Value: 5},
+				},
+			},
+			ApplicationID: appID1,
+		}
+	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 50},
-						"vcore":  {Value: 5},
-					},
-				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
-			},
-			{
-				AllocationKey: "alloc-3",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 5},
-					},
-				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
-			},
-		},
+		Asks: asks,
 		RmID: "rm:123",
 	})
 
@@ -391,8 +392,17 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -800,8 +810,17 @@ partitions:
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -1006,7 +1025,6 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 1,
 				ApplicationID:  appID1,
 				TaskGroupName:  "tg-2",
 				Placeholder:    true,
@@ -1028,7 +1046,6 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 1,
 				ApplicationID:  appID1,
 				TaskGroupName:  "tg-1",
 			},
@@ -1040,7 +1057,6 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 1,
 				ApplicationID:  appID1,
 				TaskGroupName:  "tg-2",
 			},
@@ -1057,13 +1073,13 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 				{
 					ApplicationID:   appID1,
 					PartitionName:   "default",
-					AllocationID:    "ph-alloc-1-0",
+					AllocationID:    "ph-alloc-1",
 					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 				{
 					ApplicationID:   appID1,
 					PartitionName:   "default",
-					AllocationID:    "ph-alloc-2-0",
+					AllocationID:    "ph-alloc-2",
 					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},
@@ -1079,13 +1095,13 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 				{
 					ApplicationID:   appID1,
 					PartitionName:   "default",
-					AllocationID:    "real-alloc-1-0",
+					AllocationID:    "real-alloc-1",
 					TerminationType: si.TerminationType_STOPPED_BY_RM,
 				},
 				{
 					ApplicationID:   appID1,
 					PartitionName:   "default",
-					AllocationID:    "real-alloc-2-0",
+					AllocationID:    "real-alloc-2",
 					TerminationType: si.TerminationType_STOPPED_BY_RM,
 				},
 			},

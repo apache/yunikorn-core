@@ -40,6 +40,7 @@ const (
 	appID1        = "app-1"
 	appID2        = "app-2"
 	aKey          = "alloc-1"
+	aKey2         = "alloc-2"
 	aAllocationID = "alloc-allocationid-1"
 	nodeID1       = "node-1"
 	nodeID2       = "node-2"
@@ -225,31 +226,26 @@ func newPlaceholderAlloc(appID, nodeID string, res *resources.Resource) *Allocat
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, 1, false, 0)
+	return newAllocationAskAll(allocKey, appID, "", res, false, 0)
 }
 
 func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, priority int32) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, 1, false, priority)
+	return newAllocationAskAll(allocKey, appID, "", res, false, priority)
 }
 
-func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, repeat, false, 0)
+func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource) *AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, taskGroup != "", 0)
 }
 
-func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, taskGroup, res, repeat, taskGroup != "", 0)
-}
-
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int, placeholder bool, priority int32) *AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, placeholder bool, priority int32) *AllocationAsk {
 	ask := &si.AllocationAsk{
-		AllocationKey:  allocKey,
-		ApplicationID:  appID,
-		PartitionName:  "default",
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: int32(repeat),
-		TaskGroupName:  taskGroup,
-		Placeholder:    placeholder,
-		Priority:       priority,
+		AllocationKey: allocKey,
+		ApplicationID: appID,
+		PartitionName: "default",
+		ResourceAsk:   res.ToProto(),
+		TaskGroupName: taskGroup,
+		Placeholder:   placeholder,
+		Priority:      priority,
 	}
 	return NewAllocationAskFromSI(ask)
 }

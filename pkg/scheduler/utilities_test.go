@@ -497,44 +497,38 @@ func newApplicationTGTagsWithPhTimeout(appID, partition, queueName string, task 
 }
 
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, 1, placeHolder)
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, placeHolder)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.AllocationAsk {
-	return newAllocationAskRepeat(allocKey, appID, res, 1)
+	return newAllocationAskAll(allocKey, appID, "", res, 1, false)
 }
 
-func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int32) *objects.AllocationAsk {
-	return newAllocationAskPriority(allocKey, appID, res, repeat, 1)
+func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, prio int32) *objects.AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, "", res, prio, false)
 }
 
-func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, repeat int32, prio int32) *objects.AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, repeat, prio, false)
-}
-
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int32, prio int32, placeHolder bool) *objects.AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.AllocationAsk {
 	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		AllocationKey:  allocKey,
-		ApplicationID:  appID,
-		PartitionName:  "test",
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: repeat,
-		Priority:       prio,
-		TaskGroupName:  taskGroup,
-		Placeholder:    placeHolder,
+		AllocationKey: allocKey,
+		ApplicationID: appID,
+		PartitionName: "test",
+		ResourceAsk:   res.ToProto(),
+		Priority:      prio,
+		TaskGroupName: taskGroup,
+		Placeholder:   placeHolder,
 	})
 }
 
 func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.AllocationAsk {
 	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		AllocationKey:  allocKey,
-		ApplicationID:  appID,
-		PartitionName:  "default",
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: 1,
-		Priority:       prio,
-		TaskGroupName:  taskGroup,
-		Placeholder:    false,
+		AllocationKey: allocKey,
+		ApplicationID: appID,
+		PartitionName: "default",
+		ResourceAsk:   res.ToProto(),
+		Priority:      prio,
+		TaskGroupName: taskGroup,
+		Placeholder:   false,
 		PreemptionPolicy: &si.PreemptionPolicy{
 			AllowPreemptSelf:  true,
 			AllowPreemptOther: true,

@@ -756,8 +756,8 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 			// unlink the placeholder and allocation
 			release.ClearReleases()
 			alloc.ClearReleases()
-			// update the repeat on the real alloc to get it re-scheduled
-			_, err := app.UpdateAskRepeat(askAlloc.GetAsk().GetAllocationKey(), 1)
+			// mark ask as unallocated to get it re-scheduled
+			_, err := app.DeallocateAsk(askAlloc.GetAsk().GetAllocationKey())
 			if err == nil {
 				log.Log(log.SchedPartition).Info("inflight placeholder replacement reversed due to node removal",
 					zap.String("appID", askAlloc.GetApplicationID()),

@@ -21,7 +21,6 @@ package scheduler
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -257,7 +256,7 @@ func TestAddNodeWithAllocations(t *testing.T) {
 	// fail with a broken alloc
 	ask = newAllocationAsk("alloc-1-allocationid", appID1, appRes)
 	alloc = objects.NewAllocation(nodeID1, ask)
-	assert.Equal(t, alloc.GetAllocationID(), "alloc-1-allocationid-0")
+	assert.Equal(t, alloc.GetAllocationID(), "alloc-1-allocationid")
 	// reset allocationID to empty
 	alloc.SetAllocationID("")
 	assert.Equal(t, alloc.GetAllocationID(), "")
@@ -376,10 +375,10 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Equal(t, 1, partition.getPhAllocationCount(), "number of active placeholders")
 
 	// fake an ask that is used
-	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, 1, false)
+	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, false)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
-	_, err = app.UpdateAskRepeat(allocID, -1)
+	_, err = app.AllocateAsk(allocID)
 	assert.NilError(t, err, "ask should have been updated without error")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 	assertLimits(t, getTestUserGroup(), appRes)
@@ -470,7 +469,7 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 	newRes.MultiplyTo(4)
 	phRes.MultiplyTo(7)
 
-	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
+	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 1, false)
 	alloc := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{alloc}
 
@@ -596,7 +595,7 @@ func TestPlaceholderDataWithNodeRemoval(t *testing.T) {
 	phRes.MultiplyTo(7)
 
 	// add a node with allocation: must have the correct app1 added already
-	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
+	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 1, false)
 	alloc := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{alloc}
 
@@ -679,7 +678,7 @@ func TestPlaceholderDataWithRemoval(t *testing.T) {
 	phRes.MultiplyTo(7)
 
 	// add a node with allocation: must have the correct app1 added already
-	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 0, 1, false)
+	ask := newAllocationAskAll("ask-1", appID1, taskGroup, appRes, 1, false)
 	alloc := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{alloc}
 
@@ -764,7 +763,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	node1 := newNodeMaxResource(nodeID1, nodeRes)
 	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	ask := newAllocationAskAll("placeholder", appID1, taskGroup, appRes, 0, 1, true)
+	ask := newAllocationAskAll("placeholder", appID1, taskGroup, appRes, 1, true)
 	ph := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{ph}
 	err = partition.AddNode(node1, allocs)
@@ -779,10 +778,10 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
 
 	// fake an ask that is used
-	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, 1, false)
+	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, false)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
-	_, err = app.UpdateAskRepeat(allocID, -1)
+	_, err = app.AllocateAsk(allocID)
 	assert.NilError(t, err, "ask should have been updated without error")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 
@@ -836,7 +835,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	node1 := newNodeMaxResource(nodeID1, nodeRes)
 	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	ask := newAllocationAskAll("placeholder", appID1, taskGroup, appRes, 0, 1, true)
+	ask := newAllocationAskAll("placeholder", appID1, taskGroup, appRes, 1, true)
 	ph := objects.NewAllocation(nodeID1, ask)
 	allocs := []*objects.Allocation{ph}
 	err = partition.AddNode(node1, allocs)
@@ -851,10 +850,10 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
 
 	// fake an ask that is used
-	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, 1, false)
+	ask = newAllocationAskAll(allocID, appID1, taskGroup, appRes, 1, false)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
-	_, err = app.UpdateAskRepeat(allocID, -1)
+	_, err = app.AllocateAsk(allocID)
 	assert.NilError(t, err, "ask should have been updated without error")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 
@@ -1144,7 +1143,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), appRes)
 
 	ask = newAllocationAsk("alloc-1", appNotRemoved, appRes)
-	allocationID := "alloc-1-0"
+	allocationID := "alloc-1"
 	alloc = objects.NewAllocation(nodeID1, ask)
 	err = partition.addAllocation(alloc)
 	assert.NilError(t, err, "add allocation to partition should not have failed")
@@ -1552,14 +1551,14 @@ func TestTryAllocate(t *testing.T) {
 	assert.NilError(t, err, "failed to add app-1 to partition")
 	err = app.AddAllocationAsk(newAllocationAsk(allocID, appID1, res))
 	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
-	err = app.AddAllocationAsk(newAllocationAskPriority("alloc-2", appID1, res, 1, 2))
+	err = app.AddAllocationAsk(newAllocationAskPriority("alloc-2", appID1, res, 2))
 	assert.NilError(t, err, "failed to add ask alloc-2 to app-1")
 
 	app = newApplication(appID2, "default", "root.leaf")
 	// add to the partition
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "failed to add app-2 to partition")
-	err = app.AddAllocationAsk(newAllocationAskPriority(allocID, appID2, res, 1, 2))
+	err = app.AddAllocationAsk(newAllocationAskPriority(allocID, appID2, res, 2))
 	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
 
 	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
@@ -1699,7 +1698,10 @@ func TestRequiredNodeCancelNonDSReservations(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "failed to add app-1 to partition")
 
-	ask := newAllocationAskRepeat("alloc-1", appID1, res, 2)
+	ask := newAllocationAsk("alloc-1", appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask to app")
+	ask = newAllocationAsk("alloc-2", appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask to app")
 	// calculate the resource size using the repeat request (reuse is possible using proto conversions in ask)
@@ -1774,10 +1776,14 @@ func TestRequiredNodeCancelDSReservations(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "failed to add app-1 to partition")
 
-	ask := newAllocationAskRepeat("alloc-1", appID1, res, 2)
+	ask := newAllocationAsk("alloc-1", appID1, res)
 	ask.SetRequiredNode(nodeID1)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "failed to add ask to app")
+	assert.NilError(t, err, "failed to add ask 1 to app")
+	ask = newAllocationAsk("alloc-2", appID1, res)
+	ask.SetRequiredNode(nodeID1)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "failed to add ask 2 to app")
 	// calculate the resource size using the repeat request (reuse is possible using proto conversions in ask)
 	res.MultiplyTo(2)
 	assert.Assert(t, resources.Equals(res, app.GetPendingResource()), "pending resource not set as expected")
@@ -2309,10 +2315,13 @@ func TestAllocReserveNewNode(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "failed to add app-1 to partition")
 
-	ask := newAllocationAskRepeat("alloc-1", appID1, res, 2)
+	ask := newAllocationAsk("alloc-1", appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask to app")
-	// calculate the resource size using the repeat request (reuse is possible using proto conversions in ask)
+	ask2 := newAllocationAsk("alloc-2", appID1, res)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask2 to app")
+	// calculate the resource size for two asks
 	res.MultiplyTo(2)
 	assert.Assert(t, resources.Equals(res, app.GetPendingResource()), "pending resource not set as expected")
 	assert.Assert(t, resources.Equals(res, partition.root.GetPendingResource()), "pending resource not set as expected on root queue")
@@ -2438,9 +2447,13 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "failed to add app-1 to partition")
 
-	ask := newAllocationAskRepeat("alloc-1", appID1, res, 2)
+	ask := newAllocationAsk("alloc-1", appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask alloc-1 to app")
+
+	ask2 := newAllocationAsk("alloc-2", appID1, res)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask alloc-2 to app")
 
 	// reserve one node: scheduling should happen on the other
 	node2 := partition.GetNode(nodeID2)
@@ -2491,9 +2504,11 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	app := newApplication(appID1, "default", "root.parent.sub-leaf")
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "failed to add app app-1 to partition")
-	ask := newAllocationAskRepeat("alloc-1", appID1, res, 4)
-	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "failed to add ask alloc-1 to app")
+	for i := 1; i <= 4; i++ {
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res)
+		err = app.AddAllocationAsk(ask)
+		assert.NilError(t, err, fmt.Sprintf("failed to add ask alloc-%d to app", i))
+	}
 
 	// calculate the resource size using the repeat request
 	pending := resources.Multiply(res, 4)
@@ -2509,12 +2524,12 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 16000}))
 
 	// add a asks which should reserve
-	ask = newAllocationAskRepeat("alloc-2", appID1, res, 1)
+	ask := newAllocationAsk("alloc-5", appID1, res)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "failed to add ask alloc-2 to app")
-	ask = newAllocationAskRepeat("alloc-3", appID1, res, 1)
+	assert.NilError(t, err, "failed to add ask alloc-5 to app")
+	ask = newAllocationAsk("alloc-6", appID1, res)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "failed to add ask alloc-3 to app")
+	assert.NilError(t, err, "failed to add ask alloc-6 to app")
 	pending = resources.Multiply(res, 2)
 	assert.Assert(t, resources.Equals(pending, app.GetPendingResource()), "pending resource not set as expected")
 	// allocate so we get reservations
@@ -2543,9 +2558,9 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	// before confirming remove the ask: do what the scheduler does when it gets a request from a
 	// shim in processAllocationReleaseByAllocationKey()
 	// make sure we are counting correctly and leave the other reservation intact
-	removeAskID := "alloc-2"
-	if alloc.GetAllocationKey() == "alloc-3" {
-		removeAskID = "alloc-3"
+	removeAskID := "alloc-5"
+	if alloc.GetAllocationKey() == "alloc-6" {
+		removeAskID = "alloc-6"
 	}
 	released := app.RemoveAllocationAsk(removeAskID)
 	assert.Equal(t, released, 1, "expected one reservations to be released")
@@ -3521,18 +3536,10 @@ func TestAddAllocationAsk(t *testing.T) {
 	assert.NilError(t, err, "failed to create resource")
 	askKey := "ask-key-1"
 	ask := si.AllocationAsk{
-		AllocationKey:  askKey,
-		ApplicationID:  appID1,
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: 0,
+		AllocationKey: askKey,
+		ApplicationID: appID1,
+		ResourceAsk:   res.ToProto(),
 	}
-	err = partition.addAllocationAsk(&ask)
-	if err == nil || !strings.Contains(err.Error(), "invalid") {
-		t.Fatalf("0 repeat ask should have returned invalid ask error: %v", err)
-	}
-
-	// set the repeat and retry this should work
-	ask.MaxAllocations = 1
 	err = partition.addAllocationAsk(&ask)
 	assert.NilError(t, err, "failed to add ask to app")
 	if !resources.Equals(app.GetPendingResource(), res) {
@@ -3915,7 +3922,7 @@ func TestUserHeadroom(t *testing.T) {
 
 	res, err = resources.NewResourceFromConf(map[string]string{"memory": "3", "vcores": "3"})
 	assert.NilError(t, err, "failed to create resource")
-	ask := newAllocationAskRepeat("alloc-1", "app-5", res, 2)
+	ask := newAllocationAsk("alloc-1", "app-5", res)
 	err = app5.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask to app")
 
@@ -3936,7 +3943,7 @@ func TestUserHeadroom(t *testing.T) {
 	assert.Equal(t, objects.AllocatedReserved, alloc.GetResult(), "allocation result should have been allocated")
 
 	// create a reservation and ensure reservation has not been allocated because there is no headroom for the user
-	ask = newAllocationAskRepeat("alloc-2", "app-5", res, 2)
+	ask = newAllocationAsk("alloc-2", "app-5", res)
 	err = app5.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask to app")
 	partition.reserve(app5, node2, ask)
@@ -4418,22 +4425,19 @@ func TestCalculateOutstandingRequests(t *testing.T) {
 		"memory": 1,
 	})
 	siAsk1 := &si.AllocationAsk{
-		AllocationKey:  "ask-uuid-1",
-		ApplicationID:  appID1,
-		ResourceAsk:    askResource.ToProto(),
-		MaxAllocations: 1,
+		AllocationKey: "ask-uuid-1",
+		ApplicationID: appID1,
+		ResourceAsk:   askResource.ToProto(),
 	}
 	siAsk2 := &si.AllocationAsk{
-		AllocationKey:  "ask-uuid-2",
-		ApplicationID:  appID1,
-		ResourceAsk:    askResource.ToProto(),
-		MaxAllocations: 1,
+		AllocationKey: "ask-uuid-2",
+		ApplicationID: appID1,
+		ResourceAsk:   askResource.ToProto(),
 	}
 	siAsk3 := &si.AllocationAsk{
-		AllocationKey:  "ask-uuid-3",
-		ApplicationID:  appID2,
-		ResourceAsk:    askResource.ToProto(),
-		MaxAllocations: 1,
+		AllocationKey: "ask-uuid-3",
+		ApplicationID: appID2,
+		ResourceAsk:   askResource.ToProto(),
 	}
 	err = partition.addAllocationAsk(siAsk1)
 	assert.NilError(t, err)
@@ -4511,18 +4515,18 @@ func TestPlaceholderAllocationAndReplacementAfterRecovery(t *testing.T) {
 	assert.Equal(t, objects.Replaced, alloc.GetResult())
 	assert.Equal(t, "real-alloc", alloc.GetAllocationKey())
 	assert.Equal(t, "tg-1", alloc.GetTaskGroup())
-	assert.Equal(t, "real-alloc-0", alloc.GetAllocationID())
+	assert.Equal(t, "real-alloc", alloc.GetAllocationID())
 
 	// remove the terminated placeholder allocation
 	released, confirmed := partition.removeAllocation(&si.AllocationRelease{
 		ApplicationID:   appID1,
 		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
-		AllocationKey:   "real-alloc-0",
-		AllocationID:    "placeholder-0",
+		AllocationKey:   "real-alloc",
+		AllocationID:    "placeholder",
 	})
 	assert.Assert(t, released == nil, "unexpected released allocation")
 	assert.Assert(t, confirmed != nil, "expected to have a confirmed allocation")
 	assert.Equal(t, "real-alloc", confirmed.GetAllocationKey())
 	assert.Equal(t, "tg-1", confirmed.GetTaskGroup())
-	assert.Equal(t, "real-alloc-0", confirmed.GetAllocationID())
+	assert.Equal(t, "real-alloc", confirmed.GetAllocationID())
 }

@@ -58,7 +58,6 @@ type PartitionContext struct {
 	partitionManager       *partitionManager               // manager for this partition
 	stateMachine           *fsm.FSM                        // the state of the partition for scheduling
 	stateTime              time.Time                       // last time the state was updated (needed for cleanup)
-	rules                  *[]configs.PlacementRule        // placement rules to be loaded by the scheduler
 	userGroupCache         *security.UserGroupCache        // user cache per partition
 	totalPartitionResource *resources.Resource             // Total node resources
 	allocations            int                             // Number of allocations on the partition
@@ -124,10 +123,9 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 		zap.String("partitionName", pc.Name),
 		zap.String("rmID", pc.RmID))
 
-	pc.rules = &conf.PlacementRules
 	// We need to pass in the locked version of the GetQueue function.
 	// Placing an application will not have a lock on the partition context.
-	pc.placementManager = placement.NewPlacementManager(*pc.rules, pc.GetQueue)
+	pc.placementManager = placement.NewPlacementManager(conf.PlacementRules, pc.GetQueue)
 	// get the user group cache for the partition
 	// TODO get the resolver from the config
 	pc.userGroupCache = security.GetUserGroupCache("")
@@ -170,7 +168,6 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		log.Log(log.SchedPartition).Info("New placement rules not activated, config reload failed", zap.Error(err))
 		return err
 	}
-	pc.rules = &conf.PlacementRules
 	pc.updateNodeSortingPolicy(conf)
 	pc.updatePreemption(conf)
 	// start at the root: there is only one queue

@@ -172,7 +172,6 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 
 	pc.Lock()
 	defer pc.Unlock()
-	pc.rules = &conf.PlacementRules
 	pc.updatePreemption(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]

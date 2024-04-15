@@ -39,13 +39,13 @@ func TestSendNewQueueEvent(t *testing.T) {
 		isManaged: true,
 	}
 	eventSystem := mock.NewEventSystemDisabled()
-	nq := newQueueEvents(queue, eventSystem)
-	nq.sendNewQueueEvent()
+	nq := newQueueEvents(eventSystem)
+	nq.sendNewQueueEvent(queue.QueuePath, false)
 	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
 
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(queue, eventSystem)
-	nq.sendNewQueueEvent()
+	nq = newQueueEvents(eventSystem)
+	nq.sendNewQueueEvent(queue.QueuePath, true)
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE, event.Type)
@@ -56,28 +56,21 @@ func TestSendNewQueueEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
 	assert.Equal(t, 0, len(event.Resource.Resources))
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(&Queue{
-		QueuePath: testQueuePath,
-		isManaged: false,
-	}, eventSystem)
-	nq.sendNewQueueEvent()
+	nq = newQueueEvents(eventSystem)
+	nq.sendNewQueueEvent(queue.QueuePath, false)
 	event = eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE_DYNAMIC, event.EventChangeDetail)
 }
 
 func TestSendRemoveQueueEvent(t *testing.T) {
-	queue := &Queue{
-		QueuePath: testQueuePath,
-		isManaged: true,
-	}
 	eventSystem := mock.NewEventSystemDisabled()
-	nq := newQueueEvents(queue, eventSystem)
-	nq.sendRemoveQueueEvent()
+	nq := newQueueEvents(eventSystem)
+	nq.sendRemoveQueueEvent(testQueuePath, true)
 	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
 
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(queue, eventSystem)
-	nq.sendRemoveQueueEvent()
+	nq = newQueueEvents(eventSystem)
+	nq.sendRemoveQueueEvent(testQueuePath, true)
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE, event.Type)
@@ -88,27 +81,21 @@ func TestSendRemoveQueueEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
 	assert.Equal(t, 0, len(event.Resource.Resources))
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(&Queue{
-		QueuePath: testQueuePath,
-		isManaged: false,
-	}, eventSystem)
-	nq.sendRemoveQueueEvent()
+	nq = newQueueEvents(eventSystem)
+	nq.sendRemoveQueueEvent(testQueuePath, false)
 	event = eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE_DYNAMIC, event.EventChangeDetail)
 }
 
 func TestNewApplicationEvent(t *testing.T) {
-	queue := &Queue{
-		QueuePath: testQueuePath,
-	}
 	eventSystem := mock.NewEventSystemDisabled()
-	nq := newQueueEvents(queue, eventSystem)
-	nq.sendNewApplicationEvent(appID0)
+	nq := newQueueEvents(eventSystem)
+	nq.sendNewApplicationEvent(testQueuePath, appID0)
 	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
 
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(queue, eventSystem)
-	nq.sendNewApplicationEvent(appID0)
+	nq = newQueueEvents(eventSystem)
+	nq.sendNewApplicationEvent(testQueuePath, appID0)
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE, event.Type)
@@ -121,17 +108,14 @@ func TestNewApplicationEvent(t *testing.T) {
 }
 
 func TestRemoveApplicationEvent(t *testing.T) {
-	queue := &Queue{
-		QueuePath: testQueuePath,
-	}
 	eventSystem := mock.NewEventSystemDisabled()
-	nq := newQueueEvents(queue, eventSystem)
-	nq.sendRemoveApplicationEvent(appID0)
+	nq := newQueueEvents(eventSystem)
+	nq.sendRemoveApplicationEvent(testQueuePath, appID0)
 	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
 
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(queue, eventSystem)
-	nq.sendRemoveApplicationEvent(appID0)
+	nq = newQueueEvents(eventSystem)
+	nq.sendRemoveApplicationEvent(testQueuePath, appID0)
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE, event.Type)
@@ -144,17 +128,14 @@ func TestRemoveApplicationEvent(t *testing.T) {
 }
 
 func TestTypeChangedEvent(t *testing.T) {
-	queue := &Queue{
-		QueuePath: testQueuePath,
-	}
 	eventSystem := mock.NewEventSystemDisabled()
-	nq := newQueueEvents(queue, eventSystem)
-	nq.sendTypeChangedEvent()
+	nq := newQueueEvents(eventSystem)
+	nq.sendTypeChangedEvent(testQueuePath, true)
 	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
 
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(queue, eventSystem)
-	nq.sendTypeChangedEvent()
+	nq = newQueueEvents(eventSystem)
+	nq.sendTypeChangedEvent(testQueuePath, false)
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE, event.Type)
@@ -168,18 +149,14 @@ func TestTypeChangedEvent(t *testing.T) {
 
 func TestSendMaxResourceChangedEvent(t *testing.T) {
 	maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	queue := &Queue{
-		QueuePath:   testQueuePath,
-		maxResource: maxRes,
-	}
 	eventSystem := mock.NewEventSystemDisabled()
-	nq := newQueueEvents(queue, eventSystem)
-	nq.sendMaxResourceChangedEvent()
+	nq := newQueueEvents(eventSystem)
+	nq.sendMaxResourceChangedEvent(testQueuePath, maxRes)
 	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
 
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(queue, eventSystem)
-	nq.sendMaxResourceChangedEvent()
+	nq = newQueueEvents(eventSystem)
+	nq.sendMaxResourceChangedEvent(testQueuePath, maxRes)
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE, event.Type)
@@ -195,18 +172,14 @@ func TestSendMaxResourceChangedEvent(t *testing.T) {
 
 func TestSendGuaranteedResourceChangedEvent(t *testing.T) {
 	guaranteed := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	queue := &Queue{
-		QueuePath:          testQueuePath,
-		guaranteedResource: guaranteed,
-	}
 	eventSystem := mock.NewEventSystemDisabled()
-	nq := newQueueEvents(queue, eventSystem)
-	nq.sendGuaranteedResourceChangedEvent()
+	nq := newQueueEvents(eventSystem)
+	nq.sendGuaranteedResourceChangedEvent(testQueuePath, guaranteed)
 	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
 
 	eventSystem = mock.NewEventSystem()
-	nq = newQueueEvents(queue, eventSystem)
-	nq.sendGuaranteedResourceChangedEvent()
+	nq = newQueueEvents(eventSystem)
+	nq.sendGuaranteedResourceChangedEvent(testQueuePath, guaranteed)
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	event := eventSystem.Events[0]
 	assert.Equal(t, si.EventRecord_QUEUE, event.Type)

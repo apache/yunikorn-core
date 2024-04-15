@@ -142,10 +142,10 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	} else {
 		sq.UpdateQueueProperties()
 	}
-	sq.queueEvents = newQueueEvents(sq, events.GetEventSystem())
+	sq.queueEvents = newQueueEvents(events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
-	sq.queueEvents.sendNewQueueEvent()
+	sq.queueEvents.sendNewQueueEvent(sq.QueuePath, sq.isManaged)
 
 	return sq, nil
 }
@@ -200,10 +200,10 @@ func newDynamicQueueInternal(name string, leaf bool, parent *Queue) (*Queue, err
 	}
 
 	sq.UpdateQueueProperties()
-	sq.queueEvents = newQueueEvents(sq, events.GetEventSystem())
+	sq.queueEvents = newQueueEvents(events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
-	sq.queueEvents.sendNewQueueEvent()
+	sq.queueEvents.sendNewQueueEvent(sq.QueuePath, sq.isManaged)
 
 	return sq, nil
 }
@@ -346,7 +346,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	}
 
 	if prevLeaf != sq.isLeaf && sq.queueEvents != nil {
-		sq.queueEvents.sendTypeChangedEvent()
+		sq.queueEvents.sendTypeChangedEvent(sq.QueuePath, sq.isLeaf)
 	}
 
 	if !sq.isLeaf {
@@ -392,7 +392,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", maxResource))
 		if !resources.Equals(sq.maxResource, maxResource) && sq.queueEvents != nil {
-			sq.queueEvents.sendMaxResourceChangedEvent()
+			sq.queueEvents.sendMaxResourceChangedEvent(sq.QueuePath, maxResource)
 		}
 		sq.maxResource = maxResource
 		sq.updateMaxResourceMetrics()
@@ -402,7 +402,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", maxResource))
 		if sq.queueEvents != nil {
-			sq.queueEvents.sendMaxResourceChangedEvent()
+			sq.queueEvents.sendMaxResourceChangedEvent(sq.QueuePath, maxResource)
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
@@ -418,7 +418,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 			zap.Stringer("current", sq.guaranteedResource),
 			zap.Stringer("new", guaranteedResource))
 		if !resources.Equals(sq.guaranteedResource, guaranteedResource) && sq.queueEvents != nil {
-			sq.queueEvents.sendGuaranteedResourceChangedEvent()
+			sq.queueEvents.sendGuaranteedResourceChangedEvent(sq.QueuePath, guaranteedResource)
 		}
 		sq.guaranteedResource = guaranteedResource
 		sq.updateGuaranteedResourceMetrics()
@@ -428,7 +428,7 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 			zap.Stringer("current", sq.guaranteedResource),
 			zap.Stringer("new", guaranteedResource))
 		if sq.queueEvents != nil {
-			sq.queueEvents.sendGuaranteedResourceChangedEvent()
+			sq.queueEvents.sendGuaranteedResourceChangedEvent(sq.QueuePath, guaranteedResource)
 		}
 		sq.guaranteedResource = nil
 		sq.updateGuaranteedResourceMetrics()
@@ -736,7 +736,7 @@ func (sq *Queue) AddApplication(app *Application) {
 	defer sq.Unlock()
 	appID := app.ApplicationID
 	sq.applications[appID] = app
-	sq.queueEvents.sendNewApplicationEvent(appID)
+	sq.queueEvents.sendNewApplicationEvent(sq.QueuePath, appID)
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.GetTag(siCommon.AppTagNamespaceResourceQuota)
@@ -808,7 +808,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 			zap.String("applicationID", appID))
 		return
 	}
-	sq.queueEvents.sendRemoveApplicationEvent(appID)
+	sq.queueEvents.sendRemoveApplicationEvent(sq.QueuePath, appID)
 	if appPending := app.GetPendingResource(); !resources.IsZero(appPending) {
 		sq.decPendingResource(appPending)
 	}
@@ -1010,7 +1010,7 @@ func (sq *Queue) RemoveQueue() bool {
 	log.Log(log.SchedQueue).Info("removing queue", zap.String("queue", sq.QueuePath))
 	// root is always managed and is the only queue with a nil parent: no need to guard
 	sq.parent.removeChildQueue(sq.Name)
-	sq.queueEvents.sendRemoveQueueEvent()
+	sq.queueEvents.sendRemoveQueueEvent(sq.QueuePath, sq.isManaged)
 	return true
 }
 
@@ -1322,7 +1322,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", max))
 		if !resources.Equals(sq.maxResource, max) && sq.queueEvents != nil {
-			sq.queueEvents.sendMaxResourceChangedEvent()
+			sq.queueEvents.sendMaxResourceChangedEvent(sq.QueuePath, sq.maxResource)
 		}
 		sq.maxResource = max.Clone()
 		sq.updateMaxResourceMetrics()
@@ -1332,7 +1332,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", max))
 		if sq.queueEvents != nil {
-			sq.queueEvents.sendMaxResourceChangedEvent()
+			sq.queueEvents.sendMaxResourceChangedEvent(sq.QueuePath, sq.maxResource)
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
@@ -1986,8 +1986,4 @@ func (sq *Queue) recalculatePriority() int32 {
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
-}
-
-func (sq *Queue) SendRemoveQueueEvent() {
-	sq.queueEvents.sendRemoveQueueEvent()
 }

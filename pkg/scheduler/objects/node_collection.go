@@ -37,6 +37,8 @@ var acceptAll = func(node *Node) bool {
 	return true
 }
 
+// NodeCollection represents a collection of nodes for a partition.
+// Implementations of this interface must be internally synchronized to avoid data races.
 type NodeCollection interface {
 	AddNode(node *Node) error
 	RemoveNode(nodeID string) *Node

@@ -157,18 +157,21 @@ func (pc *PartitionContext) updatePreemption(conf configs.PartitionConfig) {
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
-	pc.Lock()
-	defer pc.Unlock()
+	// the following piece of code (before pc.Lock()) must be performed without locking
+	// to avoid lock order differences between PartitionContext and AppPlacementManager
 	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {
 		return fmt.Errorf("partition cannot be created without root queue")
 	}
 	log.Log(log.SchedPartition).Info("Updating placement manager rules on config reload")
-	err := pc.placementManager.UpdateRules(conf.PlacementRules)
+	err := pc.getPlacementManager().UpdateRules(conf.PlacementRules)
 	if err != nil {
 		log.Log(log.SchedPartition).Info("New placement rules not activated, config reload failed", zap.Error(err))
 		return err
 	}
 	pc.updateNodeSortingPolicy(conf)
+
+	pc.Lock()
+	defer pc.Unlock()
 	pc.updatePreemption(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
@@ -528,9 +531,6 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 
 // Get a node from the partition by nodeID.
 func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
-	pc.RLock()
-	defer pc.RUnlock()
-
 	return pc.nodes.GetNode(nodeID)
 }
 
@@ -586,18 +586,24 @@ func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 	}
 }
 
-// Update the partition details when removing a node.
-// This locks the partition. The partition may not be locked when we process the allocation
-// additions to the node as that takes further app, queue or node locks
+// Update the partition details when adding a node.
 func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
-	pc.Lock()
-	defer pc.Unlock()
-	// Node can be added to the system to allow processing of the allocations
+	// we don't grab a lock here because we only update pc.nodes which is internally protected
 	if err := pc.nodes.AddNode(node); err != nil {
 		return fmt.Errorf("failed to add node %s to partition %s, error: %v", node.NodeID, pc.Name, err)
 	}
-	metrics.GetSchedulerMetrics().IncActiveNodes()
 
+	pc.addNodeResources(node)
+	return nil
+}
+
+// Update metrics & resource tracking information.
+// This locks the partition. The partition may not be locked when we process the allocation
+// additions to the node as that takes further app, queue or node locks.
+func (pc *PartitionContext) addNodeResources(node *objects.Node) {
+	pc.Lock()
+	defer pc.Unlock()
+	metrics.GetSchedulerMetrics().IncActiveNodes()
 	// update/set the resources available in the cluster
 	if pc.totalPartitionResource == nil {
 		pc.totalPartitionResource = node.GetCapacity().Clone()
@@ -609,14 +615,10 @@ func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
 		zap.Stringer("partitionResource", pc.totalPartitionResource))
-	return nil
 }
 
 // removeNodeFromList removes the node from the list of partition nodes.
-// This locks the partition.
 func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
-	pc.Lock()
-	defer pc.Unlock()
 	node := pc.nodes.RemoveNode(nodeID)
 	if node == nil {
 		log.Log(log.SchedPartition).Debug("node was not found, node already removed",
@@ -627,7 +629,6 @@ func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
 
 	// Remove node from list of tracked nodes
 	metrics.GetSchedulerMetrics().DecActiveNodes()
-
 	log.Log(log.SchedPartition).Info("Removed node from available partition nodes",
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID))
@@ -1029,8 +1030,6 @@ func (pc *PartitionContext) GetTotalAllocationCount() int {
 }
 
 func (pc *PartitionContext) GetTotalNodeCount() int {
-	pc.RLock()
-	defer pc.RUnlock()
 	return pc.nodes.GetNodeCount()
 }
 
@@ -1116,8 +1115,6 @@ func (pc *PartitionContext) cleanupExpiredApps() {
 
 // GetNodes returns a slice of all nodes unfiltered from the iterator
 func (pc *PartitionContext) GetNodes() []*objects.Node {
-	pc.RLock()
-	defer pc.RUnlock()
 	return pc.nodes.GetNodes()
 }
 
@@ -1439,15 +1436,11 @@ func (pc *PartitionContext) GetStateTime() time.Time {
 }
 
 func (pc *PartitionContext) GetNodeSortingPolicyType() policies.SortingPolicy {
-	pc.RLock()
-	defer pc.RUnlock()
 	policy := pc.nodes.GetNodeSortingPolicy()
 	return policy.PolicyType()
 }
 
 func (pc *PartitionContext) GetNodeSortingResourceWeights() map[string]float64 {
-	pc.RLock()
-	defer pc.RUnlock()
 	policy := pc.nodes.GetNodeSortingPolicy()
 	return policy.ResourceWeights()
 }

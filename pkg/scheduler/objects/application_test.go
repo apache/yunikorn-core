@@ -2672,6 +2672,51 @@ func TestUpdateRunnableStatus(t *testing.T) {
 	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, eventSystem.Events[1].EventChangeDetail)
 }
 
+func TestGetMaxResourceFromTag(t *testing.T) {
+	app := newApplication(appID0, "default", "root.unknown")
+	testGetResourceFromTag(t, siCommon.AppTagNamespaceResourceQuota, app.tags, app.GetMaxResource)
+}
+
+func TestGuaranteedResourceFromTag(t *testing.T) {
+	app := newApplication(appID0, "default", "root.unknown")
+	testGetResourceFromTag(t, siCommon.AppTagNamespaceResourceGuaranteed, app.tags, app.GetGuaranteedResource)
+}
+
+func testGetResourceFromTag(t *testing.T, tagName string, tags map[string]string, getResource func() *resources.Resource) {
+	assert.Equal(t, 0, len(tags), "tags are not empty")
+
+	// no value for tag
+	res := getResource()
+	assert.Assert(t, res == nil, "unexpected resource")
+
+	// empty value
+	tags[tagName] = ""
+	res = getResource()
+	assert.Assert(t, res == nil, "unexpected resource")
+
+	// valid value
+	tags[tagName] = "{\"resources\":{\"vcore\":{\"value\":111}}}"
+	res = getResource()
+	assert.Assert(t, res != nil)
+	assert.Equal(t, 1, len(res.Resources))
+	assert.Equal(t, resources.Quantity(111), res.Resources["vcore"])
+
+	// zero
+	tags[tagName] = "{\"resources\":{\"vcore\":{\"value\":0}}}"
+	res = getResource()
+	assert.Assert(t, res == nil)
+
+	// negative
+	tags[tagName] = "{\"resources\":{\"vcore\":{\"value\":-12}}}"
+	res = getResource()
+	assert.Assert(t, res == nil, "unexpected resource")
+
+	// invalid value
+	tags[tagName] = "{xyz}"
+	res = getResource()
+	assert.Assert(t, res == nil, "unexpected resource")
+}
+
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
 	sa.Lock()
 	defer sa.Unlock()

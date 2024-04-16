@@ -415,136 +415,6 @@ func TestAddApplication(t *testing.T) {
 	assert.Equal(t, len(leaf.applications), 1, "Application was not replaced in the queue as expected")
 }
 
-func TestAddApplicationWithTag(t *testing.T) {
-	// create the root
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	// only need to test leaf queues as we will never add an app to a parent
-	var leaf, leafUn *Queue
-	leaf, err = createManagedQueue(root, "leaf-man", false, nil)
-	assert.NilError(t, err, "failed to create managed leaf queue")
-	leafUn, err = createDynamicQueue(root, "leaf-unman", false)
-	assert.NilError(t, err, "failed to create Dynamic leaf queue")
-	app := newApplication(appID1, "default", "root.leaf-man")
-
-	// adding the app to managed/Dynamic queue must not update queue settings, works
-	leaf.AddApplication(app)
-	assert.Equal(t, len(leaf.applications), 1, "Application was not added to the managed queue as expected")
-	if leaf.GetMaxResource() != nil {
-		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.GetMaxResource().String())
-	}
-	app = newApplication("app-2", "default", "root.leaf-un")
-	leafUn.AddApplication(app)
-	assert.Equal(t, len(leafUn.applications), 1, "Application was not added to the Dynamic queue as expected")
-	if leafUn.GetMaxResource() != nil {
-		t.Errorf("Max resources should not be set on Dynamic queue got: %s", leafUn.GetMaxResource().String())
-	}
-
-	maxRes := resources.NewResourceFromMap(
-		map[string]resources.Quantity{
-			"first": 10,
-		})
-	guaranteedRes := resources.NewResourceFromMap(
-		map[string]resources.Quantity{
-			"first": 5,
-		})
-	tags := make(map[string]string)
-	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = "{\"resources\":{\"first\":{\"value\":5}}}"
-	// add apps again now with the tag set
-	app = newApplicationWithTags("app-3", "default", "root.leaf-man", tags)
-	leaf.AddApplication(app)
-	assert.Equal(t, len(leaf.applications), 2, "Application was not added to the managed queue as expected")
-	if leaf.GetMaxResource() != nil {
-		t.Errorf("Max resources should not be set on managed queue got: %s", leaf.GetMaxResource().String())
-	}
-	if leaf.GetGuaranteedResource() != nil {
-		t.Errorf("Guaranteed resources should not be set on managed queue got: %s", leaf.GetGuaranteedResource().String())
-	}
-
-	app = newApplicationWithTags("app-4", "default", "root.leaf-un", tags)
-	leafUn.AddApplication(app)
-	assert.Equal(t, len(leafUn.applications), 2, "Application was not added to the Dynamic queue as expected")
-	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
-		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
-	}
-	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
-		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
-	}
-
-	// set max to illegal limit (0 value), but guarantee not 0
-	tags[siCommon.AppTagNamespaceResourceQuota] = ZeroResource
-
-	app = newApplicationWithTags("app-5", "default", "root.leaf-un", tags)
-	leafUn.AddApplication(app)
-	assert.Equal(t, len(leafUn.applications), 3, "Application was not added to the Dynamic queue as expected")
-	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
-		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
-	}
-	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
-		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
-	}
-
-	// set guaranteed resource to illegal limit (0 value), but max resource not 0
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ZeroResource
-	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":100}}}"
-
-	app = newApplicationWithTags("app-6", "default", "root.leaf-un", tags)
-	leafUn.AddApplication(app)
-	assert.Equal(t, len(leafUn.applications), 4, "Application was not added to the Dynamic queue as expected")
-	if !resources.Equals(leafUn.GetMaxResource(), resources.NewResourceFromMap(
-		map[string]resources.Quantity{
-			"first": 100,
-		})) {
-		t.Errorf("Max resources not set as expected: %s got: %v", resources.NewResourceFromMap(
-			map[string]resources.Quantity{
-				"first": 100,
-			}).String(), leafUn.GetMaxResource())
-	}
-	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
-		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
-	}
-
-	// set guaranteed resource tag to "", but max resource not ""
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ""
-	tags[siCommon.AppTagNamespaceResourceQuota] = "{\"resources\":{\"first\":{\"value\":10}}}"
-	app = newApplicationWithTags("app-7", "default", "root.leaf-un", tags)
-	leafUn.AddApplication(app)
-	assert.Equal(t, len(leafUn.applications), 5, "Application was not added to the Dynamic queue as expected")
-	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
-		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
-	}
-	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
-		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
-	}
-
-	// set both to "" , the max resource and guaranteed resource will not update new value
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ""
-	tags[siCommon.AppTagNamespaceResourceQuota] = ""
-	app = newApplicationWithTags("app-8", "default", "root.leaf-un", tags)
-	leafUn.AddApplication(app)
-	assert.Equal(t, len(leafUn.applications), 6, "Application was not added to the Dynamic queue as expected")
-	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
-		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
-	}
-	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
-		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
-	}
-
-	// set both to 0 , the max resource and guaranteed resource will not update new value
-	tags[siCommon.AppTagNamespaceResourceGuaranteed] = ZeroResource
-	tags[siCommon.AppTagNamespaceResourceQuota] = ZeroResource
-	app = newApplicationWithTags("app-9", "default", "root.leaf-un", tags)
-	leafUn.AddApplication(app)
-	assert.Equal(t, len(leafUn.applications), 7, "Application was not added to the Dynamic queue as expected")
-	if !resources.Equals(leafUn.GetMaxResource(), maxRes) {
-		t.Errorf("Max resources not set as expected: %s got: %v", maxRes.String(), leafUn.GetMaxResource())
-	}
-	if !resources.Equals(leafUn.GetGuaranteedResource(), guaranteedRes) {
-		t.Errorf("Guaranteed resources not set as expected: %s got: %v", guaranteedRes.String(), leafUn.GetGuaranteedResource())
-	}
-}
-
 func TestRemoveApplication(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(map[string]string{"first": "100"})
@@ -1691,7 +1561,7 @@ func TestSetResources(t *testing.T) {
 	maxResource := getResourceConf()
 
 	// case 0: normal case
-	err = queue.setResources(configs.Resources{
+	err = queue.setResourcesFromConf(configs.Resources{
 		Guaranteed: guaranteedResource,
 		Max:        maxResource,
 	})
@@ -1707,7 +1577,7 @@ func TestSetResources(t *testing.T) {
 
 	// case 1: empty resource would set the queue resources to 'nil' if it has been set already
 	var nilResource *resources.Resource = nil
-	err = queue.setResources(configs.Resources{
+	err = queue.setResourcesFromConf(configs.Resources{
 		Guaranteed: make(map[string]string),
 		Max:        make(map[string]string),
 	})
@@ -1716,7 +1586,7 @@ func TestSetResources(t *testing.T) {
 	assert.DeepEqual(t, queue.maxResource, nilResource)
 
 	// case 2: zero resource won't change the queue resources as it is 'nil' already
-	err = queue.setResources(configs.Resources{
+	err = queue.setResourcesFromConf(configs.Resources{
 		Guaranteed: getZeroResourceConf(),
 		Max:        getZeroResourceConf(),
 	})

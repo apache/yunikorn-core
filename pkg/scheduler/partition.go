@@ -339,6 +339,10 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
+	// set resources based on tags, but only if the queue is dynamic
+	if !queue.IsManaged() {
+		queue.SetResources(app.GetGuaranteedResource(), app.GetMaxResource())
+	}
 	// check only for gang request
 	// - make sure the taskgroup request fits in the maximum set for the queue hierarchy
 	// - task groups should only be used in FIFO queues
@@ -348,12 +352,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		if !queue.SupportTaskGroup() {
 			return fmt.Errorf("queue %s cannot run application %s with task group request: unsupported sort type", queueName, appID)
 		}
-		// the new maxResource is going to be either app.GetMaxResource() from the tags or the maxResource which already set on the queue
-		maxRes := queue.GetMaxResource()
-		if app.GetMaxResource() != nil {
-			maxRes = app.GetMaxResource()
-		}
-		if maxQueue := queue.GetProposedMaxQueueResource(maxRes); maxQueue != nil {
+		if maxQueue := queue.GetMaxQueueSet(); maxQueue != nil {
 			if !maxQueue.FitInMaxUndef(placeHolder) {
 				return fmt.Errorf("queue %s cannot fit application %s: task group request %s larger than max queue allocation %s", queueName, appID, placeHolder.String(), maxQueue.String())
 			}

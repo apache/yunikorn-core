@@ -356,7 +356,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 
 	// Load the max & guaranteed resources for all but the root queue
 	if sq.Name != configs.RootQueue {
-		if err = sq.setResources(conf.Resources); err != nil {
+		if err = sq.setResourcesFromConf(conf.Resources); err != nil {
 			return err
 		}
 	}
@@ -365,8 +365,8 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	return nil
 }
 
-// setResources sets the maxResource and guaranteedResource of the queue from the config.
-func (sq *Queue) setResources(resource configs.Resources) error {
+// setResourcesFromConf sets the maxResource and guaranteedResource of the queue from the config.
+func (sq *Queue) setResourcesFromConf(resource configs.Resources) error {
 	maxResource, err := resources.NewResourceFromConf(resource.Max)
 	if err != nil {
 		log.Log(log.SchedQueue).Error("parsing failed on max resources this should not happen",
@@ -384,6 +384,11 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		return err
 	}
 
+	sq.setResources(guaranteedResource, maxResource)
+	return nil
+}
+
+func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resource) {
 	switch {
 	case resources.StrictlyGreaterThanZero(maxResource):
 		log.Log(log.SchedQueue).Debug("setting max resources",
@@ -435,7 +440,12 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		log.Log(log.SchedQueue).Debug("guaranteed resources setting ignored: cannot set zero guaranteed resources",
 			zap.String("queue", sq.QueuePath))
 	}
-	return nil
+}
+
+func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resource) {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.setResources(guaranteedResource, maxResource)
 }
 
 // setTemplate sets the template on the queue based on the config.
@@ -736,21 +746,6 @@ func (sq *Queue) AddApplication(app *Application) {
 	appID := app.ApplicationID
 	sq.applications[appID] = app
 	sq.queueEvents.sendNewApplicationEvent(sq.QueuePath, appID)
-	maxRes := app.GetMaxResource()
-	guaranteed := app.GetGuaranteedResource()
-	if (maxRes != nil || guaranteed != nil) && sq.isManaged {
-		log.Log(log.SchedQueue).Warn("Trying to set max resources on a queue that is not an unmanaged leaf",
-			zap.String("queueName", sq.QueuePath))
-		return
-	}
-
-	if maxRes != nil {
-		sq.maxResource = maxRes
-	}
-
-	if guaranteed != nil {
-		sq.guaranteedResource = guaranteed
-	}
 }
 
 // RemoveApplication removes the app from the list of tracked applications. Make sure that the app
@@ -1255,37 +1250,6 @@ func (sq *Queue) internalGetMax(parentLimit *resources.Resource) *resources.Reso
 	}
 	// calculate the smallest value for each type
 	return resources.ComponentWiseMin(parentLimit, sq.maxResource)
-}
-
-// GetProposedMaxQueueResource calculates the maximum resource for the queue based on a proposed new value.
-// This is similar to GetMaxQueueSet but uses a value that has not been applied as a maxResource for the queue.
-func (sq *Queue) GetProposedMaxQueueResource(maxRes *resources.Resource) *resources.Resource {
-	// get the limit for the parent first and check against the queue's own
-	var limit *resources.Resource
-	if sq.parent == nil {
-		return nil
-	}
-	limit = sq.parent.GetMaxQueueSet()
-	return sq.internalGetProposedMax(limit, maxRes)
-}
-
-// internalGetProposedMax does the real max calculation.
-func (sq *Queue) internalGetProposedMax(parentLimit, maxRes *resources.Resource) *resources.Resource {
-	sq.RLock()
-	defer sq.RUnlock()
-	// no parent queue limit set, not even for root
-	if parentLimit == nil {
-		if maxRes == nil {
-			return nil
-		}
-		return maxRes
-	}
-	// parent limit set, no queue limit return parent
-	if maxRes == nil {
-		return parentLimit
-	}
-	// calculate the smallest value for each type
-	return resources.ComponentWiseMin(parentLimit, maxRes)
 }
 
 // SetMaxResource sets the max resource for the root queue. Called as part of adding or removing a node.

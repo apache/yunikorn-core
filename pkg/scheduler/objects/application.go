@@ -76,12 +76,10 @@ type StateLogEntry struct {
 }
 
 type Application struct {
-	ApplicationID  string              // application ID
-	Partition      string              // partition Name
-	SubmissionTime time.Time           // time application was submitted
-	tags           map[string]string   // application tags used in scheduling
-	maxResource    *resources.Resource // max resource setting from namespace based on tags
-	guaranteed     *resources.Resource // guaranteed resource setting from namespace based on tags
+	ApplicationID  string            // application ID
+	Partition      string            // partition Name
+	SubmissionTime time.Time         // time application was submitted
+	tags           map[string]string // application tags used in scheduling
 
 	// Private mutable fields need protection
 	queuePath         string
@@ -189,55 +187,9 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
-	app.setResourcesFromTags()
 	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
 	app.appEvents.sendNewApplicationEvent()
 	return app
-}
-
-func (sa *Application) setResourcesFromTags() {
-	quota := sa.GetTag(siCommon.AppTagNamespaceResourceQuota)
-	// get the tag with the guaranteed resource
-	guaranteed := sa.GetTag(siCommon.AppTagNamespaceResourceGuaranteed)
-	if quota == "" && guaranteed == "" {
-		return
-	}
-
-	var quotaRes, guaranteedRes *resources.Resource
-	var quotaErr, guaranteedErr error
-
-	// need to set a quota: convert json string to resource
-	if quota != "" {
-		quotaRes, quotaErr = resources.NewResourceFromString(quota)
-		if quotaErr != nil {
-			log.Log(log.SchedQueue).Warn("application resource quota conversion failure",
-				zap.String("json quota string", quota),
-				zap.Error(quotaErr))
-		} else if !resources.StrictlyGreaterThanZero(quotaRes) {
-			log.Log(log.SchedQueue).Warn("Max resource quantities should be greater than zero: cannot set queue max resource",
-				zap.Stringer("maxResource", quotaRes))
-			quotaRes = nil // Skip setting quota if it has a value <= 0
-		}
-		sa.maxResource = quotaRes
-	}
-
-	// need to set guaranteed resource: convert json string to resource
-	if guaranteed != "" {
-		guaranteedRes, guaranteedErr = resources.NewResourceFromString(guaranteed)
-		if guaranteedErr != nil {
-			log.Log(log.SchedQueue).Warn("application guaranteed resource conversion failure",
-				zap.String("json guaranteed string", guaranteed),
-				zap.Error(guaranteedErr))
-			if quotaErr != nil {
-				return
-			}
-		} else if !resources.StrictlyGreaterThanZero(guaranteedRes) {
-			log.Log(log.SchedQueue).Warn("Guaranteed resource quantities should be greater than zero: cannot set queue guaranteed resource",
-				zap.Stringer("guaranteedResource", guaranteedRes))
-			guaranteedRes = nil // Skip setting guaranteed resource if it has a value <= 0
-		}
-		sa.guaranteed = guaranteedRes
-	}
 }
 
 func (sa *Application) String() string {
@@ -2170,10 +2122,31 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 
 // GetGuaranteedResource returns the guaranteed resource that was set in the application tags
 func (sa *Application) GetGuaranteedResource() *resources.Resource {
-	return sa.guaranteed.Clone() // read only, no lock
+	return sa.getResourceFromTags(siCommon.AppTagNamespaceResourceGuaranteed)
 }
 
 // GetMaxResource returns the max resource that was set in the application tags
 func (sa *Application) GetMaxResource() *resources.Resource {
-	return sa.maxResource.Clone() // read only, no lock
+	return sa.getResourceFromTags(siCommon.AppTagNamespaceResourceQuota)
+}
+
+func (sa *Application) getResourceFromTags(tag string) *resources.Resource {
+	value := sa.GetTag(tag)
+	if value == "" {
+		return nil
+	}
+
+	resource, err := resources.NewResourceFromString(value)
+	if err != nil {
+		log.Log(log.SchedQueue).Warn("application resource conversion failure",
+			zap.String("tag", tag),
+			zap.String("json string", value),
+			zap.Error(err))
+	} else if !resources.StrictlyGreaterThanZero(resource) {
+		log.Log(log.SchedQueue).Warn("resource quantities should be greater than zero",
+			zap.Stringer("maxResource", resource))
+		resource = nil
+	}
+
+	return resource
 }

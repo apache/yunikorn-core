@@ -84,6 +84,7 @@ func reInit() {
 	}
 
 	if enabled {
+		//  We want to ensure that we write this before any other subsystem is initialized, including logging which may also use locks.
 		fmt.Fprintf(os.Stderr, "=== Deadlock detection enabled (timeout: %d seconds, exit on deadlock: %v) ===\n", timeoutSec, exitOnDeadlock)
 	}
 }

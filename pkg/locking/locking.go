@@ -33,11 +33,14 @@ import (
 
 const EnvDeadlockDetectionEnabled = "DEADLOCK_DETECTION_ENABLED"
 const EnvDeadlockTimeoutSeconds = "DEADLOCK_TIMEOUT_SECONDS"
+const EnvExitOnDeadlock = "DEADLOCK_EXIT"
 
 var once sync.Once
 var trackingEnabled atomic.Bool
 var timeoutSeconds atomic.Int32
 var deadlockDetected atomic.Bool
+var testingMode atomic.Bool
+var exitOnDeadlock bool
 
 type errorBuf struct {
 	data string
@@ -74,13 +77,27 @@ func reInit() {
 	godeadlock.Opts.DeadlockTimeout = time.Duration(timeoutSec) * time.Second
 	godeadlock.Opts.LogBuf = &errorBuf{}
 	godeadlock.Opts.OnPotentialDeadlock = onPotentialDeadlock
+	if exitEnv, err := strconv.ParseBool(os.Getenv(EnvExitOnDeadlock)); err != nil {
+		exitOnDeadlock = false
+	} else {
+		exitOnDeadlock = exitEnv
+	}
+
 	if enabled {
-		fmt.Fprintf(os.Stderr, "=== Deadlock detection enabled (timeout: %d seconds) ===\n", timeoutSec)
+		//  We want to ensure that we write this before any other subsystem is initialized, including logging which may also use locks.
+		fmt.Fprintf(os.Stderr, "=== Deadlock detection enabled (timeout: %d seconds, exit on deadlock: %v) ===\n", timeoutSec, exitOnDeadlock)
 	}
 }
 
 func onPotentialDeadlock() {
 	deadlockDetected.Store(true)
+	printBufContents()
+	if exitOnDeadlock && !testingMode.Load() {
+		os.Exit(1)
+	}
+}
+
+func printBufContents() {
 	buf, ok := godeadlock.Opts.LogBuf.(*errorBuf)
 	buf.Lock()
 	defer buf.Unlock()

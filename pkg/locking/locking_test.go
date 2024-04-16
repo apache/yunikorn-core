@@ -34,12 +34,14 @@ import (
 func disableTracking() {
 	os.Unsetenv(EnvDeadlockDetectionEnabled)
 	os.Unsetenv(EnvDeadlockTimeoutSeconds)
+	testingMode.Store(false)
 	reInit()
 }
 
 func enableTracking() {
 	os.Setenv(EnvDeadlockDetectionEnabled, "true")
 	os.Setenv(EnvDeadlockTimeoutSeconds, "1")
+	testingMode.Store(true)
 	reInit()
 }
 

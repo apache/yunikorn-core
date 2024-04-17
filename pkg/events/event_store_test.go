@@ -90,6 +90,13 @@ func TestStoreWithLimitedSize(t *testing.T) {
 
 func TestSetStoreSize(t *testing.T) {
 	store := newEventStore(5)
+
+	// validate that store.CollectEvents() doesn't create a new slice for store.events if the store size remain unchanged after EventStore is initialized.
+	oldSliceData := unsafe.SliceData(store.events)
+	store.CollectEvents()
+	newSliceData := unsafe.SliceData(store.events)
+	assert.Check(t, oldSliceData == newSliceData)
+
 	// store 5 events
 	for i := 0; i < 5; i++ {
 		store.Store(&si.EventRecord{
@@ -109,4 +116,8 @@ func TestSetStoreSize(t *testing.T) {
 	events := store.CollectEvents()
 	assert.Equal(t, 5, len(events))
 	assert.Equal(t, 3, len(store.events))
+
+	// validate that store.CollectEvents() create a new slice for store.events after the store size has changed
+	newSliceData = unsafe.SliceData(store.events)
+	assert.Check(t, oldSliceData != newSliceData)
 }

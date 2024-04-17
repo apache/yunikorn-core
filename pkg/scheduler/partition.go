@@ -339,8 +339,11 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
-	// set resources based on tags, but only if the queue is dynamic
-	if !queue.IsManaged() {
+	// set resources based on tags, but only if the queue is dynamic (unmanaged)
+	if queue.IsManaged() {
+		log.Log(log.SchedQueue).Warn("Trying to set resources on a queue that is not an unmanaged leaf",
+			zap.String("queueName", queue.QueuePath))
+	} else {
 		queue.SetResources(app.GetGuaranteedResource(), app.GetMaxResource())
 	}
 	// check only for gang request
@@ -358,7 +361,6 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 			}
 		}
 	}
-	// add the app to the queue to set the quota on the queue if needed
 	queue.AddApplication(app)
 
 	// all is OK update the app and add it to the partition

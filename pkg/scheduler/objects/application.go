@@ -2120,12 +2120,12 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 	sa.runnableByUserLimit = runnableByUserLimit
 }
 
-// GetGuaranteedResource returns the guaranteed resource that was set in the application tags
+// GetGuaranteedResource returns the guaranteed resource that is set in the application tags
 func (sa *Application) GetGuaranteedResource() *resources.Resource {
 	return sa.getResourceFromTags(siCommon.AppTagNamespaceResourceGuaranteed)
 }
 
-// GetMaxResource returns the max resource that was set in the application tags
+// GetMaxResource returns the max resource that is set in the application tags
 func (sa *Application) GetMaxResource() *resources.Resource {
 	return sa.getResourceFromTags(siCommon.AppTagNamespaceResourceQuota)
 }
@@ -2144,7 +2144,7 @@ func (sa *Application) getResourceFromTags(tag string) *resources.Resource {
 			zap.Error(err))
 	} else if !resources.StrictlyGreaterThanZero(resource) {
 		log.Log(log.SchedQueue).Warn("resource quantities should be greater than zero",
-			zap.Stringer("maxResource", resource))
+			zap.Stringer("resource", resource))
 		resource = nil
 	}
 

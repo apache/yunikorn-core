@@ -81,14 +81,6 @@ func (es *EventStore) CollectEvents() []*si.EventRecord {
 	return messages
 }
 
-// test only
-func (es *EventStore) CollectInternalEvents(idx uint64) []*si.EventRecord {
-	es.RLock()
-	defer es.RUnlock()
-	messages := es.events[:idx]
-	return messages
-}
-
 func (es *EventStore) CountStoredEvents() uint64 {
 	es.RLock()
 	defer es.RUnlock()

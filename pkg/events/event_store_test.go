@@ -58,7 +58,7 @@ func TestStoreAndRetrieve(t *testing.T) {
 
 	// ensure that the underlying array of the return slice of CollectEvents() isn't the same as the one in EventStore.events
 	newSliceData := unsafe.SliceData(records) // pointer to underlying array of the return slice of EventStore.CollectEvents()
-	internalEvents := store.CollectInternalEvents(2)
+	internalEvents := store.events[:2]
 	internalSliceData := unsafe.SliceData(internalEvents) // pointer to underlying array of EventStore.events
 	assert.Check(t, newSliceData != internalSliceData)
 

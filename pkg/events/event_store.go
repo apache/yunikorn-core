@@ -43,8 +43,9 @@ type EventStore struct {
 
 func newEventStore(size uint64) *EventStore {
 	return &EventStore{
-		events: make([]*si.EventRecord, size),
-		size:   size,
+		events:   make([]*si.EventRecord, size),
+		size:     size,
+		lastSize: size,
 	}
 }
 
@@ -66,7 +67,9 @@ func (es *EventStore) CollectEvents() []*si.EventRecord {
 	es.Lock()
 	defer es.Unlock()
 
-	messages := es.events[:es.idx]
+	messages := make([]*si.EventRecord, len(es.events[:es.idx]))
+	copy(messages, es.events[:es.idx])
+
 	if es.size != es.lastSize {
 		log.Log(log.Events).Info("Resizing event store", zap.Uint64("last", es.lastSize), zap.Uint64("new", es.size))
 		es.events = make([]*si.EventRecord, es.size)

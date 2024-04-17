@@ -22,7 +22,7 @@ module github.com/apache/yunikorn-core
 go 1.21
 
 require (
-	github.com/apache/yunikorn-scheduler-interface v0.0.0-20240402211642-e7421a4261fd
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20240415160614-c40fbd225716
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
@@ -49,7 +49,7 @@ require (
 	github.com/petermattis/goid v0.0.0-20240327183114-c42a807a84ba // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/sys v0.18.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
@@ -58,8 +58,8 @@ require (
 replace (
 	github.com/petermattis/goid => github.com/petermattis/goid v0.0.0-20240327183114-c42a807a84ba
 	golang.org/x/crypto => golang.org/x/crypto v0.19.0
-	golang.org/x/net => golang.org/x/net v0.21.0
-	golang.org/x/sys => golang.org/x/sys v0.17.0
+	golang.org/x/net => golang.org/x/net v0.23.0
+	golang.org/x/sys => golang.org/x/sys v0.18.0
 	golang.org/x/text => golang.org/x/text v0.14.0
 	golang.org/x/tools => golang.org/x/tools v0.17.0
 	google.golang.org/protobuf => google.golang.org/protobuf v1.33.0

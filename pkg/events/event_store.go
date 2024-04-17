@@ -43,8 +43,9 @@ type EventStore struct {
 
 func newEventStore(size uint64) *EventStore {
 	return &EventStore{
-		events: make([]*si.EventRecord, size),
-		size:   size,
+		events:   make([]*si.EventRecord, size),
+		size:     size,
+		lastSize: size,
 	}
 }
 
@@ -77,6 +78,14 @@ func (es *EventStore) CollectEvents() []*si.EventRecord {
 	es.lastSize = es.size
 
 	metrics.GetEventMetrics().AddEventsCollected(len(messages))
+	return messages
+}
+
+// test only
+func (es *EventStore) CollectInternalEvents(idx uint64) []*si.EventRecord {
+	es.RLock()
+	defer es.RUnlock()
+	messages := es.events[:idx]
 	return messages
 }
 

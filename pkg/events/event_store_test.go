@@ -57,13 +57,12 @@ func TestStoreAndRetrieve(t *testing.T) {
 	assert.DeepEqual(t, records[1], event2, cmpopts.IgnoreUnexported(si.EventRecord{}))
 
 	// ensure that the underlying array of the return slice of CollectEvents() isn't the same as the one in EventStore.events
-	newSliceData := unsafe.SliceData(records) // pointer to underlying array of the return slice of EventStore.CollectEvents()
-	internalEvents := store.events[:2]
-	internalSliceData := unsafe.SliceData(internalEvents) // pointer to underlying array of EventStore.events
+	newSliceData := unsafe.SliceData(records)           // pointer to underlying array of the return slice of EventStore.CollectEvents()
+	internalSliceData := unsafe.SliceData(store.events) // pointer to underlying array of EventStore.events
 	assert.Check(t, newSliceData != internalSliceData)
 
 	// ensure modify EventStore.events won't affect the return slice of store.CollectEvents()
-	internalEvents[0] = event2
+	store.events[0] = event2
 	assert.DeepEqual(t, records[0], event1, cmpopts.IgnoreUnexported(si.EventRecord{}))
 
 	// calling CollectEvents erases the eventChannel map

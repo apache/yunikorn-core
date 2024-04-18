@@ -695,6 +695,10 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 				zap.Error(err))
 		}
 	}
+
+	if ask.IsPlaceholder() {
+		sa.addPlaceholderData(ask)
+	}
 }
 
 func (sa *Application) UpdateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {

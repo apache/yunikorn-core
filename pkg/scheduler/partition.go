@@ -361,11 +361,10 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 			}
 		}
 	}
-	queue.AddApplication(app)
-
 	// all is OK update the app and add it to the partition
 	app.SetQueue(queue)
 	app.SetTerminatedCallback(pc.moveTerminatedApp)
+	queue.AddApplication(app)
 	pc.applications[appID] = app
 
 	return nil

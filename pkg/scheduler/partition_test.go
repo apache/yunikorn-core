@@ -2804,7 +2804,8 @@ func TestAddTGApplication(t *testing.T) {
 	partition, err := newLimitedPartition(limit)
 	assert.NilError(t, err, "partition create failed")
 	// add a app with TG that does not fit in the queue
-	tgRes, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	var tgRes *resources.Resource
+	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	tags := map[string]string{
 		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"vcore\":{\"value\":111}}}",

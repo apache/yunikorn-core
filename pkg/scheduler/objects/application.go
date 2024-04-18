@@ -1529,7 +1529,6 @@ func (sa *Application) SetQueue(queue *Queue) {
 	defer sa.Unlock()
 	sa.queuePath = queue.QueuePath
 	sa.queue = queue
-	sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 }
 
 // remove the leaf queue the application runs in, used when completing the app

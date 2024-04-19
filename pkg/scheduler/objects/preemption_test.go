@@ -30,6 +30,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/plugins"
 )
 
+const appID3 = "app-3"
+
 func TestCheckPreconditions(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 5})
 	iterator := getNodeIteratorFn(node)

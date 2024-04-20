@@ -351,7 +351,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 
 	if !sq.isLeaf {
 		if err = sq.setTemplate(conf.ChildTemplate); err != nil {
-			return nil
+			return err
 		}
 	}
 

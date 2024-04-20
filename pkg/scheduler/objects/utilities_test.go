@@ -177,7 +177,7 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 		schedulable:       true,
 		reservations:      make(map[string]*reservation),
 	}
-	sn.nodeEvents = newNodeEvents(sn, events.GetEventSystem())
+	sn.nodeEvents = newNodeEvents(events.GetEventSystem())
 	return sn
 }
 

@@ -27,46 +27,45 @@ import (
 
 type nodeEvents struct {
 	eventSystem events.EventSystem
-	node        *Node
 }
 
-func (n *nodeEvents) sendNodeAddedEvent() {
+func (n *nodeEvents) sendNodeAddedEvent(nodeID string, capacity *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, "Node added to the scheduler", common.Empty, si.EventRecord_ADD,
-		si.EventRecord_DETAILS_NONE, n.node.GetCapacity())
+	event := events.CreateNodeEventRecord(nodeID, "Node added to the scheduler", common.Empty, si.EventRecord_ADD,
+		si.EventRecord_DETAILS_NONE, capacity)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeRemovedEvent() {
+func (n *nodeEvents) sendNodeRemovedEvent(nodeID string) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, "Node removed from the scheduler", common.Empty, si.EventRecord_REMOVE,
+	event := events.CreateNodeEventRecord(nodeID, "Node removed from the scheduler", common.Empty, si.EventRecord_REMOVE,
 		si.EventRecord_NODE_DECOMISSION, nil)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendAllocationAddedEvent(allocKey string, res *resources.Resource) {
+func (n *nodeEvents) sendAllocationAddedEvent(nodeID, allocKey string, res *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, allocKey, si.EventRecord_ADD,
+	event := events.CreateNodeEventRecord(nodeID, common.Empty, allocKey, si.EventRecord_ADD,
 		si.EventRecord_NODE_ALLOC, res)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendAllocationRemovedEvent(allocKey string, res *resources.Resource) {
+func (n *nodeEvents) sendAllocationRemovedEvent(nodeID, allocKey string, res *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, allocKey, si.EventRecord_REMOVE,
+	event := events.CreateNodeEventRecord(nodeID, common.Empty, allocKey, si.EventRecord_REMOVE,
 		si.EventRecord_NODE_ALLOC, res)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeSchedulableChangedEvent(ready bool) {
+func (n *nodeEvents) sendNodeSchedulableChangedEvent(nodeID string, ready bool) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -76,50 +75,49 @@ func (n *nodeEvents) sendNodeSchedulableChangedEvent(ready bool) {
 	} else {
 		reason = "schedulable: false"
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, reason, common.Empty, si.EventRecord_SET,
+	event := events.CreateNodeEventRecord(nodeID, reason, common.Empty, si.EventRecord_SET,
 		si.EventRecord_NODE_SCHEDULABLE, nil)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeCapacityChangedEvent() {
+func (n *nodeEvents) sendNodeCapacityChangedEvent(nodeID string, total *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, common.Empty, si.EventRecord_SET,
-		si.EventRecord_NODE_CAPACITY, n.node.totalResource)
+	event := events.CreateNodeEventRecord(nodeID, common.Empty, common.Empty, si.EventRecord_SET,
+		si.EventRecord_NODE_CAPACITY, total)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeOccupiedResourceChangedEvent() {
+func (n *nodeEvents) sendNodeOccupiedResourceChangedEvent(nodeID string, occupied *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, common.Empty, si.EventRecord_SET,
-		si.EventRecord_NODE_OCCUPIED, n.node.occupiedResource)
+	event := events.CreateNodeEventRecord(nodeID, common.Empty, common.Empty, si.EventRecord_SET,
+		si.EventRecord_NODE_OCCUPIED, occupied)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendReservedEvent(res *resources.Resource, askID string) {
+func (n *nodeEvents) sendReservedEvent(nodeID string, res *resources.Resource, askID string) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, askID, si.EventRecord_ADD,
+	event := events.CreateNodeEventRecord(nodeID, common.Empty, askID, si.EventRecord_ADD,
 		si.EventRecord_NODE_RESERVATION, res)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendUnreservedEvent(res *resources.Resource, askID string) {
+func (n *nodeEvents) sendUnreservedEvent(nodeID string, res *resources.Resource, askID string) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, askID, si.EventRecord_REMOVE,
+	event := events.CreateNodeEventRecord(nodeID, common.Empty, askID, si.EventRecord_REMOVE,
 		si.EventRecord_NODE_RESERVATION, res)
 	n.eventSystem.AddEvent(event)
 }
 
-func newNodeEvents(node *Node, evt events.EventSystem) *nodeEvents {
+func newNodeEvents(evt events.EventSystem) *nodeEvents {
 	return &nodeEvents{
 		eventSystem: evt,
-		node:        node,
 	}
 }

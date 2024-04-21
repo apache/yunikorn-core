@@ -67,7 +67,7 @@ func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
 func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 	log.Log(log.Config).Info("Building new rule list for placement manager")
 	// build temp list from new config
-	tempRules, err := m.buildRules(rules)
+	tempRules, err := buildRules(rules)
 	if err != nil {
 		return err
 	}
@@ -83,33 +83,6 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 			zap.String("ruleName", m.rules[rule].getName()))
 	}
 	return nil
-}
-
-// Build the rule set based on the config.
-// If the rule set is correct and can be used the new set is returned.
-// If any error is encountered a nil array is returned and the error set
-func (m *AppPlacementManager) buildRules(rules []configs.PlacementRule) ([]rule, error) {
-	// empty list should result in a single "provided" rule
-	if len(rules) == 0 {
-		log.Log(log.Config).Info("Placement manager configured without rules: using implicit provided rule")
-		rules = []configs.PlacementRule{{
-			Name:   types.Provided,
-			Create: false,
-		}}
-	}
-	// build temp list from new config
-	var newRules []rule
-	for _, conf := range rules {
-		buildRule, err := newRule(conf)
-		if err != nil {
-			return nil, err
-		}
-		newRules = append(newRules, buildRule)
-	}
-	// ensure the recovery rule is always present
-	newRules = append(newRules, &recoveryRule{})
-
-	return newRules, nil
 }
 
 func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
@@ -199,4 +172,31 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	// Add the queue into the application, overriding what was submitted
 	app.SetQueuePath(queueName)
 	return nil
+}
+
+// Build the rule set based on the config.
+// If the rule set is correct and can be used the new set is returned.
+// If any error is encountered a nil array is returned and the error set
+func buildRules(rules []configs.PlacementRule) ([]rule, error) {
+	// empty list should result in a single "provided" rule
+	if len(rules) == 0 {
+		log.Log(log.Config).Info("Placement manager configured without rules: using implicit provided rule")
+		rules = []configs.PlacementRule{{
+			Name:   types.Provided,
+			Create: false,
+		}}
+	}
+	// build temp list from new config
+	var newRules []rule
+	for _, conf := range rules {
+		buildRule, err := newRule(conf)
+		if err != nil {
+			return nil, err
+		}
+		newRules = append(newRules, buildRule)
+	}
+	// ensure the recovery rule is always present
+	newRules = append(newRules, &recoveryRule{})
+
+	return newRules, nil
 }

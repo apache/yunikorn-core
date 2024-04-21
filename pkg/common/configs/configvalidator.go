@@ -364,7 +364,8 @@ func checkQueueHierarchyForPlacement(path []string, create, hasDynamicPart bool,
 	if len(conf) == 0 {
 		if !parentConf.Parent {
 			// path in the hierarchy is shorter, but the last queue is a leaf
-			return errLastQueueLeaf, parentConf.Name
+			lastQueueName = parentConf.Name
+			return errLastQueueLeaf, lastQueueName
 		}
 		if !create {
 			return errNonExistingQueue, lastQueueName

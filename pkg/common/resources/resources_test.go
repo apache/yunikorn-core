@@ -119,6 +119,7 @@ func TestNewResourceFromConf(t *testing.T) {
 		{"vcore multipliers with \"m\"", map[string]string{"vcore": "10m"}, expectedvalues{true, 1, "map[vcore:10]"}},
 		{"failure case: parse error", map[string]string{"fail": "xx"}, expectedvalues{false, 0, ""}},
 		{"negative resource", map[string]string{"memory": "-15"}, expectedvalues{false, 0, ""}},
+		{"nagative resource for vcore", map[string]string{"vcore": "-15"}, expectedvalues{false, 0, "invalid quantity"}},
 		{"\"milli\" used for anything other than vcore", map[string]string{"memory": "10m"}, expectedvalues{false, 0, ""}},
 	}
 	for _, tt := range tests {

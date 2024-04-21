@@ -31,63 +31,61 @@ import (
 // Ask-specific events. These events are of REQUEST type, so they are eventually sent to the respective pods in K8s.
 type askEvents struct {
 	eventSystem events.EventSystem
-	ask         *AllocationAsk
 	limiter     *rate.Limiter
 }
 
-func (ae *askEvents) sendRequestExceedsQueueHeadroom(headroom *resources.Resource, queuePath string) {
+func (ae *askEvents) sendRequestExceedsQueueHeadroom(allocKey, appID string, headroom, allocatedResource *resources.Resource, queuePath string) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	message := fmt.Sprintf("Request '%s' does not fit in queue '%s' (requested %s, available %s)", ae.ask.allocationKey, queuePath, ae.ask.GetAllocatedResource(), headroom)
-	event := events.CreateRequestEventRecord(ae.ask.allocationKey, ae.ask.applicationID, message, ae.ask.GetAllocatedResource())
+	message := fmt.Sprintf("Request '%s' does not fit in queue '%s' (requested %s, available %s)", allocKey, queuePath, allocatedResource, headroom)
+	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *askEvents) sendRequestFitsInQueue(queuePath string) {
+func (ae *askEvents) sendRequestFitsInQueue(allocKey, appID, queuePath string, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	message := fmt.Sprintf("Request '%s' has become schedulable in queue '%s'", ae.ask.allocationKey, queuePath)
-	event := events.CreateRequestEventRecord(ae.ask.allocationKey, ae.ask.applicationID, message, ae.ask.GetAllocatedResource())
+	message := fmt.Sprintf("Request '%s' has become schedulable in queue '%s'", allocKey, queuePath)
+	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *askEvents) sendRequestExceedsUserQuota(headroom *resources.Resource) {
+func (ae *askEvents) sendRequestExceedsUserQuota(allocKey, appID string, headroom, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	message := fmt.Sprintf("Request '%s' exceeds the available user quota (requested %s, available %s)", ae.ask.allocationKey, ae.ask.GetAllocatedResource(), headroom)
-	event := events.CreateRequestEventRecord(ae.ask.allocationKey, ae.ask.applicationID, message, ae.ask.GetAllocatedResource())
+	message := fmt.Sprintf("Request '%s' exceeds the available user quota (requested %s, available %s)", allocKey, allocatedResource, headroom)
+	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *askEvents) sendRequestFitsInUserQuota() {
+func (ae *askEvents) sendRequestFitsInUserQuota(allocKey, appID string, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	message := fmt.Sprintf("Request '%s' fits in the available user quota", ae.ask.allocationKey)
-	event := events.CreateRequestEventRecord(ae.ask.allocationKey, ae.ask.applicationID, message, ae.ask.GetAllocatedResource())
+	message := fmt.Sprintf("Request '%s' fits in the available user quota", allocKey)
+	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *askEvents) sendPredicateFailed(predicateMsg string) {
+func (ae *askEvents) sendPredicateFailed(allocKey, appID, predicateMsg string, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() || !ae.limiter.Allow() {
 		return
 	}
-	message := fmt.Sprintf("Predicate failed for request '%s' with message: '%s'", ae.ask.allocationKey, predicateMsg)
-	event := events.CreateRequestEventRecord(ae.ask.allocationKey, ae.ask.applicationID, message, ae.ask.GetAllocatedResource())
+	message := fmt.Sprintf("Predicate failed for request '%s' with message: '%s'", allocKey, predicateMsg)
+	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
 	ae.eventSystem.AddEvent(event)
 }
 
-func newAskEvents(ask *AllocationAsk, evt events.EventSystem) *askEvents {
-	return newAskEventsWithRate(ask, evt, 15*time.Second, 1)
+func newAskEvents(evt events.EventSystem) *askEvents {
+	return newAskEventsWithRate(evt, 15*time.Second, 1)
 }
 
-func newAskEventsWithRate(ask *AllocationAsk, evt events.EventSystem, interval time.Duration, burst int) *askEvents {
+func newAskEventsWithRate(evt events.EventSystem, interval time.Duration, burst int) *askEvents {
 	return &askEvents{
 		eventSystem: evt,
-		ask:         ask,
 		limiter:     rate.NewLimiter(rate.Every(interval), burst),
 	}
 }

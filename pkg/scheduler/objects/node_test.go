@@ -785,7 +785,7 @@ func TestPreconditions(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAsk("test", "app001", res)
 	eventSystem := evtMock.NewEventSystem()
-	ask.askEvents = newAskEvents(ask, eventSystem)
+	ask.askEvents = newAskEvents(eventSystem)
 	node := NewNode(proto)
 
 	// failure

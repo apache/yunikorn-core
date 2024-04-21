@@ -30,29 +30,27 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+const allocKey = "alloc-0"
+
 var requestResource = resources.NewResourceFromMap(map[string]resources.Quantity{
 	"memory": 100,
 	"cpu":    100,
 })
 
 func TestRequestDoesNotFitInQueueEvent(t *testing.T) {
-	ask := &AllocationAsk{
-		allocationKey:     "alloc-0",
-		applicationID:     "app-0",
-		allocatedResource: requestResource,
-	}
+	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	eventSystem := mock.NewEventSystemDisabled()
-	events := newAskEvents(ask, eventSystem)
-	events.sendRequestExceedsQueueHeadroom(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), "root.test")
+	events := newAskEvents(eventSystem)
+	events.sendRequestExceedsQueueHeadroom(allocKey, appID1, headroom, requestResource, "root.test")
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
-	events = newAskEvents(ask, eventSystem)
-	events.sendRequestExceedsQueueHeadroom(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), "root.test")
+	events = newAskEvents(eventSystem)
+	events.sendRequestExceedsQueueHeadroom(allocKey, appID1, headroom, requestResource, "root.test")
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
 	assert.Equal(t, "alloc-0", event.ObjectID)
-	assert.Equal(t, "app-0", event.ReferenceID)
+	assert.Equal(t, appID1, event.ReferenceID)
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
@@ -60,23 +58,18 @@ func TestRequestDoesNotFitInQueueEvent(t *testing.T) {
 }
 
 func TestRequestFitsInQueueEvent(t *testing.T) {
-	ask := &AllocationAsk{
-		allocationKey:     "alloc-0",
-		applicationID:     "app-0",
-		allocatedResource: requestResource,
-	}
 	eventSystem := mock.NewEventSystemDisabled()
-	events := newAskEvents(ask, eventSystem)
-	events.sendRequestFitsInQueue("root.test")
+	events := newAskEvents(eventSystem)
+	events.sendRequestFitsInQueue(allocKey, appID1, "root.test", requestResource)
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
-	events = newAskEvents(ask, eventSystem)
-	events.sendRequestFitsInQueue("root.test")
+	events = newAskEvents(eventSystem)
+	events.sendRequestFitsInQueue(allocKey, appID1, "root.test", requestResource)
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
 	assert.Equal(t, "alloc-0", event.ObjectID)
-	assert.Equal(t, "app-0", event.ReferenceID)
+	assert.Equal(t, appID1, event.ReferenceID)
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
@@ -84,23 +77,19 @@ func TestRequestFitsInQueueEvent(t *testing.T) {
 }
 
 func TestRequestExceedsUserQuotaEvent(t *testing.T) {
-	ask := &AllocationAsk{
-		allocationKey:     "alloc-0",
-		applicationID:     "app-0",
-		allocatedResource: requestResource,
-	}
+	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	eventSystem := mock.NewEventSystemDisabled()
-	events := newAskEvents(ask, eventSystem)
-	events.sendRequestExceedsUserQuota(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+	events := newAskEvents(eventSystem)
+	events.sendRequestExceedsUserQuota(allocKey, appID1, headroom, requestResource)
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
-	events = newAskEvents(ask, eventSystem)
-	events.sendRequestExceedsUserQuota(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+	events = newAskEvents(eventSystem)
+	events.sendRequestExceedsUserQuota(allocKey, appID1, headroom, requestResource)
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
 	assert.Equal(t, "alloc-0", event.ObjectID)
-	assert.Equal(t, "app-0", event.ReferenceID)
+	assert.Equal(t, appID1, event.ReferenceID)
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
@@ -108,23 +97,18 @@ func TestRequestExceedsUserQuotaEvent(t *testing.T) {
 }
 
 func TestRequestFitsInUserQuotaEvent(t *testing.T) {
-	ask := &AllocationAsk{
-		allocationKey:     "alloc-0",
-		applicationID:     "app-0",
-		allocatedResource: requestResource,
-	}
 	eventSystem := mock.NewEventSystemDisabled()
-	events := newAskEvents(ask, eventSystem)
-	events.sendRequestFitsInUserQuota()
+	events := newAskEvents(eventSystem)
+	events.sendRequestFitsInUserQuota(allocKey, appID1, requestResource)
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
-	events = newAskEvents(ask, eventSystem)
-	events.sendRequestFitsInUserQuota()
+	events = newAskEvents(eventSystem)
+	events.sendRequestFitsInUserQuota(allocKey, appID1, requestResource)
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
 	assert.Equal(t, "alloc-0", event.ObjectID)
-	assert.Equal(t, "app-0", event.ReferenceID)
+	assert.Equal(t, appID1, event.ReferenceID)
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
@@ -132,21 +116,17 @@ func TestRequestFitsInUserQuotaEvent(t *testing.T) {
 }
 
 func TestPredicateFailedEvents(t *testing.T) {
-	ask := &AllocationAsk{
-		allocationKey:     "alloc-0",
-		applicationID:     "app-0",
-		allocatedResource: requestResource,
-	}
+	resource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	eventSystem := mock.NewEventSystemDisabled()
-	events := newAskEvents(ask, eventSystem)
-	events.sendPredicateFailed("failed")
+	events := newAskEvents(eventSystem)
+	events.sendPredicateFailed("alloc-0", "app-0", "failed", resource)
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
-	events = newAskEventsWithRate(ask, eventSystem, 50*time.Millisecond, 1)
+	events = newAskEventsWithRate(eventSystem, 50*time.Millisecond, 1)
 	// only the first event is expected to be emitted due to rate limiting
 	for i := 0; i < 200; i++ {
-		events.sendPredicateFailed("failure-" + strconv.FormatUint(uint64(i), 10))
+		events.sendPredicateFailed("alloc-0", "app-0", "failure-"+strconv.FormatUint(uint64(i), 10), resource)
 	}
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
@@ -155,7 +135,7 @@ func TestPredicateFailedEvents(t *testing.T) {
 	eventSystem.Reset()
 	// wait a bit, a new event is expected
 	time.Sleep(100 * time.Millisecond)
-	events.sendPredicateFailed("failed")
+	events.sendPredicateFailed("alloc-0", "app-0", "failed", resource)
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event = eventSystem.Events[0]
 	assert.Equal(t, "Predicate failed for request 'alloc-0' with message: 'failed'", event.Message)

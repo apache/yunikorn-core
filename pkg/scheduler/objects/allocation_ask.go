@@ -79,7 +79,7 @@ func NewAllocationAsk(allocationKey string, applicationID string, allocatedResou
 		resKeyPerNode:     make(map[string]string),
 	}
 	aa.resKeyWithoutNode = reservationKeyWithoutNode(applicationID, allocationKey)
-	aa.askEvents = newAskEvents(aa, events.GetEventSystem())
+	aa.askEvents = newAskEvents(events.GetEventSystem())
 	return aa
 }
 
@@ -108,7 +108,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		return nil
 	}
 	saa.resKeyWithoutNode = reservationKeyWithoutNode(ask.ApplicationID, ask.AllocationKey)
-	saa.askEvents = newAskEvents(saa, events.GetEventSystem())
+	saa.askEvents = newAskEvents(events.GetEventSystem())
 	return saa
 }
 
@@ -260,7 +260,7 @@ func (aa *AllocationAsk) LogAllocationFailure(message string, allocate bool) {
 }
 
 func (aa *AllocationAsk) SendPredicateFailedEvent(message string) {
-	aa.askEvents.sendPredicateFailed(message)
+	aa.askEvents.sendPredicateFailed(aa.allocationKey, aa.applicationID, message, aa.GetAllocatedResource())
 }
 
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met
@@ -344,7 +344,7 @@ func (aa *AllocationAsk) setHeadroomCheckFailed(headroom *resources.Resource, qu
 	defer aa.Unlock()
 	if !aa.headroomCheckFailed {
 		aa.headroomCheckFailed = true
-		aa.askEvents.sendRequestExceedsQueueHeadroom(headroom, queue)
+		aa.askEvents.sendRequestExceedsQueueHeadroom(aa.allocationKey, aa.applicationID, headroom, aa.allocatedResource, queue)
 	}
 }
 
@@ -353,7 +353,7 @@ func (aa *AllocationAsk) setHeadroomCheckPassed(queue string) {
 	defer aa.Unlock()
 	if aa.headroomCheckFailed {
 		aa.headroomCheckFailed = false
-		aa.askEvents.sendRequestFitsInQueue(queue)
+		aa.askEvents.sendRequestFitsInQueue(aa.allocationKey, aa.applicationID, queue, aa.allocatedResource)
 	}
 }
 
@@ -362,7 +362,7 @@ func (aa *AllocationAsk) setUserQuotaCheckFailed(available *resources.Resource) 
 	defer aa.Unlock()
 	if !aa.userQuotaCheckFailed {
 		aa.userQuotaCheckFailed = true
-		aa.askEvents.sendRequestExceedsUserQuota(available)
+		aa.askEvents.sendRequestExceedsUserQuota(aa.allocationKey, aa.applicationID, available, aa.allocatedResource)
 	}
 }
 
@@ -371,6 +371,6 @@ func (aa *AllocationAsk) setUserQuotaCheckPassed() {
 	defer aa.Unlock()
 	if aa.userQuotaCheckFailed {
 		aa.userQuotaCheckFailed = false
-		aa.askEvents.sendRequestFitsInUserQuota()
+		aa.askEvents.sendRequestFitsInUserQuota(aa.allocationKey, aa.applicationID, aa.allocatedResource)
 	}
 }

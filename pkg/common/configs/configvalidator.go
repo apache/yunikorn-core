@@ -358,6 +358,7 @@ func checkPlacementRules(partition *PartitionConfig) error {
 
 func checkQueueHierarchyForPlacement(path []string, create, hasDynamicPart bool, conf []QueueConfig, parentConf *QueueConfig) (placementPathCheckResult, string) {
 	queueName := path[0]
+	lastQueueName := ""
 
 	// no more queues in the configuration
 	if len(conf) == 0 {
@@ -366,10 +367,10 @@ func checkQueueHierarchyForPlacement(path []string, create, hasDynamicPart bool,
 			return errLastQueueLeaf, parentConf.Name
 		}
 		if !create {
-			return errNonExistingQueue, ""
+			return errNonExistingQueue, lastQueueName
 		}
 
-		return placementOK, ""
+		return placementOK, lastQueueName
 	}
 
 	var queueConf *QueueConfig
@@ -384,10 +385,10 @@ func checkQueueHierarchyForPlacement(path []string, create, hasDynamicPart bool,
 	// queue not found on this level
 	if queueConf == nil {
 		if !create {
-			return errNonExistingQueue, ""
+			return errNonExistingQueue, lastQueueName
 		}
 
-		return placementOK, ""
+		return placementOK, lastQueueName
 	}
 
 	if len(path) == 1 {
@@ -395,16 +396,16 @@ func checkQueueHierarchyForPlacement(path []string, create, hasDynamicPart bool,
 			// the "fixed" rule is followed by other rules like tag, user, etc. (root.dev.<user>),
 			// which means that the "fixed" part must point to a parent
 			if queueConf.Parent {
-				return placementOK, ""
+				return placementOK, lastQueueName
 			}
 
-			return errQueueNotLeaf, ""
+			return errQueueNotLeaf, lastQueueName
 		}
 		if queueConf.Parent {
-			return errQueueNotLeaf, ""
+			return errQueueNotLeaf, lastQueueName
 		}
 
-		return placementOK, ""
+		return placementOK, lastQueueName
 	}
 
 	path = path[1:]

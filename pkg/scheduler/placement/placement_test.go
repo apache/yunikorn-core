@@ -102,11 +102,10 @@ func TestManagerUpdate(t *testing.T) {
 
 func TestManagerBuildRule(t *testing.T) {
 	// basic with 1 rule
-	man := NewPlacementManager(nil, queueFunc)
 	rules := []configs.PlacementRule{
 		{Name: "test"},
 	}
-	ruleObjs, err := man.buildRules(rules)
+	ruleObjs, err := buildRules(rules)
 	if err != nil {
 		t.Errorf("test rule build should not have failed, err: %v", err)
 	}
@@ -122,7 +121,7 @@ func TestManagerBuildRule(t *testing.T) {
 			},
 		},
 	}
-	ruleObjs, err = man.buildRules(rules)
+	ruleObjs, err = buildRules(rules)
 	if err != nil || len(ruleObjs) != 2 {
 		t.Errorf("test rule build should not have failed and created 2 top level rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
@@ -137,7 +136,7 @@ func TestManagerBuildRule(t *testing.T) {
 		{Name: "user"},
 		{Name: "test"},
 	}
-	ruleObjs, err = man.buildRules(rules)
+	ruleObjs, err = buildRules(rules)
 	if err != nil || len(ruleObjs) != 3 {
 		t.Errorf("rule build should not have failed and created 3 rules, err: %v, rules: %v", err, ruleObjs)
 	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" || ruleObjs[2].getName() != "recovery" {

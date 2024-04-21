@@ -95,9 +95,6 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 		if err != nil {
 			return nil, err
 		}
-		if intValue < 0 {
-			return nil, fmt.Errorf("negative resources not permitted: %v", configMap)
-		}
 		res.Resources[key] = intValue
 	}
 	return res, nil

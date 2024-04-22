@@ -2062,6 +2062,18 @@ func TestApplyConf(t *testing.T) {
 	err = errQueue.ApplyConf(errConf2)
 	assert.ErrorContains(t, err, "multiple spaces found in ACL")
 
+	// wrong ChildTemplate
+	errConf3 := configs.QueueConfig{
+		Parent: true,
+		ChildTemplate: configs.ChildTemplate{
+			Resources: configs.Resources{
+				Guaranteed: map[string]string{"wrong template": "-100"},
+			},
+		},
+	}
+	err = errQueue.ApplyConf(errConf3)
+	assert.ErrorContains(t, err, "invalid quantity")
+
 	// isManaged is changed from unmanaged to managed
 	childConf := configs.QueueConfig{}
 

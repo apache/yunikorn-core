@@ -57,7 +57,7 @@ require (
 
 replace (
 	github.com/petermattis/goid => github.com/petermattis/goid v0.0.0-20240327183114-c42a807a84ba
-	golang.org/x/crypto => golang.org/x/crypto v0.19.0
+	golang.org/x/crypto => golang.org/x/crypto v0.21.0
 	golang.org/x/net => golang.org/x/net v0.23.0
 	golang.org/x/sys => golang.org/x/sys v0.18.0
 	golang.org/x/text => golang.org/x/text v0.14.0

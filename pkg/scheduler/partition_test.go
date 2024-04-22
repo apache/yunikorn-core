@@ -4423,3 +4423,69 @@ func TestCalculateOutstandingRequests(t *testing.T) {
 	assert.Equal(t, 3, len(requests))
 	assert.Assert(t, resources.Equals(expectedTotal, total), "total resource expected: %v, got: %v", expectedTotal, total)
 }
+
+func TestPlaceholderAllocationAndReplacementAfterRecovery(t *testing.T) {
+	// verify the following (YUNIKORN-2562):
+	// 1. Have a recovered, existing PH allocation (ph-1) from a node with task group "tg-1"
+	// 2. Have a new PH ask (ph-2) with task group "tg-2"
+	// 3. Have a real ask with task group "tg-1"
+	// 4. EXPECTED: successful allocation for the pending ask (ph-2)
+	// 5. EXPECTED: successful placeholder allocation (replacement)
+	// 6. EXPECTED: successful removal of ph-1 allocation
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+
+	// add a new app
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+
+	// add a node with allocation
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	node1 := newNodeMaxResource(nodeID1, nodeRes)
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	phAsk := newAllocationAskTG("placeholder", appID1, taskGroup, appRes, true)
+	ph := objects.NewAllocation(nodeID1, phAsk)
+	allocs := []*objects.Allocation{ph}
+	err = partition.AddNode(node1, allocs)
+	assert.NilError(t, err)
+
+	// add a placeholder ask with a different taskgroup
+	phAsk2 := newAllocationAskTG("placeholder2", appID1, "tg-2", appRes, true)
+	err = app.AddAllocationAsk(phAsk2)
+	assert.NilError(t, err, "failed to add placeholder ask")
+
+	realAsk := newAllocationAskTG("real-alloc", appID1, taskGroup, appRes, false)
+	err = app.AddAllocationAsk(realAsk)
+	assert.NilError(t, err, "failed to add real ask")
+
+	// get an allocation for "placeholder2"
+	alloc := partition.tryAllocate()
+	assert.Assert(t, alloc != nil, "no allocation occurred")
+	assert.Equal(t, objects.Allocated, alloc.GetResult())
+	assert.Equal(t, "placeholder2", alloc.GetAllocationKey())
+	assert.Equal(t, "tg-2", alloc.GetTaskGroup())
+	assert.Equal(t, "node-1", alloc.GetNodeID())
+
+	// real allocation gets replaced
+	alloc = partition.tryPlaceholderAllocate()
+	assert.Assert(t, alloc != nil, "no placeholder replacement occurred")
+	assert.Equal(t, objects.Replaced, alloc.GetResult())
+	assert.Equal(t, "real-alloc", alloc.GetAllocationKey())
+	assert.Equal(t, "tg-1", alloc.GetTaskGroup())
+	assert.Equal(t, "real-alloc-0", alloc.GetAllocationID())
+
+	// remove the terminated placeholder allocation
+	released, confirmed := partition.removeAllocation(&si.AllocationRelease{
+		ApplicationID:   appID1,
+		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+		AllocationKey:   "real-alloc-0",
+		AllocationID:    "placeholder-0",
+	})
+	assert.Assert(t, released == nil, "unexpected released allocation")
+	assert.Assert(t, confirmed != nil, "expected to have a confirmed allocation")
+	assert.Equal(t, "real-alloc", confirmed.GetAllocationKey())
+	assert.Equal(t, "tg-1", confirmed.GetTaskGroup())
+	assert.Equal(t, "real-alloc-0", confirmed.GetAllocationID())
+}

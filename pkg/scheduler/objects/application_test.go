@@ -524,6 +524,19 @@ func TestRecoverAllocAsk(t *testing.T) {
 	assert.Equal(t, len(app.requests), 2, "ask should have been added, total should be 2")
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
 	assertUserGroupResource(t, getTestUserGroup(), nil)
+
+	assert.Equal(t, 0, len(app.placeholderData))
+	ask = newAllocationAskTG("ask-3", appID1, "testGroup", res, 1)
+	app.RecoverAllocationAsk(ask)
+	phData := app.placeholderData
+	assert.Equal(t, 1, len(phData))
+	taskGroupData := phData["testGroup"]
+	assert.Assert(t, taskGroupData != nil)
+	assert.Equal(t, "testGroup", taskGroupData.TaskGroupName)
+	assert.Equal(t, int64(1), taskGroupData.Count)
+	assert.Equal(t, int64(0), taskGroupData.Replaced)
+	assert.Equal(t, int64(0), taskGroupData.TimedOut)
+	assert.Assert(t, resources.Equals(taskGroupData.MinResource, res))
 }
 
 // test reservations removal by allocation

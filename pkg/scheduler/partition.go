@@ -580,7 +580,7 @@ func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 		if pc.totalPartitionResource == nil {
 			pc.totalPartitionResource = delta.Clone()
 		} else {
-			pc.totalPartitionResource.AddTo(delta)
+			pc.totalPartitionResource = resources.Add(pc.totalPartitionResource, delta)
 		}
 		pc.root.SetMaxResource(pc.totalPartitionResource)
 	}
@@ -608,7 +608,7 @@ func (pc *PartitionContext) addNodeResources(node *objects.Node) {
 	if pc.totalPartitionResource == nil {
 		pc.totalPartitionResource = node.GetCapacity().Clone()
 	} else {
-		pc.totalPartitionResource.AddTo(node.GetCapacity())
+		pc.totalPartitionResource = resources.Add(pc.totalPartitionResource, node.GetCapacity())
 	}
 	pc.root.SetMaxResource(pc.totalPartitionResource)
 	log.Log(log.SchedPartition).Info("Updated available resources from added node",
@@ -641,7 +641,7 @@ func (pc *PartitionContext) removeNodeResources(node *objects.Node) {
 	pc.Lock()
 	defer pc.Unlock()
 	// cleanup the available resources, partition resources cannot be nil at this point
-	pc.totalPartitionResource.SubFrom(node.GetCapacity())
+	pc.totalPartitionResource = resources.Sub(pc.totalPartitionResource, node.GetCapacity())
 	pc.root.SetMaxResource(pc.totalPartitionResource)
 	log.Log(log.SchedPartition).Info("Updated available resources from removed node",
 		zap.String("partitionName", pc.Name),

@@ -929,3 +929,168 @@ partitions:
 	appQueue = part.GetQueue("root.app-1-namespace")
 	assert.Assert(t, appQueue != nil, "application queue was not created after recovery")
 }
+
+func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
+	// create an existing allocation
+	existingAllocations := make([]*si.Allocation, 1)
+	existingAllocations[0] = &si.Allocation{
+		AllocationKey: "ph-alloc-1",
+		NodeID:        "node-1:1234",
+		ApplicationID: appID1,
+		TaskGroupName: "tg-1",
+		AllocationID:  "ph-alloc-1-0",
+		ResourcePerAlloc: &si.Resource{
+			Resources: map[string]*si.Quantity{
+				"memory": {
+					Value: 10,
+				},
+				"vcore": {
+					Value: 1,
+				},
+			},
+		},
+		Placeholder: true,
+	}
+
+	config := `partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: default`
+	ms := &mockScheduler{}
+	defer ms.Stop()
+	err := ms.Init(config, true, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	// Add application
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.default"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+
+	// Add node
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
+			{
+				NodeID:     "node-1:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+				Action:              si.NodeInfo_CREATE,
+				ExistingAllocations: existingAllocations,
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "NodeRequest nodes and app for recovery failed")
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+
+	// Add a new placeholder ask with a different task group
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "ph-alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				MaxAllocations: 1,
+				ApplicationID:  appID1,
+				TaskGroupName:  "tg-2",
+				Placeholder:    true,
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationRequest failed for placeholder ask")
+	ms.mockRM.waitForAllocations(t, 1, 1000)
+
+	// Add two real asks
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "real-alloc-1",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				MaxAllocations: 1,
+				ApplicationID:  appID1,
+				TaskGroupName:  "tg-1",
+			},
+			{
+				AllocationKey: "real-alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				MaxAllocations: 1,
+				ApplicationID:  appID1,
+				TaskGroupName:  "tg-2",
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationRequest failed for real asks")
+	ms.mockRM.waitForReleasedPlaceholders(t, 2, 1000)
+
+	// remove placeholder allocations
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationRelease{
+				{
+					ApplicationID:   appID1,
+					PartitionName:   "default",
+					AllocationID:    "ph-alloc-1-0",
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+				},
+				{
+					ApplicationID:   appID1,
+					PartitionName:   "default",
+					AllocationID:    "ph-alloc-2-0",
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationReleasesRequest failed for placeholders")
+
+	// remove real allocations
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationRelease{
+				{
+					ApplicationID:   appID1,
+					PartitionName:   "default",
+					AllocationID:    "real-alloc-1-0",
+					TerminationType: si.TerminationType_STOPPED_BY_RM,
+				},
+				{
+					ApplicationID:   appID1,
+					PartitionName:   "default",
+					AllocationID:    "real-alloc-2-0",
+					TerminationType: si.TerminationType_STOPPED_BY_RM,
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationReleasesRequest failed for real allocations")
+
+	ms.mockRM.waitForApplicationState(t, appID1, "Completing", 1000)
+}

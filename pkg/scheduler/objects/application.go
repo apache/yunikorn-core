@@ -651,24 +651,12 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 				zap.Error(err))
 		}
 	}
-	sa.requests[ask.GetAllocationKey()] = ask
-
-	// update app priority
-	repeat := ask.GetPendingAskRepeat()
-	priority := ask.GetPriority()
-	if repeat > 0 && priority > sa.askMaxPriority {
-		sa.askMaxPriority = priority
-		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
-	}
+	sa.addAllocationAskInternal(ask)
 
 	// Update total pending resource
 	delta.SubFrom(oldAskResource)
 	sa.pending = resources.Add(sa.pending, delta)
 	sa.queue.incPendingResource(delta)
-
-	if ask.IsPlaceholder() {
-		sa.addPlaceholderData(ask)
-	}
 
 	log.Log(log.SchedApplication).Info("ask added successfully to application",
 		zap.String("appID", sa.ApplicationID),
@@ -691,6 +679,19 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	if ask == nil {
 		return
 	}
+
+	sa.addAllocationAskInternal(ask)
+
+	// progress the application from New to Accepted.
+	if sa.IsNew() {
+		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
+			log.Log(log.SchedApplication).Debug("Application state change failed while recovering allocation ask",
+				zap.Error(err))
+		}
+	}
+}
+
+func (sa *Application) addAllocationAskInternal(ask *AllocationAsk) {
 	sa.requests[ask.GetAllocationKey()] = ask
 
 	// update app priority
@@ -701,12 +702,8 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	}
 
-	// progress the application from New to Accepted.
-	if sa.IsNew() {
-		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
-			log.Log(log.SchedApplication).Debug("Application state change failed while recovering allocation ask",
-				zap.Error(err))
-		}
+	if ask.IsPlaceholder() {
+		sa.addPlaceholderData(ask)
 	}
 }
 

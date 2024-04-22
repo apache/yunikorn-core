@@ -38,6 +38,8 @@ type mockRMCallback struct {
 	rejectedNodes        map[string]bool
 	nodeAllocations      map[string][]*si.Allocation
 	Allocations          map[string]*si.Allocation
+	releasedPhs          map[string]*si.AllocationRelease
+	appStates            map[string]string
 
 	locking.RWMutex
 }
@@ -50,6 +52,8 @@ func newMockRMCallbackHandler() *mockRMCallback {
 		rejectedNodes:        make(map[string]bool),
 		nodeAllocations:      make(map[string][]*si.Allocation),
 		Allocations:          make(map[string]*si.Allocation),
+		releasedPhs:          make(map[string]*si.AllocationRelease),
+		appStates:            make(map[string]string),
 	}
 }
 
@@ -63,6 +67,10 @@ func (m *mockRMCallback) UpdateApplication(response *si.ApplicationResponse) err
 	for _, app := range response.Rejected {
 		m.rejectedApplications[app.ApplicationID] = true
 		delete(m.acceptedApplications, app.ApplicationID)
+		delete(m.appStates, app.ApplicationID)
+	}
+	for _, app := range response.Updated {
+		m.appStates[app.ApplicationID] = app.State
 	}
 	return nil
 }
@@ -83,6 +91,9 @@ func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error
 	}
 	for _, alloc := range response.Released {
 		delete(m.Allocations, alloc.AllocationID)
+		if alloc.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
+			m.releasedPhs[alloc.AllocationID] = alloc
+		}
 	}
 	return nil
 }
@@ -130,6 +141,15 @@ func (m *mockRMCallback) waitForRejectedApplication(t *testing.T, appID string, 
 		return m.rejectedApplications[appID]
 	})
 	assert.NilError(t, err, "Failed to wait for rejected application: %s, called from: %s", appID, caller())
+}
+
+func (m *mockRMCallback) waitForApplicationState(t *testing.T, appID, state string, timeoutMs int) {
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		m.RLock()
+		defer m.RUnlock()
+		return m.appStates[appID] == state
+	})
+	assert.NilError(t, err, "Failed to wait for application %s state: %s, called from: %s", appID, state, caller())
 }
 
 func (m *mockRMCallback) waitForAcceptedNode(t *testing.T, nodeID string, timeoutMs int) {
@@ -185,4 +205,15 @@ func (m *mockRMCallback) waitForMinAllocations(tb testing.TB, nAlloc int, timeou
 	if err != nil {
 		tb.Fatalf("Failed to wait for min allocations expected %d, actual %d, called from: %s", nAlloc, allocLen, caller())
 	}
+}
+
+func (m *mockRMCallback) waitForReleasedPlaceholders(t *testing.T, releases int, timeoutMs int) {
+	var releasesLen int
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		m.RLock()
+		defer m.RUnlock()
+		releasesLen = len(m.releasedPhs)
+		return releasesLen == releases
+	})
+	assert.NilError(t, err, "Failed to wait for placeholder releases, expected %d, actual %d, called from: %s", releases, releasesLen, caller())
 }

@@ -40,6 +40,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -1525,7 +1526,6 @@ func (sa *Application) SetQueue(queue *Queue) {
 	defer sa.Unlock()
 	sa.queuePath = queue.QueuePath
 	sa.queue = queue
-	sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 }
 
 // remove the leaf queue the application runs in, used when completing the app
@@ -2114,4 +2114,35 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 		}
 	}
 	sa.runnableByUserLimit = runnableByUserLimit
+}
+
+// GetGuaranteedResource returns the guaranteed resource that is set in the application tags
+func (sa *Application) GetGuaranteedResource() *resources.Resource {
+	return sa.getResourceFromTags(siCommon.AppTagNamespaceResourceGuaranteed)
+}
+
+// GetMaxResource returns the max resource that is set in the application tags
+func (sa *Application) GetMaxResource() *resources.Resource {
+	return sa.getResourceFromTags(siCommon.AppTagNamespaceResourceQuota)
+}
+
+func (sa *Application) getResourceFromTags(tag string) *resources.Resource {
+	value := sa.GetTag(tag)
+	if value == "" {
+		return nil
+	}
+
+	resource, err := resources.NewResourceFromString(value)
+	if err != nil {
+		log.Log(log.SchedQueue).Warn("application resource conversion failure",
+			zap.String("tag", tag),
+			zap.String("json string", value),
+			zap.Error(err))
+	} else if !resources.StrictlyGreaterThanZero(resource) {
+		log.Log(log.SchedQueue).Warn("resource quantities should be greater than zero",
+			zap.Stringer("resource", resource))
+		resource = nil
+	}
+
+	return resource
 }

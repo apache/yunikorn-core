@@ -2807,11 +2807,20 @@ func TestAddTGApplication(t *testing.T) {
 	var tgRes *resources.Resource
 	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	app := newApplicationTG(appID1, "default", "root.limited", tgRes)
+	tags := map[string]string{
+		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"vcore\":{\"value\":111}}}",
+		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"vcore\":{\"value\":2222}}}",
+	}
+	app := newApplicationTGTags(appID1, "default", "root.limited", tgRes, tags)
 	err = partition.AddApplication(app)
 	if err == nil {
 		t.Error("app-1 should be rejected due to TG request")
 	}
+	queue := partition.GetQueue("root.limited")
+	assert.Assert(t, resources.Equals(queue.GetMaxResource(), resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": 1000,
+	})), "max resource changed unexpectedly")
+	assert.Assert(t, queue.GetGuaranteedResource() == nil)
 
 	// add a app with TG that does fit in the queue
 	limit = map[string]string{"vcore": "100"}
@@ -2820,6 +2829,11 @@ func TestAddTGApplication(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	assert.Equal(t, partition.getApplication(appID1), app, "partition failed to add app incorrect app returned")
+	queue = partition.GetQueue("root.limited")
+	assert.Assert(t, resources.Equals(queue.GetMaxResource(), resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": 100000,
+	})), "max resource changed unexpectedly")
+	assert.Assert(t, queue.GetGuaranteedResource() == nil)
 
 	// add a app with TG that does fit in the queue as the resource is not limited in the queue
 	limit = map[string]string{"second": "100"}
@@ -2828,6 +2842,11 @@ func TestAddTGApplication(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	assert.Equal(t, partition.getApplication(appID1), app, "partition failed to add app incorrect app returned")
+	queue = partition.GetQueue("root.limited")
+	assert.Assert(t, resources.Equals(queue.GetMaxResource(), resources.NewResourceFromMap(map[string]resources.Quantity{
+		"second": 100,
+	})), "max resource changed unexpectedly")
+	assert.Assert(t, queue.GetGuaranteedResource() == nil)
 }
 
 func TestAddTGAppDynamic(t *testing.T) {
@@ -2843,16 +2862,24 @@ func TestAddTGAppDynamic(t *testing.T) {
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	assert.Equal(t, app.GetQueuePath(), "root.unlimited", "app-1 not placed in expected queue")
 
-	jsonRes := "{\"resources\":{\"vcore\":{\"value\":10000}}}"
-	tags = map[string]string{"taskqueue": "same", siCommon.AppTagNamespaceResourceQuota: jsonRes}
+	jsonMaxRes := "{\"resources\":{\"vcore\":{\"value\":10000}}}"
+	tags = map[string]string{"taskqueue": "same", siCommon.AppTagNamespaceResourceQuota: jsonMaxRes}
 	app = newApplicationTGTags(appID2, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-2 should have been added to the partition")
 	assert.Equal(t, partition.getApplication(appID2), app, "partition failed to add app incorrect app returned")
 	assert.Equal(t, app.GetQueuePath(), "root.same", "app-2 not placed in expected queue")
+	queue := partition.GetQueue("root.same")
+	assert.Assert(t, queue.GetGuaranteedResource() == nil, "guaranteed resource should be unset")
+	maxRes := queue.GetMaxResource()
+	assert.Assert(t, maxRes != nil, "maximum resource should have been set")
+	assert.Assert(t, resources.Equals(maxRes, resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": 10000,
+	})), "max resource set on the queue does not match the JSON tag")
 
-	jsonRes = "{\"resources\":{\"vcore\":{\"value\":1000}}}"
-	tags = map[string]string{"taskqueue": "smaller", siCommon.AppTagNamespaceResourceQuota: jsonRes}
+	jsonMaxRes = "{\"resources\":{\"vcore\":{\"value\":1000}}}"
+	jsonGuaranteedRes := "{\"resources\":{\"vcore\":{\"value\":111}}}"
+	tags = map[string]string{"taskqueue": "smaller", siCommon.AppTagNamespaceResourceQuota: jsonMaxRes, siCommon.AppTagNamespaceResourceGuaranteed: jsonGuaranteedRes}
 	app = newApplicationTGTags(appID3, "default", "unknown", tgRes, tags)
 	err = partition.AddApplication(app)
 	if err == nil {
@@ -2861,10 +2888,20 @@ func TestAddTGAppDynamic(t *testing.T) {
 	if partition.getApplication(appID3) != nil {
 		t.Fatal("partition added app incorrectly should have failed")
 	}
-	queue := partition.GetQueue("root.smaller")
+	queue = partition.GetQueue("root.smaller")
 	if queue == nil {
 		t.Fatal("queue should have been added, even if app failed")
 	}
+	maxRes = queue.GetMaxResource()
+	assert.Assert(t, maxRes != nil, "maximum resource should have been set")
+	assert.Assert(t, resources.Equals(maxRes, resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": 1000,
+	})), "max resource set on the queue does not match the JSON tag")
+	guaranteedRes := queue.GetGuaranteedResource()
+	assert.Assert(t, guaranteedRes != nil, "guaranteed resource should have been set")
+	assert.Assert(t, resources.Equals(guaranteedRes, resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": 111,
+	})), "guaranteed resource set on the queue does not match the JSON tag")
 }
 
 func TestPlaceholderSmallerThanReal(t *testing.T) {

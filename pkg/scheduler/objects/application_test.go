@@ -105,6 +105,46 @@ func TestNewApplication(t *testing.T) {
 	assert.Assert(t, app.IsNew(), "new application must be in new state")
 	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "no timeout passed in should be modified default")
 	assert.Assert(t, resources.Equals(app.placeholderAsk, res), "placeholder ask not set as expected")
+
+	// valid tags
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"validMaxRes\":{\"value\":11}}}",
+		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"validGuaranteed\":{\"value\":22}}}",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	guaranteed := app.GetGuaranteedResource()
+	maxResource := app.GetMaxResource()
+	assert.Assert(t, guaranteed != nil, "guaranteed resource has not been set")
+	assert.Equal(t, 1, len(guaranteed.Resources), "more than one resource has been set")
+	assert.Equal(t, resources.Quantity(22), guaranteed.Resources["validGuaranteed"])
+	assert.Assert(t, maxResource != nil, "maximum resource has not been set")
+	assert.Equal(t, 1, len(maxResource.Resources), "more than one resource has been set")
+	assert.Equal(t, resources.Quantity(11), maxResource.Resources["validMaxRes"], "maximum resource is incorrect")
+
+	// invalid tags
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceQuota:      "{xxxxxx}",
+		siCommon.AppTagNamespaceResourceGuaranteed: "{yyyyy}",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	guaranteed = app.GetGuaranteedResource()
+	maxResource = app.GetMaxResource()
+	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
+	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+
+	// negative values
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"negativeMax\":{\"value\":-11}}}",
+		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"negativeGuaranteed\":{\"value\":-22}}}",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	guaranteed = app.GetGuaranteedResource()
+	maxResource = app.GetMaxResource()
+	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
+	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
 }
 
 // test basic reservations
@@ -2643,6 +2683,51 @@ func TestUpdateRunnableStatus(t *testing.T) {
 	assert.Equal(t, 2, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUEUE, eventSystem.Events[0].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, eventSystem.Events[1].EventChangeDetail)
+}
+
+func TestGetMaxResourceFromTag(t *testing.T) {
+	app := newApplication(appID0, "default", "root.unknown")
+	testGetResourceFromTag(t, siCommon.AppTagNamespaceResourceQuota, app.tags, app.GetMaxResource)
+}
+
+func TestGuaranteedResourceFromTag(t *testing.T) {
+	app := newApplication(appID0, "default", "root.unknown")
+	testGetResourceFromTag(t, siCommon.AppTagNamespaceResourceGuaranteed, app.tags, app.GetGuaranteedResource)
+}
+
+func testGetResourceFromTag(t *testing.T, tagName string, tags map[string]string, getResource func() *resources.Resource) {
+	assert.Equal(t, 0, len(tags), "tags are not empty")
+
+	// no value for tag
+	res := getResource()
+	assert.Assert(t, res == nil, "unexpected resource")
+
+	// empty value
+	tags[tagName] = ""
+	res = getResource()
+	assert.Assert(t, res == nil, "unexpected resource")
+
+	// valid value
+	tags[tagName] = "{\"resources\":{\"vcore\":{\"value\":111}}}"
+	res = getResource()
+	assert.Assert(t, res != nil)
+	assert.Equal(t, 1, len(res.Resources))
+	assert.Equal(t, resources.Quantity(111), res.Resources["vcore"])
+
+	// zero
+	tags[tagName] = "{\"resources\":{\"vcore\":{\"value\":0}}}"
+	res = getResource()
+	assert.Assert(t, res == nil)
+
+	// negative
+	tags[tagName] = "{\"resources\":{\"vcore\":{\"value\":-12}}}"
+	res = getResource()
+	assert.Assert(t, res == nil, "unexpected resource")
+
+	// invalid value
+	tags[tagName] = "{xyz}"
+	res = getResource()
+	assert.Assert(t, res == nil, "unexpected resource")
 }
 
 func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {

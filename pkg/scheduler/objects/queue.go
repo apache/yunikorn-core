@@ -41,7 +41,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
-	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 var (
@@ -357,7 +356,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 
 	// Load the max & guaranteed resources for all but the root queue
 	if sq.Name != configs.RootQueue {
-		if err = sq.setResources(conf.Resources); err != nil {
+		if err = sq.setResourcesFromConf(conf.Resources); err != nil {
 			return err
 		}
 	}
@@ -366,8 +365,8 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	return nil
 }
 
-// setResources sets the maxResource and guaranteedResource of the queue from the config.
-func (sq *Queue) setResources(resource configs.Resources) error {
+// setResourcesFromConf sets the maxResource and guaranteedResource of the queue from the config.
+func (sq *Queue) setResourcesFromConf(resource configs.Resources) error {
 	maxResource, err := resources.NewResourceFromConf(resource.Max)
 	if err != nil {
 		log.Log(log.SchedQueue).Error("parsing failed on max resources this should not happen",
@@ -385,6 +384,11 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		return err
 	}
 
+	sq.setResources(guaranteedResource, maxResource)
+	return nil
+}
+
+func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resource) {
 	switch {
 	case resources.StrictlyGreaterThanZero(maxResource):
 		log.Log(log.SchedQueue).Debug("setting max resources",
@@ -436,7 +440,12 @@ func (sq *Queue) setResources(resource configs.Resources) error {
 		log.Log(log.SchedQueue).Debug("guaranteed resources setting ignored: cannot set zero guaranteed resources",
 			zap.String("queue", sq.QueuePath))
 	}
-	return nil
+}
+
+func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resource) {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.setResources(guaranteedResource, maxResource)
 }
 
 // setTemplate sets the template on the queue based on the config.
@@ -737,63 +746,6 @@ func (sq *Queue) AddApplication(app *Application) {
 	appID := app.ApplicationID
 	sq.applications[appID] = app
 	sq.queueEvents.sendNewApplicationEvent(sq.QueuePath, appID)
-	// YUNIKORN-199: update the quota from the namespace
-	// get the tag with the quota
-	quota := app.GetTag(siCommon.AppTagNamespaceResourceQuota)
-	// get the tag with the guaranteed resource
-	guaranteed := app.GetTag(siCommon.AppTagNamespaceResourceGuaranteed)
-	if quota == "" && guaranteed == "" {
-		return
-	}
-
-	var quotaRes, guaranteedRes *resources.Resource
-	var quotaErr, guaranteedErr error
-
-	// need to set a quota: convert json string to resource
-	if quota != "" {
-		quotaRes, quotaErr = resources.NewResourceFromString(quota)
-		if quotaErr != nil {
-			log.Log(log.SchedQueue).Warn("application resource quota conversion failure",
-				zap.String("json quota string", quota),
-				zap.Error(quotaErr))
-		} else if !resources.StrictlyGreaterThanZero(quotaRes) {
-			log.Log(log.SchedQueue).Warn("Max resource quantities should be greater than zero: cannot set queue max resource",
-				zap.Stringer("maxResource", quotaRes))
-			quotaRes = nil // Skip setting quota if it has a value <= 0
-		}
-	}
-
-	// need to set guaranteed resource: convert json string to resource
-	if guaranteed != "" {
-		guaranteedRes, guaranteedErr = resources.NewResourceFromString(guaranteed)
-		if guaranteedErr != nil {
-			log.Log(log.SchedQueue).Warn("application guaranteed resource conversion failure",
-				zap.String("json guaranteed string", guaranteed),
-				zap.Error(guaranteedErr))
-			if quotaErr != nil {
-				return
-			}
-		} else if !resources.StrictlyGreaterThanZero(guaranteedRes) {
-			log.Log(log.SchedQueue).Warn("Guaranteed resource quantities should be greater than zero: cannot set queue guaranteed resource",
-				zap.Stringer("guaranteedResource", guaranteedRes))
-			guaranteedRes = nil // Skip setting guaranteed resource if it has a value <= 0
-		}
-	}
-
-	// set the quota
-	if sq.isManaged {
-		log.Log(log.SchedQueue).Warn("Trying to set max resources on a queue that is not an unmanaged leaf",
-			zap.String("queueName", sq.QueuePath))
-		return
-	}
-
-	if quotaRes != nil {
-		sq.maxResource = quotaRes
-	}
-
-	if guaranteedRes != nil {
-		sq.guaranteedResource = guaranteedRes
-	}
 }
 
 // RemoveApplication removes the app from the list of tracked applications. Make sure that the app

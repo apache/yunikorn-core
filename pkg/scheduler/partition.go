@@ -339,8 +339,13 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
-	// add the app to the queue to set the quota on the queue if needed
-	queue.AddApplication(app)
+	// set resources based on tags, but only if the queue is dynamic (unmanaged)
+	if queue.IsManaged() {
+		log.Log(log.SchedQueue).Warn("Trying to set resources on a queue that is not an unmanaged leaf",
+			zap.String("queueName", queue.QueuePath))
+	} else {
+		queue.SetResources(app.GetGuaranteedResource(), app.GetMaxResource())
+	}
 	// check only for gang request
 	// - make sure the taskgroup request fits in the maximum set for the queue hierarchy
 	// - task groups should only be used in FIFO queues
@@ -348,21 +353,18 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	if placeHolder := app.GetPlaceholderAsk(); !resources.IsZero(placeHolder) {
 		// check the queue sorting
 		if !queue.SupportTaskGroup() {
-			queue.RemoveApplication(app)
 			return fmt.Errorf("queue %s cannot run application %s with task group request: unsupported sort type", queueName, appID)
 		}
-		// retrieve the max set
 		if maxQueue := queue.GetMaxQueueSet(); maxQueue != nil {
 			if !maxQueue.FitInMaxUndef(placeHolder) {
-				queue.RemoveApplication(app)
 				return fmt.Errorf("queue %s cannot fit application %s: task group request %s larger than max queue allocation %s", queueName, appID, placeHolder.String(), maxQueue.String())
 			}
 		}
 	}
-
 	// all is OK update the app and add it to the partition
 	app.SetQueue(queue)
 	app.SetTerminatedCallback(pc.moveTerminatedApp)
+	queue.AddApplication(app)
 	pc.applications[appID] = app
 
 	return nil

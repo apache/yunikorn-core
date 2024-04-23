@@ -582,7 +582,7 @@ func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 		} else {
 			pc.totalPartitionResource.AddTo(delta)
 		}
-		pc.root.SetMaxResource(pc.totalPartitionResource)
+		pc.root.SetMaxResource(pc.totalPartitionResource.Clone())
 	}
 }
 
@@ -610,7 +610,7 @@ func (pc *PartitionContext) addNodeResources(node *objects.Node) {
 	} else {
 		pc.totalPartitionResource.AddTo(node.GetCapacity())
 	}
-	pc.root.SetMaxResource(pc.totalPartitionResource)
+	pc.root.SetMaxResource(pc.totalPartitionResource.Clone())
 	log.Log(log.SchedPartition).Info("Updated available resources from added node",
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
@@ -642,7 +642,7 @@ func (pc *PartitionContext) removeNodeResources(node *objects.Node) {
 	defer pc.Unlock()
 	// cleanup the available resources, partition resources cannot be nil at this point
 	pc.totalPartitionResource.SubFrom(node.GetCapacity())
-	pc.root.SetMaxResource(pc.totalPartitionResource)
+	pc.root.SetMaxResource(pc.totalPartitionResource.Clone())
 	log.Log(log.SchedPartition).Info("Updated available resources from removed node",
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
@@ -1013,7 +1013,7 @@ func (pc *PartitionContext) GetTotalPartitionResource() *resources.Resource {
 	pc.RLock()
 	defer pc.RUnlock()
 
-	return pc.totalPartitionResource
+	return pc.totalPartitionResource.Clone()
 }
 
 func (pc *PartitionContext) GetAllocatedResource() *resources.Resource {

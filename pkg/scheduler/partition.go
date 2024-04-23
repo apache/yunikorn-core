@@ -1013,7 +1013,7 @@ func (pc *PartitionContext) GetTotalPartitionResource() *resources.Resource {
 	pc.RLock()
 	defer pc.RUnlock()
 
-	return pc.totalPartitionResource
+	return pc.totalPartitionResource.Clone()
 }
 
 func (pc *PartitionContext) GetAllocatedResource() *resources.Resource {

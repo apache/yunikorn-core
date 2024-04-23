@@ -30,7 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/plugins"
 )
 
-const appID3 = "app-3"
+// const appID3 = "app-3"
 const alloc = "alloc"
 const node1 = "node1"
 
@@ -639,7 +639,7 @@ func TestTryPreemptionOnQueueWithVictimsAvailableButLowerPriority(t *testing.T) 
 	ask1.createTime = time.Now().Add(-2 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 
-	//High priority ask, should not be considered as victim
+	// High priority ask, should not be considered as victim
 	ask2 := newAllocationAskPriority("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 1000)
 	ask2.createTime = time.Now().Add(-1 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask2))

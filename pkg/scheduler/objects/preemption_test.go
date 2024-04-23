@@ -702,7 +702,7 @@ func TestTryPreemptionOnQueueWithVictimsAvailableButLowerPriority(t *testing.T) 
 // root.parent.parent2.child2. 2 Allocations (belongs to single app) are running. Each Allocation usage is vcores:1, mem: 200. Total usage is vcores:2, mem: 400
 // root.parent.parent2.child3. No usage, no guaranteed set
 // 1 Allocation on root.parent.parent1.child2 should be preempted to free up resources for ask arrived in root.parent.parent1.child1.
-func TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide(t *testing.T) {\
+func TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 3, "mem": 400})
 	iterator := getNodeIteratorFn(node)

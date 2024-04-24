@@ -422,7 +422,7 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	}
 	// delete existing allocations
 	for _, alloc := range ms.mockRM.getAllocations() {
-		err = ms.releaseAllocRequest(appID1, alloc.AllocationID)
+		err = ms.releaseAllocRequest(appID1, alloc.AllocationKey)
 		assert.NilError(t, err, "allocation release update failed")
 	}
 	ms.scheduler.MultiStepSchedule(5)

@@ -1140,7 +1140,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if delta.HasNegativeValue() {
 				log.Log(log.SchedApplication).Warn("releasing placeholder: real allocation is larger than placeholder",
 					zap.Stringer("requested resource", request.GetAllocatedResource()),
-					zap.String("placeholderID", ph.GetAllocationID()),
+					zap.String("placeholderKey", ph.GetAllocationKey()),
 					zap.Stringer("placeholder resource", ph.GetAllocatedResource()))
 				// release the placeholder and tell the RM
 				ph.SetReleased(true)
@@ -1506,7 +1506,7 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
-			node.RemoveAllocation(alloc.GetAllocationID())
+			node.RemoveAllocation(alloc.GetAllocationKey())
 			return nil
 		}
 		// mark this ask as allocated
@@ -1668,7 +1668,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
 	sa.appEvents.sendNewAllocationEvent(info)
-	sa.allocations[info.GetAllocationID()] = info
+	sa.allocations[info.GetAllocationKey()] = info
 }
 
 // Increase user resource usage
@@ -1716,11 +1716,11 @@ func (sa *Application) updatePreemptedResource(info *Allocation) {
 		info.GetAllocatedResource(), info.GetBindTime())
 }
 
-func (sa *Application) ReplaceAllocation(allocationID string) *Allocation {
+func (sa *Application) ReplaceAllocation(allocationKey string) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
 	// remove the placeholder that was just confirmed by the shim
-	ph := sa.removeAllocationInternal(allocationID, si.TerminationType_PLACEHOLDER_REPLACED)
+	ph := sa.removeAllocationInternal(allocationKey, si.TerminationType_PLACEHOLDER_REPLACED)
 	// this has already been replaced or it is a duplicate message from the shim
 	if ph == nil || ph.GetReleaseCount() == 0 {
 		log.Log(log.SchedApplication).Debug("Unexpected placeholder released",
@@ -1732,7 +1732,7 @@ func (sa *Application) ReplaceAllocation(allocationID string) *Allocation {
 	if ph.GetReleaseCount() > 1 {
 		log.Log(log.SchedApplication).Error("Unexpected release number, placeholder released, only 1 real allocations processed",
 			zap.String("applicationID", sa.ApplicationID),
-			zap.String("placeholderID", allocationID),
+			zap.String("placeholderKey", allocationKey),
 			zap.Int("releases", ph.GetReleaseCount()))
 	}
 	// update the replacing allocation
@@ -1756,16 +1756,16 @@ func (sa *Application) ReplaceAllocation(allocationID string) *Allocation {
 
 // Remove the Allocation from the application.
 // Return the allocation that was removed or nil if not found.
-func (sa *Application) RemoveAllocation(allocationID string, releaseType si.TerminationType) *Allocation {
+func (sa *Application) RemoveAllocation(allocationKey string, releaseType si.TerminationType) *Allocation {
 	sa.Lock()
 	defer sa.Unlock()
-	return sa.removeAllocationInternal(allocationID, releaseType)
+	return sa.removeAllocationInternal(allocationKey, releaseType)
 }
 
 // Remove the Allocation from the application
 // No locking must be called while holding the lock
-func (sa *Application) removeAllocationInternal(allocationID string, releaseType si.TerminationType) *Allocation {
-	alloc := sa.allocations[allocationID]
+func (sa *Application) removeAllocationInternal(allocationKey string, releaseType si.TerminationType) *Allocation {
+	alloc := sa.allocations[allocationKey]
 
 	// When app has the allocation, update map, and update allocated resource of the app
 	if alloc == nil {
@@ -1830,7 +1830,7 @@ func (sa *Application) removeAllocationInternal(allocationID string, releaseType
 				zap.Error(err))
 		}
 	}
-	delete(sa.allocations, allocationID)
+	delete(sa.allocations, allocationKey)
 	sa.appEvents.sendRemoveAllocationEvent(alloc, releaseType)
 	return alloc
 }
@@ -1959,7 +1959,6 @@ func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Alloc
 			ApplicationID:   alloc.GetApplicationID(),
 			PartitionName:   alloc.GetPartitionName(),
 			AllocationKey:   alloc.GetAllocationKey(),
-			AllocationID:    alloc.GetAllocationID(),
 			TerminationType: terminationType,
 			Message:         message,
 		})
@@ -2001,7 +2000,7 @@ func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*Al
 func (sa *Application) IsAllocationAssignedToApp(alloc *Allocation) bool {
 	sa.RLock()
 	defer sa.RUnlock()
-	_, ok := sa.allocations[alloc.GetAllocationID()]
+	_, ok := sa.allocations[alloc.GetAllocationKey()]
 	return ok
 }
 

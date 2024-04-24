@@ -48,20 +48,20 @@ func (n *nodeEvents) sendNodeRemovedEvent() {
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendAllocationAddedEvent(allocID string, res *resources.Resource) {
+func (n *nodeEvents) sendAllocationAddedEvent(allocKey string, res *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, allocID, si.EventRecord_ADD,
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, allocKey, si.EventRecord_ADD,
 		si.EventRecord_NODE_ALLOC, res)
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendAllocationRemovedEvent(allocID string, res *resources.Resource) {
+func (n *nodeEvents) sendAllocationRemovedEvent(allocKey string, res *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, allocID, si.EventRecord_REMOVE,
+	event := events.CreateNodeEventRecord(n.node.NodeID, common.Empty, allocKey, si.EventRecord_REMOVE,
 		si.EventRecord_NODE_ALLOC, res)
 	n.eventSystem.AddEvent(event)
 }

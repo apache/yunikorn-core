@@ -143,7 +143,7 @@ func (cc *ClusterContext) schedule() bool {
 			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 			if alloc.GetResult() == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationID: "+alloc.GetAllocationID())
+				cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+alloc.GetAllocationKey())
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
@@ -898,7 +898,6 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
 			ApplicationID:   alloc.GetApplicationID(),
 			PartitionName:   alloc.GetPartitionName(),
-			AllocationID:    alloc.GetAllocationID(),
 			TerminationType: terminationType,
 			Message:         message,
 			AllocationKey:   alloc.GetAllocationKey(),

@@ -30,7 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/plugins"
 )
 
-// const appID3 = "app-3"
+const appID3 = "app-3"
 const alloc = "alloc"
 const node1 = "node1"
 

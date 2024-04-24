@@ -29,7 +29,6 @@ type AllocationAskDAOInfo struct {
 	AllocationTags      map[string]string          `json:"allocationTags,omitempty"`
 	RequestTime         int64                      `json:"requestTime,omitempty"`
 	ResourcePerAlloc    map[string]int64           `json:"resource,omitempty"`
-	PendingCount        int32                      `json:"pendingCount,omitempty"`
 	Priority            string                     `json:"priority,omitempty"`
 	RequiredNodeID      string                     `json:"requiredNodeId,omitempty"`
 	ApplicationID       string                     `json:"applicationId,omitempty"`

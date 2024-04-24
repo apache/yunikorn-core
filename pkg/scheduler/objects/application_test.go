@@ -272,11 +272,14 @@ func TestAppAllocReservation(t *testing.T) {
 
 	// reserve 1 allocate ask
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
+	ask := newAllocationAsk(aKey, appID1, res)
+	ask2 := newAllocationAsk(aKey2, appID1, res)
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
 	// reserve that works
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "ask2 should have been added to app")
 	err = app.Reserve(node1, ask)
 	assert.NilError(t, err, "reservation should not have failed")
 	if len(app.GetAskReservations("")) != 0 {
@@ -290,17 +293,17 @@ func TestAppAllocReservation(t *testing.T) {
 
 	nodeID2 := "node-2"
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10})
-	err = app.Reserve(node2, ask)
+	err = app.Reserve(node2, ask2)
 	assert.NilError(t, err, "reservation should not have failed: error %v", err)
-	nodeKey2 := nodeID2 + "|" + aKey
-	askReserved = app.GetAskReservations(aKey)
-	if len(askReserved) != 2 && (askReserved[0] != nodeKey2 || askReserved[1] != nodeKey2) {
+	nodeKey2 := nodeID2 + "|" + aKey2
+	askReserved = app.GetAskReservations(aKey2)
+	if len(askReserved) != 1 && askReserved[0] != nodeKey2 {
 		t.Errorf("app should have reservations for %s on %s and has not", aKey, nodeID2)
 	}
 
-	// check exceeding ask repeat: nothing should change
+	// check duplicate reserve: nothing should change
 	if app.canAskReserve(ask) {
-		t.Error("ask has maximum repeats reserved, reserve check should have failed")
+		t.Error("ask has already reserved, reserve check should have failed")
 	}
 	node3 := newNode("node-3", map[string]resources.Quantity{"first": 10})
 	err = app.Reserve(node3, ask)
@@ -308,9 +311,12 @@ func TestAppAllocReservation(t *testing.T) {
 		t.Errorf("reservation should have failed")
 	}
 	askReserved = app.GetAskReservations(aKey)
-	if len(askReserved) != 2 && (askReserved[0] != nodeKey1 || askReserved[1] != nodeKey1) &&
-		(askReserved[0] != nodeKey2 || askReserved[1] != nodeKey2) {
-		t.Errorf("app should have reservations for node %s and %s and has not: %v", nodeID1, nodeID2, askReserved)
+	if len(askReserved) != 1 && askReserved[0] != nodeKey1 {
+		t.Errorf("app should have reservations for node %s and has not: %v", nodeID1, askReserved)
+	}
+	askReserved = app.GetAskReservations(aKey2)
+	if len(askReserved) != 1 && askReserved[0] != nodeKey2 {
+		t.Errorf("app should have reservations for node %s and has not: %v", nodeID2, askReserved)
 	}
 	// clean up all asks and reservations
 	reservedAsks := app.RemoveAllocationAsk("")
@@ -319,8 +325,7 @@ func TestAppAllocReservation(t *testing.T) {
 	}
 }
 
-// test update allocation repeat
-func TestUpdateRepeat(t *testing.T) {
+func TestAllocateDeallocate(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	if app == nil || app.ApplicationID != appID1 {
 		t.Fatalf("app create failed which should not have %v", app)
@@ -331,38 +336,39 @@ func TestUpdateRepeat(t *testing.T) {
 
 	// failure cases
 	var delta *resources.Resource
-	delta, err = app.UpdateAskRepeat("", 0)
-	if err == nil || delta != nil {
-		t.Error("empty ask key should not have been found")
+	if delta, err = app.AllocateAsk(""); err == nil || delta != nil {
+		t.Error("empty ask key should not have been found by AllocateAsk()")
 	}
-	delta, err = app.UpdateAskRepeat("unknown", 0)
-	if err == nil || delta != nil {
-		t.Error("unknown ask key should not have been found")
+	if delta, err = app.AllocateAsk("unknown"); err == nil || delta != nil {
+		t.Error("unknown ask key should not have been found by AllocateAsk()")
+	}
+	if delta, err = app.DeallocateAsk(""); err == nil || delta != nil {
+		t.Error("empty ask key should not have been found by DeallocateAsk()")
+	}
+	if delta, err = app.DeallocateAsk("unknown"); err == nil || delta != nil {
+		t.Error("unknown ask key should not have been found by DeallocateAsk()")
 	}
 
 	// working cases
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask := newAllocationAskRepeat(aKey, appID1, res, 1)
+	ask := newAllocationAsk(aKey, appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
-	delta, err = app.UpdateAskRepeat(aKey, 0)
-	if err != nil || !resources.IsZero(delta) {
-		t.Errorf("0 increase should return zero delta and did not: %v, err %v", delta, err)
+	// allocate
+	if delta, err := app.AllocateAsk(aKey); err != nil || !resources.Equals(resources.Multiply(res, -1), delta) {
+		t.Errorf("AllocateAsk() did not return correct delta, err %v, expected %v got %v", err, resources.Multiply(res, -1), delta)
 	}
-	delta, err = app.UpdateAskRepeat(aKey, 1)
-	if err != nil || !resources.Equals(res, delta) {
-		t.Errorf("increase did not return correct delta, err %v, expected %v got %v", err, res, delta)
+	// allocate again should fail
+	if delta, err := app.AllocateAsk(aKey); err == nil || delta != nil {
+		t.Error("attempt to call Allocate() twice should have failed")
 	}
-
-	// decrease to zero
-	delta, err = app.UpdateAskRepeat(aKey, -2)
-	if err != nil || !resources.Equals(resources.Multiply(res, -2), delta) {
-		t.Errorf("decrease did not return correct delta, err %v, expected %v got %v", err, resources.Multiply(res, -2), delta)
+	// deallocate
+	if delta, err := app.DeallocateAsk(aKey); err != nil || !resources.Equals(res, delta) {
+		t.Errorf("DeallocateAsk() did not return correct delta, err %v, expected %v got %v", err, res, delta)
 	}
-	// decrease to below zero
-	delta, err = app.UpdateAskRepeat(aKey, -1)
-	if err == nil || delta != nil {
-		t.Errorf("decrease did not return correct delta, err %v, delta %v", err, delta)
+	// deallocate again should fail
+	if delta, err := app.DeallocateAsk(aKey); err == nil || delta != nil {
+		t.Error("attempt to call Deallocate() twice should have failed")
 	}
 }
 
@@ -394,16 +400,10 @@ func TestAddAllocAsk(t *testing.T) {
 	if err == nil {
 		t.Errorf("zero resource ask should not have been added to app")
 	}
-	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask = newAllocationAskRepeat(aKey, appID1, res, 0)
-	err = app.AddAllocationAsk(ask)
-	if err == nil {
-		t.Errorf("ask with zero repeat should not have been added to app")
-	}
 
 	// add alloc ask
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask = newAllocationAskRepeat(aKey, appID1, res, 1)
+	ask = newAllocationAsk(aKey, appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
@@ -433,36 +433,21 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, si.EventRecord_APP_REQUEST, record.EventChangeDetail, "incorrect change detail, expected app request")
 	eventSystem.Stop()
 
-	ask = newAllocationAskRepeat(aKey, appID1, res, 2)
+	// change resource
+	ask = newAllocationAsk(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	pending = app.GetPendingResource()
-	if !resources.Equals(resources.Multiply(res, 2), pending) {
+	if !resources.Equals(resources.Multiply(res, 2), app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", resources.Multiply(res, 2), pending)
 	}
 
-	// change both resource and count
-	ask = newAllocationAskRepeat(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3}), 5)
-	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been updated on app")
-	pending = app.GetPendingResource()
-	if !resources.Equals(resources.Multiply(res, 3), app.GetPendingResource()) {
-		t.Errorf("pending resource not updated correctly, expected %v but was: %v", resources.Multiply(res, 3), pending)
-	}
-
-	// test a decrease of repeat and back to start
-	ask = newAllocationAskRepeat(aKey, appID1, res, 1)
-	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been updated on app")
-	if !resources.Equals(res, app.GetPendingResource()) {
-		t.Errorf("pending resource not updated correctly, expected %v but was: %v", res, app.GetPendingResource())
-	}
 	// after all this is must still be in an accepted state
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
 
 	// test PlaceholderData
 	tg1 := "tg-1"
-	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
+	ask = newAllocationAskTG(aKey, appID1, tg1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	app.SetTimedOutPlaceholder(tg1, 1)
@@ -477,7 +462,7 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, app.placeholderData[tg1].TimedOut, int64(1))
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
-	ask = newAllocationAskTG(aKey, appID1, tg1, res, 1)
+	ask = newAllocationAskTG(aKey, appID1, tg1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 1)
@@ -488,7 +473,7 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.DeepEqual(t, app.placeholderData[tg1].MinResource, res)
 
 	tg2 := "tg-2"
-	ask = newAllocationAskTG(aKey, appID1, tg2, res, 1)
+	ask = newAllocationAskTG(aKey, appID1, tg2, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, len(app.placeholderData), 2)
@@ -511,7 +496,7 @@ func TestAllocAskStateChange(t *testing.T) {
 	app.queue = queue
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask := newAllocationAskRepeat(aKey, appID1, res, 1)
+	ask := newAllocationAsk(aKey, appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
@@ -553,20 +538,20 @@ func TestRecoverAllocAsk(t *testing.T) {
 	assert.Equal(t, len(app.requests), 0, "nil ask should not be added")
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask := newAllocationAskRepeat(aKey, appID1, res, 1)
+	ask := newAllocationAsk(aKey, appID1, res)
 	app.RecoverAllocationAsk(ask)
 	assert.Equal(t, len(app.requests), 1, "ask should have been added")
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
 	assertUserGroupResource(t, getTestUserGroup(), nil)
 
-	ask = newAllocationAskRepeat("ask-2", appID1, res, 1)
+	ask = newAllocationAsk("ask-2", appID1, res)
 	app.RecoverAllocationAsk(ask)
 	assert.Equal(t, len(app.requests), 2, "ask should have been added, total should be 2")
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
 	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	assert.Equal(t, 0, len(app.placeholderData))
-	ask = newAllocationAskTG("ask-3", appID1, "testGroup", res, 1)
+	ask = newAllocationAskTG("ask-3", appID1, "testGroup", res)
 	app.RecoverAllocationAsk(ask)
 	phData := app.placeholderData
 	assert.Equal(t, 1, len(phData))
@@ -677,16 +662,16 @@ func TestRemoveAllocAsk(t *testing.T) {
 
 	// setup the allocs
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
+	ask := newAllocationAsk(aKey, appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask 1 should have been added to app")
-	ask = newAllocationAskRepeat("alloc-2", appID1, res, 2)
+	ask = newAllocationAsk(aKey2, appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask 2 should have been added to app")
 	if len(app.requests) != 2 {
 		t.Fatalf("missing asks from app expected 2 got %d", len(app.requests))
 	}
-	expected := resources.Multiply(res, 4)
+	expected := resources.Multiply(res, 2)
 	if !resources.Equals(expected, app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", expected, app.GetPendingResource())
 	}
@@ -699,8 +684,7 @@ func TestRemoveAllocAsk(t *testing.T) {
 	delta := app.GetPendingResource().Clone()
 	reservedAsks = app.RemoveAllocationAsk(aKey)
 	delta.SubFrom(app.GetPendingResource())
-	expected = resources.Multiply(res, 2)
-	if !resources.Equals(delta, expected) || reservedAsks != 0 {
+	if !resources.Equals(delta, res) || reservedAsks != 0 {
 		t.Errorf("ask should have been removed from app, err %v, expected delta %v but was: %v, (reserved released = %d)", err, expected, delta, reservedAsks)
 	}
 	reservedAsks = app.RemoveAllocationAsk("")
@@ -723,12 +707,12 @@ func TestRemoveAllocAskWithPlaceholders(t *testing.T) {
 	app.queue = queue
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
+	ask := newAllocationAsk(aKey, appID1, res)
 	ask.placeholder = true
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask 1 should have been added to app")
 
-	ask = newAllocationAskRepeat("alloc-2", appID1, res, 2)
+	ask = newAllocationAsk("alloc-2", appID1, res)
 	ask.placeholder = true
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask 2 should have been added to app")
@@ -749,14 +733,14 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask := newAllocationAskRepeat(aKey, appID1, res, 2)
+	ask := newAllocationAsk(aKey, appID1, res)
 	ask.placeholder = true
 	allocInfo := NewAllocation(nodeID1, ask)
 	app.AddAllocation(allocInfo)
 	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted")
 
-	app.RemoveAllocation("alloc-1-0", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
+	app.RemoveAllocation("alloc-1", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Equal(t, app.stateMachine.Current(), Completing.String())
 	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
@@ -813,7 +797,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	assert.Assert(t, app.IsRunning(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
 
 	// remove the allocation, ask has been removed so nothing left
-	app.RemoveAllocation(askID+"-0", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
+	app.RemoveAllocation(askID, si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, app.IsCompleting(), "Application did not change as expected: %s", app.CurrentState())
 	assertUserGroupResource(t, getTestUserGroup(), nil)
 
@@ -839,7 +823,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, app.IsNew(), "New application did not return new state: %s", app.CurrentState())
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	askID := "ask-1"
-	ask := newAllocationAskTG(askID, appID1, "TG1", res, 1)
+	ask := newAllocationAskTG(askID, appID1, "TG1", res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	// app with ask, even for placeholder, should be accepted
@@ -873,7 +857,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
 	// first we have to remove the allocation itself
-	alloc := app.RemoveAllocation(askID+"-0", si.TerminationType_UNKNOWN_TERMINATION_TYPE)
+	alloc := app.RemoveAllocation(askID, si.TerminationType_UNKNOWN_TERMINATION_TYPE)
 	assert.Assert(t, alloc != nil, "Nil allocation was returned")
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in Accepted, changed unexpectedly: %s", app.CurrentState())
 	// removing the ask should move the application into the waiting state, because the allocation is only a placeholder allocation
@@ -1416,7 +1400,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.NilError(t, err, "Unexpected error when creating resource from map")
 	// add the placeholder ask to the app
 	tg1 := "tg-1"
-	phAsk := newAllocationAskTG("ask-1", appID1, tg1, res, 1)
+	phAsk := newAllocationAskTG("ask-1", appID1, tg1, res)
 	err = app.AddAllocationAsk(phAsk)
 	assert.NilError(t, err, "Application ask should have been added")
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
@@ -1749,9 +1733,9 @@ func TestCanReplace(t *testing.T) {
 		want bool
 	}{
 		{"nil", nil, false},
-		{"placeholder", newAllocationAskTG(aKey, appID1, tg1, res, 1), false},
+		{"placeholder", newAllocationAskTG(aKey, appID1, tg1, res), false},
 		{"no TG", newAllocationAsk(aKey, appID1, res), false},
-		{"no placeholder data", newAllocationAskAll(aKey, appID1, tg1, res, 1, false, 0), false},
+		{"no placeholder data", newAllocationAskAll(aKey, appID1, tg1, res, false, 0), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1760,14 +1744,14 @@ func TestCanReplace(t *testing.T) {
 	}
 	// add the placeholder data
 	// available tg has one replacement open
-	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg1, res, 1))
+	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg1, res))
 	// unavailable tg has NO replacement open (replaced)
 	tg2 := "unavailable"
-	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg2, res, 1))
+	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg2, res))
 	app.placeholderData[tg2].Replaced++
 	// unavailable tg has NO replacement open (timedout)
 	tg3 := "timedout"
-	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg3, res, 1))
+	app.addPlaceholderDataWithLocking(newAllocationAskTG(aKey, appID1, tg3, res))
 	app.placeholderData[tg3].TimedOut++
 	tests = []struct {
 		name string
@@ -1775,10 +1759,10 @@ func TestCanReplace(t *testing.T) {
 		want bool
 	}{
 		{"no TG", newAllocationAsk(aKey, appID1, res), false},
-		{"TG mismatch", newAllocationAskAll(aKey, appID1, "unknown", res, 1, false, 0), false},
-		{"TG placeholder used", newAllocationAskAll(aKey, appID1, tg2, res, 1, false, 0), false},
-		{"TG placeholder timed out", newAllocationAskAll(aKey, appID1, tg3, res, 1, false, 0), false},
-		{"TG placeholder available", newAllocationAskAll(aKey, appID1, tg1, res, 1, false, 0), true},
+		{"TG mismatch", newAllocationAskAll(aKey, appID1, "unknown", res, false, 0), false},
+		{"TG placeholder used", newAllocationAskAll(aKey, appID1, tg2, res, false, 0), false},
+		{"TG placeholder timed out", newAllocationAskAll(aKey, appID1, tg3, res, false, 0), false},
+		{"TG placeholder available", newAllocationAskAll(aKey, appID1, tg1, res, false, 0), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2009,25 +1993,25 @@ func TestMaxAskPriority(t *testing.T) {
 
 	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after re-adding asks")
 
-	// update repeat to zero for p=15
-	_, err = app.UpdateAskRepeat(ask3.GetAllocationKey(), -1)
+	// update to allocated for p=15
+	_, err = app.AllocateAsk(ask3.GetAllocationKey())
 	assert.NilError(t, err, "ask should have been updated")
-	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=15 repeat to 0")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=15 to allocated")
 
-	// update repeat to zero for p=5
-	_, err = app.UpdateAskRepeat(ask2.GetAllocationKey(), -1)
+	// update to allocated for p=5
+	_, err = app.AllocateAsk(ask2.GetAllocationKey())
 	assert.NilError(t, err, "ask should have been updated")
-	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=5 repeat to 0")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=5 to allocated")
 
-	// update repeat to 1 for p=5
-	_, err = app.UpdateAskRepeat(ask2.GetAllocationKey(), 1)
+	// update to unallocated for p=5
+	_, err = app.DeallocateAsk(ask2.GetAllocationKey())
 	assert.NilError(t, err, "ask should have been updated")
-	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=5 repeat to 1")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=5 to unallocated")
 
-	// update repeat to 1 for p=15
-	_, err = app.UpdateAskRepeat(ask3.GetAllocationKey(), 1)
+	// update to unallocated for p=15
+	_, err = app.DeallocateAsk(ask3.GetAllocationKey())
 	assert.NilError(t, err, "ask should have been updated")
-	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after updating p=15 repeat to 1")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after updating p=15 to unallocated")
 }
 
 func TestAskEvents(t *testing.T) {

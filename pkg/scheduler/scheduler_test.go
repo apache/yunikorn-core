@@ -46,22 +46,19 @@ func TestInspectOutstandingRequests(t *testing.T) {
 		"memory": 1,
 	})
 	siAsk1 := &si.AllocationAsk{
-		AllocationKey:  "ask-uuid-1",
-		ApplicationID:  appID1,
-		ResourceAsk:    askResource.ToProto(),
-		MaxAllocations: 1,
+		AllocationKey: "ask-uuid-1",
+		ApplicationID: appID1,
+		ResourceAsk:   askResource.ToProto(),
 	}
 	siAsk2 := &si.AllocationAsk{
-		AllocationKey:  "ask-uuid-2",
-		ApplicationID:  appID1,
-		ResourceAsk:    askResource.ToProto(),
-		MaxAllocations: 1,
+		AllocationKey: "ask-uuid-2",
+		ApplicationID: appID1,
+		ResourceAsk:   askResource.ToProto(),
 	}
 	siAsk3 := &si.AllocationAsk{
-		AllocationKey:  "ask-uuid-3",
-		ApplicationID:  appID2,
-		ResourceAsk:    askResource.ToProto(),
-		MaxAllocations: 1,
+		AllocationKey: "ask-uuid-3",
+		ApplicationID: appID2,
+		ResourceAsk:   askResource.ToProto(),
 	}
 	err = partition.addAllocationAsk(siAsk1)
 	assert.NilError(t, err)

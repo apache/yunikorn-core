@@ -576,8 +576,10 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 			toRelease += releases
 		}
 		if ask := sa.requests[allocKey]; ask != nil {
-			deltaPendingResource = resources.MultiplyBy(ask.GetAllocatedResource(), float64(ask.GetPendingAskRepeat()))
-			sa.pending = resources.Sub(sa.pending, deltaPendingResource)
+			if !ask.IsAllocated() {
+				deltaPendingResource = ask.GetAllocatedResource()
+				sa.pending = resources.Sub(sa.pending, deltaPendingResource)
+			}
 			delete(sa.requests, allocKey)
 			sa.sortedRequests.remove(ask)
 			sa.appEvents.sendRemoveAskEvent(ask, detail)
@@ -618,14 +620,14 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	if ask == nil {
 		return fmt.Errorf("ask cannot be nil when added to app %s", sa.ApplicationID)
 	}
-	if ask.GetPendingAskRepeat() == 0 || resources.IsZero(ask.GetAllocatedResource()) {
+	if ask.IsAllocated() || resources.IsZero(ask.GetAllocatedResource()) {
 		return fmt.Errorf("invalid ask added to app %s: %v", sa.ApplicationID, ask)
 	}
-	delta := resources.Multiply(ask.GetAllocatedResource(), int64(ask.GetPendingAskRepeat()))
+	delta := ask.GetAllocatedResource().Clone()
 
 	var oldAskResource *resources.Resource = nil
-	if oldAsk := sa.requests[ask.GetAllocationKey()]; oldAsk != nil {
-		oldAskResource = resources.Multiply(oldAsk.GetAllocatedResource(), int64(oldAsk.GetPendingAskRepeat()))
+	if oldAsk := sa.requests[ask.GetAllocationKey()]; oldAsk != nil && !oldAsk.IsAllocated() {
+		oldAskResource = oldAsk.GetAllocatedResource().Clone()
 	}
 
 	// Check if we need to change state based on the ask added, there are two cases:
@@ -683,9 +685,9 @@ func (sa *Application) addAllocationAskInternal(ask *AllocationAsk) {
 	sa.requests[ask.GetAllocationKey()] = ask
 
 	// update app priority
-	repeat := ask.GetPendingAskRepeat()
+	allocated := ask.IsAllocated()
 	priority := ask.GetPriority()
-	if repeat > 0 && priority > sa.askMaxPriority {
+	if !allocated && priority > sa.askMaxPriority {
 		sa.askMaxPriority = priority
 		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	}
@@ -695,44 +697,60 @@ func (sa *Application) addAllocationAskInternal(ask *AllocationAsk) {
 	}
 }
 
-func (sa *Application) UpdateAskRepeat(allocKey string, delta int32) (*resources.Resource, error) {
+func (sa *Application) AllocateAsk(allocKey string) (*resources.Resource, error) {
 	sa.Lock()
 	defer sa.Unlock()
 	if ask := sa.requests[allocKey]; ask != nil {
-
-		return sa.updateAskRepeatInternal(ask, delta)
+		return sa.allocateAsk(ask)
 	}
 	return nil, fmt.Errorf("failed to locate ask with key %s", allocKey)
 }
 
-func (sa *Application) updateAskRepeatInternal(ask *AllocationAsk, delta int32) (*resources.Resource, error) {
-	// updating with delta does error checking internally
-	if !ask.updatePendingAskRepeat(delta) {
-		return nil, fmt.Errorf("ask repaeat not updated resulting repeat less than zero for ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
+func (sa *Application) DeallocateAsk(allocKey string) (*resources.Resource, error) {
+	sa.Lock()
+	defer sa.Unlock()
+	if ask := sa.requests[allocKey]; ask != nil {
+		return sa.deallocateAsk(ask)
+	}
+	return nil, fmt.Errorf("failed to locate ask with key %s", allocKey)
+}
+
+func (sa *Application) allocateAsk(ask *AllocationAsk) (*resources.Resource, error) {
+	if !ask.allocate() {
+		return nil, fmt.Errorf("unable to allocate previously allocated ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
+	}
+
+	if ask.GetPriority() >= sa.askMaxPriority {
+		// recalculate downward
+		sa.updateAskMaxPriority()
+	}
+
+	delta := resources.Multiply(ask.GetAllocatedResource(), -1)
+	sa.pending = resources.Add(sa.pending, delta)
+	// update the pending of the queue with the same delta
+	sa.queue.incPendingResource(delta)
+
+	return delta, nil
+}
+
+func (sa *Application) deallocateAsk(ask *AllocationAsk) (*resources.Resource, error) {
+	if !ask.deallocate() {
+		return nil, fmt.Errorf("unable to deallocate pending ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
 	}
 
 	askPriority := ask.GetPriority()
-	if ask.GetPendingAskRepeat() == 0 {
-		// ask removed
-		if askPriority >= sa.askMaxPriority {
-			// recalculate downward
-			sa.updateAskMaxPriority()
-		}
-	} else {
-		// ask added
-		if askPriority > sa.askMaxPriority {
-			// increase app priority
-			sa.askMaxPriority = askPriority
-			sa.queue.UpdateApplicationPriority(sa.ApplicationID, askPriority)
-		}
+	if askPriority > sa.askMaxPriority {
+		// increase app priority
+		sa.askMaxPriority = askPriority
+		sa.queue.UpdateApplicationPriority(sa.ApplicationID, askPriority)
 	}
 
-	deltaPendingResource := resources.Multiply(ask.GetAllocatedResource(), int64(delta))
-	sa.pending = resources.Add(sa.pending, deltaPendingResource)
+	delta := ask.GetAllocatedResource()
+	sa.pending = resources.Add(sa.pending, delta)
 	// update the pending of the queue with the same delta
-	sa.queue.incPendingResource(deltaPendingResource)
+	sa.queue.incPendingResource(delta)
 
-	return deltaPendingResource, nil
+	return delta, nil
 }
 
 // HasReserved returns true if the application has any reservations.
@@ -789,7 +807,11 @@ func (sa *Application) reserveInternal(node *Node, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation creation failed ask %s not found on appID %s", allocKey, sa.ApplicationID)
 	}
 	if !sa.canAskReserve(ask) {
-		return fmt.Errorf("reservation of ask exceeds pending repeat, pending ask repeat %d", ask.GetPendingAskRepeat())
+		if ask.IsAllocated() {
+			return fmt.Errorf("ask is already allocated")
+		} else {
+			return fmt.Errorf("ask is already reserved")
+		}
 	}
 	// check if we can reserve the node before reserving on the app
 	if err := node.Reserve(sa, ask); err != nil {
@@ -869,20 +891,21 @@ func (sa *Application) GetAskReservations(allocKey string) []string {
 	return reservationKeys
 }
 
-// Check if the allocation has already been reserved. An ask can reserve multiple nodes if the request has a repeat set
-// larger than 1. It can never reserve more than the repeat number of nodes.
+// Check if the allocation has already been reserved. An ask can never reserve more than one node.
 // No locking must be called while holding the lock
 func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 	allocKey := ask.GetAllocationKey()
-	pending := int(ask.GetPendingAskRepeat())
-	resNumber := sa.GetAskReservations(allocKey)
-	if len(resNumber) >= pending {
-		log.Log(log.SchedApplication).Debug("reservation exceeds repeats",
-			zap.String("askKey", allocKey),
-			zap.Int("askPending", pending),
-			zap.Int("askReserved", len(resNumber)))
+	if ask.IsAllocated() {
+		log.Log(log.SchedApplication).Debug("ask already allocated, no reservation allowed",
+			zap.String("askKey", allocKey))
+		return false
 	}
-	return pending > len(resNumber)
+	if len(sa.GetAskReservations(allocKey)) > 0 {
+		log.Log(log.SchedApplication).Debug("reservation already exists",
+			zap.String("askKey", allocKey))
+		return false
+	}
+	return true
 }
 
 func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*AllocationAsk) {
@@ -892,7 +915,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 		return
 	}
 	for _, request := range sa.sortedRequests {
-		if request.GetPendingAskRepeat() == 0 || !request.IsSchedulingAttempted() {
+		if request.IsAllocated() || !request.IsSchedulingAttempted() {
 			continue
 		}
 
@@ -933,7 +956,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
-		if request.GetPendingAskRepeat() == 0 {
+		if request.IsAllocated() {
 			continue
 		}
 		// check if there is a replacement possible
@@ -1097,7 +1120,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	for _, request := range sa.sortedRequests {
 		// skip placeholders they follow standard allocation
 		// this should also be part of a task group just make sure it is
-		if request.IsPlaceholder() || request.GetTaskGroup() == "" || request.GetPendingAskRepeat() == 0 {
+		if request.IsPlaceholder() || request.GetTaskGroup() == "" || request.IsAllocated() {
 			continue
 		}
 		// walk over the placeholders, allow for processing all as we can have multiple task groups
@@ -1144,9 +1167,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				alloc.SetResult(Replaced)
 				// mark placeholder as released
 				ph.SetReleased(true)
-				_, err := sa.updateAskRepeatInternal(request, -1)
+				_, err := sa.allocateAsk(request)
 				if err != nil {
-					log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
+					log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
 						zap.Error(err))
 				}
 				return alloc
@@ -1195,9 +1218,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 					zap.Stringer("placeholder", phFit))
 				return false
 			}
-			_, err := sa.updateAskRepeatInternal(reqFit, -1)
+			_, err := sa.allocateAsk(reqFit)
 			if err != nil {
-				log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
+				log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
 					zap.Error(err))
 			}
 
@@ -1226,7 +1249,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	for _, reserve := range sa.reservations {
 		ask := sa.requests[reserve.askKey]
 		// sanity check and cleanup if needed
-		if ask == nil || ask.GetPendingAskRepeat() == 0 {
+		if ask == nil || ask.IsAllocated() {
 			var unreserveAsk *AllocationAsk
 			// if the ask was not found we need to construct one to unreserve
 			if ask == nil {
@@ -1372,7 +1395,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 	// check if the ask is reserved or not
 	allocKey := ask.GetAllocationKey()
 	reservedAsks := sa.GetAskReservations(allocKey)
-	allowReserve := len(reservedAsks) < int(ask.GetPendingAskRepeat())
+	allowReserve := !ask.IsAllocated() && len(reservedAsks) == 0
 	var allocResult *Allocation
 	iterator.ForEachNode(func(node *Node) bool {
 		// skip the node if the node is not valid for the ask
@@ -1450,8 +1473,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			zap.String("appID", sa.ApplicationID),
 			zap.String("nodeID", nodeToReserve.NodeID),
 			zap.String("allocationKey", allocKey),
-			zap.Int("reservations", len(reservedAsks)),
-			zap.Int32("pendingRepeats", ask.GetPendingAskRepeat()))
+			zap.Int("reservations", len(reservedAsks)))
 		// skip the node if conditions can not be satisfied
 		if !nodeToReserve.preReserveConditions(ask) {
 			return nil
@@ -1487,10 +1509,10 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) *Allocation {
 			node.RemoveAllocation(alloc.GetAllocationID())
 			return nil
 		}
-		// mark this ask as allocated by lowering the repeat
-		_, err := sa.updateAskRepeatInternal(ask, -1)
+		// mark this ask as allocated
+		_, err := sa.allocateAsk(ask)
 		if err != nil {
-			log.Log(log.SchedApplication).Warn("ask repeat update failed unexpectedly",
+			log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
 				zap.Error(err))
 		}
 		// all is OK, last update for the app
@@ -1816,7 +1838,7 @@ func (sa *Application) removeAllocationInternal(allocationID string, releaseType
 func (sa *Application) updateAskMaxPriority() {
 	value := configs.MinPriority
 	for _, v := range sa.requests {
-		if v.GetPendingAskRepeat() == 0 {
+		if v.IsAllocated() {
 			continue
 		}
 		value = max(value, v.GetPriority())

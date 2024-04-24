@@ -21,6 +21,8 @@ package objects
 import (
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -32,6 +34,9 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
+
+var initNodeLogOnce sync.Once
+var rateLimitedNodeLog *log.RateLimitedLogger
 
 const (
 	UnknownInstanceType = "UNKNOWN"
@@ -391,7 +396,7 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 			NodeID:        sn.NodeID,
 			Allocate:      allocate,
 		}); err != nil {
-			log.Log(log.SchedNode).Debug("running predicates failed",
+			getRateLimitedNodeLog().Debug("running predicates failed",
 				zap.String("allocationKey", allocID),
 				zap.String("nodeID", sn.NodeID),
 				zap.Bool("allocateFlag", allocate),
@@ -412,7 +417,7 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
-		log.Log(log.SchedNode).Debug("pre alloc check: requested resource is zero",
+		getRateLimitedNodeLog().Debug("pre alloc check: requested resource is zero",
 			zap.String("nodeID", sn.NodeID))
 		return false
 	}
@@ -592,4 +597,12 @@ func (sn *Node) SendNodeAddedEvent() {
 
 func (sn *Node) SendNodeRemovedEvent() {
 	sn.nodeEvents.sendNodeRemovedEvent()
+}
+
+// getRateLimitedNodeLog lazy initializes the node logger the first time is needed.
+func getRateLimitedNodeLog() *log.RateLimitedLogger {
+	initNodeLogOnce.Do(func() {
+		rateLimitedNodeLog = log.NewRateLimitedLogger(log.SchedNode, time.Second)
+	})
+	return rateLimitedNodeLog
 }

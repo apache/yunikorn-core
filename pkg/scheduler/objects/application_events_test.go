@@ -19,8 +19,9 @@
 package objects
 
 import (
-	"gotest.tools/v3/assert"
 	"testing"
+
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events/mock"
@@ -84,14 +85,13 @@ func TestSendNewAllocationEvent(t *testing.T) {
 	appEvents.sendNewAllocationEvent(&Allocation{
 		applicationID: appID0,
 		allocationKey: aKey,
-		allocationID:  aAllocationID,
 	})
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	assert.Equal(t, si.EventRecord_APP, eventSystem.Events[0].Type, "event type is not expected")
 	assert.Equal(t, si.EventRecord_ADD, eventSystem.Events[0].EventChangeType, "event change type is not expected")
 	assert.Equal(t, si.EventRecord_APP_ALLOC, eventSystem.Events[0].EventChangeDetail, "event change detail is not expected")
 	assert.Equal(t, appID0, eventSystem.Events[0].ObjectID, "event object id is not expected")
-	assert.Equal(t, aAllocationID, eventSystem.Events[0].ReferenceID, "event reference id is not expected")
+	assert.Equal(t, aKey, eventSystem.Events[0].ReferenceID, "event reference id is not expected")
 	assert.Equal(t, common.Empty, eventSystem.Events[0].Message, "message is not expected")
 }
 
@@ -147,61 +147,61 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 			name:                 "remove allocation cause of node removal",
 			eventSystemMock:      mock.NewEventSystem(),
 			terminationType:      si.TerminationType_UNKNOWN_TERMINATION_TYPE,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aAllocationID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
 			expectedChangeDetail: si.EventRecord_ALLOC_NODEREMOVED,
 			expectedObjectID:     appID0,
-			expectedReferenceID:  aAllocationID,
+			expectedReferenceID:  aKey,
 		},
 		{
 			name:                 "remove allocation cause of resource manager cancel",
 			eventSystemMock:      mock.NewEventSystem(),
 			terminationType:      si.TerminationType_STOPPED_BY_RM,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aAllocationID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
 			expectedChangeDetail: si.EventRecord_ALLOC_CANCEL,
 			expectedObjectID:     appID0,
-			expectedReferenceID:  aAllocationID,
+			expectedReferenceID:  aKey,
 		},
 		{
 			name:                 "remove allocation cause of timeout",
 			eventSystemMock:      mock.NewEventSystem(),
 			terminationType:      si.TerminationType_TIMEOUT,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aAllocationID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
 			expectedChangeDetail: si.EventRecord_ALLOC_TIMEOUT,
 			expectedObjectID:     appID0,
-			expectedReferenceID:  aAllocationID,
+			expectedReferenceID:  aKey,
 		},
 		{
 			name:                 "remove allocation cause of preemption",
 			eventSystemMock:      mock.NewEventSystem(),
 			terminationType:      si.TerminationType_PREEMPTED_BY_SCHEDULER,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aAllocationID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
 			expectedChangeDetail: si.EventRecord_ALLOC_PREEMPT,
 			expectedObjectID:     appID0,
-			expectedReferenceID:  aAllocationID,
+			expectedReferenceID:  aKey,
 		},
 		{
 			name:                 "remove allocation cause of replacement",
 			eventSystemMock:      mock.NewEventSystem(),
 			terminationType:      si.TerminationType_PLACEHOLDER_REPLACED,
-			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey, allocationID: aAllocationID},
+			allocation:           &Allocation{applicationID: appID0, allocationKey: aKey},
 			expectedEventCnt:     1,
 			expectedType:         si.EventRecord_APP,
 			expectedChangeType:   si.EventRecord_REMOVE,
 			expectedChangeDetail: si.EventRecord_ALLOC_REPLACED,
 			expectedObjectID:     appID0,
-			expectedReferenceID:  aAllocationID,
+			expectedReferenceID:  aKey,
 		},
 	}
 	for _, testCase := range testCases {

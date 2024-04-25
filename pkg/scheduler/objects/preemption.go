@@ -54,7 +54,7 @@ type Preemptor struct {
 
 	// lazily-populated work structures
 	allocationsByQueue map[string]*QueuePreemptionSnapshot // map of queue snapshots by queue path
-	queueByAlloc       map[string]*QueuePreemptionSnapshot // map of queue snapshots by allocationID
+	queueByAlloc       map[string]*QueuePreemptionSnapshot // map of queue snapshots by allocationKey
 	allocationsByNode  map[string][]*Allocation            // map of allocation by nodeID
 	nodeAvailableMap   map[string]*resources.Resource      // map of available resources by nodeID
 }
@@ -144,7 +144,7 @@ func (p *Preemptor) initWorkingState() {
 	queueByAlloc := make(map[string]*QueuePreemptionSnapshot)
 	nodeAvailableMap := make(map[string]*resources.Resource)
 
-	// build a map from NodeID to allocation and from allocationID to queue capacities
+	// build a map from NodeID to allocation and from allocationKey to queue capacities
 	for _, victims := range p.allocationsByQueue {
 		for _, allocation := range victims.PotentialVictims {
 			nodeID := allocation.GetNodeID()

@@ -47,9 +47,9 @@ const (
 	taskGroup       = "tg-1"
 	phID            = "ph-1"
 	phID2           = "ph-2"
-	allocID         = "alloc-1"
-	allocID2        = "alloc-2"
-	allocID3        = "alloc-3"
+	allocKey        = "alloc-1"
+	allocKey2       = "alloc-2"
+	allocKey3       = "alloc-3"
 	maxresources    = "maxresources"
 	maxapplications = "maxapplications"
 )

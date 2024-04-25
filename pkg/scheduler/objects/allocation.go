@@ -57,7 +57,6 @@ type Allocation struct {
 	taskGroupName     string // task group this allocation belongs to
 	placeholder       bool   // is this a placeholder allocation
 	nodeID            string
-	allocationID      string
 	priority          int32
 	tags              map[string]string
 	allocatedResource *resources.Resource
@@ -92,7 +91,6 @@ func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 		bindTime:          time.Now(),
 		nodeID:            nodeID,
 		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
-		allocationID:      ask.allocationKey,
 		tags:              ask.GetTagsClone(),
 		priority:          ask.GetPriority(),
 		allocatedResource: ask.GetAllocatedResource().Clone(),
@@ -104,7 +102,6 @@ func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 
 func newReservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(nodeID, ask)
-	alloc.allocationID = ""
 	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(Reserved)
 	return alloc
@@ -112,7 +109,6 @@ func newReservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 
 func newUnreservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(nodeID, ask)
-	alloc.allocationID = ""
 	alloc.SetBindTime(time.Time{})
 	alloc.SetResult(Unreserved)
 	return alloc
@@ -157,7 +153,7 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		allowPreemptOther: alloc.PreemptionPolicy.GetAllowPreemptOther(),
 	}
 	newAlloc := NewAllocation(alloc.NodeID, ask)
-	newAlloc.allocationID = alloc.AllocationID
+	newAlloc.allocationKey = alloc.AllocationKey
 	return newAlloc
 }
 
@@ -173,7 +169,6 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		NodeID:           a.GetNodeID(),
 		ApplicationID:    a.GetApplicationID(),
 		AllocationKey:    a.GetAllocationKey(),
-		AllocationID:     a.GetAllocationID(),
 		ResourcePerAlloc: a.GetAllocatedResource().ToProto(), // needed in tests for restore
 		TaskGroupName:    a.GetTaskGroup(),
 		Placeholder:      a.IsPlaceholder(),
@@ -191,11 +186,7 @@ func (a *Allocation) String() string {
 	}
 	a.RLock()
 	defer a.RUnlock()
-	allocationID := a.allocationID
-	if a.result == Reserved || a.result == Unreserved {
-		allocationID = "N/A"
-	}
-	return fmt.Sprintf("applicationID=%s, allocationID=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, allocationID, a.allocationKey, a.nodeID, a.result.String())
+	return fmt.Sprintf("applicationID=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, a.allocationKey, a.nodeID, a.result.String())
 }
 
 // GetAsk returns the ask associated with this allocation
@@ -299,17 +290,6 @@ func (a *Allocation) GetInstanceType() string {
 	a.RLock()
 	defer a.RUnlock()
 	return a.instType
-}
-
-// GetAllocationID returns the allocationID for this allocation
-func (a *Allocation) GetAllocationID() string {
-	return a.allocationID
-}
-
-// SetAllocationID set the allocationID for this allocation
-// only for tests
-func (a *Allocation) SetAllocationID(allocationID string) {
-	a.allocationID = allocationID
 }
 
 // GetPriority returns the priority of this allocation

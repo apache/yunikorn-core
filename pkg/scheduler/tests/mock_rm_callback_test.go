@@ -79,7 +79,7 @@ func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error
 	m.Lock()
 	defer m.Unlock()
 	for _, alloc := range response.New {
-		m.Allocations[alloc.AllocationID] = alloc
+		m.Allocations[alloc.AllocationKey] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
 			val = append(val, alloc)
 			m.nodeAllocations[alloc.NodeID] = val
@@ -90,9 +90,9 @@ func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error
 		}
 	}
 	for _, alloc := range response.Released {
-		delete(m.Allocations, alloc.AllocationID)
+		delete(m.Allocations, alloc.AllocationKey)
 		if alloc.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			m.releasedPhs[alloc.AllocationID] = alloc
+			m.releasedPhs[alloc.AllocationKey] = alloc
 		}
 	}
 	return nil

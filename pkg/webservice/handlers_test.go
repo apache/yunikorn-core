@@ -43,6 +43,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
@@ -50,9 +51,12 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const unmarshalError = "Failed to unmarshal error response from response body"
-const statusCodeError = "Incorrect Status code"
-const jsonMessageError = "JSON error message is incorrect"
+const (
+	unmarshalError   = "Failed to unmarshal error response from response body"
+	statusCodeError  = "Incorrect Status code"
+	jsonMessageError = "JSON error message is incorrect"
+	httpRequestError = "HTTP request creation failed"
+)
 
 const partitionNameWithoutClusterID = "default"
 const normalizedPartitionName = "[rm-123]default"
@@ -67,6 +71,7 @@ partitions:
           first: "some value with spaces"
           second: somethingElse
 `
+
 const updatedConf = `
 partitions:
   - name: default
@@ -127,6 +132,7 @@ partitions:
             name: default
             submitacl: "*"
 `
+
 const configTwoLevelQueues = `
 partitions: 
   - 
@@ -245,6 +251,27 @@ partitions:
                     - testgroup
                   maxresources:
                     cpu: "200"
+`
+
+const placementRuleConfig = `
+partitions:
+    - name: default
+      placementrules:
+      - name: user
+      - name: tag
+        value: namespace
+        create: true
+        parent:
+          name: fixed
+          value: root.namespaces
+      - name: fixed
+        value: root.default
+      queues:
+        - name: root
+          parent: true
+          submitacl: '*'
+          queues:
+            - name: default
 `
 
 const rmID = "rm-123"
@@ -1832,7 +1859,8 @@ func TestFullStateDumpPath(t *testing.T) {
 	var aggregated AggregatedStateInfo
 	err = json.Unmarshal(resp.outputBytes, &aggregated)
 	assert.NilError(t, err)
-	verifyStateDumpJSON(t, &aggregated)
+	// default config has only one partition
+	verifyStateDumpJSON(t, &aggregated, 1)
 }
 
 func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
@@ -2499,15 +2527,18 @@ func clearUserManager() {
 	userManager.ClearGroupTrackers()
 }
 
-func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo) {
+func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo, partitionCount int) {
 	assert.Check(t, aggregated.Timestamp != 0)
-	assert.Check(t, len(aggregated.Partitions) > 0)
+	assert.Check(t, len(aggregated.Partitions) == partitionCount, "incorrect partition count")
 	assert.Check(t, len(aggregated.Nodes) > 0)
 	assert.Check(t, len(aggregated.ClusterInfo) > 0)
-	assert.Check(t, len(aggregated.Queues) > 0)
+	assert.Check(t, len(aggregated.Queues) == 1, "should only have root queue")
 	assert.Check(t, len(aggregated.LogLevel) > 0)
-	assert.Check(t, len(aggregated.Config.SchedulerConfig.Partitions) > 0)
+	assert.Check(t, len(aggregated.Config.SchedulerConfig.Partitions) == partitionCount, "incorrect partition count")
 	assert.Check(t, len(aggregated.Config.Extra) > 0)
+	assert.Check(t, aggregated.RMDiagnostics["empty"] != nil, "expected no RM registered for diagnostics")
+	assert.Check(t, len(aggregated.PlacementRules) == partitionCount, "incorrect partition count")
+	assert.Check(t, len(aggregated.PlacementRules[0].Rules) == 2, "incorrect rule count")
 }
 
 func TestCheckHealthStatusNotFound(t *testing.T) {
@@ -2572,6 +2603,58 @@ func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
 		assert.Equal(t, expectedHealthCheck.Description, actualHealthCheck.Description)
 		assert.Equal(t, expectedHealthCheck.DiagnosisMessage, actualHealthCheck.DiagnosisMessage)
 	}
+}
+
+func TestGetPartitionRuleHandler(t *testing.T) {
+	setup(t, configDefault, 1)
+
+	NewWebApp(schedulerContext, nil)
+
+	// test partition not exists
+	req, err := http.NewRequest("GET", "/ws/v1/partition/default/placementrules", strings.NewReader(""))
+	assert.NilError(t, err, httpRequestError)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
+	resp := &MockResponseWriter{}
+	getPartitionRules(resp, req)
+	assertPartitionNotExists(t, resp)
+
+	// test params name missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/placementrules", strings.NewReader(""))
+	assert.NilError(t, err, httpRequestError)
+	resp = &MockResponseWriter{}
+	getPartitionRules(resp, req)
+	assertParamsMissing(t, resp)
+
+	// default config without rules defined
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/placementrules", strings.NewReader(""))
+	assert.NilError(t, err, httpRequestError)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
+	var partitionRules []*dao.RuleDAO
+	resp = &MockResponseWriter{}
+	getPartitionRules(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &partitionRules)
+	assert.NilError(t, err, unmarshalError)
+	// assert content: default is provided and recovery
+	assert.Equal(t, len(partitionRules), 2)
+	assert.Equal(t, partitionRules[0].Name, types.Provided)
+	assert.Equal(t, partitionRules[1].Name, types.Recovery)
+
+	// change the config: 3 rules, expect recovery also
+	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(placementRuleConfig))
+	assert.NilError(t, err, "Error when updating clusterInfo from config")
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/placementrules", strings.NewReader(""))
+	assert.NilError(t, err, httpRequestError)
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
+	resp = &MockResponseWriter{}
+	getPartitionRules(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &partitionRules)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, len(partitionRules), 4)
+	assert.Equal(t, partitionRules[0].Name, types.User)
+	assert.Equal(t, partitionRules[1].Name, types.Tag)
+	assert.Equal(t, partitionRules[1].ParentRule.Name, types.Fixed)
+	assert.Equal(t, partitionRules[2].Name, types.Fixed)
+	assert.Equal(t, partitionRules[3].Name, types.Recovery)
 }
 
 type ResponseRecorderWithDeadline struct {

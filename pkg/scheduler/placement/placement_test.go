@@ -35,7 +35,7 @@ import (
 func TestManagerNew(t *testing.T) {
 	// basic info without rules, manager should not init
 	man := NewPlacementManager(nil, queueFunc)
-	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for new placement manager, no config")
 	assert.Equal(t, types.Provided, man.rules[0].getName(), "wrong name for implicit provided rule")
 	assert.Equal(t, types.Recovery, man.rules[1].getName(), "wrong name for implicit recovery rule")
 }
@@ -43,13 +43,21 @@ func TestManagerNew(t *testing.T) {
 func TestManagerInit(t *testing.T) {
 	// basic info without rules, manager should implicitly init
 	man := NewPlacementManager(nil, queueFunc)
-	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil rules config")
+	ruleDAOs := man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for nil rules config")
+	assert.Equal(t, ruleDAOs[0].Name, types.Provided, "expected provided rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 
 	// try to init with empty list should do the same
 	var rules []configs.PlacementRule
 	err := man.initialise(rules)
 	assert.NilError(t, err, "Failed to initialize empty placement rules")
-	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty rules config")
+	ruleDAOs = man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for empty rules config")
+	assert.Equal(t, ruleDAOs[0].Name, types.Provided, "expected provided rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 
 	rules = []configs.PlacementRule{
 		{Name: "unknown"},
@@ -58,6 +66,11 @@ func TestManagerInit(t *testing.T) {
 	if err == nil {
 		t.Error("initialise with 'unknown' rule list should have failed")
 	}
+	// rules should not have changed
+	ruleDAOs = man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "unexpected change: wrong DAO count for failed reinit")
+	assert.Equal(t, ruleDAOs[0].Name, types.Provided, "expected provided rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 
 	// init the manager with one rule
 	rules = []configs.PlacementRule{
@@ -65,17 +78,29 @@ func TestManagerInit(t *testing.T) {
 	}
 	err = man.initialise(rules)
 	assert.NilError(t, err, "failed to init existing manager")
+	ruleDAOs = man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for manager with test rule")
+	assert.Equal(t, ruleDAOs[0].Name, types.Test, "expected test rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 
 	// update the manager: remove rules implicit state is reverted
 	rules = []configs.PlacementRule{}
 	err = man.initialise(rules)
 	assert.NilError(t, err, "Failed to re-initialize empty placement rules")
-	assert.Equal(t, 2, len(man.rules), "wrong rule count for newly empty placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty rules config")
+	ruleDAOs = man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for empty rules list")
+	assert.Equal(t, ruleDAOs[0].Name, types.Provided, "expected provided rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 
 	// check if we handle a nil list
 	err = man.initialise(nil)
 	assert.NilError(t, err, "Failed to re-initialize nil placement rules")
-	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil rules config")
+	ruleDAOs = man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for nil rules config")
+	assert.Equal(t, ruleDAOs[0].Name, types.Provided, "expected provided rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 }
 
 func TestManagerUpdate(t *testing.T) {
@@ -87,17 +112,29 @@ func TestManagerUpdate(t *testing.T) {
 	}
 	err := man.UpdateRules(rules)
 	assert.NilError(t, err, "failed to update existing manager")
+	ruleDAOs := man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for manager with test rule")
+	assert.Equal(t, ruleDAOs[0].Name, types.Test, "expected test rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 
 	// update the manager: remove rules init state is reverted
 	rules = []configs.PlacementRule{}
 	err = man.UpdateRules(rules)
 	assert.NilError(t, err, "Failed to re-initialize empty placement rules")
-	assert.Equal(t, 2, len(man.rules), "wrong rule count for newly empty placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty rules config")
+	ruleDAOs = man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for empty rules config")
+	assert.Equal(t, ruleDAOs[0].Name, types.Provided, "expected provided rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 
 	// check if we handle a nil list
 	err = man.UpdateRules(nil)
 	assert.NilError(t, err, "Failed to re-initialize nil placement rules")
-	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil placement manager")
+	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil rules config")
+	ruleDAOs = man.GetRulesDAO()
+	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for nil rules config")
+	assert.Equal(t, ruleDAOs[0].Name, types.Provided, "expected provided rule as first rule")
+	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 }
 
 func TestManagerBuildRule(t *testing.T) {

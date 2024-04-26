@@ -37,10 +37,9 @@ type AllocationAsk struct {
 	allocationKey     string
 	applicationID     string
 	partitionName     string
-	taskGroupName     string        // task group this allocation ask belongs to
-	placeholder       bool          // is this a placeholder allocation ask
-	execTimeout       time.Duration // execTimeout for the allocation ask
-	createTime        time.Time     // the time this ask was created (used in reservations)
+	taskGroupName     string    // task group this allocation ask belongs to
+	placeholder       bool      // is this a placeholder allocation ask
+	createTime        time.Time // the time this ask was created (used in reservations)
 	priority          int32
 	requiredNode      string
 	allowPreemptSelf  bool
@@ -95,7 +94,6 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		tags:              CloneAllocationTags(ask.Tags),
 		createTime:        time.Now(),
 		priority:          ask.Priority,
-		execTimeout:       common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
 		placeholder:       ask.Placeholder,
 		taskGroupName:     ask.TaskGroupName,
 		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
@@ -197,11 +195,6 @@ func (aa *AllocationAsk) IsPlaceholder() bool {
 // GetTaskGroup returns the task group name for this ask
 func (aa *AllocationAsk) GetTaskGroup() string {
 	return aa.taskGroupName
-}
-
-// GetTimeout returns the timeout for this ask
-func (aa *AllocationAsk) GetTimeout() time.Duration {
-	return aa.execTimeout
 }
 
 // GetRequiredNode gets the node (if any) required by this ask.

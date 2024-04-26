@@ -34,7 +34,6 @@ type AllocationAskDAOInfo struct {
 	ApplicationID       string                     `json:"applicationId,omitempty"`
 	Partition           string                     `json:"partition,omitempty"`
 	Placeholder         bool                       `json:"placeholder,omitempty"`
-	PlaceholderTimeout  int64                      `json:"placeholderTimeout,omitempty"`
 	TaskGroupName       string                     `json:"taskGroupName,omitempty"`
 	AllocationLog       []*AllocationAskLogDAOInfo `json:"allocationLog,omitempty"`
 	TriggeredPreemption bool                       `json:"triggeredPreemption,omitempty"`

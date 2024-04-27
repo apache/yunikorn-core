@@ -329,7 +329,6 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 		ApplicationID:       ask.GetApplicationID(),
 		Partition:           common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		Placeholder:         ask.IsPlaceholder(),
-		PlaceholderTimeout:  ask.GetTimeout().Nanoseconds(),
 		TaskGroupName:       ask.GetTaskGroup(),
 		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),
 		TriggeredPreemption: ask.HasTriggeredPreemption(),

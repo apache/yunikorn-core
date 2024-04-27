@@ -141,24 +141,6 @@ func TestPlaceHolder(t *testing.T) {
 	assert.Equal(t, ask.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 }
 
-func TestGetTimeout(t *testing.T) {
-	siAsk := &si.AllocationAsk{
-		AllocationKey: "ask1",
-		ApplicationID: "app1",
-		PartitionName: "default",
-	}
-	ask := NewAllocationAskFromSI(siAsk)
-	assert.Equal(t, ask.GetTimeout(), time.Duration(0), "standard ask should not have timeout")
-	siAsk = &si.AllocationAsk{
-		AllocationKey:                "ask1",
-		ApplicationID:                "app1",
-		PartitionName:                "default",
-		ExecutionTimeoutMilliSeconds: 10,
-	}
-	ask = NewAllocationAskFromSI(siAsk)
-	assert.Equal(t, ask.GetTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
-}
-
 func TestGetRequiredNode(t *testing.T) {
 	tag := make(map[string]string)
 	// unset case

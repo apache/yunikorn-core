@@ -839,6 +839,67 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getQueueApplicationsByStatus(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	queueName := vars.ByName("queue")
+	status := vars.ByName("status")
+	queueErr := validateQueue(queueName)
+	if queueErr != nil {
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+		return
+	}
+
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+
+	queue := partitionContext.GetQueue(queueName)
+	if queue == nil {
+		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
+		return
+	}
+
+	var appList []*objects.Application
+
+	switch status {
+	case "Rejected":
+		buildJSONErrorResponse(w, "Queue does not involve rejected state applications.", http.StatusBadRequest)
+		return
+	case "Completed":
+		buildJSONErrorResponse(w, "Queue does not involve completed state applications.", http.StatusBadRequest)
+		return
+	default:
+		if !allowedAppActiveStatuses[strings.ToLower(status)] {
+			buildJSONErrorResponse(w, "The provided state is invalid.", http.StatusBadRequest)
+			return
+		}
+	}
+
+	status = strings.ToLower(status)
+	for _, app := range queue.GetCopyOfApps() {
+		if strings.ToLower(app.CurrentState()) == status {
+			appList = append(appList, app)
+		}
+	}
+
+	appsDao := make([]*dao.ApplicationDAOInfo, 0)
+	for _, app := range appList {
+		appsDao = append(appsDao, getApplicationDAO(app))
+	}
+
+	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
 	result := make([]*dao.PartitionInfo, 0, len(lists))
 

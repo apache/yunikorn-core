@@ -67,10 +67,9 @@ func TestCompressionWithDummyRoute(t *testing.T) {
 	err := common.WaitFor(500*time.Millisecond, 5*time.Second, func() bool {
 		conn, connErr := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", "9080"), time.Second)
 		if connErr == nil {
-			defer conn.Close()
-			return true
+			conn.Close()
 		}
-		return false
+		return connErr == nil
 	})
 	assert.NilError(t, err, "Ｗeb app failed to start in 2 seconds.")
 
@@ -89,10 +88,10 @@ func TestCompressionWithDummyRoute(t *testing.T) {
 	// prevent http.DefaultClient from automatically adding gzip header
 	req.Header.Set("Accept-Encoding", "deflate")
 	resp, err := http.DefaultClient.Do(req)
-	assert.NilError(t, err, "Request failed to send.")
+	assert.NilError(t, err, "Http request failed.")
 	defer resp.Body.Close()
 	byteArr, err := io.ReadAll(resp.Body)
-	assert.NilError(t, err, "Failed when reading data.")
+	assert.NilError(t, err, "Failed to read body.")
 	var respMsg map[string]string
 	err = json.Unmarshal(byteArr, &respMsg)
 	assert.NilError(t, err, unmarshalError)
@@ -101,14 +100,14 @@ func TestCompressionWithDummyRoute(t *testing.T) {
 	// request with gzip compression enabled
 	req.Header.Set("Accept-Encoding", "gzip")
 	resp2, err := http.DefaultClient.Do(req)
-	assert.NilError(t, err, "Request failed to send.")
+	assert.NilError(t, err, "Http request failed.")
 	defer resp2.Body.Close()
 	gzipReader, err := gzip.NewReader(resp2.Body)
 	assert.NilError(t, err, "Failed to create gzip reader.")
-	byteArr2, err := io.ReadAll(gzipReader)
-	assert.NilError(t, err, "Failed when reading data.")
+	compressedData, err := io.ReadAll(gzipReader)
+	assert.NilError(t, err, "Failed to read body")
 	var respMsg2 map[string]string
-	err = json.Unmarshal(byteArr2, &respMsg2)
+	err = json.Unmarshal(compressedData, &respMsg2)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, respMsg2["data"], "hello world")
 	defer gzipReader.Close()

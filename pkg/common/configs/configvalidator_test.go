@@ -1910,3 +1910,80 @@ func TestCheckLimitsStructure(t *testing.T) {
 	assert.Equal(t, len(partitionConfig.Queues[0].Limits), 0)
 	assert.Equal(t, len(partitionConfig.Limits), 0)
 }
+
+
+func TestCheckQueuesStructure(t *testing.T) {
+    testCases := []struct {
+        name          string
+        partition     *PartitionConfig
+        errorExpected bool
+    }{
+        {
+            name: "No Queues Configured",
+            partition: &PartitionConfig{Queues: nil},
+            errorExpected: true,
+        },
+        {
+            name: "Single Root Queue",
+            partition: &PartitionConfig{
+                Queues: []QueueConfig{
+                    {Name: "root", Parent: true},
+                },
+            },
+            errorExpected: false,
+        },
+        {
+            name: "Single Non-Root Queue",
+            partition: &PartitionConfig{
+                Queues: []QueueConfig{
+                    {Name: "non-root"},
+                },
+            },
+            errorExpected: false,
+        },
+        {
+            name: "Multiple Top-Level Queues",
+            partition: &PartitionConfig{
+                Queues: []QueueConfig{
+                    {Name: "queue1"},
+                    {Name: "queue2"},
+                },
+            },
+            errorExpected: false,
+        },
+		{
+            name: "Root Queue With Guaranteed Resources",
+            partition: &PartitionConfig{
+                Queues: []QueueConfig{
+                    {
+						Name: "root", 
+						Parent: true, 
+						Resources: Resources{Guaranteed: map[string]string{"memory": "1000Mi"}}},
+                },
+            },
+            errorExpected: true,
+        },
+        {
+            name: "Root Queue With Max Resources",
+            partition: &PartitionConfig{
+                Queues: []QueueConfig{
+                    {
+						Name: "root", 
+						Parent: true, 
+						Resources: Resources{Max: map[string]string{"memory": "2000Mi"}}},
+                },
+            },
+            errorExpected: true,
+        },
+    }
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkQueuesStructure(tc.partition)
+			if tc.errorExpected {
+				assert.Assert(t, err != nil, "An error is expected")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+			}
+		})
+	}
+}

@@ -119,8 +119,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 						"vcore":  {Value: 1000},
 					},
 				},
-				MaxAllocations: 1,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -136,9 +135,9 @@ func TestApplicationHistoryTracking(t *testing.T) {
 
 	allocations := ms.mockRM.getAllocations()
 	assert.Equal(t, 1, len(allocations), "number of allocations")
-	var allocationID string
+	var allocationKey string
 	for key := range allocations {
-		allocationID = key
+		allocationKey = key
 	}
 
 	// terminate allocation & check events
@@ -148,7 +147,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 				{
 					ApplicationID:   appID1,
 					PartitionName:   "default",
-					AllocationID:    allocationID,
+					AllocationKey:   allocationKey,
 					TerminationType: si.TerminationType_STOPPED_BY_RM,
 				},
 			},

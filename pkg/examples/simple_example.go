@@ -41,7 +41,7 @@ func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) er
 	m.Lock()
 	defer m.Unlock()
 	for _, alloc := range response.New {
-		m.Allocations[alloc.AllocationID] = alloc
+		m.Allocations[alloc.AllocationKey] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
 			val = append(val, alloc)
 			m.nodeAllocations[alloc.NodeID] = val
@@ -53,7 +53,7 @@ func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) er
 	}
 
 	for _, alloc := range response.Released {
-		delete(m.Allocations, alloc.AllocationID)
+		delete(m.Allocations, alloc.AllocationKey)
 	}
 	return nil
 }
@@ -218,8 +218,7 @@ partitions:
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 20,
-				ApplicationID:  "app-1",
+				ApplicationID: "app-1",
 			},
 		},
 		RmID: "rm:123",

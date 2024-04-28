@@ -219,8 +219,6 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 		RequestTime:      requestTime,
 		AllocationTime:   allocTime,
 		AllocationDelay:  allocTime - requestTime,
-		UUID:             alloc.GetAllocationID(),
-		AllocationID:     alloc.GetAllocationID(),
 		ResourcePerAlloc: alloc.GetAllocatedResource().DAOMap(),
 		PlaceholderUsed:  alloc.IsPlaceholderUsed(),
 		Placeholder:      alloc.IsPlaceholder(),
@@ -326,13 +324,11 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 		AllocationTags:      ask.GetTagsClone(),
 		RequestTime:         ask.GetCreateTime().UnixNano(),
 		ResourcePerAlloc:    ask.GetAllocatedResource().DAOMap(),
-		PendingCount:        ask.GetPendingAskRepeat(),
 		Priority:            strconv.Itoa(int(ask.GetPriority())),
 		RequiredNodeID:      ask.GetRequiredNode(),
 		ApplicationID:       ask.GetApplicationID(),
 		Partition:           common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		Placeholder:         ask.IsPlaceholder(),
-		PlaceholderTimeout:  ask.GetTimeout().Nanoseconds(),
 		TaskGroupName:       ask.GetTaskGroup(),
 		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),
 		TriggeredPreemption: ask.HasTriggeredPreemption(),
@@ -345,7 +341,7 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 func getAllocationAsksDAO(asks []*objects.AllocationAsk) []*dao.AllocationAskDAOInfo {
 	asksDAO := make([]*dao.AllocationAskDAOInfo, 0, len(asks))
 	for _, ask := range asks {
-		if ask.GetPendingAskRepeat() > 0 {
+		if !ask.IsAllocated() {
 			asksDAO = append(asksDAO, getAllocationAskDAO(ask))
 		}
 	}

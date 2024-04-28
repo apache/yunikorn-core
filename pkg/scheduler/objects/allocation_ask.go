@@ -37,12 +37,10 @@ type AllocationAsk struct {
 	allocationKey     string
 	applicationID     string
 	partitionName     string
-	taskGroupName     string        // task group this allocation ask belongs to
-	placeholder       bool          // is this a placeholder allocation ask
-	execTimeout       time.Duration // execTimeout for the allocation ask
-	createTime        time.Time     // the time this ask was created (used in reservations)
+	taskGroupName     string    // task group this allocation ask belongs to
+	placeholder       bool      // is this a placeholder allocation ask
+	createTime        time.Time // the time this ask was created (used in reservations)
 	priority          int32
-	maxAllocations    int32
 	requiredNode      string
 	allowPreemptSelf  bool
 	allowPreemptOther bool
@@ -52,7 +50,7 @@ type AllocationAsk struct {
 	resKeyWithoutNode string // the reservation key without node
 
 	// Mutable fields which need protection
-	pendingAskRepeat    int32
+	allocated           bool
 	allocLog            map[string]*AllocationLogEntry
 	preemptionTriggered bool
 	preemptCheckTime    time.Time
@@ -90,15 +88,12 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 	saa := &AllocationAsk{
 		allocationKey:     ask.AllocationKey,
 		allocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
-		pendingAskRepeat:  ask.MaxAllocations,
-		maxAllocations:    ask.MaxAllocations,
 		applicationID:     ask.ApplicationID,
 		partitionName:     ask.PartitionName,
 
 		tags:              CloneAllocationTags(ask.Tags),
 		createTime:        time.Now(),
 		priority:          ask.Priority,
-		execTimeout:       common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
 		placeholder:       ask.Placeholder,
 		taskGroupName:     ask.TaskGroupName,
 		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
@@ -124,7 +119,7 @@ func (aa *AllocationAsk) String() string {
 	if aa == nil {
 		return "ask is nil"
 	}
-	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, PendingRepeats %d", aa.allocationKey, aa.applicationID, aa.allocatedResource, aa.GetPendingAskRepeat())
+	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, Allocated %t", aa.allocationKey, aa.applicationID, aa.allocatedResource, aa.IsAllocated())
 }
 
 // GetAllocationKey returns the allocation key for this ask
@@ -142,26 +137,35 @@ func (aa *AllocationAsk) GetPartitionName() string {
 	return aa.partitionName
 }
 
-// updatePendingAskRepeat updates the pending ask repeat with the delta given.
-// Update the pending ask repeat counter with the delta (pos or neg). The pending repeat is always 0 or higher.
-// If the update would cause the repeat to go negative the update is discarded and false is returned.
-// In all other cases the repeat is updated and true is returned.
-func (aa *AllocationAsk) updatePendingAskRepeat(delta int32) bool {
+// allocate marks the ask as allocated and returns true if successful. An ask may not be allocated multiple times.
+func (aa *AllocationAsk) allocate() bool {
 	aa.Lock()
 	defer aa.Unlock()
 
-	if aa.pendingAskRepeat+delta >= 0 {
-		aa.pendingAskRepeat += delta
-		return true
+	if aa.allocated {
+		return false
 	}
-	return false
+	aa.allocated = true
+	return true
 }
 
-// GetPendingAskRepeat gets the number of repeat asks remaining
-func (aa *AllocationAsk) GetPendingAskRepeat() int32 {
+// deallocate marks the ask as pending and returns true if successful. An ask may not be deallocated multiple times.
+func (aa *AllocationAsk) deallocate() bool {
+	aa.Lock()
+	defer aa.Unlock()
+
+	if !aa.allocated {
+		return false
+	}
+	aa.allocated = false
+	return true
+}
+
+// IsAllocated determines if this ask has been allocated yet
+func (aa *AllocationAsk) IsAllocated() bool {
 	aa.RLock()
 	defer aa.RUnlock()
-	return aa.pendingAskRepeat
+	return aa.allocated
 }
 
 // GetCreateTime returns the time this ask was created
@@ -191,11 +195,6 @@ func (aa *AllocationAsk) IsPlaceholder() bool {
 // GetTaskGroup returns the task group name for this ask
 func (aa *AllocationAsk) GetTaskGroup() string {
 	return aa.taskGroupName
-}
-
-// GetTimeout returns the timeout for this ask
-func (aa *AllocationAsk) GetTimeout() time.Duration {
-	return aa.execTimeout
 }
 
 // GetRequiredNode gets the node (if any) required by this ask.
@@ -334,13 +333,6 @@ func (aa *AllocationAsk) HasTriggeredScaleUp() bool {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.scaleUpTriggered
-}
-
-// completedPendingAsk How many pending asks has been completed or processed so far?
-func (aa *AllocationAsk) completedPendingAsk() int {
-	aa.RLock()
-	defer aa.RUnlock()
-	return int(aa.maxAllocations - aa.pendingAskRepeat)
 }
 
 func (aa *AllocationAsk) setReservationKeyForNode(node, resKey string) {

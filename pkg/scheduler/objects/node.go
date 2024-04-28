@@ -204,13 +204,13 @@ func (sn *Node) refreshAvailableResource() {
 	}
 }
 
-// Return the allocation based on the allocationID of the allocation.
+// Return the allocation based on the allocationKey of the allocation.
 // returns nil if the allocation is not found
-func (sn *Node) GetAllocation(allocationID string) *Allocation {
+func (sn *Node) GetAllocation(allocationKey string) *Allocation {
 	sn.RLock()
 	defer sn.RUnlock()
 
-	return sn.allocations[allocationID]
+	return sn.allocations[allocationKey]
 }
 
 // Get a copy of the allocations on this node
@@ -294,14 +294,14 @@ func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 // Returns nil if the allocation was not found and no changes are made. If the allocation
 // is found the Allocation removed is returned. Used resources will decrease available
 // will increase as per the allocation removed.
-func (sn *Node) RemoveAllocation(allocationID string) *Allocation {
+func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
-	alloc := sn.allocations[allocationID]
+	alloc := sn.allocations[allocationKey]
 	if alloc != nil {
-		delete(sn.allocations, allocationID)
+		delete(sn.allocations, allocationKey)
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.nodeEvents.sendAllocationRemovedEvent(alloc.allocationKey, alloc.allocatedResource)
@@ -324,7 +324,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 	// check if this still fits: it might have changed since pre-check
 	res := alloc.GetAllocatedResource()
 	if sn.availableResource.FitIn(res) {
-		sn.allocations[alloc.GetAllocationID()] = alloc
+		sn.allocations[alloc.GetAllocationKey()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
 		sn.nodeEvents.sendAllocationAddedEvent(alloc.allocationKey, res)
@@ -336,23 +336,23 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 // ReplaceAllocation replaces the placeholder with the real allocation on the node.
 // The delta passed in is the difference in resource usage between placeholder and real allocation.
 // It should always be a negative value or zero: it is a decrease in usage or no change
-func (sn *Node) ReplaceAllocation(allocationID string, replace *Allocation, delta *resources.Resource) {
+func (sn *Node) ReplaceAllocation(allocationKey string, replace *Allocation, delta *resources.Resource) {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
 
-	replace.SetPlaceholderCreateTime(sn.allocations[allocationID].GetCreateTime())
-	delete(sn.allocations, allocationID)
+	replace.SetPlaceholderCreateTime(sn.allocations[allocationKey].GetCreateTime())
+	delete(sn.allocations, allocationKey)
 	replace.SetPlaceholderUsed(true)
-	sn.allocations[replace.GetAllocationID()] = replace
+	sn.allocations[replace.GetAllocationKey()] = replace
 	before := sn.allocatedResource.Clone()
 	// The allocatedResource and availableResource should be updated in the same way
 	sn.allocatedResource.AddTo(delta)
 	sn.availableResource.SubFrom(delta)
 	if !before.FitIn(sn.allocatedResource) {
 		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",
-			zap.String("placeholder allocationID", allocationID),
-			zap.String("allocation allocationID", replace.GetAllocationID()),
+			zap.String("placeholder allocationKey", allocationKey),
+			zap.String("allocation allocationKey", replace.GetAllocationKey()),
 			zap.Stringer("delta", delta))
 	}
 }
@@ -383,16 +383,16 @@ func (sn *Node) preReserveConditions(ask *AllocationAsk) bool {
 // run at the same time.
 func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 	// Check the predicates plugin (k8shim)
-	allocID := ask.GetAllocationKey()
+	allocationKey := ask.GetAllocationKey()
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// checking predicates
 		if err := plugin.Predicates(&si.PredicatesArgs{
-			AllocationKey: allocID,
+			AllocationKey: allocationKey,
 			NodeID:        sn.NodeID,
 			Allocate:      allocate,
 		}); err != nil {
 			log.Log(log.SchedNode).Debug("running predicates failed",
-				zap.String("allocationKey", allocID),
+				zap.String("allocationKey", allocationKey),
 				zap.String("nodeID", sn.NodeID),
 				zap.Bool("allocateFlag", allocate),
 				zap.Error(err))

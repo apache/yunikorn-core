@@ -37,7 +37,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 )
 
-func TestCompressionWithDummyRoute(t *testing.T) {
+func TestCompression(t *testing.T) {
 	m := NewWebApp(scheduler.NewScheduler().GetClusterContext(), nil)
 	// dummy route and corresponding handler
 	testRoute := route{
@@ -71,7 +71,7 @@ func TestCompressionWithDummyRoute(t *testing.T) {
 		}
 		return connErr == nil
 	})
-	assert.NilError(t, err, "Ｗeb app failed to start in 2 seconds.")
+	assert.NilError(t, err, "Ｗeb app failed to start in 5 seconds.")
 
 	u := &url.URL{
 		Host:   "localhost:9080",

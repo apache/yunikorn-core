@@ -1911,78 +1911,103 @@ func TestCheckLimitsStructure(t *testing.T) {
 	assert.Equal(t, len(partitionConfig.Limits), 0)
 }
 
-
 func TestCheckQueuesStructure(t *testing.T) {
-    testCases := []struct {
-        name          string
-        partition     *PartitionConfig
-        errorExpected bool
-    }{
-        {
-            name: "No Queues Configured",
-            partition: &PartitionConfig{Queues: nil},
-            errorExpected: true,
-        },
-        {
-            name: "Single Root Queue",
-            partition: &PartitionConfig{
-                Queues: []QueueConfig{
-                    {Name: "root", Parent: true},
-                },
-            },
-            errorExpected: false,
-        },
-        {
-            name: "Single Non-Root Queue",
-            partition: &PartitionConfig{
-                Queues: []QueueConfig{
-                    {Name: "non-root"},
-                },
-            },
-            errorExpected: false,
-        },
-        {
-            name: "Multiple Top-Level Queues",
-            partition: &PartitionConfig{
-                Queues: []QueueConfig{
-                    {Name: "queue1"},
-                    {Name: "queue2"},
-                },
-            },
-            errorExpected: false,
-        },
+	negativeResourceMap := map[string]string{"memory": "-50", "vcores": "33"}
+	testCases := []struct {
+		name             string
+		partition        *PartitionConfig
+		errorExpected    bool
+		expectedErrorMsg string
+		validateFunc     func(t *testing.T, partition *PartitionConfig)
+	}{
 		{
-            name: "Root Queue With Guaranteed Resources",
-            partition: &PartitionConfig{
-                Queues: []QueueConfig{
-                    {
-						Name: "root", 
-						Parent: true, 
-						Resources: Resources{Guaranteed: map[string]string{"memory": "1000Mi"}}},
-                },
-            },
-            errorExpected: true,
-        },
-        {
-            name: "Root Queue With Max Resources",
-            partition: &PartitionConfig{
-                Queues: []QueueConfig{
-                    {
-						Name: "root", 
-						Parent: true, 
-						Resources: Resources{Max: map[string]string{"memory": "2000Mi"}}},
-                },
-            },
-            errorExpected: true,
-        },
-    }
+			name:             "No Queues Configured",
+			partition:        &PartitionConfig{Queues: nil},
+			errorExpected:    true,
+			expectedErrorMsg: "queue config is not set",
+		},
+		{
+			name: "Single Root Queue",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{Name: "root", Parent: true},
+				},
+			},
+			errorExpected: false,
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue")
+				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
+				assert.Assert(t, p.Queues[0].Parent, "Root queue should be a parent")
+			},
+		},
+		{
+			name: "Single Non-Root Queue",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{Name: "non-root"},
+				},
+			},
+			errorExpected: false,
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue in the new root")
+				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
+				assert.Assert(t, p.Queues[0].Parent, "Root queue should be a parent")
+				assert.Equal(t, 1, len(p.Queues[0].Queues), "New root queue should contain the non-root queue")
+			},
+		},
+		{
+			name: "Multiple Top-Level Queues",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{Name: "queue1"},
+					{Name: "queue2"},
+				},
+			},
+			errorExpected: false,
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue in the new root")
+				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
+				assert.Assert(t, p.Queues[0].Parent, "Root queue should be a parent")
+				assert.Equal(t, 2, len(p.Queues[0].Queues), "New root queue should contain both top-level queues")
+			},
+		},
+		{
+			name: "Root Queue With Guaranteed Resources",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						Resources: Resources{Guaranteed: negativeResourceMap}},
+				},
+			},
+			errorExpected:    true,
+			expectedErrorMsg: "root queue must not have resource limits set",
+		},
+		{
+			name: "Root Queue With Max Resources",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						Resources: Resources{Max: negativeResourceMap}},
+				},
+			},
+			errorExpected:    true,
+			expectedErrorMsg: "root queue must not have resource limits set",
+		},
+	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := checkQueuesStructure(tc.partition)
 			if tc.errorExpected {
-				assert.Assert(t, err != nil, "An error is expected")
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
 			} else {
 				assert.NilError(t, err, "No error is expected")
+				if tc.validateFunc != nil {
+					tc.validateFunc(t, tc.partition)
+				}
 			}
 		})
 	}

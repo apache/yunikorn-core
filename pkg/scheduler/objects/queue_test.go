@@ -1649,6 +1649,20 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "allocatingAcceptedApps size")
 	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
 	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).AllocatingAcceptedApps[0], appID1)
+
+	// Test specific queue
+	_, err = createManagedQueue(root, "leaf-queue", false, nil)
+	assert.NilError(t, err, "failed to create managed queue")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).QueueName, "root")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).Children), 0)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).ChildNames), 1)
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).ChildNames[0], "root.leaf-queue")
+	// Test hierarchy queue
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).QueueName, "root")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).Children), 1)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).ChildNames), 1)
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).Children[0].QueueName, "root.leaf-queue")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).ChildNames[0], "root.leaf-queue")
 }
 
 func getAllocatingAcceptedApps() map[string]bool {

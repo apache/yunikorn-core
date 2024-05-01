@@ -2069,7 +2069,7 @@ func TestCheckQueues(t *testing.T) {
 				SubmitACL: "submit",
 				Queues: []QueueConfig{
 					{
-						Name: "subqueue",
+						Name:      "subqueue",
 						AdminACL:  "admin",
 						SubmitACL: "submit",
 						Queues: []QueueConfig{
@@ -2092,15 +2092,15 @@ func TestCheckQueues(t *testing.T) {
 				Queues: []QueueConfig{
 					{
 						Name: "subqueue",
-						},
 					},
+				},
 				Limits: []Limit{
 					{
 						Limit: "user-limit",
 						Users: []string{"user1", "user2", "user1"},
-						},
 					},
 				},
+			},
 			level:            0,
 			errorExpected:    true,
 			expectedErrorMsg: "duplicated user name user1 , already existed",
@@ -2125,7 +2125,7 @@ func TestCheckQueues(t *testing.T) {
 				Name:      "root",
 				AdminACL:  "admin",
 				SubmitACL: "submit",
-				Queues:    []QueueConfig{
+				Queues: []QueueConfig{
 					{Name: "queue_Name$"},
 				},
 			},
@@ -2156,7 +2156,7 @@ func TestCheckQueues(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err := checkQueues(tc.queue, tc.level)
 			if tc.errorExpected {
-				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch") 
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
 			} else {
 				assert.NilError(t, err, "No error is expected")
 				if tc.validateFunc != nil {
@@ -2179,7 +2179,7 @@ func TestCheckNodeSortingPolicy(t *testing.T) {
 			name: "Valid Sorting Policy with Positive Weights",
 			partition: &PartitionConfig{
 				NodeSortPolicy: NodeSortingPolicy{
-					Type: "fair",
+					Type:            "fair",
 					ResourceWeights: map[string]float64{"memory": 1.0},
 				},
 			},

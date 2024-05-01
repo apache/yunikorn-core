@@ -178,7 +178,7 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	}
 	// name might not be checked do it here
 	if !configs.QueueNameRegExp.MatchString(name) {
-		return nil, fmt.Errorf("invalid queue name '%s', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters execpt recovery queue", name)
+		return nil, fmt.Errorf("invalid queue name '%s', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters", name)
 	}
 	return newDynamicQueueInternal(name, leaf, parent)
 }

@@ -2166,3 +2166,73 @@ func TestCheckQueues(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckNodeSortingPolicy(t *testing.T) {
+	testCases := []struct {
+		name             string
+		partition        *PartitionConfig
+		errorExpected    bool
+		expectedErrorMsg string
+		validateFunc     func(t *testing.T, partition *PartitionConfig)
+	}{
+		{
+			name: "Valid Sorting Policy with Positive Weights",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type: "fair",
+					ResourceWeights: map[string]float64{"memory": 1.0},
+				},
+			},
+			errorExpected: false,
+		},
+		{
+			name: "Negative Resource Weight",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "fair",
+					ResourceWeights: map[string]float64{"memory": -1.0},
+				},
+			},
+			errorExpected:    true,
+			expectedErrorMsg: "negative resource weight for memory is not allowed",
+		},
+		{
+			name: "Undefined Sorting Policy",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "undefinedPolicy",
+					ResourceWeights: map[string]float64{"memory": 1.0},
+				},
+			},
+			errorExpected:    true,
+			expectedErrorMsg: "undefined policy: undefinedPolicy",
+		},
+		{
+			name: "Valid Policy with Multiple Resources",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "binpacking",
+					ResourceWeights: map[string]float64{"memory": 2.0, "cpu": 3.0},
+				},
+			},
+			errorExpected: false,
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, 2, len(p.NodeSortPolicy.ResourceWeights), "Expected two resource weights")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkNodeSortingPolicy(tc.partition)
+			if tc.errorExpected {
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+				if tc.validateFunc != nil {
+					tc.validateFunc(t, tc.partition)
+				}
+			}
+		})
+	}
+}

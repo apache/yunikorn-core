@@ -133,6 +133,7 @@ func waitForRemovedNode(t *testing.T, context *scheduler.ClusterContext, nodeID 
 
 func waitForUpdatePartitionResource(t *testing.T, pc *scheduler.PartitionContext, resourcesName string, availableQuantity resources.Quantity, timeoutMs int) {
 	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		fmt.Println("Arthur ", pc.GetTotalPartitionResource().Resources[resourcesName])
 		return pc.GetTotalPartitionResource().Resources[resourcesName] == availableQuantity
 	})
 	assert.NilError(t, err, "Failed to wait for available resource %v with target quantity %v, called from: %s", resourcesName, availableQuantity, caller())

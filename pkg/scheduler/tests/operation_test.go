@@ -521,6 +521,7 @@ partitions:
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-2:1234"}, 50000000, 1000)
 	waitForUpdatePartitionResource(t, partitionInfo, common.Memory, 150000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.CPU, 30000, 1000)
 
 	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "150M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
@@ -552,6 +553,7 @@ partitions:
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-2:1234"}, 50000000, 1000)
 	waitForUpdatePartitionResource(t, partitionInfo, common.Memory, 150000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.CPU, 30000, 1000)
 
 	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "150M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")

@@ -2012,3 +2012,157 @@ func TestCheckQueuesStructure(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckQueues(t *testing.T) {
+	testCases := []struct {
+		name             string
+		queue            *QueueConfig
+		level            int
+		errorExpected    bool
+		expectedErrorMsg string
+		validateFunc     func(t *testing.T, queue *QueueConfig)
+	}{
+		{
+			name: "Invalid ACL Format for AdminACL",
+			queue: &QueueConfig{
+				Name:      "validQueue",
+				AdminACL:  "admin group extra",
+				SubmitACL: "submit",
+				Queues:    []QueueConfig{{Name: "validSubQueue"}},
+			},
+			level:            0,
+			errorExpected:    true,
+			expectedErrorMsg: "multiple spaces found in ACL: 'admin group extra'",
+		},
+		{
+			name: "Invalid ACL Format for SubmitACL",
+			queue: &QueueConfig{
+				Name:      "validQueue",
+				AdminACL:  "admin",
+				SubmitACL: "submit group extra",
+				Queues:    []QueueConfig{{Name: "validSubQueue"}},
+			},
+			level:            0,
+			errorExpected:    true,
+			expectedErrorMsg: "multiple spaces found in ACL: 'submit group extra'",
+		},
+		{
+			name: "Duplicate Child Queue Names",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "duplicateQueue"},
+					{Name: "duplicateQueue"},
+				},
+			},
+			level:            0,
+			errorExpected:    true,
+			expectedErrorMsg: "duplicate child name found with name duplicateQueue, level 0",
+		},
+		{
+			name: "Duplicate Child Queue Names at level 1",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{
+						Name: "subqueue",
+						AdminACL:  "admin",
+						SubmitACL: "submit",
+						Queues: []QueueConfig{
+							{Name: "duplicateQueue"},
+							{Name: "duplicateQueue"},
+						},
+					},
+				},
+			},
+			level:            0,
+			errorExpected:    true,
+			expectedErrorMsg: "duplicate child name found with name duplicateQueue, level 1",
+		},
+		{
+			name: "Check Limits Error With Duplicated User Name",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{
+						Name: "subqueue",
+						},
+					},
+				Limits: []Limit{
+					{
+						Limit: "user-limit",
+						Users: []string{"user1", "user2", "user1"},
+						},
+					},
+				},
+			level:            0,
+			errorExpected:    true,
+			expectedErrorMsg: "duplicated user name user1 , already existed",
+		},
+		{
+			name: "Invalid Child Queue Name Length",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "thisQueueNameIsTooLongthisQueueNameIsTooLongthisQueueNameIsTooLong"},
+				},
+			},
+			level:            0,
+			errorExpected:    true,
+			expectedErrorMsg: "invalid child name thisQueueNameIsTooLongthisQueueNameIsTooLongthisQueueNameIsTooLong, a name must only have alphanumeric characters, - or _, and be no longer than 64 characters",
+		},
+		{
+			name: "Invalid Child Queue Name With Special Character",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues:    []QueueConfig{
+					{Name: "queue_Name$"},
+				},
+			},
+			level:            0,
+			errorExpected:    true,
+			expectedErrorMsg: "invalid child name queue_Name$, a name must only have alphanumeric characters, - or _, and be no longer than 64 characters",
+		},
+		{
+			name: "Valid Multiple Queues",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "queue_One"},
+					{Name: "queue-Two"},
+				},
+			},
+			level:         0,
+			errorExpected: false,
+			validateFunc: func(t *testing.T, q *QueueConfig) {
+				assert.Equal(t, 2, len(q.Queues), "Expected two queues")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkQueues(tc.queue, tc.level)
+			if tc.errorExpected {
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch") 
+			} else {
+				assert.NilError(t, err, "No error is expected")
+				if tc.validateFunc != nil {
+					tc.validateFunc(t, tc.queue)
+				}
+			}
+		})
+	}
+}

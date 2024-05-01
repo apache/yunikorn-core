@@ -632,7 +632,7 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 // Check the queue names configured for compliance and uniqueness
 // - no duplicate names at each branched level in the tree
 // - queue name is alphanumeric (case ignore) with - and _
-// - queue name is maximum 16 char long
+// - queue name is maximum 64 char long
 func checkQueues(queue *QueueConfig, level int) error {
 	// check the ACLs (if defined)
 	err := checkACL(queue.AdminACL)

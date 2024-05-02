@@ -319,6 +319,68 @@ func TestStrictlyGreaterThan(t *testing.T) {
 	}
 }
 
+func TestStrictlyGreaterThanOnlyExisting(t *testing.T) {
+	type inputs struct {
+		larger  map[string]Quantity
+		smaller map[string]Quantity
+		sameRef bool
+	}
+	type outputs struct {
+		larger  bool
+		smaller bool
+	}
+	var tests = []struct {
+		caseName string
+		input    inputs
+		expected outputs
+	}{
+		{"Nil check", inputs{nil, nil, false}, outputs{false, false}},
+		{"Positive resource and empty resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{}, false}, outputs{true, false}},
+		{"Positive resource and nil resources", inputs{map[string]Quantity{"first": 10}, nil, false}, outputs{true, false}},
+
+		{"Equal Positive resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 10}, false}, outputs{false, false}},
+		{"Different Positive resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 20}, false}, outputs{false, true}},
+		{"Different Positive resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}, false}, outputs{true, false}},
+
+		{"Equal Positive resources with extra resource types", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 10, "sec": 10}, false}, outputs{false, false}},
+		{"Different Positive resources with extra resource types", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 20, "sec": 10}, false}, outputs{false, true}},
+		{"Different Positive resources with extra resource types", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5, "sec": 10}, false}, outputs{true, false}},
+
+		{"Equal Positive resources but completely disjoint", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"sec": 10}, false}, outputs{true, true}},
+		{"Zero resource and empty resources", inputs{map[string]Quantity{"first": 0}, map[string]Quantity{}, false}, outputs{false, false}},
+		{"Zero resource and nil resources", inputs{map[string]Quantity{"first": 0}, nil, false}, outputs{false, false}},
+
+		{"Equal Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -10}, false}, outputs{false, false}},
+		{"Different Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -20}, false}, outputs{true, false}},
+		{"Different Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -5}, false}, outputs{false, true}},
+
+		{"Equal Negative resources with extra resource types", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -10, "sec": 10}, false}, outputs{false, false}},
+		{"Different Negative resources with extra resource types", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -20, "sec": 10}, false}, outputs{true, false}},
+		{"Different Negative resources with extra resource types", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -5, "sec": 10}, false}, outputs{false, true}},
+
+		{"Equal Negative resources but completely disjoint", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"sec": -10}, false}, outputs{true, true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var compare, base *Resource
+			if tt.input.larger != nil {
+				compare = NewResourceFromMap(tt.input.larger)
+			}
+			if tt.input.sameRef {
+				base = compare
+			} else {
+				base = NewResourceFromMap(tt.input.smaller)
+			}
+			if result := StrictlyGreaterThanOnlyExisting(compare, base); result != tt.expected.larger {
+				t.Errorf("comapre %v, base %v, got %v, expeceted %v", compare, base, result, tt.expected.larger)
+			}
+			if result := StrictlyGreaterThanOnlyExisting(base, compare); result != tt.expected.smaller {
+				t.Errorf("base %v, compare %v, got %v, expeceted %v", base, compare, result, tt.expected.smaller)
+			}
+		})
+	}
+}
+
 func TestStrictlyGreaterThanOrEquals(t *testing.T) {
 	type inputs struct {
 		larger  map[string]Quantity

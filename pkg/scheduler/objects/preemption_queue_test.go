@@ -145,10 +145,10 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 	childQ1.maxResource = smallestRes
 	childQ2.maxResource = smallestRes
 	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
-	assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 4)), "guaranteed not set but max res set, so min of guaranteed and max res should be remaining")
-	assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, 2)), "guaranteed not set but max res set, so min of guaranteed and max res should be remaining")
-	assert.Assert(t, resources.Equals(cRemaining1, smallestRes), "guaranteed not set but max res set, so min of guaranteed and max res should be remaining")
-	assert.Assert(t, resources.Equals(cRemaining2, smallestRes), "guaranteed not set but max res set, so min of guaranteed and max res should be remaining")
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed and max res not set, so no remaining")
 
 	// guaranteed set only for queue at specific levels but no usage.
 	// so remaining for queues without guaranteed quota inherits from parent queue based on min perm calculation

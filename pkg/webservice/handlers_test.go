@@ -1552,7 +1552,8 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 }
 
 func checkGetQueueAppByStatus(t *testing.T, partition, queue, status string, expectedApp []*objects.Application) {
-	req, err := http.NewRequest("GET", "/ws/v1/partition/default/applications/queue/root.default/New", strings.NewReader(""))
+	url := fmt.Sprintf("/ws/v1/partition/%s/queue/%s/applications/%s", partition, queue, status)
+	req, err := http.NewRequest("GET", url, strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partition},
 		httprouter.Param{Key: "queue", Value: queue},
@@ -1571,7 +1572,8 @@ func checkGetQueueAppByStatus(t *testing.T, partition, queue, status string, exp
 }
 
 func checkGetQueueAppByIllegalStatus(t *testing.T, partition, queue, status string) {
-	req, err := http.NewRequest("GET", "/ws/v1/partition/default/applications/queue/root.default/New", strings.NewReader(""))
+	url := fmt.Sprintf("/ws/v1/partition/%s/queue/%s/applications/%s", partition, queue, status)
+	req, err := http.NewRequest("GET", url, strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partition},
 		httprouter.Param{Key: "queue", Value: queue},

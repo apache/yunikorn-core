@@ -2059,7 +2059,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 			},
 			level:            0,
 			errorExpected:    true,
-			expectedErrorMsg: "duplicate child name found with name duplicateQueue, level 0",
+			expectedErrorMsg: "duplicate child name found with name 'duplicateQueue', level 0",
 		},
 		{
 			name: "Duplicate Child Queue Names at level 1",
@@ -2081,7 +2081,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 			},
 			level:            0,
 			errorExpected:    true,
-			expectedErrorMsg: "duplicate child name found with name duplicateQueue, level 1",
+			expectedErrorMsg: "duplicate child name found with name 'duplicateQueue', level 1",
 		},
 		{
 			name: "Check Limits Error With Duplicated User Name",
@@ -2103,7 +2103,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 			},
 			level:            0,
 			errorExpected:    true,
-			expectedErrorMsg: "duplicated user name user1 , already existed",
+			expectedErrorMsg: "duplicated user name 'user1', already exists",
 		},
 		{
 			name: "Invalid Child Queue Name Length",

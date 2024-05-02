@@ -489,7 +489,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 		}
 
 		if existedUserName[name] {
-			return fmt.Errorf("duplicated user name %s , already existed", name)
+			return fmt.Errorf("duplicated user name '%s', already exists", name)
 		}
 		existedUserName[name] = true
 
@@ -658,7 +658,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 				" - or _, and be no longer than 64 characters", child.Name)
 		}
 		if queueMap[strings.ToLower(child.Name)] {
-			return fmt.Errorf("duplicate child name found with name %s, level %d", child.Name, level)
+			return fmt.Errorf("duplicate child name found with name '%s', level %d", child.Name, level)
 		}
 		queueMap[strings.ToLower(child.Name)] = true
 	}

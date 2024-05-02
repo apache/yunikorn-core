@@ -339,7 +339,7 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
-// TestTryPreemptionWithVictimsAvailableButInsufficientResource Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
+// TestTryPreemption_VictimsAvailable_InsufficientResource Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue path. victim and preemptor queue are siblings.
 // Ask (Preemptor) resource type matches with 1 resource type of the victim. Guaranteed also set on specific resource type. 2 Victims are available, but total resource usage is lesser than ask requirement.
 // Setup:
@@ -348,7 +348,7 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 // root.parent.child1. Guaranteed not set. 2 Allocations (belongs to single app) are running. Each Allocation usage is first:2, pods: 1. Total usage is first:4, pods: 2.
 // root.parent.child2. Guaranteed set, first: 5. Ask of first:5 is waiting for resources.
 // 2 Allocation on root.parent.child1 has been found and considered as victims. Since victims total resource usage (first: 4) is lesser than ask requirment (first: 5), preemption won't help. Hence, victims are dropped.
-func TestTryPreemptionWithVictimsAvailableButInsufficientResource(t *testing.T) {
+func TestTryPreemption_VictimsAvailable_InsufficientResource(t *testing.T) {
 	t.SkipNow()
 	node1 := newNode(node1, map[string]resources.Quantity{"first": 10, "pods": 2})
 	node2 := newNode("node2", map[string]resources.Quantity{"first": 10, "pods": 2})
@@ -394,7 +394,7 @@ func TestTryPreemptionWithVictimsAvailableButInsufficientResource(t *testing.T) 
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
-// TestTryPreemptionWithVictimsAvailableOnDifferentNodesButInsufficientResource Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue path. victim and preemptor queue are siblings.
 // Ask (Preemptor) resource type matches with 1 resource type of the victim. Guaranteed also set on specific resource type. 2 Victims are available, but total resource usage is lesser than ask requirement.
 // Setup:
@@ -403,7 +403,7 @@ func TestTryPreemptionWithVictimsAvailableButInsufficientResource(t *testing.T) 
 // root.parent.child1. Guaranteed not set. 2 Allocations (belongs to single app) are running. Each Allocation usage is first:2, pods: 1. Total usage is first:4, pods: 2.
 // root.parent.child2. Guaranteed set, first: 5. Ask of first:5 is waiting for resources.
 // 2 Allocation on root.parent.child1 has been found and considered as victims. Since victims total resource usage (first: 4) is lesser than ask requirment (first: 5), preemption won't help. Hence, victims are dropped.
-func TestTryPreemptionWithVictimsAvailableOnDifferentNodesButInsufficientResource(t *testing.T) {
+func TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource(t *testing.T) {
 	t.SkipNow()
 	node1 := newNode(node1, map[string]resources.Quantity{"first": 5, "pods": 1})
 	node2 := newNode("node2", map[string]resources.Quantity{"first": 5, "pods": 1})
@@ -459,7 +459,7 @@ func TestTryPreemptionWithVictimsAvailableOnDifferentNodesButInsufficientResourc
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
-// TestTryPreemptionWithVictimsAvailableButOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// TestTryPreemption_VictimsAvailableOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue path. victim and preemptor queue are siblings.
 // Ask (Preemptor) resource type matches with 1 resource type of the victim. Guaranteed also set on specific resource type. 2 Victims are available, but total resource usage is lesser than ask requirement.
 // Setup:
@@ -468,7 +468,7 @@ func TestTryPreemptionWithVictimsAvailableOnDifferentNodesButInsufficientResourc
 // root.parent.child1. Guaranteed not set. 2 Allocations (belongs to single app) are running. 1st Allocation usage is first:4, pods: 1. 2nd Allocation usage is first:2, pods: 1. Total usage is first:6, pods: 2.
 // root.parent.child2. Guaranteed set, first: 5. Ask of first:5 is waiting for resources.
 // 2 Allocation on root.parent.child1 has been found and considered as victims and preempted to free up resources for ask.
-func TestTryPreemptionWithVictimsAvailableButOnDifferentNodes(t *testing.T) {
+func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 	t.SkipNow()
 	node1 := newNode(node1, map[string]resources.Quantity{"first": 5, "pods": 1})
 	node2 := newNode("node2", map[string]resources.Quantity{"first": 4, "pods": 1})
@@ -523,7 +523,7 @@ func TestTryPreemptionWithVictimsAvailableButOnDifferentNodes(t *testing.T) {
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
-// TestTryPreemptionOnQueueWithVictimsOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
+// TestTryPreemption_OnQueue_VictimsOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue paths. victim and preemptor queue are siblings.
 // Ask (Preemptor) resource type matches with all resource types of the victim. Guaranteed set only on that specific resource type.
 // Setup:
@@ -535,7 +535,7 @@ func TestTryPreemptionWithVictimsAvailableButOnDifferentNodes(t *testing.T) {
 // Preemption options are 1. 2 Alloc running on Node 2 but on child 1 and child 3 queues.  2. 2 Alloc running on Node 2 and child 1 queue. 3. All three 3 allocs.
 // option 1 >> option 2 >> option 3. In option 3, preempting third allocation is unnecessary, should avoid this option.
 // Either option 1 or option2 is fine, but not option 3.
-func TestTryPreemptionOnQueueWithVictimsOnDifferentNodes(t *testing.T) {
+func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 	t.SkipNow()
 	node1 := newNode(node1, map[string]resources.Quantity{"first": 30})
 	node2 := newNode("node2", map[string]resources.Quantity{"first": 30})
@@ -609,7 +609,7 @@ func TestTryPreemptionOnQueueWithVictimsOnDifferentNodes(t *testing.T) {
 	assert.Check(t, alloc4.IsPreempted(), "alloc2 not preempted")
 }
 
-// TestTryPreemptionOnQueueWithVictimsAvailableButLowerPriority Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
+// TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue paths. victim and preemptor queue are siblings.
 // Ask (Preemptor) resource type matches with all resource types of the victim. Guaranteed set only on that specific resource type.
 // Setup:
@@ -619,7 +619,7 @@ func TestTryPreemptionOnQueueWithVictimsOnDifferentNodes(t *testing.T) {
 // root.parent.child2. Guaranteed set 5. Ask of first:5 is waiting for resources.
 // root.parent.child3. Guaranteed not set. 1 Allocation is running on node2. Total usage is first:5.
 // High priority ask should not be touched and remaining 2 allocs should be preempted to free up resources
-func TestTryPreemptionOnQueueWithVictimsAvailableButLowerPriority(t *testing.T) {
+func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	t.SkipNow()
 	node1 := newNode(node1, map[string]resources.Quantity{"first": 30})
 	node2 := newNode("node2", map[string]resources.Quantity{"first": 30})
@@ -695,7 +695,7 @@ func TestTryPreemptionOnQueueWithVictimsAvailableButLowerPriority(t *testing.T) 
 	assert.Check(t, alloc4.IsPreempted(), "alloc2 not preempted")
 }
 
-// TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy.
+// TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy.
 // Guaranteed set only on preemptor queue path, but not on the victim queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.
 // Setup:
@@ -704,7 +704,7 @@ func TestTryPreemptionOnQueueWithVictimsAvailableButLowerPriority(t *testing.T) 
 // root.parent.parent2.child2. 2 Allocations (belongs to single app) are running. Each Allocation usage is vcores:1, mem: 200. Total usage is vcores:2, mem: 400
 // root.parent.parent2.child3. No usage, no guaranteed set
 // 1 Allocation on root.parent.parent1.child2 should be preempted to free up resources for ask arrived in root.parent.parent1.child1.
-func TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide(t *testing.T) {
+func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 3, "mem": 400})
 	iterator := getNodeIteratorFn(node)
@@ -756,7 +756,7 @@ func TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide(t *te
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
-// TestPreemptionOnNodeWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed set only on preemptor queue path, but not on the victim queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.
 // Setup:
@@ -765,7 +765,7 @@ func TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide(t *te
 // root.parent.parent2.child2. 2 Allocations (belongs to single app) are running. Each Allocation usage is vcores:1, mem: 200. Total usage is vcores:2, mem: 400
 // root.parent.parent2.child3. No usage, no guaranteed set
 // 1 Allocation on root.parent.parent1.child2 should be preempted to free up resources for ask arrived in root.parent.parent1.child1.
-func TestPreemptionOnNodeWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide(t *testing.T) {
+func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 2, "mem": 400})
 	iterator := getNodeIteratorFn(node)
@@ -823,7 +823,7 @@ func TestPreemptionOnNodeWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
-// TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy.
+// TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy.
 // Guaranteed set on both victim queue path and preemptor queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.
 // Setup:
@@ -834,7 +834,7 @@ func TestPreemptionOnNodeWithAskResTypesDifferedFromGuaranteedSetOnPreemptorSide
 // 2 Allocations of each vcores:1, mem: 100 running on root.parent.parent1.child2 should be preempted to free up resources for ask arrived in root.parent.parent1.child1.
 // 3rd allocation of vcores:1, mem: 100 should not be touched as preempting the same would make usage goes below the guaranteed set on root.parent.parent2.child2.
 // All remaining three allocation of each mem: 100 should not be touched at all as there is no matching resource type between these allocs and ask resource types.
-func TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
+func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 5, "mem": 700})
 	iterator := getNodeIteratorFn(node)
@@ -923,7 +923,7 @@ func TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnVictimAndPreemptorS
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 preempted")
 }
 
-// TestPreemptionOnNodeWithAskResTypesDifferedFromGuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed set on both victim queue path and preemptor queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.
 // Setup:
@@ -934,7 +934,7 @@ func TestPreemptionWithAskResTypesDifferedFromGuaranteedSetOnVictimAndPreemptorS
 // 2 Allocations of each vcores:1, mem: 100 running on root.parent.parent1.child2 should be preempted to free up resources for ask arrived in root.parent.parent1.child1.
 // 3rd allocation of vcores:1, mem: 100 should not be touched as preempting the same would make usage goes below the guaranteed set on root.parent.parent2.child2.
 // All remaining three allocation of each mem: 100 should not be touched at all as there is no matching resource type between these allocs and ask resource types.
-func TestPreemptionOnNodeWithAskResTypesDifferedFromGuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
+func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 3, "mem": 600})
 	iterator := getNodeIteratorFn(node)
@@ -1021,7 +1021,7 @@ func TestPreemptionOnNodeWithAskResTypesDifferedFromGuaranteedSetOnVictimAndPree
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 preempted")
 }
 
-// TestPreemptionWithAskResTypesSameAsGuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy.  Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy.  Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed set only on preemptor queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.
 // Setup:
@@ -1032,7 +1032,7 @@ func TestPreemptionOnNodeWithAskResTypesDifferedFromGuaranteedSetOnVictimAndPree
 // 3 Allocations of each vcores:1 running on root.parent.parent1.child2 could be preempted to free up resources for ask arrived in root.parent.parent1.child1.
 // but last allocation should not be touched as preempting the same would make usage goes above the guaranteed set on preemptor or ask queue root.parent.parent2.child1.
 // All remaining three allocation of each mem: 100 should not be touched at all as there is no matching resource type between these allocs and ask resource types.
-func TestPreemptionWithAskResTypesSameAsGuaranteedSetOnPreemptorSide(t *testing.T) {
+func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 5, "gpu": 300, "mem": 200})
 	iterator := getNodeIteratorFn(node)
@@ -1121,7 +1121,7 @@ func TestPreemptionWithAskResTypesSameAsGuaranteedSetOnPreemptorSide(t *testing.
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 preempted")
 }
 
-// TestPreemptionOnNodeWithAskResTypesSameAsGuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed set only on preemptor queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.
 // Setup:
@@ -1132,7 +1132,7 @@ func TestPreemptionWithAskResTypesSameAsGuaranteedSetOnPreemptorSide(t *testing.
 // 3 Allocations of each vcores:1 running on root.parent.parent1.child2 could be preempted to free up resources for ask arrived in root.parent.parent1.child1.
 // but last allocation should not be touched as preempting the same would make usage goes above the guaranteed set on preemptor or ask queue root.parent.parent2.child1.
 // All remaining three allocation of each mem: 100 should not be touched at all as there is no matching resource type between these allocs and ask resource types.
-func TestPreemptionOnNodeWithAskResTypesSameAsGuaranteedSetOnPreemptorSide(t *testing.T) {
+func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 3, "gpu": 300, "mem": 200})
 	iterator := getNodeIteratorFn(node)
@@ -1219,7 +1219,7 @@ func TestPreemptionOnNodeWithAskResTypesSameAsGuaranteedSetOnPreemptorSide(t *te
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 preempted")
 }
 
-// TestPreemptionWithAskResTypesSameAsGuaranteedSetOnVictimSide Test try preemption with 2 level queue hierarchy.
+// TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy.
 // Guaranteed set on both victim queue path and preemptor queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.
 // Setup:
@@ -1230,7 +1230,7 @@ func TestPreemptionOnNodeWithAskResTypesSameAsGuaranteedSetOnPreemptorSide(t *te
 // 2 Allocations of each vcores:1 running on root.parent.parent1.child2 could be preempted to free up resources for ask arrived in root.parent.parent1.child1.
 // 3rd allocation of vcores:1 should not be touched as preempting the same would make usage goes below the guaranteed set on root.parent.parent2.child2.
 // All remaining three allocation of each mem: 100 should not be touched at all as there is no matching resource type between these allocs and ask resource types.
-func TestPreemptionWithAskResTypesSameAsGuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
+func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 5, "gpu": 700, "mem": 200})
 	iterator := getNodeIteratorFn(node)
@@ -1320,7 +1320,7 @@ func TestPreemptionWithAskResTypesSameAsGuaranteedSetOnVictimAndPreemptorSides(t
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 preempted")
 }
 
-// TestPreemptionOnNodeWithAskResTypesSameAsGuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed set on both victim queue path and preemptor queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.
 // Setup:
@@ -1331,7 +1331,7 @@ func TestPreemptionWithAskResTypesSameAsGuaranteedSetOnVictimAndPreemptorSides(t
 // 2 Allocations of each vcores:1 running on root.parent.parent1.child2 could be preempted to free up resources for ask arrived in root.parent.parent1.child1.
 // 3rd allocation of vcores:1 should not be touched as preempting the same would make usage goes below the guaranteed set on root.parent.parent2.child2.
 // All remaining three allocation of each mem: 100 should not be touched at all as there is no matching resource type between these allocs and ask resource types.
-func TestPreemptionOnNodeWithAskResTypesSameAsGuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
+func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
 	t.SkipNow()
 	node := newNode(node1, map[string]resources.Quantity{"vcores": 3, "gpu": 700, "mem": 200})
 	iterator := getNodeIteratorFn(node)

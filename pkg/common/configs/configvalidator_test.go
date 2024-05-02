@@ -2013,7 +2013,7 @@ func TestCheckQueuesStructure(t *testing.T) {
 	}
 }
 
-func TestCheckQueues(t *testing.T) {
+func TestCheckQueues(t *testing.T) { //nolint:funlen
 	testCases := []struct {
 		name             string
 		queue            *QueueConfig
@@ -2167,7 +2167,7 @@ func TestCheckQueues(t *testing.T) {
 	}
 }
 
-func TestCheckNodeSortingPolicy(t *testing.T) {
+func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 	testCases := []struct {
 		name             string
 		partition        *PartitionConfig

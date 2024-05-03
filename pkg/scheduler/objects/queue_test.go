@@ -1490,7 +1490,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 
 	// test properties
 	root.properties = getProperties()
-	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo(false).Properties)
+	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo(true).Properties)
 
 	// test template
 	root.template, err = template.FromConf(&configs.ChildTemplate{
@@ -1502,23 +1502,37 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 		},
 	})
 	assert.NilError(t, err)
-	assert.Equal(t, root.template.GetMaxApplications(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.MaxApplications)
-	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.Properties)
-	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.MaxResource)
-	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.GuaranteedResource)
+	assert.Equal(t, root.template.GetMaxApplications(), root.GetPartitionQueueDAOInfo(true).TemplateInfo.MaxApplications)
+	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo(true).TemplateInfo.Properties)
+	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(true).TemplateInfo.MaxResource)
+	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(true).TemplateInfo.GuaranteedResource)
 
 	// test resources
 	root.maxResource = getResource(t)
 	root.guaranteedResource = getResource(t)
-	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).MaxResource)
-	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).GuaranteedResource)
-	assert.DeepEqual(t, root.getHeadRoom().DAOMap(), root.GetPartitionQueueDAOInfo(false).HeadRoom)
+	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(true).MaxResource)
+	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(true).GuaranteedResource)
+	assert.DeepEqual(t, root.getHeadRoom().DAOMap(), root.GetPartitionQueueDAOInfo(true).HeadRoom)
 
 	// test allocatingAcceptedApps
 	root.allocatingAcceptedApps = getAllocatingAcceptedApps()
 	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "allocatingAcceptedApps size")
-	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
-	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).AllocatingAcceptedApps[0], appID1)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).AllocatingAcceptedApps[0], appID1)
+
+	// Test specific queue
+	_, err = createManagedQueue(root, "leaf-queue", false, nil)
+	assert.NilError(t, err, "failed to create managed queue")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).QueueName, "root")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).Children), 0)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).ChildNames), 1)
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).ChildNames[0], "root.leaf-queue")
+	// Test hierarchy queue
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).QueueName, "root")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).Children), 1)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).ChildNames), 1)
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).Children[0].QueueName, "root.leaf-queue")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).ChildNames[0], "root.leaf-queue")
 }
 
 func getAllocatingAcceptedApps() map[string]bool {

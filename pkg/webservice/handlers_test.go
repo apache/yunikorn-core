@@ -1164,7 +1164,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	// test specific queue
 	var partitionQueueDao1 dao.PartitionQueueDAOInfo
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a?subtree", strings.NewReader(""))
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -1173,12 +1173,12 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, partitionQueueDao1.QueueName, "root.a")
 	assert.Equal(t, len(partitionQueueDao1.Children), 0)
-	assert.Equal(t, len(partitionQueueDao1.ChildrenNames), 1)
-	assert.Equal(t, partitionQueueDao1.ChildrenNames[0], "root.a.a1")
+	assert.Equal(t, len(partitionQueueDao1.ChildNames), 1)
+	assert.Equal(t, partitionQueueDao1.ChildNames[0], "root.a.a1")
 
 	// test hierarchy queue
 	var partitionQueueDao2 dao.PartitionQueueDAOInfo
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a?subtree", strings.NewReader(""))
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -1187,9 +1187,9 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, partitionQueueDao2.QueueName, "root.a")
 	assert.Equal(t, len(partitionQueueDao2.Children), 1)
-	assert.Equal(t, len(partitionQueueDao2.ChildrenNames), 1)
+	assert.Equal(t, len(partitionQueueDao2.ChildNames), 1)
 	assert.Equal(t, partitionQueueDao2.Children[0].QueueName, "root.a.a1")
-	assert.Equal(t, partitionQueueDao2.ChildrenNames[0], "root.a.a1")
+	assert.Equal(t, partitionQueueDao2.ChildNames[0], "root.a.a1")
 
 	// test partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))

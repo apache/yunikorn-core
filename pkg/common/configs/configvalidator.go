@@ -506,7 +506,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 		}
 
 		if existedGroupName[name] {
-			return fmt.Errorf("duplicated group name %s , already existed", name)
+			return fmt.Errorf("duplicated group name '%s' , already existed", name)
 		}
 		existedGroupName[name] = true
 
@@ -654,7 +654,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 	queueMap := make(map[string]bool)
 	for _, child := range queue.Queues {
 		if !QueueNameRegExp.MatchString(child.Name) {
-			return fmt.Errorf("invalid child name %s, a name must only have alphanumeric characters,"+
+			return fmt.Errorf("invalid child name '%s', a name must only have alphanumeric characters,"+
 				" - or _, and be no longer than 64 characters", child.Name)
 		}
 		if queueMap[strings.ToLower(child.Name)] {

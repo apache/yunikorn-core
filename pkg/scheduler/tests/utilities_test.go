@@ -131,6 +131,13 @@ func waitForRemovedNode(t *testing.T, context *scheduler.ClusterContext, nodeID 
 	assert.NilError(t, err, "Failed to wait for removal of scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
 }
 
+func waitForUpdatePartitionResource(t *testing.T, pc *scheduler.PartitionContext, resourcesName string, availableQuantity resources.Quantity, timeoutMs int) {
+	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		return pc.GetTotalPartitionResource().Resources[resourcesName] == availableQuantity
+	})
+	assert.NilError(t, err, "Failed to wait for available resource %v with target quantity %v, called from: %s", resourcesName, availableQuantity, caller())
+}
+
 func getApplication(pc *scheduler.PartitionContext, appID string) (*objects.Application, error) {
 	for _, app := range pc.GetApplications() {
 		if app.ApplicationID == appID {

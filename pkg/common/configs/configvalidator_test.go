@@ -2018,7 +2018,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 		name             string
 		queue            *QueueConfig
 		level            int
-		errorExpected    bool
 		expectedErrorMsg string
 		validateFunc     func(t *testing.T, queue *QueueConfig)
 	}{
@@ -2031,7 +2030,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				Queues:    []QueueConfig{{Name: "validSubQueue"}},
 			},
 			level:            0,
-			errorExpected:    true,
 			expectedErrorMsg: "multiple spaces found in ACL: 'admin group extra'",
 		},
 		{
@@ -2043,7 +2041,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				Queues:    []QueueConfig{{Name: "validSubQueue"}},
 			},
 			level:            0,
-			errorExpected:    true,
 			expectedErrorMsg: "multiple spaces found in ACL: 'submit group extra'",
 		},
 		{
@@ -2058,7 +2055,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			errorExpected:    true,
 			expectedErrorMsg: "duplicate child name found with name 'duplicateQueue', level 0",
 		},
 		{
@@ -2080,7 +2076,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			errorExpected:    true,
 			expectedErrorMsg: "duplicate child name found with name 'duplicateQueue', level 1",
 		},
 		{
@@ -2102,7 +2097,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			errorExpected:    true,
 			expectedErrorMsg: "duplicated user name 'user1', already exists",
 		},
 		{
@@ -2116,7 +2110,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			errorExpected:    true,
 			expectedErrorMsg: "invalid child name 'thisQueueNameIsTooLongthisQueueNameIsTooLongthisQueueNameIsTooLong', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters",
 		},
 		{
@@ -2130,7 +2123,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			errorExpected:    true,
 			expectedErrorMsg: "invalid child name 'queue_Name$', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters",
 		},
 		{
@@ -2145,7 +2137,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:         0,
-			errorExpected: false,
 			validateFunc: func(t *testing.T, q *QueueConfig) {
 				assert.Equal(t, 2, len(q.Queues), "Expected two queues")
 			},
@@ -2155,13 +2146,14 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := checkQueues(tc.queue, tc.level)
-			if tc.errorExpected {
+			if tc.expectedErrorMsg != "" {
 				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
 			} else {
 				assert.NilError(t, err, "No error is expected")
-				if tc.validateFunc != nil {
-					tc.validateFunc(t, tc.queue)
-				}
+			}
+
+			if tc.validateFunc != nil {
+				tc.validateFunc(t, tc.queue)
 			}
 		})
 	}
@@ -2171,7 +2163,6 @@ func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 	testCases := []struct {
 		name             string
 		partition        *PartitionConfig
-		errorExpected    bool
 		expectedErrorMsg string
 		validateFunc     func(t *testing.T, partition *PartitionConfig)
 	}{
@@ -2183,7 +2174,10 @@ func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 					ResourceWeights: map[string]float64{"memory": 1.0},
 				},
 			},
-			errorExpected: false,
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, "fair", p.NodeSortPolicy.Type, "Expected sorting policy type to be 'fair'")
+				assert.Equal(t, 1, len(p.NodeSortPolicy.ResourceWeights), "Expected one resource weights")
+			},
 		},
 		{
 			name: "Negative Resource Weight",
@@ -2193,7 +2187,6 @@ func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 					ResourceWeights: map[string]float64{"memory": -1.0},
 				},
 			},
-			errorExpected:    true,
 			expectedErrorMsg: "negative resource weight for memory is not allowed",
 		},
 		{
@@ -2204,7 +2197,6 @@ func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 					ResourceWeights: map[string]float64{"memory": 1.0},
 				},
 			},
-			errorExpected:    true,
 			expectedErrorMsg: "undefined policy: undefinedPolicy",
 		},
 		{
@@ -2215,8 +2207,8 @@ func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 					ResourceWeights: map[string]float64{"memory": 2.0, "cpu": 3.0},
 				},
 			},
-			errorExpected: false,
 			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, "binpacking", p.NodeSortPolicy.Type, "Expected sorting policy type to be 'binpacking'")
 				assert.Equal(t, 2, len(p.NodeSortPolicy.ResourceWeights), "Expected two resource weights")
 			},
 		},
@@ -2225,13 +2217,14 @@ func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := checkNodeSortingPolicy(tc.partition)
-			if tc.errorExpected {
+			if tc.expectedErrorMsg != "" {
 				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
 			} else {
 				assert.NilError(t, err, "No error is expected")
-				if tc.validateFunc != nil {
-					tc.validateFunc(t, tc.partition)
-				}
+			}
+
+			if tc.validateFunc != nil {
+				tc.validateFunc(t, tc.partition)
 			}
 		})
 	}

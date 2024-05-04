@@ -2136,7 +2136,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 					{Name: "queue-Two"},
 				},
 			},
-			level:         0,
+			level: 0,
 			validateFunc: func(t *testing.T, q *QueueConfig) {
 				assert.Equal(t, 2, len(q.Queues), "Expected two queues")
 			},

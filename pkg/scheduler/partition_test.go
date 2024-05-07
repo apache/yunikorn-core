@@ -2948,7 +2948,7 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 
 	// release placeholder: do what the context would do after the shim processing
 	release := &si.AllocationRelease{
-		PartitionName:   ph.GetPartitionName(),
+		PartitionName:   partition.Name,
 		ApplicationID:   appID1,
 		AllocationKey:   ph.GetAllocationKey(),
 		TerminationType: si.TerminationType_TIMEOUT,
@@ -3020,7 +3020,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 	for id, ph := range phs {
 		assert.Assert(t, ph.IsReleased(), "placeholder %s should be released", id)
 		release := &si.AllocationRelease{
-			PartitionName:   ph.GetPartitionName(),
+			PartitionName:   partition.Name,
 			ApplicationID:   appID1,
 			AllocationKey:   ph.GetAllocationKey(),
 			TerminationType: si.TerminationType_TIMEOUT,
@@ -3087,7 +3087,7 @@ func TestPlaceholderBiggerThanReal(t *testing.T) {
 
 	// replace the placeholder: do what the context would do after the shim processing
 	release := &si.AllocationRelease{
-		PartitionName:   ph.GetPartitionName(),
+		PartitionName:   partition.Name,
 		ApplicationID:   appID1,
 		AllocationKey:   ph.GetAllocationKey(),
 		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,

@@ -356,7 +356,7 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 					alloc.SetReleased(true)
 					toRelease = append(toRelease, alloc)
 				}
-				sa.notifyRMAllocationReleased(sa.rmID, toRelease, si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
+				sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
 				// nolint: errcheck
@@ -430,7 +430,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			zap.String("AppID", sa.ApplicationID),
 			zap.Int("placeholders being replaced", replacing),
 			zap.Int("releasing placeholders", len(toRelease)))
-		sa.notifyRMAllocationReleased(sa.rmID, toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
+		sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 	// Case 2: in every other case fail the application, and notify the context about the expired placeholder asks
 	default:
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing asks and placeholders",
@@ -449,10 +449,10 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
-		sa.notifyRMAllocationAskReleased(sa.rmID, sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
+		sa.notifyRMAllocationAskReleased(sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
 		sa.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
 		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
-		sa.notifyRMAllocationReleased(sa.rmID, sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
+		sa.notifyRMAllocationReleased(sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 		// we are in an accepted or new state so nothing can be replaced yet: mark everything as timedout
 		for _, phData := range sa.placeholderData {
 			phData.TimedOut = phData.Count
@@ -1144,7 +1144,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 					zap.Stringer("placeholder resource", ph.GetAllocatedResource()))
 				// release the placeholder and tell the RM
 				ph.SetReleased(true)
-				sa.notifyRMAllocationReleased(sa.rmID, []*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
+				sa.notifyRMAllocationReleased([]*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
 				sa.appEvents.sendPlaceholderLargerEvent(ph, request)
 				continue
 			}
@@ -1347,7 +1347,7 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 			victim.MarkPreempted()
 		}
 		ask.MarkTriggeredPreemption()
-		sa.notifyRMAllocationReleased(sa.rmID, victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
+		sa.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
 			"preempting allocations to free up resources to run daemon set ask: "+ask.GetAllocationKey())
 		return true
 	}
@@ -1943,7 +1943,7 @@ func (sa *Application) executeTerminatedCallback() {
 // notifyRMAllocationReleased send an allocation release event to the RM to if the event handler is configured
 // and at least one allocation has been released.
 // No locking must be called while holding the lock
-func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Allocation, terminationType si.TerminationType, message string) {
+func (sa *Application) notifyRMAllocationReleased(released []*Allocation, terminationType si.TerminationType, message string) {
 	// only generate event if needed
 	if len(released) == 0 || sa.rmEventHandler == nil {
 		return
@@ -1951,13 +1951,13 @@ func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Alloc
 	c := make(chan *rmevent.Result)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
-		RmID:                rmID,
+		RmID:                sa.rmID,
 		Channel:             c,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
 			ApplicationID:   alloc.GetApplicationID(),
-			PartitionName:   alloc.GetPartitionName(),
+			PartitionName:   sa.Partition,
 			AllocationKey:   alloc.GetAllocationKey(),
 			TerminationType: terminationType,
 			Message:         message,
@@ -1976,19 +1976,19 @@ func (sa *Application) notifyRMAllocationReleased(rmID string, released []*Alloc
 // notifyRMAllocationAskReleased send an ask release event to the RM to if the event handler is configured
 // and at least one ask has been released.
 // No locking must be called while holding the lock
-func (sa *Application) notifyRMAllocationAskReleased(rmID string, released []*AllocationAsk, terminationType si.TerminationType, message string) {
+func (sa *Application) notifyRMAllocationAskReleased(released []*AllocationAsk, terminationType si.TerminationType, message string) {
 	// only generate event if needed
 	if len(released) == 0 || sa.rmEventHandler == nil {
 		return
 	}
 	releaseEvent := &rmevent.RMReleaseAllocationAskEvent{
 		ReleasedAllocationAsks: make([]*si.AllocationAskRelease, 0),
-		RmID:                   rmID,
+		RmID:                   sa.rmID,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocationAsks = append(releaseEvent.ReleasedAllocationAsks, &si.AllocationAskRelease{
 			ApplicationID:   alloc.GetApplicationID(),
-			PartitionName:   alloc.GetPartitionName(),
+			PartitionName:   common.GetPartitionNameWithoutClusterID(sa.Partition),
 			AllocationKey:   alloc.GetAllocationKey(),
 			TerminationType: terminationType,
 			Message:         message,

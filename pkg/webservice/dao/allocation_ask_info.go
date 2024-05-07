@@ -32,7 +32,6 @@ type AllocationAskDAOInfo struct {
 	Priority            string                     `json:"priority,omitempty"`
 	RequiredNodeID      string                     `json:"requiredNodeId,omitempty"`
 	ApplicationID       string                     `json:"applicationId,omitempty"`
-	Partition           string                     `json:"partition,omitempty"`
 	Placeholder         bool                       `json:"placeholder,omitempty"`
 	TaskGroupName       string                     `json:"taskGroupName,omitempty"`
 	AllocationLog       []*AllocationAskLogDAOInfo `json:"allocationLog,omitempty"`

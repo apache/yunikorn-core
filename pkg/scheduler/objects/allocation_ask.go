@@ -36,7 +36,6 @@ type AllocationAsk struct {
 	// Read-only fields
 	allocationKey     string
 	applicationID     string
-	partitionName     string
 	taskGroupName     string    // task group this allocation ask belongs to
 	placeholder       bool      // is this a placeholder allocation ask
 	createTime        time.Time // the time this ask was created (used in reservations)
@@ -89,8 +88,6 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		allocationKey:     ask.AllocationKey,
 		allocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
 		applicationID:     ask.ApplicationID,
-		partitionName:     ask.PartitionName,
-
 		tags:              CloneAllocationTags(ask.Tags),
 		createTime:        time.Now(),
 		priority:          ask.Priority,
@@ -130,11 +127,6 @@ func (aa *AllocationAsk) GetAllocationKey() string {
 // GetApplicationID returns the application ID for this ask
 func (aa *AllocationAsk) GetApplicationID() string {
 	return aa.applicationID
-}
-
-// GetPartitionName returns the partition name for this ask
-func (aa *AllocationAsk) GetPartitionName() string {
-	return aa.partitionName
 }
 
 // allocate marks the ask as allocated and returns true if successful. An ask may not be allocated multiple times.

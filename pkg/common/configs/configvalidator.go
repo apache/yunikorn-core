@@ -489,7 +489,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 		}
 
 		if existedUserName[name] {
-			return fmt.Errorf("duplicated user name %s , already existed", name)
+			return fmt.Errorf("duplicated user name '%s', already exists", name)
 		}
 		existedUserName[name] = true
 
@@ -506,7 +506,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 		}
 
 		if existedGroupName[name] {
-			return fmt.Errorf("duplicated group name %s , already existed", name)
+			return fmt.Errorf("duplicated group name '%s' , already existed", name)
 		}
 		existedGroupName[name] = true
 
@@ -632,7 +632,7 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 // Check the queue names configured for compliance and uniqueness
 // - no duplicate names at each branched level in the tree
 // - queue name is alphanumeric (case ignore) with - and _
-// - queue name is maximum 16 char long
+// - queue name is maximum 64 char long
 func checkQueues(queue *QueueConfig, level int) error {
 	// check the ACLs (if defined)
 	err := checkACL(queue.AdminACL)
@@ -654,11 +654,11 @@ func checkQueues(queue *QueueConfig, level int) error {
 	queueMap := make(map[string]bool)
 	for _, child := range queue.Queues {
 		if !QueueNameRegExp.MatchString(child.Name) {
-			return fmt.Errorf("invalid child name %s, a name must only have alphanumeric characters,"+
+			return fmt.Errorf("invalid child name '%s', a name must only have alphanumeric characters,"+
 				" - or _, and be no longer than 64 characters", child.Name)
 		}
 		if queueMap[strings.ToLower(child.Name)] {
-			return fmt.Errorf("duplicate child name found with name %s, level %d", child.Name, level)
+			return fmt.Errorf("duplicate child name found with name '%s', level %d", child.Name, level)
 		}
 		queueMap[strings.ToLower(child.Name)] = true
 	}

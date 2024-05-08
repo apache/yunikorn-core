@@ -2012,3 +2012,220 @@ func TestCheckQueuesStructure(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckQueues(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name             string
+		queue            *QueueConfig
+		level            int
+		expectedErrorMsg string
+		validateFunc     func(t *testing.T, queue *QueueConfig)
+	}{
+		{
+			name: "Invalid ACL Format for AdminACL",
+			queue: &QueueConfig{
+				Name:      "validQueue",
+				AdminACL:  "admin group extra",
+				SubmitACL: "submit",
+				Queues:    []QueueConfig{{Name: "validSubQueue"}},
+			},
+			level:            0,
+			expectedErrorMsg: "multiple spaces found in ACL: 'admin group extra'",
+		},
+		{
+			name: "Invalid ACL Format for SubmitACL",
+			queue: &QueueConfig{
+				Name:      "validQueue",
+				AdminACL:  "admin",
+				SubmitACL: "submit group extra",
+				Queues:    []QueueConfig{{Name: "validSubQueue"}},
+			},
+			level:            0,
+			expectedErrorMsg: "multiple spaces found in ACL: 'submit group extra'",
+		},
+		{
+			name: "Duplicate Child Queue Names",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "duplicateQueue"},
+					{Name: "duplicateQueue"},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: "duplicate child name found with name 'duplicateQueue', level 0",
+		},
+		{
+			name: "Duplicate Child Queue Names at level 1",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{
+						Name:      "subqueue",
+						AdminACL:  "admin",
+						SubmitACL: "submit",
+						Queues: []QueueConfig{
+							{Name: "duplicateQueue"},
+							{Name: "duplicateQueue"},
+						},
+					},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: "duplicate child name found with name 'duplicateQueue', level 1",
+		},
+		{
+			name: "Check Limits Error With Duplicated User Name",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{
+						Name: "subqueue",
+					},
+				},
+				Limits: []Limit{
+					{
+						Limit: "user-limit",
+						Users: []string{"user1", "user2", "user1"},
+					},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: "duplicated user name 'user1', already exists",
+		},
+		{
+			name: "Invalid Child Queue Name Length",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "thisQueueNameIsTooLongthisQueueNameIsTooLongthisQueueNameIsTooLong"},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: "invalid child name 'thisQueueNameIsTooLongthisQueueNameIsTooLongthisQueueNameIsTooLong', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters",
+		},
+		{
+			name: "Invalid Child Queue Name With Special Character",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "queue_Name$"},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: "invalid child name 'queue_Name$', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters",
+		},
+		{
+			name: "Valid Multiple Queues",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "queue_One"},
+					{Name: "queue-Two"},
+				},
+			},
+			level: 0,
+			validateFunc: func(t *testing.T, q *QueueConfig) {
+				assert.Equal(t, 2, len(q.Queues), "Expected two queues")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkQueues(tc.queue, tc.level)
+			if tc.expectedErrorMsg != "" {
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+			}
+
+			if tc.validateFunc != nil {
+				tc.validateFunc(t, tc.queue)
+			}
+		})
+	}
+}
+
+func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name             string
+		partition        *PartitionConfig
+		expectedErrorMsg string
+		validateFunc     func(t *testing.T, partition *PartitionConfig)
+	}{
+		{
+			name: "Valid Sorting Policy with Positive Weights",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "fair",
+					ResourceWeights: map[string]float64{"memory": 1.0},
+				},
+			},
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, "fair", p.NodeSortPolicy.Type, "Expected sorting policy type to be 'fair'")
+				assert.Equal(t, 1, len(p.NodeSortPolicy.ResourceWeights), "Expected one resource weights")
+			},
+		},
+		{
+			name: "Negative Resource Weight",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "fair",
+					ResourceWeights: map[string]float64{"memory": -1.0},
+				},
+			},
+			expectedErrorMsg: "negative resource weight for memory is not allowed",
+		},
+		{
+			name: "Undefined Sorting Policy",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "undefinedPolicy",
+					ResourceWeights: map[string]float64{"memory": 1.0},
+				},
+			},
+			expectedErrorMsg: "undefined policy: undefinedPolicy",
+		},
+		{
+			name: "Valid Policy with Multiple Resources",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "binpacking",
+					ResourceWeights: map[string]float64{"memory": 2.0, "cpu": 3.0},
+				},
+			},
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, "binpacking", p.NodeSortPolicy.Type, "Expected sorting policy type to be 'binpacking'")
+				assert.Equal(t, 2, len(p.NodeSortPolicy.ResourceWeights), "Expected two resource weights")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkNodeSortingPolicy(tc.partition)
+			if tc.expectedErrorMsg != "" {
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+			}
+
+			if tc.validateFunc != nil {
+				tc.validateFunc(t, tc.partition)
+			}
+		})
+	}
+}

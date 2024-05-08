@@ -250,7 +250,6 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 				// For other cases like victims spread over multiple nodes, this doesn't add great value.
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
 					(oldRemaining == nil || resources.StrictlyGreaterThan(resources.Zero, oldRemaining)) {
-
 					// add the current victim into the ask queue
 					askQueue.AddAllocation(victim.GetAllocatedResource())
 					askQueueNewRemaining := askQueue.GetRemainingGuaranteedResource()
@@ -321,7 +320,6 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 				// Similar checks could be added even on the ask or preemptor queue to prevent being over utilized.
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
 					(oldRemaining == nil || resources.StrictlyGreaterThan(resources.Zero, oldRemaining)) {
-
 					// removing task does not violate queue constraints, adjust queue and node
 					nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
 					// check if ask now fits and we haven't had this happen before
@@ -467,7 +465,6 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 	// evaluate each potential victim in turn, stopping once sufficient resources have been freed
 	victims := make([]*Allocation, 0)
 	for _, victim := range potentialVictims {
-
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
@@ -587,12 +584,23 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 	// Holds total victims resources
 	victimsTotalResource := resources.NewResource()
 
+	fitIn := false
+	nodeCurrentAvailable := p.nodeAvailableMap
+	if nodeCurrentAvailable[nodeID].FitIn(p.ask.GetAllocatedResource()) {
+		fitIn = true
+	}
+
 	// Since there could be more victims than the actual need, ensure only required victims are filtered finally
 	// to do: There is room for improvements especially when there are more victims. victims could be chosen based
 	// on different criteria. for example, victims could be picked up either from specific node (bin packing) or
 	// from multiple nodes (fair) given the choices.
 	var finalVictims []*Allocation
 	for _, victim := range victims {
+		// Victims from any node is acceptable as long as chosen node has enough space to accommodate the ask
+		// Otherwise, preempting victims from 'n' different nodes doesn't help to achieve the goal.
+		if !fitIn && victim.nodeID != nodeID {
+			continue
+		}
 		// stop collecting the victims once ask resource requirement met
 		if resources.StrictlyGreaterThanOnlyExisting(p.ask.GetAllocatedResource(), victimsTotalResource) {
 			finalVictims = append(finalVictims, victim)
@@ -725,7 +733,6 @@ func (pcr *predicateCheckResult) populateVictims(victimsByNode map[string][]*All
 		victim := victimList[i]
 		pcr.victims = append(pcr.victims, victim)
 	}
-
 }
 
 // Duplicate creates a copy of this snapshot into the given map by queue path
@@ -733,7 +740,6 @@ func (qps *QueuePreemptionSnapshot) Duplicate(copy map[string]*QueuePreemptionSn
 	if qps == nil {
 		return nil
 	}
-
 	if existing, ok := copy[qps.QueuePath]; ok {
 		return existing
 	}
@@ -805,7 +811,7 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 		return nil
 	}
 	parent := qps.Parent.GetRemainingGuaranteedResource()
-	remainingGuaranteed := resources.ComponentWiseMinPermissive(qps.GuaranteedResource.Clone(), qps.MaxResource.Clone())
+	remainingGuaranteed := qps.GuaranteedResource.Clone()
 
 	// No Guaranteed set, so nothing remaining
 	// In case of guaranteed not set for queues at specific level, inherits the same from parent queue.

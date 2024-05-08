@@ -158,8 +158,8 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
 	assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 2)), "guaranteed set, but no usage. so all guaranteed should be in remaining")
 	assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, 2)), "guaranteed not set, also no usage. However, parent's remaining should be used")
-	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(resources.Multiply(smallestRes, 1), childRes)), "guaranteed not set, also no usage. However, parent's remaining should be used")
-	assert.Assert(t, resources.Equals(cRemaining2, resources.Multiply(smallestRes, 1)), "guaranteed not set, also no usage. However, parent's remaining should be used")
+	assert.Assert(t, resources.Equals(cRemaining1, resources.Add(resources.Multiply(smallestRes, 2), childRes)), "guaranteed not set, also no usage. However, parent's remaining should be used")
+	assert.Assert(t, resources.Equals(cRemaining2, resources.Multiply(smallestRes, 2)), "guaranteed not set, also no usage. However, parent's remaining should be used")
 
 	// guaranteed set but no usage. so nothing to preempt
 	// clean start for the snapshot: whole hierarchy with guarantee

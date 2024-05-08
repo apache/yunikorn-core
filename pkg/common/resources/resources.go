@@ -654,7 +654,7 @@ func MatchAnyOnlyExisting(left, right *Resource) bool {
 	if left == nil || right == nil {
 		return false
 	}
-	for k, _ := range left.Resources {
+	for k := range left.Resources {
 		if _, ok := right.Resources[k]; ok {
 			return true
 		}

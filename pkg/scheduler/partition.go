@@ -46,7 +46,7 @@ import (
 
 type PartitionContext struct {
 	RmID string // the RM the partition belongs to
-	Name string // name of the partition (logging mainly)
+	Name string // name of the partition
 
 	// Private fields need protection
 	root                   *objects.Queue                  // start of the queue hierarchy

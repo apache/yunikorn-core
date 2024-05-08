@@ -143,7 +143,7 @@ func (cc *ClusterContext) schedule() bool {
 			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 			if alloc.GetResult() == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+alloc.GetAllocationKey())
+				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+alloc.GetAllocationKey())
 			} else {
 				cc.notifyRMNewAllocation(psc.RmID, alloc)
 			}
@@ -564,7 +564,7 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 			}
 			allocations := partition.removeApplication(app.ApplicationID)
 			if len(allocations) > 0 {
-				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.TerminationType_STOPPED_BY_RM,
+				cc.notifyRMAllocationReleased(partition.RmID, partition.Name, allocations, si.TerminationType_STOPPED_BY_RM,
 					fmt.Sprintf("Application %s Removed", app.ApplicationID))
 			}
 			log.Log(log.SchedContext).Info("Application removed from partition",
@@ -690,7 +690,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		node.SendNodeRemovedEvent()
 		// notify the shim allocations have been released from node
 		if len(released) != 0 {
-			cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
+			cc.notifyRMAllocationReleased(partition.RmID, partition.Name, released, si.TerminationType_STOPPED_BY_RM,
 				fmt.Sprintf("Node %s Removed", node.NodeID))
 		}
 		for _, confirm := range confirmed {
@@ -845,7 +845,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			allocs, confirmed := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
-				cc.notifyRMAllocationReleased(rmID, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
+				cc.notifyRMAllocationReleased(rmID, partition.Name, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
 			}
 			// notify the RM of the confirmed allocations (placeholder swap & preemption)
 			if confirmed != nil {
@@ -887,7 +887,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
-func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
+func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, partitionName string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
 	c := make(chan *rmevent.Result)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
@@ -897,7 +897,7 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
 			ApplicationID:   alloc.GetApplicationID(),
-			PartitionName:   alloc.GetPartitionName(),
+			PartitionName:   partitionName,
 			TerminationType: terminationType,
 			Message:         message,
 			AllocationKey:   alloc.GetAllocationKey(),

@@ -226,7 +226,6 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 		Priority:         strconv.Itoa(int(alloc.GetPriority())),
 		NodeID:           alloc.GetNodeID(),
 		ApplicationID:    alloc.GetApplicationID(),
-		Partition:        alloc.GetPartitionName(),
 		Preempted:        alloc.IsPreempted(),
 	}
 	return allocDAO
@@ -327,7 +326,6 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 		Priority:            strconv.Itoa(int(ask.GetPriority())),
 		RequiredNodeID:      ask.GetRequiredNode(),
 		ApplicationID:       ask.GetApplicationID(),
-		Partition:           common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		Placeholder:         ask.IsPlaceholder(),
 		TaskGroupName:       ask.GetTaskGroup(),
 		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),

@@ -25,7 +25,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
@@ -90,7 +89,6 @@ func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 		createTime:        createTime,
 		bindTime:          time.Now(),
 		nodeID:            nodeID,
-		partitionName:     common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		tags:              ask.GetTagsClone(),
 		priority:          ask.GetPriority(),
 		allocatedResource: ask.GetAllocatedResource().Clone(),
@@ -139,7 +137,6 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	ask := &AllocationAsk{
 		allocationKey:     alloc.AllocationKey,
 		applicationID:     alloc.ApplicationID,
-		partitionName:     alloc.PartitionName,
 		allocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
 		tags:              CloneAllocationTags(alloc.AllocationTags),
 		priority:          alloc.Priority,
@@ -202,11 +199,6 @@ func (a *Allocation) GetAllocationKey() string {
 // GetApplicationID returns the application ID for this allocation
 func (a *Allocation) GetApplicationID() string {
 	return a.applicationID
-}
-
-// GetPartitionName returns the partition name for this allocation
-func (a *Allocation) GetPartitionName() string {
-	return a.partitionName
 }
 
 // GetTaskGroup returns the task group name for this allocation

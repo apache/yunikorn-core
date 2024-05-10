@@ -1916,14 +1916,12 @@ func TestCheckQueuesStructure(t *testing.T) {
 	testCases := []struct {
 		name             string
 		partition        *PartitionConfig
-		errorExpected    bool
 		expectedErrorMsg string
 		validateFunc     func(t *testing.T, partition *PartitionConfig)
 	}{
 		{
 			name:             "No Queues Configured",
 			partition:        &PartitionConfig{Queues: nil},
-			errorExpected:    true,
 			expectedErrorMsg: "queue config is not set",
 		},
 		{
@@ -1933,7 +1931,6 @@ func TestCheckQueuesStructure(t *testing.T) {
 					{Name: "root", Parent: true},
 				},
 			},
-			errorExpected: false,
 			validateFunc: func(t *testing.T, p *PartitionConfig) {
 				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue")
 				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
@@ -1947,7 +1944,6 @@ func TestCheckQueuesStructure(t *testing.T) {
 					{Name: "non-root"},
 				},
 			},
-			errorExpected: false,
 			validateFunc: func(t *testing.T, p *PartitionConfig) {
 				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue in the new root")
 				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
@@ -1963,7 +1959,6 @@ func TestCheckQueuesStructure(t *testing.T) {
 					{Name: "queue2"},
 				},
 			},
-			errorExpected: false,
 			validateFunc: func(t *testing.T, p *PartitionConfig) {
 				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue in the new root")
 				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
@@ -1981,7 +1976,6 @@ func TestCheckQueuesStructure(t *testing.T) {
 						Resources: Resources{Guaranteed: negativeResourceMap}},
 				},
 			},
-			errorExpected:    true,
 			expectedErrorMsg: "root queue must not have resource limits set",
 		},
 		{
@@ -1994,21 +1988,21 @@ func TestCheckQueuesStructure(t *testing.T) {
 						Resources: Resources{Max: negativeResourceMap}},
 				},
 			},
-			errorExpected:    true,
 			expectedErrorMsg: "root queue must not have resource limits set",
 		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := checkQueuesStructure(tc.partition)
-			if tc.errorExpected {
+			if tc.expectedErrorMsg != "" {
 				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
 			} else {
 				assert.NilError(t, err, "No error is expected")
-				if tc.validateFunc != nil {
-					tc.validateFunc(t, tc.partition)
-				}
 			}
+			if tc.validateFunc != nil {
+				tc.validateFunc(t, tc.partition)
+			}
+
 		})
 	}
 }

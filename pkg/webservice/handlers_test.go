@@ -1070,6 +1070,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp := &MockResponseWriter{}
@@ -1149,6 +1150,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	// test partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -1165,6 +1167,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	// test specific queue
 	var partitionQueueDao1 dao.PartitionQueueDAOInfo
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -1179,6 +1182,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	// test hierarchy queue
 	var partitionQueueDao2 dao.PartitionQueueDAOInfo
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a?subtree", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -1193,6 +1197,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	// test partition not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -1208,6 +1213,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	// test invalid queue name
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.notexists@"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -1216,6 +1222,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 
 	// test queue is not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "notexists"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
@@ -1283,6 +1290,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp := &MockResponseWriter{}
@@ -1313,6 +1321,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	}
 
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp1 := &MockResponseWriter{}
@@ -1328,6 +1337,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	// Test specific node
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node/node-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "node", Value: "node-1"}}))
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
@@ -1335,6 +1345,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 	// Test node id is missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node/node-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "node", Value: ""}}))
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
@@ -1394,6 +1405,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "root.default"},
@@ -1423,6 +1435,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	// test nonexistent partition
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req1 = req1.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: "notexists"},
 		httprouter.Param{Key: "queue", Value: "root.default"},
@@ -1435,6 +1448,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	// test nonexistent queue
 	var req2 *http.Request
 	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req2 = req2.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "notexists"},
@@ -1447,6 +1461,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	// test queue without applications
 	var req3 *http.Request
 	req3, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/applications", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req3 = req3.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "root.noapps"},
@@ -1469,6 +1484,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 
 func checkLegalGetAppsRequest(t *testing.T, url string, params httprouter.Params, expected []*dao.ApplicationDAOInfo) {
 	req, err := http.NewRequest("GET", url, strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, params))
 	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
@@ -1481,6 +1497,7 @@ func checkLegalGetAppsRequest(t *testing.T, url string, params httprouter.Params
 
 func checkIllegalGetAppsRequest(t *testing.T, url string, params httprouter.Params, assertFunc func(t *testing.T, resp *MockResponseWriter)) {
 	req, err := http.NewRequest("GET", url, strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, params))
 	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
@@ -1570,6 +1587,7 @@ func TestGetApplicationHandler(t *testing.T) {
 
 	var req *http.Request
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "root.default"},
@@ -1591,6 +1609,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	// test nonexistent partition
 	var req1 *http.Request
 	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req1 = req1.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: "notexists"},
 		httprouter.Param{Key: "queue", Value: "root.default"},
@@ -1604,6 +1623,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	// test nonexistent queue
 	var req2 *http.Request
 	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req2 = req2.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "notexists"},
@@ -1617,6 +1637,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	// test nonexistent application
 	var req3 *http.Request
 	req3, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req3 = req3.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "root.noapps"},
@@ -1630,6 +1651,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	// test without queue
 	var req4 *http.Request
 	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req4 = req4.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "application", Value: "app-1"},
@@ -1644,6 +1666,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	// test invalid queue name
 	var req5 *http.Request
 	req5, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req5 = req5.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "root.test.test123@"},
@@ -1836,6 +1859,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	prepareUserAndGroupContext(t, groupsLimitsConfig)
 	// Test user name is missing
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "group", Value: "testgroup"},
 	}))
@@ -1846,6 +1870,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 
 	// Test group name is missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "user", Value: "testuser"},
 		httprouter.Param{Key: "group", Value: ""},
@@ -1857,6 +1882,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 
 	// Test existed user query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "user", Value: "testuser"},
 		httprouter.Param{Key: "group", Value: "testgroup"},
@@ -1884,6 +1910,7 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 
 	// Test non-existing user query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "user", Value: "testNonExistingUser"},
 		httprouter.Param{Key: "group", Value: "testgroup"},
@@ -2133,6 +2160,7 @@ func TestGetStream_Count(t *testing.T) {
 	getStream(resp, req)
 	output := make([]byte, 256)
 	n, err := resp.Body.Read(output)
+	assert.NilError(t, err)
 	lines := strings.Split(string(output[:n]), "\n")
 	assertInstanceUUID(t, lines[0])
 

@@ -648,11 +648,11 @@ func Equals(left, right *Resource) bool {
 // MatchAnyOnlyExisting Is there at least one resource type match between left & right resources?
 // Matching happens only for the resource existing only in left but not vice versa.
 func MatchAnyOnlyExisting(left, right *Resource) bool {
-	if left == right {
-		return true
-	}
 	if left == nil || right == nil {
 		return false
+	}
+	if left == right {
+		return true
 	}
 	for k := range left.Resources {
 		if _, ok := right.Resources[k]; ok {

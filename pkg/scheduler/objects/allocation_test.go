@@ -65,13 +65,6 @@ func TestNewAlloc(t *testing.T) {
 	expected := "applicationID=app-1, allocationKey=ask-1, Node=node-1, result=Allocated"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
 	assert.Assert(t, !alloc.IsPlaceholderUsed(), fmt.Sprintf("Alloc should not be placeholder replacement by default: got %t, expected %t", alloc.IsPlaceholderUsed(), false))
-	created := alloc.GetCreateTime()
-	// move time 10 seconds back
-	alloc.SetCreateTime(created.Add(time.Second * -10))
-	createdNow := alloc.GetCreateTime()
-	if createdNow.Equal(created) {
-		t.Fatal("create time stamp should have been modified")
-	}
 	// check that createTime is properly copied from the ask
 	tags := make(map[string]string)
 	tags[siCommon.CreationTime] = strconv.FormatInt(past, 10)
@@ -211,8 +204,11 @@ func TestNewAllocFromSI(t *testing.T) {
 	allocSI.PreemptionPolicy.AllowPreemptSelf = true
 	allocSI.PreemptionPolicy.AllowPreemptOther = false
 	allocSI.AllocationTags[siCommon.CreationTime] = "xyz"
+	startTime := time.Now().Unix()
 	alloc = NewAllocationFromSI(allocSI)
-	assert.Equal(t, alloc.GetAsk().GetCreateTime().Unix(), int64(-1)) //nolint:staticcheck
+	endTime := time.Now().Unix()
+	assert.Assert(t, alloc.GetAsk().GetCreateTime().Unix() >= startTime, "alloc create time is too early")
+	assert.Assert(t, alloc.GetAsk().GetCreateTime().Unix() <= endTime, "alloc create time is too late")
 	assert.Assert(t, !alloc.GetAsk().IsOriginator(), "ask should not have been an originator")
 	assert.Assert(t, alloc.GetAsk().IsAllowPreemptSelf(), "ask should have allow-preempt-self set")
 	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptOther(), "ask should not have allow-preempt-other set")

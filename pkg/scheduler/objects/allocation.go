@@ -52,17 +52,16 @@ type Allocation struct {
 	ask               *AllocationAsk
 	allocationKey     string
 	applicationID     string
-	partitionName     string
 	taskGroupName     string // task group this allocation belongs to
 	placeholder       bool   // is this a placeholder allocation
 	nodeID            string
 	priority          int32
 	tags              map[string]string
 	allocatedResource *resources.Resource
+	createTime        time.Time // the time this allocation was created
 
 	// Mutable fields which need protection
 	placeholderUsed       bool
-	createTime            time.Time // the time this allocation was created
 	bindTime              time.Time // the time this allocation was bound to a node
 	placeholderCreateTime time.Time
 	released              bool
@@ -76,17 +75,11 @@ type Allocation struct {
 }
 
 func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
-	var createTime time.Time
-	if ask.GetTag(siCommon.CreationTime) == "" {
-		createTime = time.Now()
-	} else {
-		createTime = ask.GetCreateTime()
-	}
 	return &Allocation{
 		ask:               ask,
 		allocationKey:     ask.GetAllocationKey(),
 		applicationID:     ask.GetApplicationID(),
-		createTime:        createTime,
+		createTime:        ask.GetCreateTime(),
 		bindTime:          time.Now(),
 		nodeID:            nodeID,
 		tags:              ask.GetTagsClone(),
@@ -127,11 +120,14 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		return nil
 	}
 
-	creationTime, err := strconv.ParseInt(alloc.AllocationTags[siCommon.CreationTime], 10, 64)
+	var createTime time.Time
+	siCreationTime, err := strconv.ParseInt(alloc.AllocationTags[siCommon.CreationTime], 10, 64)
 	if err != nil {
-		log.Log(log.SchedAllocation).Warn("CreationTime is not set on the Allocation object or invalid",
+		log.Log(log.SchedAllocation).Debug("CreationTime is not set on the Allocation object or invalid",
 			zap.String("creationTime", alloc.AllocationTags[siCommon.CreationTime]))
-		creationTime = -1
+		createTime = time.Now()
+	} else {
+		createTime = time.Unix(siCreationTime, 0)
 	}
 
 	ask := &AllocationAsk{
@@ -143,7 +139,7 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		allocated:         true,
 		taskGroupName:     alloc.TaskGroupName,
 		placeholder:       alloc.Placeholder,
-		createTime:        time.Unix(creationTime, 0),
+		createTime:        createTime,
 		allocLog:          make(map[string]*AllocationLogEntry),
 		originator:        alloc.Originator,
 		allowPreemptSelf:  alloc.PreemptionPolicy.GetAllowPreemptSelf(),
@@ -208,15 +204,7 @@ func (a *Allocation) GetTaskGroup() string {
 
 // GetCreateTime returns the time this allocation was created
 func (a *Allocation) GetCreateTime() time.Time {
-	a.RLock()
-	defer a.RUnlock()
 	return a.createTime
-}
-
-func (a *Allocation) SetCreateTime(createTime time.Time) {
-	a.Lock()
-	defer a.Unlock()
-	a.createTime = createTime
 }
 
 // GetBindTime returns the time this allocation was created

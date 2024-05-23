@@ -664,7 +664,7 @@ func TestNodeEvents(t *testing.T) {
 		"ready": "true",
 	})
 	node := NewNode(proto)
-	node.nodeEvents = newNodeEvents(node, mockEvents)
+	node.nodeEvents = newNodeEvents(mockEvents)
 
 	node.SendNodeAddedEvent()
 	assert.Equal(t, 1, len(mockEvents.Events))

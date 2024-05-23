@@ -213,12 +213,12 @@ func TestSendPredicateFailed(t *testing.T) {
 	}
 	ask := NewAllocationAskFromSI(siAsk)
 	eventSystem := mock.NewEventSystemDisabled()
-	ask.askEvents = newAskEvents(ask, eventSystem)
+	ask.askEvents = newAskEvents(eventSystem)
 	ask.SendPredicateFailedEvent("failed")
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
-	ask.askEvents = newAskEvents(ask, eventSystem)
+	ask.askEvents = newAskEvents(eventSystem)
 	ask.SendPredicateFailedEvent("failure")
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]

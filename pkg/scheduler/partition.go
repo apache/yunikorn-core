@@ -339,13 +339,18 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
-	// set resources based on tags, but only if the queue is dynamic (unmanaged)
-	if queue.IsManaged() {
-		log.Log(log.SchedQueue).Warn("Trying to set resources on a queue that is not an unmanaged leaf",
-			zap.String("queueName", queue.QueuePath))
-	} else {
-		queue.SetResources(app.GetGuaranteedResource(), app.GetMaxResource())
+	guaranteedRes := app.GetGuaranteedResource()
+	maxRes := app.GetMaxResource()
+	if guaranteedRes != nil || maxRes != nil {
+		// set resources based on tags, but only if the queue is dynamic (unmanaged)
+		if queue.IsManaged() {
+			log.Log(log.SchedQueue).Warn("Trying to set resources on a queue that is not an unmanaged leaf",
+				zap.String("queueName", queue.QueuePath))
+		} else {
+			queue.SetResources(guaranteedRes, maxRes)
+		}
 	}
+
 	// check only for gang request
 	// - make sure the taskgroup request fits in the maximum set for the queue hierarchy
 	// - task groups should only be used in FIFO queues

@@ -77,9 +77,9 @@ func NewAllocationAsk(allocationKey string, applicationID string, allocatedResou
 		allocatedResource: allocatedResource,
 		allocLog:          make(map[string]*AllocationLogEntry),
 		resKeyPerNode:     make(map[string]string),
+		askEvents:         newAskEvents(events.GetEventSystem()),
 	}
 	aa.resKeyWithoutNode = reservationKeyWithoutNode(applicationID, allocationKey)
-	aa.askEvents = newAskEvents(events.GetEventSystem())
 	return aa
 }
 
@@ -99,6 +99,7 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		originator:        ask.Originator,
 		allocLog:          make(map[string]*AllocationLogEntry),
 		resKeyPerNode:     make(map[string]string),
+		askEvents:         newAskEvents(events.GetEventSystem()),
 	}
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
@@ -108,7 +109,6 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		return nil
 	}
 	saa.resKeyWithoutNode = reservationKeyWithoutNode(ask.ApplicationID, ask.AllocationKey)
-	saa.askEvents = newAskEvents(events.GetEventSystem())
 	return saa
 }
 

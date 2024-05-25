@@ -1538,6 +1538,34 @@ func TestFitInScore(t *testing.T) {
 			expected:     0.0,
 			errorMessage: "FitInScore on resource with one quantity failed",
 		},
+		{
+			message:      "Resource with one quantity of negative value",
+			receiver:     NewResourceFromMap(map[string]Quantity{"first": -10}),
+			fit:          NewResourceFromMap(map[string]Quantity{"first": 10}),
+			expected:     1,
+			errorMessage: "FitInScore on resource with one quantity of negative value failed",
+		},
+		{
+			message:      "Resource with multi quantity of negative value",
+			receiver:     NewResourceFromMap(map[string]Quantity{"first": -10, "second": -5}),
+			fit:          NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10}),
+			expected:     2,
+			errorMessage: "FitInScore on resource with multi quantity of negative value failed",
+		},
+		{
+			message:      "Fit quantity more than resource",
+			receiver:     NewResourceFromMap(map[string]Quantity{"first": 10}),
+			fit:          NewResourceFromMap(map[string]Quantity{"first": 20}),
+			expected:     0.5,
+			errorMessage: "FitInScore on fit quantity more than resource failed",
+		},
+		{
+			message:      "Multi fit quantity more than resource",
+			receiver:     NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10}),
+			fit:          NewResourceFromMap(map[string]Quantity{"first": 20, "second": 20}),
+			expected:     1,
+			errorMessage: "FitInScore on multi fit quantity more than resource failed",
+		},
 	}
 
 	for _, tc := range testCases {

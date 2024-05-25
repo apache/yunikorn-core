@@ -19,6 +19,7 @@
 package common
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"strconv"
@@ -34,6 +35,32 @@ import (
 const (
 	testKey = "testKey"
 )
+
+func TestWaitForCondition(t *testing.T) {
+	target := false
+	eval := func() bool {
+		return target
+	}
+	tests := []struct {
+		input    bool
+		interval time.Duration
+		timeout  time.Duration
+		output   error
+	}{
+		{true, time.Duration(1) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(1) * time.Second, time.Duration(2) * time.Second, fmt.Errorf("timeout waiting for condition")},
+		{true, time.Duration(3) * time.Second, time.Duration(2) * time.Second, nil},
+	}
+	for _, test := range tests {
+		target = test.input
+		get := WaitForCondition(eval, test.interval, test.timeout)
+		if test.output == nil {
+			assert.NilError(t, get)
+		} else {
+			assert.Equal(t, get.Error(), test.output.Error())
+		}
+	}
+}
 
 func TestGetNormalizedPartitionName(t *testing.T) {
 	tests := []struct {

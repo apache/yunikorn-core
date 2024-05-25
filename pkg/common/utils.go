@@ -224,6 +224,9 @@ func ZeroTimeInUnixNano(t time.Time) *int64 {
 }
 
 func WaitForCondition(eval func() bool, interval time.Duration, timeout time.Duration) error {
+	if interval > timeout {
+		interval = time.Duration(1)
+	}
 	deadline := time.Now().Add(timeout)
 	for {
 		if eval() {

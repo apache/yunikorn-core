@@ -107,6 +107,15 @@ func TestSortQueues(t *testing.T) {
 	queues = []*Queue{q0, q1, q2, q3}
 	sortQueue(queues, policies.FairSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q1, q2}), "fair third - priority")
+
+	// fairness ratios: q0:400/800=0.5, q1:200/400= 0.5, q2:100/200=0.5, q3:100/200=0.5
+	q0.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 800, "vcore": 400})
+	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 400, "vcore": 200})
+	q1.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 400, "vcore": 300})
+	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 150})
+	queues = []*Queue{q0, q1, q2, q3}
+	sortQueue(queues, policies.FairSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q1, q2}), "fair - pending resource")
 }
 
 // queue guaranteed resource is not set (same as a zero resource)
@@ -209,6 +218,18 @@ func TestSortAppsFifo(t *testing.T) {
 	// fifo - apps should come back in order created 0, 1, 2, 3
 	list = sortApplications(input, policies.FifoSortPolicy, false, nil)
 	assertAppList(t, list, []int{0, 1, 2, 3}, "fifo simple")
+
+	input["app-1"].askMaxPriority = 3
+	input["app-3"].askMaxPriority = 5
+	input["app-2"].SubmissionTime = input["app-3"].SubmissionTime
+	input["app-1"].SubmissionTime = input["app-3"].SubmissionTime
+	list = sortApplications(input, policies.FifoSortPolicy, false, nil)
+	/*
+	* apps order: 0, 3, 1, 2
+	* the result of app index is [0, 2, 3, 1]
+	* app0 with index 0, app1 with index 2, app2 with index 3 and app3 with index 1
+	 */
+	assertAppList(t, list, []int{0, 2, 3, 1}, "fifo first, priority second")
 }
 
 func TestSortAppsPriorityFifo(t *testing.T) {
@@ -276,6 +297,19 @@ func TestSortAppsFair(t *testing.T) {
 	// apps should come back in order: 3, 0, 2, 1
 	list = sortApplications(input, policies.FairSortPolicy, false, resources.Multiply(res, 5))
 	assertAppList(t, list, []int{1, 3, 2, 0}, "app-1 & app-3 allocated")
+
+	// update allocated resource for app-3 & app-1 where priority of app-3 is higher
+	input["app-1"].allocatedResource = resources.Multiply(res, 10)
+	input["app-1"].askMaxPriority = 2
+	input["app-3"].allocatedResource = resources.Multiply(res, 10)
+	input["app-3"].askMaxPriority = 3
+	list = sortApplications(input, policies.FairSortPolicy, false, resources.Multiply(res, 5))
+	/*
+	*  expected apps order: 0, 2, 3, 1 means
+	*  So result of apps indexs is [0, 3, 1, 2]
+	*  app0 in 0, app1 in 3, app2 in 1, app3 in 2:
+	 */
+	assertAppList(t, list, []int{0, 3, 1, 2}, "app-1 & app-3 allocated, app-3 high priority")
 }
 
 func TestSortAppsPriorityFair(t *testing.T) {

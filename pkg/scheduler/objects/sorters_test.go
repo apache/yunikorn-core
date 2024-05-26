@@ -224,7 +224,12 @@ func TestSortAppsFifo(t *testing.T) {
 	input["app-2"].SubmissionTime = input["app-3"].SubmissionTime
 	input["app-1"].SubmissionTime = input["app-3"].SubmissionTime
 	list = sortApplications(input, policies.FifoSortPolicy, false, nil)
-	assertAppList(t, list, []int{0, 2, 3, 1}, "fifo first, priority second") // 0, 3, 1, 2
+	/*
+	* apps order: 0, 3, 1, 2
+	* the result of app index is [0, 2, 3, 1]
+	* app0 with index 0, app1 with index 2, app2 with index 3 and app3 with index 1
+	 */
+	assertAppList(t, list, []int{0, 2, 3, 1}, "fifo first, priority second")
 }
 
 func TestSortAppsPriorityFifo(t *testing.T) {
@@ -299,7 +304,11 @@ func TestSortAppsFair(t *testing.T) {
 	input["app-3"].allocatedResource = resources.Multiply(res, 10)
 	input["app-3"].askMaxPriority = 3
 	list = sortApplications(input, policies.FairSortPolicy, false, resources.Multiply(res, 5))
-	// apps should come back in order: 0, 2, 3, 1
+	/*
+	*  expected apps order: 0, 2, 3, 1 means
+	*  So result of apps indexs is [0, 3, 1, 2]
+	*  app0 in 0, app1 in 3, app2 in 1, app3 in 2:
+	 */
 	assertAppList(t, list, []int{0, 3, 1, 2}, "app-1 & app-3 allocated, app-3 high priority")
 }
 

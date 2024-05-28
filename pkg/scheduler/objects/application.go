@@ -1741,7 +1741,6 @@ func (sa *Application) ReplaceAllocation(allocationKey string) *Allocation {
 	alloc := ph.GetFirstRelease()
 	alloc.SetPlaceholderUsed(true)
 	alloc.SetPlaceholderCreateTime(ph.GetCreateTime())
-	alloc.SetCreateTime(time.Now())
 	alloc.SetBindTime(time.Now())
 	sa.addAllocationInternal(alloc)
 	// order is important: clean up the allocation after adding it to the app

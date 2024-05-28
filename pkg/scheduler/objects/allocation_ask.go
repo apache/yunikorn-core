@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -29,6 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -84,12 +86,23 @@ func NewAllocationAsk(allocationKey string, applicationID string, allocatedResou
 }
 
 func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
+
+	var createTime time.Time
+	siCreationTime, err := strconv.ParseInt(ask.Tags[siCommon.CreationTime], 10, 64)
+	if err != nil {
+		log.Log(log.SchedAllocation).Debug("CreationTime is not set on the AllocationAsk object or invalid",
+			zap.String("creationTime", ask.Tags[siCommon.CreationTime]))
+		createTime = time.Now()
+	} else {
+		createTime = time.Unix(siCreationTime, 0)
+	}
+
 	saa := &AllocationAsk{
 		allocationKey:     ask.AllocationKey,
 		allocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
 		applicationID:     ask.ApplicationID,
 		tags:              CloneAllocationTags(ask.Tags),
-		createTime:        time.Now(),
+		createTime:        createTime,
 		priority:          ask.Priority,
 		placeholder:       ask.Placeholder,
 		taskGroupName:     ask.TaskGroupName,

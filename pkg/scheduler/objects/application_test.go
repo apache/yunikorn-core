@@ -2619,7 +2619,7 @@ func TestUpdateRunnableStatus(t *testing.T) {
 	assert.Assert(t, app.runnableInQueue)
 	assert.Assert(t, app.runnableByUserLimit)
 	eventSystem := mock.NewEventSystem()
-	app.appEvents = newApplicationEvents(app, eventSystem)
+	app.appEvents = newApplicationEvents(eventSystem)
 
 	// App runnable - no events
 	app.updateRunnableStatus(true, true)
@@ -2747,5 +2747,5 @@ func (sa *Application) disableStateChangeEvents() {
 func (sa *Application) resetAppEvents() {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.appEvents = newApplicationEvents(sa, events.GetEventSystem())
+	sa.appEvents = newApplicationEvents(events.GetEventSystem())
 }

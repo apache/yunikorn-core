@@ -63,6 +63,9 @@ func GetPartitionNameWithoutClusterID(partitionName string) string {
 }
 
 func WaitFor(interval time.Duration, timeout time.Duration, condition func() bool) error {
+	if interval > timeout {
+		interval = time.Duration(1)
+	}
 	deadline := time.Now().Add(timeout)
 	for {
 		if time.Now().After(deadline) {

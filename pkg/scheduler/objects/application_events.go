@@ -20,7 +20,6 @@ package objects
 
 import (
 	"fmt"
-
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -28,15 +27,14 @@ import (
 
 type applicationEvents struct {
 	eventSystem events.EventSystem
-	app         *Application
 }
 
 func (evt *applicationEvents) sendPlaceholderLargerEvent(ph *Allocation, request *AllocationAsk) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), evt.app.ApplicationID, request.GetAllocatedResource(), ph.GetAllocatedResource(), ph.GetAllocationKey())
-	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), evt.app.ApplicationID, message, request.GetAllocatedResource())
+	message := fmt.Sprintf("Task group '%s' in application '%s': allocation resources '%s' are not matching placeholder '%s' allocation with ID '%s'", ph.GetTaskGroup(), ph.GetApplicationID(), request.GetAllocatedResource(), ph.GetAllocatedResource(), ph.GetAllocationKey())
+	event := events.CreateRequestEventRecord(ph.GetAllocationKey(), ph.GetApplicationID(), message, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -44,7 +42,7 @@ func (evt *applicationEvents) sendNewAllocationEvent(alloc *Allocation) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
+	event := events.CreateAppEventRecord(alloc.GetApplicationID(), common.Empty, alloc.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_ALLOC, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -52,7 +50,7 @@ func (evt *applicationEvents) sendNewAskEvent(request *AllocationAsk) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, request.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_REQUEST, request.GetAllocatedResource())
+	event := events.CreateAppEventRecord(request.GetApplicationID(), common.Empty, request.GetAllocationKey(), si.EventRecord_ADD, si.EventRecord_APP_REQUEST, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -75,7 +73,7 @@ func (evt *applicationEvents) sendRemoveAllocationEvent(alloc *Allocation, termi
 		eventChangeDetail = si.EventRecord_ALLOC_REPLACED
 	}
 
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, alloc.GetAllocationKey(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
+	event := events.CreateAppEventRecord(alloc.GetApplicationID(), common.Empty, alloc.GetAllocationKey(), si.EventRecord_REMOVE, eventChangeDetail, alloc.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
@@ -83,69 +81,68 @@ func (evt *applicationEvents) sendRemoveAskEvent(request *AllocationAsk, detail 
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, request.GetAllocationKey(), si.EventRecord_REMOVE, detail, request.GetAllocatedResource())
+	event := events.CreateAppEventRecord(request.GetApplicationID(), common.Empty, request.GetAllocationKey(), si.EventRecord_REMOVE, detail, request.GetAllocatedResource())
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendNewApplicationEvent() {
+func (evt *applicationEvents) sendNewApplicationEvent(appID string) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_ADD, si.EventRecord_APP_NEW, evt.app.allocatedResource)
+	event := events.CreateAppEventRecord(appID, common.Empty, common.Empty, si.EventRecord_ADD, si.EventRecord_APP_NEW, nil)
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendRemoveApplicationEvent() {
+func (evt *applicationEvents) sendRemoveApplicationEvent(appID string) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, evt.app.allocatedResource)
+	event := events.CreateAppEventRecord(appID, common.Empty, common.Empty, si.EventRecord_REMOVE, si.EventRecord_DETAILS_NONE, nil)
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendStateChangeEvent(changeDetail si.EventRecord_ChangeDetail, eventInfo string) {
-	if !evt.eventSystem.IsEventTrackingEnabled() || !evt.app.sendStateChangeEvents {
-		return
-	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, eventInfo, common.Empty, si.EventRecord_SET, changeDetail, evt.app.allocatedResource)
-	evt.eventSystem.AddEvent(event)
-}
-
-func (evt *applicationEvents) sendAppNotRunnableInQueueEvent() {
+func (evt *applicationEvents) sendStateChangeEvent(appID string, changeDetail si.EventRecord_ChangeDetail, eventInfo string) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_CANNOTRUN_QUEUE, nil)
+	event := events.CreateAppEventRecord(appID, eventInfo, common.Empty, si.EventRecord_SET, changeDetail, nil)
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendAppRunnableInQueueEvent() {
+func (evt *applicationEvents) sendAppNotRunnableInQueueEvent(appID string) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_RUNNABLE_QUEUE, nil)
+	event := events.CreateAppEventRecord(appID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_CANNOTRUN_QUEUE, nil)
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendAppNotRunnableQuotaEvent() {
+func (evt *applicationEvents) sendAppRunnableInQueueEvent(appID string) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_CANNOTRUN_QUOTA, nil)
+	event := events.CreateAppEventRecord(appID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_RUNNABLE_QUEUE, nil)
 	evt.eventSystem.AddEvent(event)
 }
 
-func (evt *applicationEvents) sendAppRunnableQuotaEvent() {
+func (evt *applicationEvents) sendAppNotRunnableQuotaEvent(appID string) {
 	if !evt.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateAppEventRecord(evt.app.ApplicationID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_RUNNABLE_QUOTA, nil)
+	event := events.CreateAppEventRecord(appID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_CANNOTRUN_QUOTA, nil)
 	evt.eventSystem.AddEvent(event)
 }
 
-func newApplicationEvents(app *Application, evt events.EventSystem) *applicationEvents {
+func (evt *applicationEvents) sendAppRunnableQuotaEvent(appID string) {
+	if !evt.eventSystem.IsEventTrackingEnabled() {
+		return
+	}
+	event := events.CreateAppEventRecord(appID, common.Empty, common.Empty, si.EventRecord_NONE, si.EventRecord_APP_RUNNABLE_QUOTA, nil)
+	evt.eventSystem.AddEvent(event)
+}
+
+func newApplicationEvents(evt events.EventSystem) *applicationEvents {
 	return &applicationEvents{
 		eventSystem: evt,
-		app:         app,
 	}
 }

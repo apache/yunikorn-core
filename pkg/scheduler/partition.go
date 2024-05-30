@@ -320,8 +320,9 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	queue := pc.getQueueInternal(queueName)
 
 	// create the queue if necessary
+	isRecoveryQueue := common.IsRecoveryQueue(queueName)
 	if queue == nil {
-		if common.IsRecoveryQueue(queueName) {
+		if isRecoveryQueue {
 			queue, err = pc.createRecoveryQueue()
 			if err != nil {
 				return fmt.Errorf("failed to create recovery queue %s for application %s", common.RecoveryQueueFull, appID)
@@ -341,7 +342,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 
 	guaranteedRes := app.GetGuaranteedResource()
 	maxRes := app.GetMaxResource()
-	if guaranteedRes != nil || maxRes != nil {
+	if !isRecoveryQueue && (guaranteedRes != nil || maxRes != nil) {
 		// set resources based on tags, but only if the queue is dynamic (unmanaged)
 		if queue.IsManaged() {
 			log.Log(log.SchedQueue).Warn("Trying to set resources on a queue that is not an unmanaged leaf",

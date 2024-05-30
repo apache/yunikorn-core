@@ -964,6 +964,22 @@ func TestAddAppForced(t *testing.T) {
 	assert.Equal(t, common.RecoveryQueueFull, partApp3.GetQueuePath(), "wrong queue path for app3")
 	assert.Check(t, recoveryQueue == partApp3.GetQueue(), "wrong queue for app3")
 	assert.Equal(t, 3, len(recoveryQueue.GetCopyOfApps()), "wrong queue length")
+
+	// add recovered forced apps with resource tags
+	app4 := newApplicationTags("app-4", "default", common.RecoveryQueueFull, map[string]string{
+		siCommon.AppTagCreateForce:                 "true",
+		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"vcore\":{\"value\":111}}}"})
+	err = partition.AddApplication(app4)
+	assert.NilError(t, err, "app4 could not be added")
+	assert.Assert(t, recoveryQueue.GetGuaranteedResource() == nil, "guaranteed resource should be unset")
+	assert.Assert(t, recoveryQueue.GetMaxResource() == nil, "max resource should be unset")
+	app5 := newApplicationTags("app-5", "default", common.RecoveryQueueFull, map[string]string{
+		siCommon.AppTagCreateForce:            "true",
+		siCommon.AppTagNamespaceResourceQuota: "{\"resources\":{\"vcore\":{\"value\":111}}}"})
+	err = partition.AddApplication(app5)
+	assert.NilError(t, err, "app5 could not be added")
+	assert.Assert(t, recoveryQueue.GetGuaranteedResource() == nil, "guaranteed resource should be unset")
+	assert.Assert(t, recoveryQueue.GetMaxResource() == nil, "max resource should be unset")
 }
 
 func TestAddAppForcedWithPlacement(t *testing.T) {

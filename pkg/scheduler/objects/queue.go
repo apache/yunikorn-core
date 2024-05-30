@@ -729,6 +729,11 @@ func (sq *Queue) AddApplication(app *Application) {
 	appID := app.ApplicationID
 	sq.applications[appID] = app
 	sq.queueEvents.sendNewApplicationEvent(sq.QueuePath, appID)
+	if common.IsRecoveryQueue(sq.QueuePath) {
+		// don't set tag-based resources on the recovery queue
+		return
+	}
+
 	// YUNIKORN-199: update the quota from the namespace
 	// get the tag with the quota
 	quota := app.GetTag(siCommon.AppTagNamespaceResourceQuota)

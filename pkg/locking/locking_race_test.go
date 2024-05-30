@@ -22,7 +22,6 @@
 package locking
 
 import (
-	"sync"
 	"testing"
 	"time"
 
@@ -47,7 +46,7 @@ func TestDeadlockDetection(t *testing.T) {
 
 // TestLockOrderDetection
 // lock order detection looks at the ordering of the same mutexes in different go routines
-// if the order changes for two different go routines then that could be a potential deadlock
+// if the order changes (for two different go routines) then that could be a potential deadlock
 // this case happens in preemption when looking for victims when queues hover around guaranteed
 func TestLockOrderDetection(t *testing.T) {
 	var tests = []struct {
@@ -63,26 +62,20 @@ func TestLockOrderDetection(t *testing.T) {
 			deadlockDetected.Store(false)
 			defer disableTracking()
 
-			var wg sync.WaitGroup
-			wg.Add(1)
 			var a, b RWMutex
-			go func() { // lock ordering: a, b, b, a
-				defer wg.Done()
-				a.Lock()
-				b.RLock()
-				b.RUnlock()
-				a.Unlock()
-			}()
-			wg.Wait()
-			wg.Add(1)
-			go func() { // lock ordering: b, a, a, b
-				defer wg.Done()
-				b.Lock()
-				a.RLock()
-				a.RUnlock()
-				b.Unlock()
-			}()
-			wg.Wait()
+			// lock ordering: a, b, b, a
+			a.Lock()
+			b.RLock()
+			b.RUnlock()
+			a.Unlock()
+
+			// lock ordering: b, a, a, b
+			b.Lock()
+			a.RLock()
+			a.RUnlock()
+			b.Unlock()
+
+			// detection is based on the tracking order enabled or not
 			assert.Assert(t, IsDeadlockDetected() == tt.disable, "Deadlock detected not as expected")
 		})
 	}

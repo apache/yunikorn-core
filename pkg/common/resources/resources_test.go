@@ -1205,6 +1205,110 @@ func TestGetShares(t *testing.T) {
 	}
 }
 
+func TestCompUsageRatio(t *testing.T) {
+	tests := []struct {
+		left     *Resource
+		right    *Resource
+		total    *Resource
+		expected int
+		message  string
+	}{
+		{
+			left:     nil,
+			right:    nil,
+			total:    nil,
+			expected: 0,
+			message:  "nil resources",
+		},
+		{
+			left:     NewResource(),
+			right:    NewResource(),
+			total:    nil,
+			expected: 0,
+			message:  "empty resource with total nil",
+		},
+		{
+			left:     NewResource(),
+			right:    NewResource(),
+			total:    NewResource(),
+			expected: 0,
+			message:  "empty resources",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"zero": 0}),
+			right:    NewResourceFromMap(map[string]Quantity{"zero": 0}),
+			total:    nil,
+			expected: 0,
+			message:  "zero valued resource",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}),
+			right:    NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}),
+			total:    nil,
+			expected: 0,
+			message:  "negative valued resource",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"zero": 0}),
+			right:    NewResourceFromMap(map[string]Quantity{"zero": 0}),
+			total:    NewResource(),
+			expected: 0,
+			message:  "zero valued resource with total",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}),
+			right:    NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}),
+			total:    NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}),
+			expected: 0,
+			message:  "same resource and total",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}),
+			right:    NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0}),
+			total:    NewResourceFromMap(map[string]Quantity{"large": 10, "zero": 10}),
+			expected: -1,
+			message:  "left side has more one negative value",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0}),
+			right:    NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}),
+			total:    NewResourceFromMap(map[string]Quantity{"large": 10, "zero": 10}),
+			expected: 1,
+			message:  "right side has more one negative value",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}),
+			right:    NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10}),
+			total:    NewResourceFromMap(map[string]Quantity{"first": 15}),
+			expected: -1,
+			message:  "left side first one bigger, last one smaller",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10}),
+			right:    NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}),
+			total:    NewResourceFromMap(map[string]Quantity{"first": 15}),
+			expected: 1,
+			message:  "left side first one smaller, last one bigger",
+		},
+		{
+			left:     NewResourceFromMap(map[string]Quantity{"second": 10, "first": 5}),
+			right:    NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}),
+			total:    NewResourceFromMap(map[string]Quantity{}),
+			expected: 0,
+			message:  "left side key order not same as right side",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			ratio := CompUsageRatio(tc.left, tc.right, tc.total)
+			if ratio != tc.expected {
+				t.Errorf("incorrect ratio for %s, expected %v got: %v", tc.message, tc.expected, ratio)
+			}
+		})
+	}
+}
+
 func TestCompareShares(t *testing.T) {
 	tests := []struct {
 		left     []float64
@@ -1641,6 +1745,11 @@ func TestCalculateAbsUsedCapacity(t *testing.T) {
 			capacity: NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
 			used:     NewResourceFromMap(map[string]Quantity{"memory": math.MaxInt64}),
 			expected: NewResourceFromMap(map[string]Quantity{"memory": 100}),
+		},
+		"multiple resources not in used": {
+			capacity: NewResourceFromMap(map[string]Quantity{"memory": 1024, "vcores": 2, "gpu": 1}),
+			used:     NewResourceFromMap(map[string]Quantity{"memory": 512}),
+			expected: NewResourceFromMap(map[string]Quantity{"memory": 50}),
 		},
 	}
 	for name, test := range tests {

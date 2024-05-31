@@ -719,6 +719,44 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, resources.Zero), true)
 }
 
+func TestIncreaseTrackedResourceForGroupTracker(t *testing.T) {
+	setupUGM()
+	// Queue setup:
+	// root->parent
+	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
+	conf := createConfigWithoutLimits()
+	conf.Queues[0].Queues[0].Limits = []configs.Limit{
+		{
+			Limit:           "parent queue limit for a specific group",
+			Groups:          user.Groups,
+			MaxResources:    map[string]string{"memory": "100"},
+			MaxApplications: 2,
+		},
+	}
+	manager := GetUserManager()
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+
+	usage1, err := resources.NewResourceFromConf(map[string]string{"memory": "50"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
+	}
+
+	manager.IncreaseTrackedResource("root.parent", TestApp1, usage1, user)
+	groupTracker := m.GetGroupTracker(user.Groups[0])
+	assert.Equal(t, groupTracker != nil, true)
+	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], true)
+	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, usage1), true)
+
+	usage2, err := resources.NewResourceFromConf(map[string]string{"memory": "30"})
+	if err != nil {
+		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
+	}
+
+	manager.IncreaseTrackedResource("root.parent", TestApp2, usage2, user)
+	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp2], true)
+	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, resources.Add(usage1, usage2)), true)
+}
+
 func TestUserGroupLimitWithMultipleApps(t *testing.T) {
 	// Increase app rsources to different child queue, which have different group linkage
 	// Queue setup:

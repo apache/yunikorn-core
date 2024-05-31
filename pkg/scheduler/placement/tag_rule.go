@@ -20,6 +20,7 @@ package placement
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // A rule to place an application based on the a tag on the application.
@@ -41,6 +43,22 @@ type tagRule struct {
 
 func (tr *tagRule) getName() string {
 	return types.Tag
+}
+
+func (tr *tagRule) ruleDAO() *dao.RuleDAO {
+	var pDAO *dao.RuleDAO
+	if tr.parent != nil {
+		pDAO = tr.parent.ruleDAO()
+	}
+	return &dao.RuleDAO{
+		Name: tr.getName(),
+		Parameters: map[string]string{
+			"tagName": tr.tagName,
+			"create":  strconv.FormatBool(tr.create),
+		},
+		ParentRule: pDAO,
+		Filter:     tr.filter.filterDAO(),
+	}
 }
 
 func (tr *tagRule) initialise(conf configs.PlacementRule) error {

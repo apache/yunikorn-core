@@ -26,6 +26,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
@@ -74,4 +75,12 @@ partitions:
 	if queue != common.RecoveryQueueFull || err != nil {
 		t.Errorf("recovery rule did not place forced application into recovery queue, resolved queue '%s', err %v ", queue, err)
 	}
+}
+
+func Test_recoveryRule_ruleDAO(t *testing.T) {
+	// nothing should be set as everything is ignored by the rule
+	rrDAO := &dao.RuleDAO{Name: "recovery", Parameters: map[string]string{"queue": common.RecoveryQueueFull}}
+	rr := &recoveryRule{}
+	ruleDAO := rr.ruleDAO()
+	assert.DeepEqual(t, rrDAO, ruleDAO)
 }

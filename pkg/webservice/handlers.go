@@ -836,6 +836,25 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func getPartitionRules(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+	rulesDao := partitionContext.GetPlacementRules()
+	if err := json.NewEncoder(w).Encode(rulesDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
 func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
 	result := make([]*dao.PartitionInfo, 0, len(lists))
 
@@ -937,6 +956,19 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 		for _, app := range appList {
 			result = append(result, getApplicationDAO(app))
 		}
+	}
+
+	return result
+}
+
+func getPlacementRulesDAO(lists map[string]*scheduler.PartitionContext) []*dao.RuleDAOInfo {
+	result := make([]*dao.RuleDAOInfo, 0, len(lists))
+
+	for _, partition := range lists {
+		result = append(result, &dao.RuleDAOInfo{
+			Partition: common.GetPartitionNameWithoutClusterID(partition.Name),
+			Rules:     partition.GetPlacementRules(),
+		})
 	}
 
 	return result

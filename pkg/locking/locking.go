@@ -31,16 +31,22 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
-const EnvDeadlockDetectionEnabled = "DEADLOCK_DETECTION_ENABLED"
-const EnvDeadlockTimeoutSeconds = "DEADLOCK_TIMEOUT_SECONDS"
-const EnvExitOnDeadlock = "DEADLOCK_EXIT"
+const (
+	EnvDeadlockDetectionEnabled = "DEADLOCK_DETECTION_ENABLED"
+	EnvDeadlockTimeoutSeconds   = "DEADLOCK_TIMEOUT_SECONDS"
+	EnvExitOnDeadlock           = "DEADLOCK_EXIT"
+	EnvDisableLockOrder         = "DEADLOCK_DISABLE_LOCK_ORDER"
+)
 
-var once sync.Once
-var trackingEnabled atomic.Bool
-var timeoutSeconds atomic.Int32
-var deadlockDetected atomic.Bool
-var testingMode atomic.Bool
-var exitOnDeadlock bool
+var (
+	once               sync.Once
+	trackingEnabled    atomic.Bool
+	timeoutSeconds     atomic.Int32
+	deadlockDetected   atomic.Bool
+	testingMode        atomic.Bool
+	exitOnDeadlock     atomic.Bool
+	disableOrderDetect atomic.Bool
+)
 
 type errorBuf struct {
 	data string
@@ -68,31 +74,45 @@ func reInit() {
 	}
 	trackingEnabled.Store(enabled)
 
-	timeoutSec, err := strconv.ParseInt(os.Getenv(EnvDeadlockTimeoutSeconds), 10, 32)
+	var timeoutSec int64
+	timeoutSec, err = strconv.ParseInt(os.Getenv(EnvDeadlockTimeoutSeconds), 10, 32)
 	if err != nil {
 		timeoutSec = 60
 	}
 	timeoutSeconds.Store(int32(timeoutSec))
+
+	var disableOrder bool
+	disableOrder, err = strconv.ParseBool(os.Getenv(EnvDisableLockOrder))
+	if err != nil {
+		disableOrder = false
+	}
+	disableOrderDetect.Store(disableOrder)
+
+	var exitOnDetect bool
+	exitOnDetect, err = strconv.ParseBool(os.Getenv(EnvExitOnDeadlock))
+	if err != nil {
+		exitOnDetect = false
+	}
+	exitOnDeadlock.Store(exitOnDetect)
+
+	// set deadlock detection options
 	godeadlock.Opts.Disable = !enabled
 	godeadlock.Opts.DeadlockTimeout = time.Duration(timeoutSec) * time.Second
 	godeadlock.Opts.LogBuf = &errorBuf{}
 	godeadlock.Opts.OnPotentialDeadlock = onPotentialDeadlock
-	if exitEnv, err := strconv.ParseBool(os.Getenv(EnvExitOnDeadlock)); err != nil {
-		exitOnDeadlock = false
-	} else {
-		exitOnDeadlock = exitEnv
-	}
+	godeadlock.Opts.DisableLockOrderDetection = disableOrder
 
 	if enabled {
-		//  We want to ensure that we write this before any other subsystem is initialized, including logging which may also use locks.
-		fmt.Fprintf(os.Stderr, "=== Deadlock detection enabled (timeout: %d seconds, exit on deadlock: %v) ===\n", timeoutSec, exitOnDeadlock)
+		// We want to ensure that we write this before any other subsystem is initialized, including logging which may also use locks.
+		// no way to handle errors just ignore
+		_, _ = fmt.Fprintf(os.Stderr, "=== Deadlock detection enabled (timeout: %d seconds, exit on deadlock: %t, locking order disabled: %t) ===\n", timeoutSec, exitOnDetect, disableOrder)
 	}
 }
 
 func onPotentialDeadlock() {
 	deadlockDetected.Store(true)
 	printBufContents()
-	if exitOnDeadlock && !testingMode.Load() {
+	if exitOnDeadlock.Load() && !testingMode.Load() {
 		os.Exit(1)
 	}
 }
@@ -107,10 +127,6 @@ func printBufContents() {
 		log.Log(log.Diagnostics).Error(buf.data)
 	}
 	buf.data = ""
-}
-
-func SetTrackingEnabled(enabled bool) {
-	trackingEnabled.Store(enabled)
 }
 
 func IsTrackingEnabled() bool {

@@ -481,14 +481,19 @@ func (pc *PartitionContext) getQueueInternal(name string) *objects.Queue {
 	return queue
 }
 
-// Get the queue info for the whole queue structure to pass to the webservice
+// GetPartitionQueues builds the queue info for the whole queue structure to pass to the webservice
 func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	partitionQueueDAOInfo := pc.root.GetPartitionQueueDAOInfo(true)
 	partitionQueueDAOInfo.Partition = common.GetPartitionNameWithoutClusterID(pc.Name)
 	return partitionQueueDAOInfo
 }
 
-// Create the recovery queue.
+// GetPlacementRules returns the current active rule set as dao to expose to the webservice
+func (pc *PartitionContext) GetPlacementRules() []*dao.RuleDAO {
+	return pc.getPlacementManager().GetRulesDAO()
+}
+
+// createRecoveryQueue creates the recovery queue to add to the hierarchy
 func (pc *PartitionContext) createRecoveryQueue() (*objects.Queue, error) {
 	return objects.NewRecoveryQueue(pc.root)
 }

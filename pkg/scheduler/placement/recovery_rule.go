@@ -26,6 +26,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // A rule to place an application into the recovery queue if no other rules matched and application submission is forced.
@@ -37,6 +38,15 @@ type recoveryRule struct {
 
 func (rr *recoveryRule) getName() string {
 	return types.Recovery
+}
+
+func (rr *recoveryRule) ruleDAO() *dao.RuleDAO {
+	return &dao.RuleDAO{
+		Name: rr.getName(),
+		Parameters: map[string]string{
+			"queue": common.RecoveryQueueFull,
+		},
+	}
 }
 
 func (rr *recoveryRule) initialise(_ configs.PlacementRule) error {

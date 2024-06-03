@@ -49,6 +49,7 @@ type AggregatedStateInfo struct {
 	RMDiagnostics    map[string]interface{}           `json:"rmDiagnostics,omitempty"`
 	LogLevel         string                           `json:"logLevel,omitempty"`
 	Config           *dao.ConfigDAOInfo               `json:"config,omitempty"`
+	PlacementRules   []*dao.RuleDAOInfo               `json:"placementRules,omitempty"`
 	EventStreams     []events.EventStreamData         `json:"eventStreams,omitempty"`
 }
 
@@ -79,6 +80,7 @@ func doStateDump(w io.Writer) error {
 		RMDiagnostics:    getResourceManagerDiagnostics(),
 		LogLevel:         zapConfig.Level.Level().String(),
 		Config:           getClusterConfigDAO(),
+		PlacementRules:   getPlacementRulesDAO(partitionContext),
 		EventStreams:     events.GetEventSystem().GetEventStreams(),
 	}
 

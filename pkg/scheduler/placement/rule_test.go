@@ -52,6 +52,15 @@ func TestNewRule(t *testing.T) {
 	if err != nil || nr == nil {
 		t.Errorf("new normalised newRule build failed which should not, newRule 'nil' , err: %v, ", err)
 	}
+
+	// test deny recovery rule name
+	conf = configs.PlacementRule{
+		Name: "recovery",
+	}
+	nr, err = newRule(conf)
+	if err == nil || nr != nil {
+		t.Errorf("new newRule did not fail with recovery rule name, err 'nil' , newRule: %v, ", nr)
+	}
 }
 
 // Test for a basic test rule.

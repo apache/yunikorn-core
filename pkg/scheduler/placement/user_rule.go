@@ -20,6 +20,7 @@ package placement
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // A rule to place an application based on the user name of the submitting user.
@@ -37,6 +39,21 @@ type userRule struct {
 
 func (ur *userRule) getName() string {
 	return types.User
+}
+
+func (ur *userRule) ruleDAO() *dao.RuleDAO {
+	var pDAO *dao.RuleDAO
+	if ur.parent != nil {
+		pDAO = ur.parent.ruleDAO()
+	}
+	return &dao.RuleDAO{
+		Name: ur.getName(),
+		Parameters: map[string]string{
+			"create": strconv.FormatBool(ur.create),
+		},
+		ParentRule: pDAO,
+		Filter:     ur.filter.filterDAO(),
+	}
 }
 
 func (ur *userRule) initialise(conf configs.PlacementRule) error {

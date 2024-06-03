@@ -158,7 +158,9 @@ func NewAppState() *fsm.FSM {
 						zap.String("state", event.Dst))
 					return
 				}
-				app.appEvents.sendStateChangeEvent(eventDetails, eventInfo)
+				if app.sendStateChangeEvents {
+					app.appEvents.sendStateChangeEvent(app.ApplicationID, eventDetails, eventInfo)
+				}
 			},
 			"leave_state": func(_ context.Context, event *fsm.Event) {
 				event.Args[0].(*Application).clearStateTimer() //nolint:errcheck

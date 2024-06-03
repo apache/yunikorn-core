@@ -187,8 +187,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
-	app.appEvents = newApplicationEvents(app, events.GetEventSystem())
-	app.appEvents.sendNewApplicationEvent()
+	app.appEvents = newApplicationEvents(events.GetEventSystem())
+	app.appEvents.sendNewApplicationEvent(app.ApplicationID)
 	return app
 }
 
@@ -2106,12 +2106,12 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 			log.Log(log.SchedApplication).Info("Application is now runnable in queue",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("queue", sa.queuePath))
-			sa.appEvents.sendAppRunnableInQueueEvent()
+			sa.appEvents.sendAppRunnableInQueueEvent(sa.ApplicationID)
 		} else {
 			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the queue limit",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("queue", sa.queuePath))
-			sa.appEvents.sendAppNotRunnableInQueueEvent()
+			sa.appEvents.sendAppNotRunnableInQueueEvent(sa.ApplicationID)
 		}
 	}
 	sa.runnableInQueue = runnableInQueue
@@ -2123,14 +2123,14 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 				zap.String("queue", sa.queuePath),
 				zap.String("user", sa.user.User),
 				zap.Strings("groups", sa.user.Groups))
-			sa.appEvents.sendAppRunnableQuotaEvent()
+			sa.appEvents.sendAppRunnableQuotaEvent(sa.ApplicationID)
 		} else {
 			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the user/group limit",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("queue", sa.queuePath),
 				zap.String("user", sa.user.User),
 				zap.Strings("groups", sa.user.Groups))
-			sa.appEvents.sendAppNotRunnableQuotaEvent()
+			sa.appEvents.sendAppNotRunnableQuotaEvent(sa.ApplicationID)
 		}
 	}
 	sa.runnableByUserLimit = runnableByUserLimit

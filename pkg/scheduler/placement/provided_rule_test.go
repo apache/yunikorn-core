@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 func TestProvidedRulePlace(t *testing.T) {
@@ -205,5 +206,37 @@ func TestProvidedRuleParent(t *testing.T) {
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+}
+
+func Test_providedRule_ruleDAO(t *testing.T) {
+	tests := []struct {
+		name string
+		conf configs.PlacementRule
+		want *dao.RuleDAO
+	}{
+		{
+			"base",
+			configs.PlacementRule{Name: "provided"},
+			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{"create": "false"}},
+		},
+		{
+			"parent",
+			configs.PlacementRule{Name: "provided", Create: true, Parent: &configs.PlacementRule{Name: "test", Create: true}},
+			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{"create": "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{"create": "true"}}},
+		},
+		{
+			"filter",
+			configs.PlacementRule{Name: "provided", Create: false, Filter: configs.Filter{Type: filterDeny, Users: []string{"john*"}}},
+			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{"create": "false"}, Filter: &dao.FilterDAO{Type: filterDeny, UserExp: "john*"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ur, err := newRule(tt.conf)
+			assert.NilError(t, err, "setting up the rule failed")
+			ruleDAO := ur.ruleDAO()
+			assert.DeepEqual(t, tt.want, ruleDAO)
+		})
 	}
 }

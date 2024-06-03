@@ -19,6 +19,7 @@
 package configs
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -319,6 +320,139 @@ func TestCheckQueueHierarchyForPlacement(t *testing.T) {
 	result, queueName = checkQueueHierarchyForPlacement(parts, false, true, queues, nil)
 	assert.Equal(t, placementOK, result)
 	assert.Equal(t, "", queueName)
+}
+
+//nolint:funlen
+func TestCheckPlacementRule(t *testing.T) {
+	getInvalidRuleNameError := func(name string) error {
+		return fmt.Errorf("invalid rule name %s, a name must be a valid identifier", name)
+	}
+
+	tests := []struct {
+		rule     PlacementRule
+		expected error
+		message  string
+	}{
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+			},
+			expected: nil,
+			message:  "valid rule name with a-z",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "_fixed",
+				Value: "root.default.leaf",
+			},
+			expected: nil,
+			message:  "valid rule name start with underscore",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "#fixed",
+				Value: "root.default.leaf",
+			},
+			expected: getInvalidRuleNameError("#fixed"),
+			message:  "invalid rule name contain pound sign",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "1234",
+				Value: "root.default.leaf",
+			},
+			expected: getInvalidRuleNameError("1234"),
+			message:  "invalid rule name with number",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Parent: &PlacementRule{
+					Name:  "fixed",
+					Value: "root.default",
+				},
+			},
+			expected: nil,
+			message:  "valid parent's rule name with a-z",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Parent: &PlacementRule{
+					Name:  "@fixed",
+					Value: "root.default",
+				},
+			},
+			expected: getInvalidRuleNameError("@fixed"),
+			message:  "invalid parent's rule name with commercial at",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Parent: &PlacementRule{
+					Name:  "fixed",
+					Value: "root.default",
+					Parent: &PlacementRule{
+						Name:  "@fixed",
+						Value: "root",
+					},
+				},
+			},
+			expected: getInvalidRuleNameError("@fixed"),
+			message:  "invalid nested parent's rule name with commercial at",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Filter: Filter{
+					Users:  []string{"username"},
+					Groups: []string{},
+				},
+			},
+			expected: nil,
+			message:  "valid rule name and filter",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Filter: Filter{
+					Users:  []string{""},
+					Groups: []string{"ok"},
+				},
+			},
+			expected: fmt.Errorf("invalid rule filter user list"),
+			message:  "invalid rule filter user list",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Filter: Filter{
+					Users:  []string{"ok"},
+					Groups: []string{"groupname "},
+				},
+			},
+			expected: fmt.Errorf("invalid rule filter group list"),
+			message:  "invalid rule filter group list",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			err := checkPlacementRule(tc.rule)
+			if err == nil {
+				assert.NilError(t, tc.expected, tc.message)
+			} else {
+				assert.ErrorContains(t, err, tc.expected.Error(), tc.message)
+			}
+		})
+	}
 }
 
 func TestCheckPlacementRules(t *testing.T) {
@@ -1143,6 +1277,50 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 			},
 			errMsg: "is greater than immediate or ancestor parent maximum resource",
 		},
+		{
+			name: "overflow vcore of limit resources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{"*": {"vcore": "1000P"}},
+					map[string]map[string]string{}),
+				Queues: []QueueConfig{},
+			},
+			errMsg: "overflow",
+		},
+		{
+			name: "invalid vcore of limit resources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{"*": {"vcore": "-1"}},
+					map[string]map[string]string{}),
+				Queues: []QueueConfig{},
+			},
+			errMsg: "invalid",
+		},
+		{
+			name: "overflow quantity of limit resources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{"*": {"memory": "1000E"}},
+					map[string]map[string]string{}),
+				Queues: []QueueConfig{},
+			},
+			errMsg: "overflow",
+		},
+		{
+			name: "invalid quantity of limit resources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{"*": {"memory": "500m"}},
+					map[string]map[string]string{}),
+				Queues: []QueueConfig{},
+			},
+			errMsg: "invalid",
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -1811,6 +1989,20 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 				},
 			},
 			errMsg: "should not specify only one group limit that is using the wildcard.",
+		},
+		{
+			name: "both user list and group list in limits are empty",
+			config: QueueConfig{
+				Name:      "parent",
+				Resources: Resources{},
+				Limits: []Limit{
+					{
+						Users:  []string{},
+						Groups: []string{},
+					},
+				},
+			},
+			errMsg: "empty user and group lists defined in limit",
 		},
 	}
 

@@ -408,15 +408,14 @@ partitions:
 
 	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 300000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.Memory, 300000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.CPU, 10000, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[common.Memory]), int64(300000000))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[common.CPU]), int64(10000))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(300000000))
 	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "300M", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
-		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
-	}
 	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
 	}
@@ -440,11 +439,10 @@ partitions:
 	})
 	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 100000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.Memory, 100000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.CPU, 20000, 1000)
 	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "100M", "vcore": "20"})
 	assert.NilError(t, err, "failed to create resource")
-	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
-		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
-	}
 	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
 	}

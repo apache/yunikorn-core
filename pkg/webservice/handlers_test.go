@@ -2064,6 +2064,11 @@ func TestGetEvents(t *testing.T) {
 	checkIllegalBatchRequest(t, "count=0", `0 is not a valid value for "count`)
 	checkIllegalBatchRequest(t, "start=xyz", `strconv.ParseUint: parsing "xyz": invalid syntax`)
 	checkIllegalBatchRequest(t, "start=-100", `strconv.ParseUint: parsing "-100": invalid syntax`)
+
+	// "count" too high
+	maxRESTResponseSize.Store(1)
+	defer maxRESTResponseSize.Store(configs.DefaultRESTResponseSize)
+	checkSingleEvent(t, appEvent, "count=3")
 }
 
 func TestGetEventsWhenTrackingDisabled(t *testing.T) {
@@ -2679,6 +2684,34 @@ func TestGetPartitionRuleHandler(t *testing.T) {
 	assert.Equal(t, partitionRules[1].ParentRule.Name, types.Fixed)
 	assert.Equal(t, partitionRules[2].Name, types.Fixed)
 	assert.Equal(t, partitionRules[3].Name, types.Recovery)
+}
+
+func TestSetMaxRESTResponseSize(t *testing.T) {
+	current := configs.GetConfigMap()
+	defer configs.SetConfigMap(current)
+
+	configs.SetConfigMap(map[string]string{
+		configs.CMRESTResponseSize: "1234",
+	})
+	assert.Equal(t, uint64(1234), maxRESTResponseSize.Load())
+
+	configs.SetConfigMap(map[string]string{})
+	assert.Equal(t, uint64(10000), maxRESTResponseSize.Load())
+
+	configs.SetConfigMap(map[string]string{
+		configs.CMRESTResponseSize: "xyz",
+	})
+	assert.Equal(t, uint64(10000), maxRESTResponseSize.Load())
+
+	configs.SetConfigMap(map[string]string{
+		configs.CMRESTResponseSize: "0",
+	})
+	assert.Equal(t, uint64(10000), maxRESTResponseSize.Load())
+
+	configs.SetConfigMap(map[string]string{
+		configs.CMRESTResponseSize: "-1",
+	})
+	assert.Equal(t, uint64(10000), maxRESTResponseSize.Load())
 }
 
 type ResponseRecorderWithDeadline struct {

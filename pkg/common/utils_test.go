@@ -19,7 +19,6 @@
 package common
 
 import (
-	"fmt"
 	"math"
 	"os"
 	"strconv"
@@ -235,7 +234,7 @@ func TestConvertSITimestamp(t *testing.T) {
 	assert.Equal(t, result, time.Time{})
 }
 
-func TestWaitFor(t *testing.T) {
+func TestWaitForCondition(t *testing.T) {
 	target := false
 	eval := func() bool {
 		return target
@@ -247,12 +246,11 @@ func TestWaitFor(t *testing.T) {
 		output   error
 	}{
 		{true, time.Duration(1) * time.Second, time.Duration(2) * time.Second, nil},
-		{false, time.Duration(1) * time.Second, time.Duration(2) * time.Second, fmt.Errorf("timeout waiting for condition")},
-		{true, time.Duration(3) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(1) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
 	}
 	for _, test := range tests {
 		target = test.input
-		get := WaitFor(test.interval, test.timeout, eval)
+		get := WaitForCondition(test.interval, test.timeout, eval)
 		if test.output == nil {
 			assert.NilError(t, get)
 		} else {

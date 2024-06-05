@@ -2459,7 +2459,7 @@ func TestQueueEvents(t *testing.T) {
 	queue.AddApplication(app)
 	queue.RemoveApplication(app)
 	noEvents := uint64(0)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 5
 	})
@@ -2488,7 +2488,7 @@ func TestQueueEvents(t *testing.T) {
 	}
 	err = queue.ApplyConf(newConf)
 	assert.NilError(t, err)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3
 	})

@@ -62,23 +62,6 @@ func GetPartitionNameWithoutClusterID(partitionName string) string {
 	return partitionName
 }
 
-func WaitFor(interval time.Duration, timeout time.Duration, condition func() bool) error {
-	if interval > timeout {
-		interval = time.Duration(1)
-	}
-	deadline := time.Now().Add(timeout)
-	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for condition")
-		}
-		if condition() {
-			return nil
-		}
-		time.Sleep(interval)
-		continue
-	}
-}
-
 // Generate a new uuid. The chance that we generate a collision is really small.
 // As long as we check the UUID before we communicate it back to the RM we can still replace it without a problem.
 func GetNewUUID() string {
@@ -226,18 +209,15 @@ func ZeroTimeInUnixNano(t time.Time) *int64 {
 	return &tInt
 }
 
-func WaitForCondition(eval func() bool, interval time.Duration, timeout time.Duration) error {
-	if interval > timeout {
-		interval = time.Duration(1)
-	}
+func WaitForCondition(interval time.Duration, timeout time.Duration, eval func() bool) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		if eval() {
 			return nil
 		}
 
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for condition")
+		if time.Now().After(deadline) || time.Now().Add(interval).After(deadline) {
+			return ErrorTimeout
 		}
 
 		time.Sleep(interval)

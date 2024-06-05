@@ -247,6 +247,8 @@ func TestWaitForCondition(t *testing.T) {
 	}{
 		{true, time.Duration(1) * time.Second, time.Duration(2) * time.Second, nil},
 		{false, time.Duration(1) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
+		{true, time.Duration(3) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(3) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
 	}
 	for _, test := range tests {
 		target = test.input

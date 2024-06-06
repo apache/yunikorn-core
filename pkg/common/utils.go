@@ -19,6 +19,7 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -31,6 +32,11 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	interfaceCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+)
+
+var (
+	// ErrorTimeout returned if waiting for a condition times out
+	ErrorTimeout = errors.New("timeout waiting for condition")
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {

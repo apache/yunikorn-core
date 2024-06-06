@@ -19,6 +19,7 @@
 package placement
 
 import (
+	"sort"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -282,6 +283,12 @@ func Test_fixedRule_ruleDAO(t *testing.T) {
 			ur, err := newRule(tt.conf)
 			assert.NilError(t, err, "setting up the rule failed")
 			ruleDAO := ur.ruleDAO()
+			if tt.want.Filter != nil {
+				sort.Strings(tt.want.Filter.UserList)
+				sort.Strings(ruleDAO.Filter.UserList)
+				sort.Strings(tt.want.Filter.GroupList)
+				sort.Strings(ruleDAO.Filter.GroupList)
+			}
 			assert.DeepEqual(t, tt.want, ruleDAO)
 		})
 	}

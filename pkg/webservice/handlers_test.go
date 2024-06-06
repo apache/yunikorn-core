@@ -1398,7 +1398,7 @@ func addAppWithUserGroup(t *testing.T, id string, part *scheduler.PartitionConte
 		currentCount := len(part.GetCompletedApplications())
 		err = app.HandleApplicationEvent(objects.CompleteApplication)
 		assert.NilError(t, err, "The app should have completed")
-		err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+		err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 			newCount := len(part.GetCompletedApplications())
 			return newCount == currentCount+1
 		})
@@ -2303,7 +2303,7 @@ func TestGetStream_Limit(t *testing.T) {
 	go getStream(NewResponseRecorderWithDeadline(), req)
 
 	// wait until the StreamingLimiter.AddHost() calls
-	err := common.WaitFor(time.Millisecond, time.Second, func() bool {
+	err := common.WaitForCondition(time.Millisecond, time.Second, func() bool {
 		streamingLimiter.Lock()
 		defer streamingLimiter.Unlock()
 		return streamingLimiter.streams == 3
@@ -2426,7 +2426,7 @@ func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
 	}
 	ev.AddEvent(queueEvent)
 	noEvents := uint64(0)
-	err := common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = ev.Store.CountStoredEvents()
 		return noEvents == 3
 	})

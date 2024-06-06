@@ -158,7 +158,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 
 	// make sure app transitions to Completing
 	app := ms.getApplication(appID1)
-	err = common.WaitFor(time.Millisecond*10, time.Second, func() bool {
+	err = common.WaitForCondition(time.Millisecond*10, time.Second, func() bool {
 		return app.IsCompleting()
 	})
 	assert.NilError(t, err, "timeout waiting for app state Completing")

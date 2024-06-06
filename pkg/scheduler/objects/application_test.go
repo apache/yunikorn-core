@@ -414,7 +414,7 @@ func TestAddAllocAsk(t *testing.T) {
 
 	// test add alloc ask event
 	noEvents := uint64(0)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 2
@@ -1033,10 +1033,10 @@ func TestCompleted(t *testing.T) {
 	assert.NilError(t, err, "no error expected accepted to completing (completed test)")
 	assert.Assert(t, app.IsCompleting(), "App should be waiting")
 	// give it some time to run and progress
-	err = common.WaitFor(10*time.Microsecond, time.Millisecond*200, app.IsCompleted)
+	err = common.WaitForCondition(10*time.Microsecond, time.Millisecond*200, app.IsCompleted)
 	assert.NilError(t, err, "Application did not progress into Completed state")
 
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
+	err = common.WaitForCondition(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
 
 	assert.Assert(t, app.sortedRequests == nil)
@@ -1157,13 +1157,13 @@ func TestRejected(t *testing.T) {
 	err := app.handleApplicationEventWithInfoLocking(RejectApplication, rejectedMessage)
 	assert.NilError(t, err, "no error expected new to rejected")
 
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsRejected)
+	err = common.WaitForCondition(1*time.Millisecond, time.Millisecond*200, app.IsRejected)
 	assert.NilError(t, err, "Application did not progress into Rejected state")
 	assert.Assert(t, !app.FinishedTime().IsZero())
 	assert.Equal(t, app.rejectedMessage, rejectedMessage)
 	assert.Equal(t, app.GetRejectedMessage(), rejectedMessage)
 
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
+	err = common.WaitForCondition(1*time.Millisecond, time.Millisecond*200, app.IsExpired)
 	assert.NilError(t, err, "Application did not progress into Expired state")
 
 	log := app.GetStateLog()
@@ -1422,7 +1422,7 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	ph = newPlaceholderAlloc(appID1, nodeID1, res)
 	app.AddAllocation(ph)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
-	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, 1*time.Second, func() bool {
 		app.RLock()
 		defer app.RUnlock()
 		return app.placeholderTimer == nil
@@ -1499,7 +1499,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	alloc := newAllocation(appID1, nodeID1, res)
 	app.AddAllocation(alloc)
 	assert.Assert(t, app.IsRunning(), "App should be in running state after the first allocation")
-	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, 1*time.Second, func() bool {
 		return app.getPlaceholderTimer() == nil
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
@@ -1554,7 +1554,7 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 	assert.Assert(t, app.IsCompleting(), "App should be in completing state all allocs have been removed")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 1))
 	// make sure the placeholders time out
-	err = common.WaitFor(10*time.Millisecond, 1*time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, 1*time.Second, func() bool {
 		return app.getPlaceholderTimer() == nil
 	})
 	assert.NilError(t, err, "Placeholder timer did not time out as expected")
@@ -2032,7 +2032,7 @@ func TestAskEvents(t *testing.T) {
 	assert.NilError(t, err)
 	app.RemoveAllocationAsk(ask.allocationKey)
 	noEvents := uint64(0)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3
 	})
@@ -2055,7 +2055,7 @@ func TestAskEvents(t *testing.T) {
 	err = app.AddAllocationAsk(ask3)
 	assert.NilError(t, err)
 	app.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 6
 	})
@@ -2104,7 +2104,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	app.RemoveAllocation(alloc1.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
 	app.RemoveAllocation(alloc2.GetAllocationKey(), si.TerminationType_PLACEHOLDER_REPLACED)
 	noEvents := uint64(0)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 5
 	})
@@ -2138,7 +2138,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	app.AddAllocation(alloc1)
 	app.ReplaceAllocation(alloc1.GetAllocationKey())
 	noEvents = 0
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 2
 	})
@@ -2160,7 +2160,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	app.AddAllocation(alloc1)
 	app.AddAllocation(alloc2)
 	app.RemoveAllAllocations()
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 4
 	})
@@ -2227,7 +2227,7 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	})
 
 	noEvents := uint64(0)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 4
 	})

@@ -234,36 +234,30 @@ func TestConvertSITimestamp(t *testing.T) {
 	assert.Equal(t, result, time.Time{})
 }
 
-func TestWaitFor(t *testing.T) {
-	var tests = []struct {
-		testname   string
-		bound      int
-		ErrorExist bool
-	}{
-		{"Timeout case", 10000, true},
-		{"Fullfilling case", 10, false},
+func TestWaitForCondition(t *testing.T) {
+	target := false
+	eval := func() bool {
+		return target
 	}
-	for _, tt := range tests {
-		t.Run(tt.testname, func(t *testing.T) {
-			count := 0
-			err := WaitFor(time.Nanosecond, time.Millisecond, func() bool {
-				if count <= tt.bound {
-					count++
-					return false
-				}
-				return true
-			})
-			switch tt.ErrorExist {
-			case true:
-				if errorExist := (err != nil); !errorExist {
-					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-				}
-			case false:
-				if errorExist := (err == nil); !errorExist {
-					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-				}
-			}
-		})
+	tests := []struct {
+		input    bool
+		interval time.Duration
+		timeout  time.Duration
+		output   error
+	}{
+		{true, time.Duration(1) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(1) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
+		{true, time.Duration(3) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(3) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
+	}
+	for _, test := range tests {
+		target = test.input
+		get := WaitForCondition(test.interval, test.timeout, eval)
+		if test.output == nil {
+			assert.NilError(t, get)
+		} else {
+			assert.Equal(t, get.Error(), test.output.Error())
+		}
 	}
 }
 

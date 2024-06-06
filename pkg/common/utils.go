@@ -19,6 +19,7 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -31,6 +32,11 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	interfaceCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+)
+
+var (
+	// ErrorTimeout returned if waiting for a condition times out
+	ErrorTimeout = errors.New("timeout waiting for condition")
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
@@ -60,20 +66,6 @@ func GetPartitionNameWithoutClusterID(partitionName string) string {
 		return partitionName[idx+1:]
 	}
 	return partitionName
-}
-
-func WaitFor(interval time.Duration, timeout time.Duration, condition func() bool) error {
-	deadline := time.Now().Add(timeout)
-	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for condition")
-		}
-		if condition() {
-			return nil
-		}
-		time.Sleep(interval)
-		continue
-	}
 }
 
 // Generate a new uuid. The chance that we generate a collision is really small.
@@ -223,15 +215,15 @@ func ZeroTimeInUnixNano(t time.Time) *int64 {
 	return &tInt
 }
 
-func WaitForCondition(eval func() bool, interval time.Duration, timeout time.Duration) error {
+func WaitForCondition(interval time.Duration, timeout time.Duration, eval func() bool) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		if eval() {
 			return nil
 		}
 
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for condition")
+		if time.Now().After(deadline) || time.Now().Add(interval).After(deadline) {
+			return ErrorTimeout
 		}
 
 		time.Sleep(interval)

@@ -120,9 +120,12 @@ func TestConfigUpdate(t *testing.T) {
 
 	// update config to run every 100ms and wait for refresh
 	configs.SetConfigMap(map[string]string{configs.HealthCheckInterval: "100ms"})
-	err = common.WaitForCondition(func() bool {
-		return healthChecker.GetPeriod() == 100*time.Millisecond
-	}, 10*time.Millisecond, 5*time.Second)
+	err = common.WaitForCondition(10*time.Millisecond,
+		5*time.Second,
+		func() bool {
+			return healthChecker.GetPeriod() == 100*time.Millisecond
+		},
+	)
 	assert.NilError(t, err, "timed out waiting for config refresh")
 
 	// clear results
@@ -134,9 +137,11 @@ func TestConfigUpdate(t *testing.T) {
 
 	// disable and wait for refresh
 	configs.SetConfigMap(map[string]string{configs.HealthCheckInterval: "0"})
-	err = common.WaitForCondition(func() bool {
-		return !healthChecker.IsEnabled()
-	}, 10*time.Millisecond, 5*time.Second)
+	err = common.WaitForCondition(10*time.Millisecond,
+		5*time.Second, func() bool {
+			return !healthChecker.IsEnabled()
+		},
+	)
 	assert.NilError(t, err, "timed out waiting for config refresh")
 
 	// clear results

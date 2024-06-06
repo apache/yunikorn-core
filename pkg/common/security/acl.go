@@ -49,10 +49,6 @@ func (a *ACL) setAllAllowed(part string) {
 // set the user list in the ACL, invalid user names are ignored
 func (a *ACL) setUsers(userList []string) {
 	a.users = make(map[string]bool)
-	// list could be empty
-	if len(userList) == 0 {
-		return
-	}
 	// special case if the user list is just the wildcard
 	if len(userList) == 1 && userList[0] == common.Wildcard {
 		log.Log(log.Security).Info("user list is wildcard, allowing all access")
@@ -78,10 +74,6 @@ func (a *ACL) setUsers(userList []string) {
 // set the group list in the ACL, invalid group names are ignored
 func (a *ACL) setGroups(groupList []string) {
 	a.groups = make(map[string]bool)
-	// list could be empty
-	if len(groupList) == 0 {
-		return
-	}
 	// special case if the wildcard was already set
 	if a.allAllowed {
 		log.Log(log.Security).Info("ignoring group list in ACL: wildcard set")
@@ -123,10 +115,6 @@ func NewACL(aclStr string) (ACL, error) {
 	}
 	// trim and check for wildcard
 	acl.setAllAllowed(aclStr)
-	// an empty ACL is a deny
-	if len(fields) == 0 {
-		return acl, nil
-	}
 	// parse users and groups
 	acl.setUsers(strings.Split(fields[0], common.Separator))
 	if len(fields) == 2 {

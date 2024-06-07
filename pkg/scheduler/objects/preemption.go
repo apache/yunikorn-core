@@ -602,14 +602,14 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 			continue
 		}
 		// stop collecting the victims once ask resource requirement met
-		if resources.StrictlyGreaterThanOnlyExisting(p.ask.GetAllocatedResource(), victimsTotalResource) {
+		if p.ask.GetAllocatedResource().StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
 			finalVictims = append(finalVictims, victim)
 		}
 		// add the victim resources to the total
 		victimsTotalResource.AddTo(victim.GetAllocatedResource())
 	}
 
-	if resources.StrictlyGreaterThanOnlyExisting(p.ask.GetAllocatedResource(), victimsTotalResource) {
+	if p.ask.GetAllocatedResource().StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
 		// there is shortfall, so preemption doesn't help
 		return nil, false
 	}

@@ -1773,7 +1773,7 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 		for _, app := range sq.GetCopyOfApps() {
 			for _, alloc := range app.GetAllAllocations() {
 				// at least any one of the ask resource type should match with potential victim
-				if !resources.MatchAnyOnlyExisting(ask.GetAllocatedResource(), alloc.allocatedResource) {
+				if !ask.GetAllocatedResource().MatchAny(alloc.allocatedResource) {
 					continue
 				}
 

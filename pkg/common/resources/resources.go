@@ -645,17 +645,19 @@ func Equals(left, right *Resource) bool {
 	return true
 }
 
-// MatchAnyOnlyExisting Is there at least one resource type match between left & right resources?
-// Matching happens only for the resource existing only in left but not vice versa.
-func MatchAnyOnlyExisting(left, right *Resource) bool {
-	if left == nil || right == nil {
+// MatchAny returns true if at least one type in the defined resource exists in the other resource.
+// False if none of the types exist in the other resource.
+// A nil resource is treated as an empty resource (no types defined) and returns false
+// Values are not considered during the checks
+func (r *Resource) MatchAny(other *Resource) bool {
+	if r == nil || other == nil {
 		return false
 	}
-	if left == right {
+	if r == other {
 		return true
 	}
-	for k := range left.Resources {
-		if _, ok := right.Resources[k]; ok {
+	for k := range r.Resources {
+		if _, ok := other.Resources[k]; ok {
 			return true
 		}
 	}
@@ -768,12 +770,13 @@ func StrictlyGreaterThanOrEquals(larger, smaller *Resource) bool {
 	return true
 }
 
-// StrictlyGreaterThanOnlyExisting Return true if all quantities present or existing only in larger > smaller
+// StrictlyGreaterThanOnlyExisting returns true if all quantities for types in the defined resource are greater than
+// the quantity for the same type in smaller.
+// Types defined in smaller that are not in the defined resource are ignored.
 // Two resources that are equal are not considered strictly larger than each other.
-// Resource present in smaller but not in larger are not even considered.
-func StrictlyGreaterThanOnlyExisting(larger, smaller *Resource) bool {
-	if larger == nil {
-		larger = Zero
+func (r *Resource) StrictlyGreaterThanOnlyExisting(smaller *Resource) bool {
+	if r == nil {
+		r = Zero
 	}
 	if smaller == nil {
 		smaller = Zero
@@ -784,10 +787,13 @@ func StrictlyGreaterThanOnlyExisting(larger, smaller *Resource) bool {
 
 	// Is larger and smaller completely disjoint?
 	atleastOneResourcePresent := false
-	for k, v := range larger.Resources {
-		// even when smaller is empty, at least one of the resource type in larger should be greater than zero
-		if smaller.IsEmpty() && v > 0 {
-			return true
+	// Is all resource in larger greater than zero?
+	isAllPositiveInLarger := true
+
+	for k, v := range r.Resources {
+		// even when smaller is empty, all resource type in larger should be greater than zero
+		if smaller.IsEmpty() && v <= 0 {
+			isAllPositiveInLarger = false
 		}
 		// when smaller is not empty
 		if val, ok := smaller.Resources[k]; ok {
@@ -801,11 +807,14 @@ func StrictlyGreaterThanOnlyExisting(larger, smaller *Resource) bool {
 			}
 		}
 	}
-	if atleastOneResourcePresent {
+
+	if smaller.IsEmpty() && !r.IsEmpty() {
+		return isAllPositiveInLarger
+	} else if atleastOneResourcePresent {
 		return notEqual
 	} else {
 		// larger and smaller is completely disjoint. none of the resource match.
-		return !larger.IsEmpty() && !smaller.IsEmpty()
+		return !r.IsEmpty() && !smaller.IsEmpty()
 	}
 }
 

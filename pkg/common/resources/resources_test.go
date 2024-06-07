@@ -348,8 +348,8 @@ func TestMatchAnyOnlyExisting(t *testing.T) {
 			if tt.right != nil {
 				right = NewResourceFromMap(tt.right)
 			}
-			if result := MatchAnyOnlyExisting(left, right); result != tt.expected {
-				t.Errorf("MatchAnyOnlyExisting: got %v, expected %v", result, tt.expected)
+			if result := left.MatchAny(right); result != tt.expected {
+				t.Errorf("MatchAny: got %v, expected %v", result, tt.expected)
 			}
 		})
 	}
@@ -386,6 +386,11 @@ func TestStrictlyGreaterThanOnlyExisting(t *testing.T) {
 		{"Zero resource and empty resources", inputs{map[string]Quantity{"first": 0}, map[string]Quantity{}, false}, outputs{false, false}},
 		{"Zero resource and nil resources", inputs{map[string]Quantity{"first": 0}, nil, false}, outputs{false, false}},
 
+		{"Negative resource and empty resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{}, false}, outputs{false, false}},
+		{"Negative resource and nil resources", inputs{map[string]Quantity{"first": -10}, nil, false}, outputs{false, false}},
+		{"Negative resource and empty resources", inputs{map[string]Quantity{"first": -10, "sec": 10}, map[string]Quantity{}, false}, outputs{false, false}},
+		{"Negative resource and nil resources", inputs{map[string]Quantity{"first": -10, "sec": 10}, nil, false}, outputs{false, false}},
+
 		{"Equal Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -10}, false}, outputs{false, false}},
 		{"Different Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -20}, false}, outputs{true, false}},
 		{"Different Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -5}, false}, outputs{false, true}},
@@ -407,10 +412,10 @@ func TestStrictlyGreaterThanOnlyExisting(t *testing.T) {
 			} else {
 				base = NewResourceFromMap(tt.input.smaller)
 			}
-			if result := StrictlyGreaterThanOnlyExisting(compare, base); result != tt.expected.larger {
+			if result := compare.StrictlyGreaterThanOnlyExisting(base); result != tt.expected.larger {
 				t.Errorf("comapre %v, base %v, got %v, expeceted %v", compare, base, result, tt.expected.larger)
 			}
-			if result := StrictlyGreaterThanOnlyExisting(base, compare); result != tt.expected.smaller {
+			if result := base.StrictlyGreaterThanOnlyExisting(compare); result != tt.expected.smaller {
 				t.Errorf("base %v, compare %v, got %v, expeceted %v", base, compare, result, tt.expected.smaller)
 			}
 		})

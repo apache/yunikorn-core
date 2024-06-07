@@ -808,11 +808,12 @@ func (r *Resource) StrictlyGreaterThanOnlyExisting(smaller *Resource) bool {
 		}
 	}
 
-	if smaller.IsEmpty() && !r.IsEmpty() {
+	switch {
+	case smaller.IsEmpty() && !r.IsEmpty():
 		return isAllPositiveInLarger
-	} else if atleastOneResourcePresent {
+	case atleastOneResourcePresent:
 		return notEqual
-	} else {
+	default:
 		// larger and smaller is completely disjoint. none of the resource match.
 		return !r.IsEmpty() && !smaller.IsEmpty()
 	}

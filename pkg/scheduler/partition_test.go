@@ -2660,7 +2660,7 @@ func completeApplicationAndWait(app *objects.Application, pc *PartitionContext) 
 		return err
 	}
 
-	err = common.WaitFor(10*time.Millisecond, time.Duration(1000)*time.Millisecond, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Duration(1000)*time.Millisecond, func() bool {
 		newCount := len(pc.GetCompletedApplications())
 		return newCount == currentCount+1
 	})
@@ -3824,7 +3824,7 @@ func TestNewQueueEvents(t *testing.T) {
 	})
 	assert.NilError(t, err)
 	noEvents := uint64(0)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3
 	})

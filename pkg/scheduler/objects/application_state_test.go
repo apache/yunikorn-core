@@ -49,7 +49,7 @@ func TestAcceptStateTransition(t *testing.T) {
 	// accepted to failed
 	err = app.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected accepted to failing")
-	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, app.IsFailing)
+	err = common.WaitForCondition(10*time.Microsecond, time.Millisecond*100, app.IsFailing)
 	assert.NilError(t, err, "App should be in Failing state")
 }
 
@@ -97,7 +97,7 @@ func TestRunStateTransition(t *testing.T) {
 	// run to failing
 	err = appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected running to failing")
-	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
+	err = common.WaitForCondition(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
 	assert.NilError(t, err, "App should be in Failing state")
 
 	// run fails from failing
@@ -195,7 +195,7 @@ func TestFailedStateTransition(t *testing.T) {
 	// new to failing
 	err := appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected new to failing")
-	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
+	err = common.WaitForCondition(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
 	assert.NilError(t, err, "App should be in Failing state")
 
 	// failing to failed
@@ -206,7 +206,7 @@ func TestFailedStateTransition(t *testing.T) {
 	// failed to rejected: error expected
 	err = appInfo.HandleApplicationEvent(RejectApplication)
 	assert.Assert(t, err != nil, "error expected failing to rejected")
-	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailed)
+	err = common.WaitForCondition(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailed)
 	assert.NilError(t, err, "App should be in Failed state")
 }
 
@@ -235,7 +235,7 @@ func TestAppStateTransitionEvents(t *testing.T) {
 	// run to failing
 	err = appInfo.HandleApplicationEvent(FailApplication)
 	assert.NilError(t, err, "no error expected new to failing")
-	err = common.WaitFor(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
+	err = common.WaitForCondition(10*time.Microsecond, time.Millisecond*100, appInfo.IsFailing)
 	assert.NilError(t, err, "App should be in Failing state")
 
 	// failing to failed
@@ -255,7 +255,7 @@ func TestAppStateTransitionEvents(t *testing.T) {
 	assert.Assert(t, appInfo.IsResuming(), "App should be in Resuming state")
 
 	// Verify application events
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		fmt.Printf("checking event length: %d\n", eventSystem.Store.CountStoredEvents())
 		return eventSystem.Store.CountStoredEvents() == 8
 	})

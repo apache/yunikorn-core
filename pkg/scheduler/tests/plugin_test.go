@@ -128,7 +128,7 @@ partitions:
 	})
 	assert.NilError(t, err)
 
-	err = common.WaitFor(100*time.Millisecond, 3000*time.Millisecond, func() bool {
+	err = common.WaitForCondition(100*time.Millisecond, 3000*time.Millisecond, func() bool {
 		reqSent := csu.GetContainerUpdateRequest()
 		return reqSent != nil && reqSent.ApplicationID == appID1 &&
 			reqSent.GetState() == si.UpdateContainerSchedulingStateRequest_FAILED

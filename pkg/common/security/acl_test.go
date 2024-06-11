@@ -148,6 +148,10 @@ func TestACLCreate(t *testing.T) {
 			" group,group",
 			ACL{users: make(map[string]bool), groups: map[string]bool{"group": true}, allAllowed: false},
 		},
+		{
+			"#user1,user2",
+			ACL{users: map[string]bool{"user2": true}, groups: make(map[string]bool), allAllowed: false},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {

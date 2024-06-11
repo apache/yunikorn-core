@@ -61,9 +61,12 @@ func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
 	}
 	store.Store(event)
 
-	err := common.WaitForCondition(func() bool {
-		return store.CountStoredEvents() == 0
-	}, time.Millisecond, time.Second)
+	err := common.WaitForCondition(time.Millisecond,
+		time.Second,
+		func() bool {
+			return store.CountStoredEvents() == 0
+		},
+	)
 	assert.NilError(t, err, "the Publisher should erase the store even if no EventPlugin registered")
 }
 
@@ -92,10 +95,13 @@ func TestPublisherSendsEvent(t *testing.T) {
 	store.Store(event)
 
 	var eventFromPlugin *si.EventRecord
-	err := common.WaitForCondition(func() bool {
-		eventFromPlugin = eventPlugin.GetNextEventRecord()
-		return eventFromPlugin != nil
-	}, time.Millisecond, time.Second)
+	err := common.WaitForCondition(time.Millisecond,
+		time.Second,
+		func() bool {
+			eventFromPlugin = eventPlugin.GetNextEventRecord()
+			return eventFromPlugin != nil
+		},
+	)
 	assert.NilError(t, err, "event was not received in time: %v", err)
 	assert.Equal(t, eventFromPlugin.ObjectID, "ask")
 	assert.Equal(t, eventFromPlugin.ReferenceID, "app")

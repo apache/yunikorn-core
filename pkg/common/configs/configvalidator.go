@@ -73,7 +73,7 @@ var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
-var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.@-]*[$]?$`)
+var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:#/_.@-]*[$]?$`)
 
 // Groups should have a slightly more restrictive regexp (no @ . or $ at the end)
 var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.-]*$`)

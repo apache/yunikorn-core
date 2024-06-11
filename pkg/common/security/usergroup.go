@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -153,6 +154,11 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 			return ug, err
 		}
 	}
+
+	if !configs.UserRegExp.MatchString(ugi.User) {
+		return UserGroup{}, fmt.Errorf("invalid username. username contain invalid characters. ")
+	}
+
 	// If groups are already present we should just convert
 	newUG := UserGroup{User: ugi.User}
 	newUG.Groups = append(newUG.Groups, ugi.Groups...)

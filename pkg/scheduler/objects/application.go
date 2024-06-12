@@ -1722,30 +1722,23 @@ func (sa *Application) ReplaceAllocation(allocationKey string) *Allocation {
 	// remove the placeholder that was just confirmed by the shim
 	ph := sa.removeAllocationInternal(allocationKey, si.TerminationType_PLACEHOLDER_REPLACED)
 	// this has already been replaced or it is a duplicate message from the shim
-	if ph == nil || ph.GetReleaseCount() == 0 {
+	if ph == nil || !ph.HasRelease() {
 		log.Log(log.SchedApplication).Debug("Unexpected placeholder released",
 			zap.String("applicationID", sa.ApplicationID),
 			zap.Stringer("placeholder", ph))
 		return nil
 	}
-	// weird issue we should never have more than 1 log it for debugging this error
-	if ph.GetReleaseCount() > 1 {
-		log.Log(log.SchedApplication).Error("Unexpected release number, placeholder released, only 1 real allocations processed",
-			zap.String("applicationID", sa.ApplicationID),
-			zap.String("placeholderKey", allocationKey),
-			zap.Int("releases", ph.GetReleaseCount()))
-	}
 	// update the replacing allocation
 	// we double linked the real and placeholder allocation
 	// ph is the placeholder, the releases entry points to the real one
-	alloc := ph.GetFirstRelease()
+	alloc := ph.GetRelease()
 	alloc.SetPlaceholderUsed(true)
 	alloc.SetPlaceholderCreateTime(ph.GetCreateTime())
 	alloc.SetBindTime(time.Now())
 	sa.addAllocationInternal(alloc)
 	// order is important: clean up the allocation after adding it to the app
 	// we need the original Replaced allocation result.
-	alloc.ClearReleases()
+	alloc.ClearRelease()
 	alloc.SetResult(Allocated)
 	if sa.placeholderData != nil {
 		sa.placeholderData[ph.GetTaskGroup()].Replaced++

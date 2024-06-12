@@ -328,6 +328,9 @@ func TestSetLimit(t *testing.T) {
 		},
 	}
 	root := newRootQueueTracker(user)
+	assert.Assert(t, !root.useWildCard)
+	assert.Equal(t, uint64(0), root.maxRunningApps)
+	assert.Assert(t, root.maxResources == nil)
 
 	// create tracker hierarchy
 	limit := resources.NewResourceFromMap(map[string]resources.Quantity{
@@ -350,15 +353,24 @@ func TestSetLimit(t *testing.T) {
 		"vcore": 20})
 	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit.Clone(), 3, false, user, true) // override
 	assert.Assert(t, resources.Equals(newLimit, childQ.maxResources))
+	assert.Assert(t, !childQ.useWildCard)
 	newLimit2 := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"mem":   30,
 		"vcore": 30})
-	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit2.Clone(), 3, true, user, true) // no override
+	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit2.Clone(), 2, true, user, true) // no override
+	assert.Assert(t, !childQ.useWildCard)
 	assert.Assert(t, resources.Equals(newLimit, childQ.maxResources))
-	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit2.Clone(), 3, true, user, false) // override -> changes qt.doWildCardCheck
+	assert.Equal(t, uint64(3), childQ.maxRunningApps)
+
+	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit2.Clone(), 4, true, user, false) // override -> changes qt.doWildCardCheck
+	assert.Assert(t, childQ.useWildCard)
 	assert.Assert(t, resources.Equals(newLimit2, childQ.maxResources))
-	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit2.Clone(), 3, false, user, false) // no override
-	assert.Assert(t, resources.Equals(newLimit2, childQ.maxResources))
+	assert.Equal(t, uint64(4), childQ.maxRunningApps)
+
+	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit.Clone(), 5, false, user, false) // override
+	assert.Assert(t, !childQ.useWildCard)
+	assert.Assert(t, resources.Equals(newLimit, childQ.maxResources))
+	assert.Equal(t, uint64(5), childQ.maxRunningApps)
 }
 
 func getQTResource(qt *QueueTracker) map[string]*resources.Resource {

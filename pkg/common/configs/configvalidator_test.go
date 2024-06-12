@@ -742,7 +742,6 @@ func TestUserName(t *testing.T) {
 	rejectedUserNames := []string{
 		"username rejected",
 		"",
-		"rejected#",
 		"rejected!name",
 		"!rejected",
 		" rejected ",

@@ -67,7 +67,7 @@ type Allocation struct {
 	released              bool
 	reservedNodeID        string
 	result                AllocationResult
-	releases              []*Allocation
+	release               *Allocation
 	preempted             bool
 	instType              string
 
@@ -324,47 +324,32 @@ func (a *Allocation) SetResult(result AllocationResult) {
 	a.result = result
 }
 
-// GetReleasesClone returns a clone of the release list
-func (a *Allocation) GetReleasesClone() []*Allocation {
+// GetRelease returns the associated release for this allocation
+func (a *Allocation) GetRelease() *Allocation {
 	a.RLock()
 	defer a.RUnlock()
-	result := make([]*Allocation, len(a.releases))
-	copy(result, a.releases)
-	return result
+	return a.release
 }
 
-// GetFirstRelease returns the first release for this allocation
-func (a *Allocation) GetFirstRelease() *Allocation {
-	a.RLock()
-	defer a.RUnlock()
-	return a.releases[0]
-}
-
-// GetReleaseCount gets the number of releases associated with this allocation
-func (a *Allocation) GetReleaseCount() int {
-	a.RLock()
-	defer a.RUnlock()
-	return len(a.releases)
-}
-
-// ClearReleases removes all releases from this allocation
-func (a *Allocation) ClearReleases() {
-	a.Lock()
-	defer a.Unlock()
-	a.releases = nil
-}
-
-// AddRelease adds a new release to this allocation
-func (a *Allocation) AddRelease(release *Allocation) {
-	a.Lock()
-	defer a.Unlock()
-	a.releases = append(a.releases, release)
-}
-
+// SetRelease sets the release for this allocation
 func (a *Allocation) SetRelease(release *Allocation) {
 	a.Lock()
 	defer a.Unlock()
-	a.releases = []*Allocation{release}
+	a.release = release
+}
+
+// ClearRelease removes all releases from this allocation
+func (a *Allocation) ClearRelease() {
+	a.Lock()
+	defer a.Unlock()
+	a.release = nil
+}
+
+// HasRelease determines if this allocation has an associated release
+func (a *Allocation) HasRelease() bool {
+	a.RLock()
+	defer a.RUnlock()
+	return a.release != nil
 }
 
 // GetAllocatedResource returns a reference to the allocated resources for this allocation. This must be treated as read-only.

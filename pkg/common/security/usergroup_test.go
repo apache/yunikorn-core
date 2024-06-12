@@ -237,4 +237,18 @@ func TestConvertUGI(t *testing.T) {
 	if ug.Groups[0] != group {
 		t.Errorf("groups not initialised correctly on convert: expected '%s' got '%s'", group, ug.Groups[0])
 	}
+	// try valid username with groups
+	ugi.User = "validuserABCD1234@://#"
+	ugi.Groups = []string{group}
+	ug, err = testCache.ConvertUGI(ugi, false)
+	if err != nil {
+		t.Errorf("valid username with groups, convert should not have failed: %v", err)
+	}
+	// try invalid username with groups
+	ugi.User = "invaliduser><+"
+	ugi.Groups = []string{group}
+	ug, err = testCache.ConvertUGI(ugi, false)
+	if err == nil {
+		t.Errorf("invalid username, convert should have failed: %v", err)
+	}
 }

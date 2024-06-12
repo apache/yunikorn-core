@@ -38,6 +38,7 @@ const (
 	CMEventRingBufferCapacity = PrefixEvent + "ringBufferCapacity" // Ring Buffer Capacity
 	CMMaxEventStreams         = PrefixEvent + "maxStreams"
 	CMMaxEventStreamsPerHost  = PrefixEvent + "maxStreamsPerHost"
+	CMRESTResponseSize        = PrefixEvent + "RESTResponseSize"
 
 	// defaults
 	DefaultHealthCheckInterval     = 30 * time.Second
@@ -46,6 +47,7 @@ const (
 	DefaultEventRingBufferCapacity = 100000
 	DefaultMaxStreams              = uint64(100)
 	DefaultMaxStreamsPerHost       = uint64(15)
+	DefaultRESTResponseSize        = uint64(10000)
 )
 
 var ConfigContext *SchedulerConfigContext

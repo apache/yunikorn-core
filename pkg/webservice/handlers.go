@@ -87,20 +87,7 @@ func init() {
 	streamingLimiter = NewStreamingLimiter()
 
 	configs.AddConfigMapCallback("rest-response-size", func() {
-		newSize := configs.DefaultRESTResponseSize
-		configMap := configs.GetConfigMap()
-		if value, ok := configMap[configs.CMRESTResponseSize]; ok {
-			parsed, err := strconv.ParseUint(value, 10, 64)
-			if err != nil {
-				log.Log(log.REST).Warn("Failed to parse configuration value",
-					zap.String("key", configs.CMRESTResponseSize),
-					zap.String("value", value),
-					zap.Error(err))
-			} else {
-				newSize = parsed
-			}
-		}
-
+		newSize := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMRESTResponseSize, configs.DefaultRESTResponseSize)
 		if newSize == 0 {
 			log.Log(log.REST).Warn("Illegal value `0` for config key, using default",
 				zap.String("key", configs.CMRESTResponseSize),

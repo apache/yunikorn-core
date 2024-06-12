@@ -28,6 +28,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -65,6 +66,7 @@ const (
 var allowedActiveStatusMsg string
 var allowedAppActiveStatuses map[string]bool
 var streamingLimiter *StreamingLimiter
+var maxRESTResponseSize atomic.Uint64
 
 func init() {
 	allowedAppActiveStatuses = make(map[string]bool)
@@ -83,6 +85,22 @@ func init() {
 	allowedActiveStatusMsg = fmt.Sprintf("Only following active statuses are allowed: %s", strings.Join(activeStatuses, ","))
 
 	streamingLimiter = NewStreamingLimiter()
+
+	configs.AddConfigMapCallback("rest-response-size", func() {
+		newSize := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMRESTResponseSize, configs.DefaultRESTResponseSize)
+		if newSize == 0 {
+			log.Log(log.REST).Warn("Illegal value `0` for config key, using default",
+				zap.String("key", configs.CMRESTResponseSize),
+				zap.Uint64("default", configs.DefaultRESTResponseSize))
+			newSize = configs.DefaultRESTResponseSize
+		}
+
+		log.Log(log.REST).Info("Reloading max REST event response size setting",
+			zap.Uint64("current", maxRESTResponseSize.Load()),
+			zap.Uint64("new", newSize))
+		maxRESTResponseSize.Store(newSize)
+	})
+	maxRESTResponseSize.Store(configs.DefaultRESTResponseSize)
 }
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -1117,9 +1135,8 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count := uint64(10000)
-	var start uint64
-
+	maxCount := maxRESTResponseSize.Load()
+	count := maxCount
 	if countStr := r.URL.Query().Get("count"); countStr != "" {
 		var err error
 		count, err = strconv.ParseUint(countStr, 10, 64)
@@ -1127,12 +1144,16 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if count > maxCount {
+			count = maxCount
+		}
 		if count == 0 {
 			buildJSONErrorResponse(w, `0 is not a valid value for "count"`, http.StatusBadRequest)
 			return
 		}
 	}
 
+	var start uint64
 	if startStr := r.URL.Query().Get("start"); startStr != "" {
 		var err error
 		start, err = strconv.ParseUint(startStr, 10, 64)

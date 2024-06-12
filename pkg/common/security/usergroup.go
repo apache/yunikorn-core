@@ -156,7 +156,7 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 	}
 
 	if !configs.UserRegExp.MatchString(ugi.User) {
-		return UserGroup{}, fmt.Errorf("invalid username. username contain invalid characters. ")
+		return UserGroup{}, fmt.Errorf("invalid username, it contains invalid characters")
 	}
 
 	// If groups are already present we should just convert

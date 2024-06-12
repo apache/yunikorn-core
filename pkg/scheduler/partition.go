@@ -716,8 +716,8 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 		// Retrieve the queue early before a possible race.
 		queue := app.GetQueue()
 		// check for an inflight replacement.
-		if alloc.GetReleaseCount() != 0 {
-			release := alloc.GetFirstRelease()
+		if alloc.HasRelease() {
+			release := alloc.GetRelease()
 			// allocation to update the ask on: this needs to happen on the real alloc never the placeholder
 			askAlloc := alloc
 			// placeholder gets handled differently from normal
@@ -765,8 +765,8 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 				askAlloc = release
 			}
 			// unlink the placeholder and allocation
-			release.ClearReleases()
-			alloc.ClearReleases()
+			release.ClearRelease()
+			alloc.ClearRelease()
 			// mark ask as unallocated to get it re-scheduled
 			_, err := app.DeallocateAsk(askAlloc.GetAsk().GetAllocationKey())
 			if err == nil {
@@ -876,7 +876,7 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 		log.Log(log.SchedPartition).Info("scheduler replace placeholder processed",
 			zap.String("appID", alloc.GetApplicationID()),
 			zap.String("allocationKey", alloc.GetAllocationKey()),
-			zap.String("placeholder released allocationKey", alloc.GetFirstRelease().GetAllocationKey()))
+			zap.String("placeholder released allocationKey", alloc.GetRelease().GetAllocationKey()))
 		// pass the release back to the RM via the cluster context
 		return alloc
 	}
@@ -1313,7 +1313,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			continue
 		}
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			confirmed = alloc.GetFirstRelease()
+			confirmed = alloc.GetRelease()
 			// we need to check the resources equality
 			delta := resources.Sub(confirmed.GetAllocatedResource(), alloc.GetAllocatedResource())
 			// Any negative value in the delta means that at least one of the requested resource in the

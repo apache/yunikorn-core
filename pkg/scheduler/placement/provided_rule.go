@@ -112,13 +112,20 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 		if parentName == "" {
 			parentName = configs.RootQueue
 		}
+		childQueueName := replaceDot(queueName)
+		if err = configs.IsQueueNameValid(childQueueName); err != nil {
+			return "", err
+		}
 		// Make it a fully qualified queue
-		queueName = parentName + configs.DOT + replaceDot(queueName)
+		queueName = parentName + configs.DOT + childQueueName
 	}
 	// Log the result before we check the create flag
 	log.Log(log.SchedApplication).Debug("Provided rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
+	if err = configs.IsQueuePathValid(queueName); err != nil {
+		return "", err
+	}
 	// get the queue object
 	queue := queueFn(queueName)
 	// if we cannot create the queue must exist

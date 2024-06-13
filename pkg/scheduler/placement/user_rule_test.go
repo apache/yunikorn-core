@@ -127,6 +127,36 @@ partitions:
 		t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
 	}
 
+	user = security.UserGroup{
+		User:   "test.user@gmail.com",
+		Groups: []string{},
+	}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "root.test_dot_user@gmail_dot_com" || err != nil {
+		t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
+	}
+
+	user = security.UserGroup{
+		User:   "http://domain.com/server1/testuser@cloudera.com",
+		Groups: []string{},
+	}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "root.http://domain_dot_com/server1/testuser@cloudera_dot_com" || err != nil {
+		t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
+	}
+
+	user = security.UserGroup{
+		User:   "invalid!us>er",
+		Groups: []string{},
+	}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("user rule with invalid username should have failed, error %v", err)
+	}
+
 	// deny filter type should got got empty queue
 	conf = configs.PlacementRule{
 		Name: "user",
@@ -215,6 +245,16 @@ func TestUserRuleParent(t *testing.T) {
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
+	}
+
+	user1 := security.UserGroup{
+		User:   "test!child",
+		Groups: []string{},
+	}
+	appInfo1 := newApplication("app1", "default", "unknown", user1, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo1, queueFunc)
+	if err == nil {
+		t.Errorf("user rule with non existing parent queue and invalid child queue should have failed, error %v", err)
 	}
 
 	// trying to place in a child using a parent which is defined as a leaf

@@ -70,6 +70,9 @@ func (tr *testRule) placeApplication(app *objects.Application, queueFn func(stri
 		return "", fmt.Errorf("nil app passed in")
 	}
 	if queuePath := app.GetQueuePath(); queuePath != "" {
+		if err := configs.IsQueuePathValid(queuePath); err != nil {
+			return "", err
+		}
 		return replaceDot(queuePath), nil
 	}
 	return types.Test, nil

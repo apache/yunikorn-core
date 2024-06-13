@@ -88,6 +88,21 @@ partitions:
 		t.Errorf("provided rule placed app in incorrect queue '%s', error %v", queue, err)
 	}
 
+	// trying to place in invalid queue
+	appInfo = newApplication("app1", "default", "root.unkno!wn", user, tags, nil, "")
+	conf = configs.PlacementRule{
+		Name:   "provided",
+		Create: true,
+	}
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed, err %v", err)
+	}
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("provided rule should have failed to place app, error %v", err)
+	}
+
 	conf = configs.PlacementRule{
 		Name: "provided",
 		Parent: &configs.PlacementRule{
@@ -113,6 +128,13 @@ partitions:
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent" || err != nil {
 		t.Errorf("provided rule placed in to be created queue with create false '%s', err %v", queue, err)
+	}
+
+	// invalid queue with parent rule (parent rule ignored)
+	appInfo = newApplication("app1", "default", "root.testp!arent", user, tags, nil, "")
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("provided rule should have failed to place app, error %v", err)
 	}
 }
 
@@ -186,6 +208,26 @@ func TestProvidedRuleParent(t *testing.T) {
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("provided rule with non existing parent queue should create '%s', error %v", queue, err)
+	}
+
+	// trying to place in invalid queue using a creatable parent
+	conf = configs.PlacementRule{
+		Name:   "provided",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "testparentnew",
+			Create: true,
+		},
+	}
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "testc!hild", user, tags, nil, "")
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("provided rule with non existing parent invalid queue should have failed to create, error %v", err)
 	}
 
 	// trying to place in a child using a parent which is defined as a leaf

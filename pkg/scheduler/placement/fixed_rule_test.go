@@ -97,6 +97,20 @@ partitions:
 		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
 
+	// invalid queue name
+	conf = configs.PlacementRule{
+		Name:  "fixed",
+		Value: "testqueue!>invalid<",
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(app, queueFunc)
+	if err == nil {
+		t.Errorf("fixed rule should have failed to place queue, err %v", err)
+	}
+
 	// fixed queue that exists directly in hierarchy
 	conf = configs.PlacementRule{
 		Name:  "fixed",
@@ -109,6 +123,20 @@ partitions:
 	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
+	}
+
+	// invalid queue name with full hierarchy
+	conf = configs.PlacementRule{
+		Name:  "fixed",
+		Value: "root.testparent!>invalid<test.testqueue",
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(app, queueFunc)
+	if err == nil {
+		t.Errorf("fixed rule should have failed to place queue, err %v", err)
 	}
 
 	// fixed queue that does not exists
@@ -246,6 +274,26 @@ func TestFixedRuleParent(t *testing.T) {
 	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != nameParentChild || err != nil {
 		t.Errorf("fixed rule with non existing parent queue should created '%s', error %v", queue, err)
+	}
+
+	// trying to place in invalid child using a creatable parent
+	conf = configs.PlacementRule{
+		Name:   "fixed",
+		Value:  "testchild",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "test!invalid<tes>t",
+			Create: true,
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(app, queueFunc)
+	if err == nil {
+		t.Errorf("fixed rule with non existing invalid child queue should have failed, error %v", err)
 	}
 
 	// trying to place in a child using a parent which is defined as a leaf

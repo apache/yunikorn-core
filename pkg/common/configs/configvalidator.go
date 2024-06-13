@@ -69,7 +69,11 @@ var DefaultPreemptionDelay = 30 * time.Second
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
-var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_:#/@-]{1,64}$`)
+
+// A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
+// The queue name must thus allow for at least that length with the replacement of dots.
+var QueuePathRegExp = regexp.MustCompile(`^[a-zA-Z0-9_.:#/@-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
@@ -653,9 +657,9 @@ func checkQueues(queue *QueueConfig, level int) error {
 	// check this level for name compliance and uniqueness
 	queueMap := make(map[string]bool)
 	for _, child := range queue.Queues {
-		if !QueueNameRegExp.MatchString(child.Name) {
-			return fmt.Errorf("invalid child name '%s', a name must only have alphanumeric characters,"+
-				" - or _, and be no longer than 64 characters", child.Name)
+		err = IsQueueNameValid(child.Name)
+		if err != nil {
+			return err
 		}
 		if queueMap[strings.ToLower(child.Name)] {
 			return fmt.Errorf("duplicate child name found with name '%s', level %d", child.Name, level)
@@ -669,6 +673,22 @@ func checkQueues(queue *QueueConfig, level int) error {
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func IsQueueNameValid(queueName string) error {
+	if !QueueNameRegExp.MatchString(queueName) {
+		return fmt.Errorf("invalid child name '%s', a name must only have alphanumeric characters,"+
+			" - or _, and be no longer than 64 characters", queueName)
+	}
+	return nil
+}
+
+func IsQueuePathValid(queuePath string) error {
+	if !QueuePathRegExp.MatchString(queuePath) {
+		return fmt.Errorf("invalid queue path '%s', a queue path must only have alphanumeric characters,"+
+			" - or _, and be no longer than 64 characters", queuePath)
 	}
 	return nil
 }

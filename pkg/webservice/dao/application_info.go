@@ -51,8 +51,6 @@ type ApplicationDAOInfo struct {
 type ApplicationDetailsDAOInfo struct {
 	ApplicationDAOInfo
 	StartTime           int64
-	Queue               string
-	State               string
 	ResourceUsage       *resources.TrackedResource
 	PreemptedResource   *resources.TrackedResource
 	PlaceholderResource *resources.TrackedResource

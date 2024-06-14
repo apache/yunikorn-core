@@ -348,8 +348,6 @@ func getApplicationDetailsDAO(app *objects.Application, sum *objects.Application
 			MaxRequestPriority: app.GetAskMaxPriority(),
 		},
 		StartTime:           app.StartTime().UnixMilli(),
-		Queue:               app.GetQueue().Name,
-		State:               sum.State,
 		ResourceUsage:       sum.ResourceUsage,
 		PreemptedResource:   sum.PreemptedResource,
 		PlaceholderResource: sum.PlaceholderResource,

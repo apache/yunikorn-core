@@ -238,7 +238,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 
 	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage3, user, true)
 	assert.Equal(t, 1, len(manager.GetUsersResources()), "userTrackers count should be 1")
-	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 1")
+	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 0")
 
 	manager.DecreaseTrackedResource(queuePath2, TestApp2, usage2, user1, true)
 	assert.Equal(t, 0, len(manager.GetUsersResources()), "userTrackers count should be 0")

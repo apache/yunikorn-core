@@ -960,7 +960,7 @@ func TestGangAllocChange(t *testing.T) {
 
 	// add a real alloc this should NOT trigger state update
 	alloc = newAllocation(appID1, nodeID1, res)
-	alloc.SetResult(Replaced)
+	alloc.SetResultType(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 3)
 	assert.Assert(t, app.IsRunning(), "app should still be in running state")
@@ -968,7 +968,7 @@ func TestGangAllocChange(t *testing.T) {
 
 	// add a second real alloc this should NOT trigger state update
 	alloc = newAllocation(appID1, nodeID1, res)
-	alloc.SetResult(Replaced)
+	alloc.SetResultType(Replaced)
 	app.AddAllocation(alloc)
 	assert.Equal(t, len(app.GetAllAllocations()), 4)
 	assert.Assert(t, app.IsRunning(), "app should still be in running state")
@@ -1271,7 +1271,7 @@ func TestReplaceAllocation(t *testing.T) {
 
 	// set the real one to replace the placeholder
 	realAlloc := newAllocation(appID1, nodeID1, res)
-	realAlloc.SetResult(Replaced)
+	realAlloc.SetResultType(Replaced)
 	ph.SetRelease(realAlloc)
 	alloc = app.ReplaceAllocation(ph.GetAllocationKey())
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
@@ -1293,10 +1293,10 @@ func TestReplaceAllocation(t *testing.T) {
 
 	// set multiple real allocations to replace the placeholder
 	realAlloc = newAllocation(appID1, nodeID1, res)
-	realAlloc.SetResult(Replaced)
+	realAlloc.SetResultType(Replaced)
 	ph.SetRelease(realAlloc)
 	realAllocNoAdd := newAllocation(appID1, nodeID1, res)
-	realAllocNoAdd.SetResult(Replaced)
+	realAllocNoAdd.SetResultType(Replaced)
 	ph.SetRelease(realAlloc)
 	alloc = app.ReplaceAllocation(ph.GetAllocationKey())
 	assert.Equal(t, alloc, ph, "returned allocation is not the placeholder")
@@ -1345,21 +1345,21 @@ func TestReplaceAllocationTracking(t *testing.T) {
 
 	// replace placeholders
 	realAlloc1 := newAllocation(appID1, nodeID1, res)
-	realAlloc1.SetResult(Replaced)
+	realAlloc1.SetResultType(Replaced)
 	ph1.SetRelease(realAlloc1)
 	alloc1 := app.ReplaceAllocation(ph1.GetAllocationKey())
 	app.RemoveAllocation(ph1.GetAllocationKey(), si.TerminationType_PLACEHOLDER_REPLACED)
 	assert.Equal(t, ph1.GetAllocationKey(), alloc1.GetAllocationKey())
 	assert.Equal(t, true, app.HasPlaceholderAllocation())
 	realAlloc2 := newAllocation(appID1, nodeID1, res)
-	realAlloc2.SetResult(Replaced)
+	realAlloc2.SetResultType(Replaced)
 	ph2.SetRelease(realAlloc2)
 	alloc2 := app.ReplaceAllocation(ph2.GetAllocationKey())
 	app.RemoveAllocation(ph2.GetAllocationKey(), si.TerminationType_PLACEHOLDER_REPLACED)
 	assert.Equal(t, ph2.GetAllocationKey(), alloc2.GetAllocationKey())
 	assert.Equal(t, true, app.HasPlaceholderAllocation())
 	realAlloc3 := newAllocation(appID1, nodeID1, res)
-	realAlloc3.SetResult(Replaced)
+	realAlloc3.SetResultType(Replaced)
 	ph3.SetRelease(realAlloc3)
 	alloc3 := app.ReplaceAllocation(ph3.GetAllocationKey())
 	app.RemoveAllocation(ph3.GetAllocationKey(), si.TerminationType_PLACEHOLDER_REPLACED)
@@ -1861,7 +1861,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	// pass the time and try again
 	ask3.createTime = ask3.createTime.Add(-30 * time.Second)
 	alloc3 = app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
-	assert.Assert(t, alloc3 != nil && alloc3.result == Reserved, "alloc3 should be a reservation")
+	assert.Assert(t, alloc3 != nil && alloc3.resultType == Reserved, "alloc3 should be a reservation")
 	assert.Assert(t, alloc2.IsPreempted(), "alloc2 should have been preempted")
 }
 
@@ -1932,7 +1932,7 @@ func TestTryAllocatePreemptNode(t *testing.T) {
 	alloc3 := app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, alloc3 != nil, "alloc3 expected")
 	assert.Equal(t, "node1", alloc3.GetNodeID(), "wrong node assignment")
-	assert.Equal(t, Reserved, alloc3.GetResult(), "expected reservation")
+	assert.Equal(t, Reserved, alloc3.GetResultType(), "expected reservation")
 	assert.Assert(t, !alloc2.IsPreempted(), "alloc2 should not have been preempted")
 	err = node1.Reserve(app2, ask3)
 	assert.NilError(t, err)

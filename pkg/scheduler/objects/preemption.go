@@ -206,7 +206,7 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 
 // calculateVictimsByNode takes a list of potential victims for a node and builds a list ready for the RM to process.
 // Result is a list of allocations and the starting index to check for the initial preemption list.
-// If the result is nil, the node should not be considered for preemption.
+// If the resultType is nil, the node should not be considered for preemption.
 func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, potentialVictims []*Allocation) (int, []*Allocation) {
 	nodeCurrentAvailable := nodeAvailable.Clone()
 	allocationsByQueueSnap := p.duplicateQueueSnapshots()
@@ -345,7 +345,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 	// check for RM callback
 	plugin := plugins.GetResourceManagerCallbackPlugin()
 	if plugin == nil {
-		// if a plugin isn't registered, assume checks will succeed and synthesize a result
+		// if a plugin isn't registered, assume checks will succeed and synthesize a resultType
 		check := predicateChecks[0]
 		log.Log(log.SchedPreemption).Debug("No RM callback plugin registered, using first selected node for preemption",
 			zap.String("NodeID", check.NodeID),
@@ -380,7 +380,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 			close(ch)
 		}()
 		for result := range ch {
-			// if result is successful, keep track of it
+			// if resultType is successful, keep track of it
 			if result.success {
 				if bestResult == nil {
 					bestResult = result
@@ -389,7 +389,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 				}
 			}
 		}
-		// if the best result we have from this batch meets all our criteria, don't run another batch
+		// if the best resultType we have from this batch meets all our criteria, don't run another batch
 		if bestResult.isSatisfactory(p.allocationsByNode) {
 			break
 		}
@@ -897,7 +897,7 @@ func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 	}
 }
 
-// preemptPredicateCheck performs a single predicate check and reports the result on a channel
+// preemptPredicateCheck performs a single predicate check and reports the resultType on a channel
 func preemptPredicateCheck(plugin api.ResourceManagerCallback, ch chan<- *predicateCheckResult, wg *sync.WaitGroup, args *si.PreemptionPredicatesArgs) {
 	defer wg.Done()
 	result := &predicateCheckResult{

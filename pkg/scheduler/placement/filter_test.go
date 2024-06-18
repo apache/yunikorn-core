@@ -144,6 +144,17 @@ func TestNewFilterExpressions(t *testing.T) {
 	if filter.empty {
 		t.Error("filter create did not set empty flag correctly")
 	}
+
+	// test invalid regexp format
+	conf.Users = []string{"user[a-z"}
+	conf.Groups = []string{"group[a-z"}
+	filter = newFilter(conf)
+	if filter.userExp != nil {
+		t.Error("The userExp should be nil for an invalid regexp format.")
+	}
+	if filter.groupExp != nil {
+		t.Error("The groupExp should be nil for an invalid regexp format.")
+	}
 }
 
 // New filter creation failure tests

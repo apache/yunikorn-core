@@ -153,6 +153,24 @@ partitions:
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule with parent queue incorrect queue '%s', error %v", queue, err)
 	}
+
+	// deny filter type should got got empty queue
+	conf = configs.PlacementRule{
+		Name:  "tag",
+		Value: "label1",
+		Filter: configs.Filter{
+			Type: filterDeny,
+		},
+	}
+	tr, err = newRule(conf)
+	if err != nil || tr == nil {
+		t.Errorf("tag rule create failed with parent rule and qualified value, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = tr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err != nil {
+		t.Errorf("tag rule with deny filter type should got empty queue, err nil")
+	}
 }
 
 func TestTagRuleParent(t *testing.T) {
@@ -249,6 +267,55 @@ func TestTagRuleParent(t *testing.T) {
 	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
+		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// failed parent rule
+	conf = configs.PlacementRule{
+		Name:  "tag",
+		Value: "label2",
+		Parent: &configs.PlacementRule{
+			Name:  "tag",
+			Value: "label1",
+			Parent: &configs.PlacementRule{
+				Name:  "tag",
+				Value: "label1",
+			},
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("tag rule create failed, err %v", err)
+	}
+
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// parent name not has prefix
+	conf = configs.PlacementRule{
+		Name:   "tag",
+		Value:  "label2",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "tag",
+			Value:  "label2",
+			Create: true,
+			Parent: &configs.PlacementRule{
+				Name:  "fixed",
+				Value: "root",
+			},
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("tag rule create failed, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "root.root.testparentnew.testparentnew" || err != nil {
 		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
 }

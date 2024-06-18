@@ -21,6 +21,7 @@ package placement
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
@@ -70,8 +71,11 @@ func (tr *testRule) placeApplication(app *objects.Application, queueFn func(stri
 		return "", fmt.Errorf("nil app passed in")
 	}
 	if queuePath := app.GetQueuePath(); queuePath != "" {
-		if err := configs.IsQueuePathValid(queuePath); err != nil {
-			return "", err
+		parts := strings.Split(queuePath, configs.DOT)
+		for _, part := range parts {
+			if err := configs.IsQueueNameValid(part); err != nil {
+				return "", err
+			}
 		}
 		return replaceDot(queuePath), nil
 	}

@@ -119,19 +119,18 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 		if parentName == "" {
 			parentName = configs.RootQueue
 		}
-		childQueueName := replaceDot(tagVal)
-		if err = configs.IsQueueNameValid(childQueueName); err != nil {
+		queueName = parentName + configs.DOT + replaceDot(tagVal)
+	}
+	parts := strings.Split(queueName, configs.DOT)
+	for _, part := range parts {
+		if err := configs.IsQueueNameValid(part); err != nil {
 			return "", err
 		}
-		queueName = parentName + configs.DOT + childQueueName
 	}
 	// Log the result before we check the create flag
 	log.Log(log.SchedApplication).Debug("Tag rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
-	if err := configs.IsQueuePathValid(queueName); err != nil {
-		return "", err
-	}
 	// get the queue object
 	queue := queueFn(queueName)
 	// if we cannot create the queue it must exist, rule does not match otherwise

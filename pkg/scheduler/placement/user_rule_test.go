@@ -126,6 +126,23 @@ partitions:
 	if queue != "root.unknown" || err != nil {
 		t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
 	}
+
+	// deny filter type should got got empty queue
+	conf = configs.PlacementRule{
+		Name: "user",
+		Filter: configs.Filter{
+			Type: filterDeny,
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed with queue name, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "" || err != nil {
+		t.Errorf("user rule with deny filter type should got empty queue, err nil")
+	}
 }
 
 func TestUserRuleParent(t *testing.T) {
@@ -217,6 +234,48 @@ func TestUserRuleParent(t *testing.T) {
 	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
+		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// failed parent rule
+	conf = configs.PlacementRule{
+		Name:   "user",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testchild",
+			Parent: &configs.PlacementRule{
+				Name:  "fixed",
+				Value: "testchild",
+			},
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// parent name not has prefix
+	conf = configs.PlacementRule{
+		Name:   "user",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "root",
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "root.root.testchild" || err != nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
 }

@@ -157,6 +157,23 @@ partitions:
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("fixed rule with parent queue should not have failed '%s', error %v", queue, err)
 	}
+
+	// deny filter type should got got empty queue
+	conf = configs.PlacementRule{
+		Name:  "fixed",
+		Value: "testchild",
+		Filter: configs.Filter{
+			Type: filterDeny,
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(app, queueFunc)
+	if queue != "" || err != nil {
+		t.Errorf("fixed rule with deny filter type should got empty queue, err nil")
+	}
 }
 
 func TestFixedRuleParent(t *testing.T) {
@@ -247,6 +264,47 @@ func TestFixedRuleParent(t *testing.T) {
 	}
 	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "" || err == nil {
+		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
+	}
+
+	// failed parent rule
+	conf = configs.PlacementRule{
+		Name:  "fixed",
+		Value: "testchild",
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testchild",
+			Parent: &configs.PlacementRule{
+				Name:  "fixed",
+				Value: "testchild",
+			},
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(app, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
+	}
+
+	// parent name not has prefix
+	conf = configs.PlacementRule{
+		Name:   "fixed",
+		Value:  "testchild",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "root",
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(app, queueFunc)
+	if queue != "root.root.testchild" || err != nil {
 		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
 	}
 }

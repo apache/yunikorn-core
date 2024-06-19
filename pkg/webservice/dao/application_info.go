@@ -49,11 +49,11 @@ type ApplicationDAOInfo struct {
 }
 
 type ApplicationDetailsDAOInfo struct {
-	ApplicationDAOInfo
-	StartTime           int64
-	ResourceUsage       *resources.TrackedResource
-	PreemptedResource   *resources.TrackedResource
-	PlaceholderResource *resources.TrackedResource
+	ApplicationDAOInfo  ApplicationDAOInfo
+	StartTime           int64                      `json:"startTime,omitempty"`
+	ResourceUsage       *resources.TrackedResource `json:"resourceUsage,omitempty"`
+	PreemptedResource   *resources.TrackedResource `json:"preemptedResource,omitempty"`
+	PlaceholderResource *resources.TrackedResource `json:"placeholderResource,omitempty"`
 }
 
 type StateDAOInfo struct {

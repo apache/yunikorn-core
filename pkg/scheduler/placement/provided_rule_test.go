@@ -98,7 +98,7 @@ partitions:
 	if err != nil || pr == nil {
 		t.Errorf("provided rule create failed, err %v", err)
 	}
-	queue, err = pr.placeApplication(appInfo, queueFunc)
+	_, err = pr.placeApplication(appInfo, queueFunc)
 	if err == nil {
 		t.Errorf("provided rule should have failed to place app, error %v", err)
 	}
@@ -132,7 +132,7 @@ partitions:
 
 	// invalid queue with parent rule (parent rule ignored)
 	appInfo = newApplication("app1", "default", "root.testp!arent", user, tags, nil, "")
-	queue, err = pr.placeApplication(appInfo, queueFunc)
+	_, err = pr.placeApplication(appInfo, queueFunc)
 	if err == nil {
 		t.Errorf("provided rule should have failed to place app, error %v", err)
 	}
@@ -225,7 +225,7 @@ func TestProvidedRuleParent(t *testing.T) {
 		t.Errorf("provided rule create failed, err %v", err)
 	}
 	appInfo = newApplication("app1", "default", "testc!hild", user, tags, nil, "")
-	queue, err = pr.placeApplication(appInfo, queueFunc)
+	_, err = pr.placeApplication(appInfo, queueFunc)
 	if err == nil {
 		t.Errorf("provided rule with non existing parent invalid queue should have failed to create, error %v", err)
 	}

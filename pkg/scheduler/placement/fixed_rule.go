@@ -91,8 +91,14 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 			zap.String("queueName", fr.queue))
 		return "", nil
 	}
+	parts := strings.Split(fr.queue, configs.DOT)
+	for _, part := range parts {
+		if err := configs.IsQueueNameValid(part); err != nil {
+			return "", err
+		}
+	}
 	queueName := fr.queue
-	// if the fixed queue is already fully qualified skip the parent check
+	// not fully qualified queue, run the parent rule if set
 	if !fr.qualified {
 		var parentName string
 		var err error
@@ -122,12 +128,6 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 			parentName = configs.RootQueue
 		}
 		queueName = parentName + configs.DOT + fr.queue
-	}
-	parts := strings.Split(queueName, configs.DOT)
-	for _, part := range parts {
-		if err := configs.IsQueueNameValid(part); err != nil {
-			return "", err
-		}
 	}
 	// Log the result before we check the create flag
 	log.Log(log.SchedApplication).Debug("Fixed rule intermediate result",

@@ -107,7 +107,7 @@ partitions:
 	// tag invalid queue
 	tags = map[string]string{"label1": "test!queue"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	_, err = tr.placeApplication(appInfo, queueFunc)
 	if err == nil {
 		t.Errorf("tag rule should have failed to place app, err %v", err)
 	}
@@ -131,7 +131,7 @@ partitions:
 	// tag invalid queue fully qualified
 	tags = map[string]string{"label1": "root.testparent.test!child"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	_, err = tr.placeApplication(appInfo, queueFunc)
 	if err == nil {
 		t.Errorf("tag rule should have failed with fully qualified invalid queue, error %v", err)
 	}
@@ -172,7 +172,7 @@ partitions:
 
 	tags = map[string]string{"label1": "testchild", "label2": "testp!arent"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = tr.placeApplication(appInfo, queueFunc)
+	_, err = tr.placeApplication(appInfo, queueFunc)
 	if err == nil {
 		t.Errorf("tag rule with parent queue should have failed, error %v", err)
 	}

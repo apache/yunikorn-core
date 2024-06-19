@@ -81,109 +81,41 @@ partitions:
 	tags := make(map[string]string)
 	app := newApplication("app1", "default", "ignored", user, tags, nil, "")
 
-	// fixed queue that exists directly under the root
-	conf := configs.PlacementRule{
-		Name:  "fixed",
-		Value: "testqueue",
-	}
-	var fr rule
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	var queue string
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.testqueue" || err != nil {
-		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
-	}
-
-	// invalid queue name
-	conf = configs.PlacementRule{
-		Name:  "fixed",
-		Value: "testqueue!>invalid<",
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if err == nil {
-		t.Errorf("fixed rule should have failed to place queue, err %v", err)
+	var tests = []struct {
+		name          string
+		expectedQueue string
+		config        configs.PlacementRule
+		nilError      bool
+	}{
+		{"fixed queue that exists directly under the root", "root.testqueue", configs.PlacementRule{Name: "fixed", Value: "testqueue"}, true},
+		{"fixed queue that exists directly in hierarchy", "root.testparent.testchild", configs.PlacementRule{Name: "fixed", Value: "root.testparent.testchild"}, true},
+		{"fixed queue that does not exists", "root.newqueue", configs.PlacementRule{Name: "fixed", Value: "newqueue", Create: true}, true},
+		{"place in a parent queue should not fail: failure happens on create in this case", "root.testparent", configs.PlacementRule{Name: "fixed", Value: "root.testparent"}, true},
+		{"place in a child using a parent", "root.testparent.testchild", configs.PlacementRule{Name: "fixed", Value: "testchild", Parent: &configs.PlacementRule{Name: "fixed", Value: "testparent"}}, true},
+		{"invalid queue name", "", configs.PlacementRule{Name: "fixed", Value: "testqueue!>invalid<"}, false},
+		{"invalid queue name with full queue hierarchy", "", configs.PlacementRule{Name: "fixed", Value: "root.testparent!>invalid<test.testqueue"}, false},
 	}
 
-	// fixed queue that exists directly in hierarchy
-	conf = configs.PlacementRule{
-		Name:  "fixed",
-		Value: "root.testparent.testchild",
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.testparent.testchild" || err != nil {
-		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
-	}
-
-	// invalid queue name with full hierarchy
-	conf = configs.PlacementRule{
-		Name:  "fixed",
-		Value: "root.testparent!>invalid<test.testqueue",
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if err == nil {
-		t.Errorf("fixed rule should have failed to place queue, err %v", err)
-	}
-
-	// fixed queue that does not exists
-	conf = configs.PlacementRule{
-		Name:   "fixed",
-		Value:  "newqueue",
-		Create: true,
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.newqueue" || err != nil {
-		t.Errorf("fixed rule failed to place queue in to be created queue '%s', err %v", queue, err)
-	}
-
-	// trying to place in a parent queue should not fail: failure happens on create in this case
-	conf = configs.PlacementRule{
-		Name:  "fixed",
-		Value: "root.testparent",
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.testparent" || err != nil {
-		t.Errorf("fixed rule did fail with parent queue '%s', error %v", queue, err)
-	}
-
-	// trying to place in a child using a parent
-	conf = configs.PlacementRule{
-		Name:  "fixed",
-		Value: "testchild",
-		Parent: &configs.PlacementRule{
-			Name:  "fixed",
-			Value: "testparent",
-		},
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.testparent.testchild" || err != nil {
-		t.Errorf("fixed rule with parent queue should not have failed '%s', error %v", queue, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var fr rule
+			fr, err = newRule(tt.config)
+			if err != nil || fr == nil {
+				t.Errorf("fixed rule create failed with queue name, err %v", err)
+			}
+			var queue string
+			if tt.nilError {
+				queue, err = fr.placeApplication(app, queueFunc)
+				if queue != tt.expectedQueue || err != nil {
+					t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
+				}
+			} else {
+				_, err = fr.placeApplication(app, queueFunc)
+				if err == nil {
+					t.Errorf("fixed rule should have failed to place queue, err %v", err)
+				}
+			}
+		})
 	}
 
 	// deny filter type should got got empty queue
@@ -291,7 +223,7 @@ func TestFixedRuleParent(t *testing.T) {
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	_, err = fr.placeApplication(app, queueFunc)
 	if err == nil {
 		t.Errorf("fixed rule with non existing invalid child queue should have failed, error %v", err)
 	}

@@ -60,6 +60,7 @@ partitions:
 		{"user queue with oidc supported characters", security.UserGroup{User: "test.user@gmail.com", Groups: []string{}}, "root.test_dot_user@gmail_dot_com", configs.PlacementRule{Name: "user", Create: true}, true},
 		{"user queue with oidc supported characters", security.UserGroup{User: "http://domain.com/server1/testuser@cloudera.com", Groups: []string{}}, "root.http://domain_dot_com/server1/testuser@cloudera_dot_com", configs.PlacementRule{Name: "user", Create: true}, true},
 		{"invalid queue name", security.UserGroup{User: "invalid!us>er", Groups: []string{}}, "root.http://domain_dot_com/server1/testuser@cloudera_dot_com", configs.PlacementRule{Name: "user", Create: true}, false},
+		{"deny filter type should got empty queue", security.UserGroup{User: "unknown", Groups: []string{}}, "", configs.PlacementRule{Name: "user", Filter: configs.Filter{Type: filterDeny}}, true},
 	}
 
 	for _, tt := range tests {
@@ -83,23 +84,6 @@ partitions:
 				}
 			}
 		})
-	}
-
-	// deny filter type should got got empty queue
-	conf = configs.PlacementRule{
-		Name: "user",
-		Filter: configs.Filter{
-			Type: filterDeny,
-		},
-	}
-	ur, err = newRule(conf)
-	if err != nil || ur == nil {
-		t.Errorf("user rule create failed with queue name, err %v", err)
-	}
-	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
-	if queue != "" || err != nil {
-		t.Errorf("user rule with deny filter type should got empty queue, err nil")
 	}
 }
 

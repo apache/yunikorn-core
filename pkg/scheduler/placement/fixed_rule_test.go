@@ -94,6 +94,7 @@ partitions:
 		{"place in a child using a parent", "root.testparent.testchild", configs.PlacementRule{Name: "fixed", Value: "testchild", Parent: &configs.PlacementRule{Name: "fixed", Value: "testparent"}}, true},
 		{"invalid queue name", "", configs.PlacementRule{Name: "fixed", Value: "testqueue!>invalid<"}, false},
 		{"invalid queue name with full queue hierarchy", "", configs.PlacementRule{Name: "fixed", Value: "root.testparent!>invalid<test.testqueue"}, false},
+		{"deny filter type should got empty queue", "", configs.PlacementRule{Name: "fixed", Value: "testchild", Filter: configs.Filter{Type: filterDeny}}, true},
 	}
 
 	for _, tt := range tests {
@@ -119,18 +120,18 @@ partitions:
 	}
 
 	// deny filter type should got got empty queue
-	conf = configs.PlacementRule{
+	conf := configs.PlacementRule{
 		Name:  "fixed",
 		Value: "testchild",
 		Filter: configs.Filter{
 			Type: filterDeny,
 		},
 	}
-	fr, err = newRule(conf)
+	fr, err := newRule(conf)
 	if err != nil || fr == nil {
 		t.Errorf("fixed rule create failed with queue name, err %v", err)
 	}
-	queue, err = fr.placeApplication(app, queueFunc)
+	queue, err := fr.placeApplication(app, queueFunc)
 	if queue != "" || err != nil {
 		t.Errorf("fixed rule with deny filter type should got empty queue, err nil")
 	}

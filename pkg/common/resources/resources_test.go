@@ -328,6 +328,8 @@ func TestMatchAnyOnlyExisting(t *testing.T) {
 	}{
 		{"nil resource should not match", nil, nil, false},
 		{"empty resource should not match", map[string]Quantity{}, map[string]Quantity{}, false},
+		{"equal positive resources should match", map[string]Quantity{"first": 1}, map[string]Quantity{"first": 1}, true},
+		{"equal positive resources with different values should match", map[string]Quantity{"first": 1}, map[string]Quantity{"first": 2}, true},
 		{"positive resource and nil resource should not match", map[string]Quantity{"first": 1}, nil, false},
 		{"nil resource and positive resource should not match", nil, map[string]Quantity{"first": 1}, false},
 		{"positive resource and empty resource should not match", map[string]Quantity{"first": 1}, map[string]Quantity{}, false},

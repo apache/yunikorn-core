@@ -32,10 +32,10 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type AllocationResult int
+type AllocationResultType int
 
 const (
-	None AllocationResult = iota
+	None AllocationResultType = iota
 	Allocated
 	AllocatedReserved
 	Reserved
@@ -43,7 +43,7 @@ const (
 	Replaced
 )
 
-func (ar AllocationResult) String() string {
+func (ar AllocationResultType) String() string {
 	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved", "Replaced"}[ar]
 }
 
@@ -66,7 +66,7 @@ type Allocation struct {
 	placeholderCreateTime time.Time
 	released              bool
 	reservedNodeID        string
-	result                AllocationResult
+	resultType            AllocationResultType
 	release               *Allocation
 	preempted             bool
 	instType              string
@@ -87,21 +87,21 @@ func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 		allocatedResource: ask.GetAllocatedResource().Clone(),
 		taskGroupName:     ask.GetTaskGroup(),
 		placeholder:       ask.IsPlaceholder(),
-		result:            Allocated,
+		resultType:        Allocated,
 	}
 }
 
 func newReservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(nodeID, ask)
 	alloc.SetBindTime(time.Time{})
-	alloc.SetResult(Reserved)
+	alloc.SetResultType(Reserved)
 	return alloc
 }
 
 func newUnreservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 	alloc := NewAllocation(nodeID, ask)
 	alloc.SetBindTime(time.Time{})
-	alloc.SetResult(Unreserved)
+	alloc.SetResultType(Unreserved)
 	return alloc
 }
 
@@ -179,7 +179,7 @@ func (a *Allocation) String() string {
 	}
 	a.RLock()
 	defer a.RUnlock()
-	return fmt.Sprintf("applicationID=%s, allocationKey=%s, Node=%s, result=%s", a.applicationID, a.allocationKey, a.nodeID, a.result.String())
+	return fmt.Sprintf("applicationID=%s, allocationKey=%s, Node=%s, resultType=%s", a.applicationID, a.allocationKey, a.nodeID, a.resultType.String())
 }
 
 // GetAsk returns the ask associated with this allocation
@@ -310,18 +310,18 @@ func (a *Allocation) GetTagsClone() map[string]string {
 	return CloneAllocationTags(a.tags)
 }
 
-// GetResult gets the result of this allocation
-func (a *Allocation) GetResult() AllocationResult {
+// GetResultType gets the result type of this allocation
+func (a *Allocation) GetResultType() AllocationResultType {
 	a.RLock()
 	defer a.RUnlock()
-	return a.result
+	return a.resultType
 }
 
-// SetResult sets the result of this allocation
-func (a *Allocation) SetResult(result AllocationResult) {
+// SetResultType sets the result type of this allocation
+func (a *Allocation) SetResultType(resultType AllocationResultType) {
 	a.Lock()
 	defer a.Unlock()
-	a.result = result
+	a.resultType = resultType
 }
 
 // GetRelease returns the associated release for this allocation

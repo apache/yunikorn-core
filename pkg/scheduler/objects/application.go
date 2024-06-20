@@ -1021,13 +1021,13 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 						zap.String("appID", sa.ApplicationID),
 						zap.String("nodeID", requiredNode),
 						zap.String("allocationKey", request.GetAllocationKey()))
-					alloc.SetResult(AllocatedReserved)
+					alloc.SetResultType(AllocatedReserved)
 					return alloc
 				}
 				log.Log(log.SchedApplication).Debug("allocation on required node is completed",
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", request.GetAllocationKey()),
-					zap.Stringer("AllocationResult", alloc.GetResult()))
+					zap.Stringer("resultType", alloc.GetResultType()))
 				return alloc
 			}
 			return newReservedAllocation(node.NodeID, request)
@@ -1164,7 +1164,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				alloc.SetRelease(ph)
 				// placeholder point to the real one in the releases list
 				ph.SetRelease(alloc)
-				alloc.SetResult(Replaced)
+				alloc.SetResultType(Replaced)
 				// mark placeholder as released
 				ph.SetReleased(true)
 				_, err := sa.allocateAsk(request)
@@ -1199,14 +1199,14 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if !node.preAllocateConditions(reqFit) {
 				return true
 			}
-			// allocation worked: on a non placeholder node update result and return
+			// allocation worked: on a non placeholder node update resultType and return
 			alloc := NewAllocation(node.NodeID, reqFit)
 			// double link to make it easier to find
 			// alloc (the real one) releases points to the placeholder in the releases list
 			alloc.SetRelease(phFit)
 			// placeholder point to the real one in the releases list
 			phFit.SetRelease(alloc)
-			alloc.SetResult(Replaced)
+			alloc.SetResultType(Replaced)
 			// mark placeholder as released
 			phFit.SetReleased(true)
 			// update just the node to make sure we keep its spot
@@ -1280,9 +1280,9 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		// check allocation possibility
 		alloc := sa.tryNode(reserve.node, ask)
 
-		// allocation worked fix the result and return
+		// allocation worked fix the resultType and return
 		if alloc != nil {
-			alloc.SetResult(AllocatedReserved)
+			alloc.SetResultType(AllocatedReserved)
 			return alloc
 		}
 	}
@@ -1358,7 +1358,7 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 }
 
 // Try all the nodes for a reserved request that have not been tried yet.
-// This should never result in a reservation as the ask is already reserved
+// This should never resultType in a reservation as the ask is already reserved
 func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterator, reservedNode string) *Allocation {
 	var allocResult *Allocation
 	iterator.ForEachNode(func(node *Node) bool {
@@ -1373,10 +1373,10 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterat
 			return true
 		}
 		alloc := sa.tryNode(node, ask)
-		// allocation worked: update result and return
+		// allocation worked: update resultType and return
 		if alloc != nil {
 			alloc.SetReservedNodeID(reservedNode)
-			alloc.SetResult(AllocatedReserved)
+			alloc.SetResultType(AllocatedReserved)
 			allocResult = alloc
 			return false
 		}
@@ -1387,7 +1387,7 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterat
 	return allocResult
 }
 
-// Try all the nodes for a request. The result is an allocation or reservation of a node.
+// Try all the nodes for a request. The resultType is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
 func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allocation {
 	var nodeToReserve *Node
@@ -1414,7 +1414,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 		// allocation worked so return
 		if alloc != nil {
 			metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
-			// check if the node was reserved for this ask: if it is set the result and return
+			// check if the node was reserved for this ask: if it is set the resultType and return
 			// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
 			// but we have no locking
 			if _, ok := sa.reservations[reservationKey(node, nil, ask)]; ok {
@@ -1422,7 +1422,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 					zap.String("appID", sa.ApplicationID),
 					zap.String("nodeID", node.NodeID),
 					zap.String("allocationKey", allocKey))
-				alloc.SetResult(AllocatedReserved)
+				alloc.SetResultType(AllocatedReserved)
 				allocResult = alloc
 				return false
 			}
@@ -1434,7 +1434,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 					zap.String("appID", sa.ApplicationID),
 					zap.String("nodeID", nodeID),
 					zap.String("allocationKey", allocKey))
-				alloc.SetResult(AllocatedReserved)
+				alloc.SetResultType(AllocatedReserved)
 				alloc.SetReservedNodeID(nodeID)
 				allocResult = alloc
 				return false
@@ -1654,7 +1654,7 @@ func (sa *Application) addAllocationInternal(info *Allocation) {
 		// already when the last placeholder was allocated
 		// special case COMPLETING: gang with only one placeholder moves to COMPLETING and causes orphaned
 		// allocations
-		if info.GetResult() != Replaced || !resources.IsZero(sa.allocatedResource) || sa.IsCompleting() {
+		if info.GetResultType() != Replaced || !resources.IsZero(sa.allocatedResource) || sa.IsCompleting() {
 			// progress the state based on where we are, we should never fail in this case
 			// keep track of a failure in log.
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
@@ -1737,9 +1737,9 @@ func (sa *Application) ReplaceAllocation(allocationKey string) *Allocation {
 	alloc.SetBindTime(time.Now())
 	sa.addAllocationInternal(alloc)
 	// order is important: clean up the allocation after adding it to the app
-	// we need the original Replaced allocation result.
+	// we need the original Replaced allocation resultType.
 	alloc.ClearRelease()
-	alloc.SetResult(Allocated)
+	alloc.SetResultType(Allocated)
 	if sa.placeholderData != nil {
 		sa.placeholderData[ph.GetTaskGroup()].Replaced++
 	}

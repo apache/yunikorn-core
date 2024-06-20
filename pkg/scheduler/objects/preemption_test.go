@@ -173,7 +173,7 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 			childQ2.incPendingResource(ask3.GetAllocatedResource())
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
-			assert.Equal(t, tt.expected, preemptor.checkPreemptionQueueGuarantees(), "unexpected result")
+			assert.Equal(t, tt.expected, preemptor.checkPreemptionQueueGuarantees(), "unexpected resultType")
 		})
 	}
 }

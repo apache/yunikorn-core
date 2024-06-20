@@ -916,14 +916,14 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 	}
 	alloc.SetInstanceType(node.GetInstanceType())
 	// reservation
-	if alloc.GetResult() == objects.Reserved {
+	if alloc.GetResultType() == objects.Reserved {
 		pc.reserve(app, node, alloc.GetAsk())
 		return nil
 	}
 	// unreserve
-	if alloc.GetResult() == objects.Unreserved || alloc.GetResult() == objects.AllocatedReserved {
+	if alloc.GetResultType() == objects.Unreserved || alloc.GetResultType() == objects.AllocatedReserved {
 		pc.unReserve(app, node, alloc.GetAsk())
-		if alloc.GetResult() == objects.Unreserved {
+		if alloc.GetResultType() == objects.Unreserved {
 			return nil
 		}
 		// remove the link to the reserved node

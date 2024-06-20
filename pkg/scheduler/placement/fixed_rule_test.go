@@ -117,10 +117,8 @@ partitions:
 						t.Errorf("fixed rule should have failed to place queue, err %v", err)
 					}
 				}
-			} else {
-				if err == nil {
-					t.Errorf("fixed rule should have failed with queue name, err %v", err)
-				}
+			} else if err == nil {
+				t.Errorf("fixed rule should have failed with queue name, err %v", err)
 			}
 		})
 	}
@@ -209,7 +207,7 @@ func TestFixedRuleParent(t *testing.T) {
 			Create: true,
 		},
 	}
-	fr, err = newRule(conf)
+	_, err = newRule(conf)
 	if err == nil {
 		t.Errorf("fixed rule create should have failed with queue name, err %v", err)
 	}

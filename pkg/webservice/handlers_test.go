@@ -1633,114 +1633,76 @@ func TestGetApplicationHandler(t *testing.T) {
 		assert.Check(t, len(appsDao.Reservations) > 0, "app should have at least 1 reservation")
 	}
 
-	// test additional application details
+	// test nonexistent partition
 	var req1 *http.Request
-	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1?details=true", strings.NewReader(""))
+	req1, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
 	assert.NilError(t, err, "HTTP request create failed")
 	req1 = req1.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "queue", Value: "root.default"},
-		httprouter.Param{Key: "application", Value: "app-1"},
-	}))
-	assert.NilError(t, err, "Get Application Handler request failed")
-
-	resp1 := &MockResponseWriter{}
-	var appDetailsDao *dao.ApplicationDetailsDAOInfo
-	getApplication(resp1, req1)
-	appSummary := app.GetApplicationSummary(partitionNameWithoutClusterID)
-
-	err = json.Unmarshal(resp1.outputBytes, &appDetailsDao)
-	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, "app-1", appDetailsDao.ApplicationDAOInfo.ApplicationID)
-	assert.Equal(t, app.StartTime().UnixMilli(), appDetailsDao.StartTime)
-	assert.Equal(t, appSummary.ResourceUsage.String(), appDetailsDao.ResourceUsage.String())
-	assert.Equal(t, appSummary.PreemptedResource.String(), appDetailsDao.PreemptedResource.String())
-	assert.Equal(t, appSummary.PlaceholderResource.String(), appDetailsDao.PlaceholderResource.String())
-
-	// test nonexistent partition
-	var req2 *http.Request
-	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req2 = req2.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: "notexists"},
 		httprouter.Param{Key: "queue", Value: "root.default"},
 		httprouter.Param{Key: "application", Value: "app-1"},
 	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
-	resp2 := &MockResponseWriter{}
-	getApplication(resp2, req2)
-	assertPartitionNotExists(t, resp2)
+	resp1 := &MockResponseWriter{}
+	getApplication(resp1, req1)
+	assertPartitionNotExists(t, resp1)
 
 	// test nonexistent queue
-	var req3 *http.Request
-	req3, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	var req2 *http.Request
+	req2, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
 	assert.NilError(t, err, "HTTP request create failed")
-	req3 = req3.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+	req2 = req2.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "notexists"},
 		httprouter.Param{Key: "application", Value: "app-1"},
 	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
-	resp3 := &MockResponseWriter{}
-	getApplication(resp3, req3)
-	assertQueueNotExists(t, resp3)
+	resp2 := &MockResponseWriter{}
+	getApplication(resp2, req2)
+	assertQueueNotExists(t, resp2)
 
 	// test nonexistent application
+	var req3 *http.Request
+	req3, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req3 = req3.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.noapps"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	resp3 := &MockResponseWriter{}
+	getApplication(resp3, req3)
+	assertApplicationNotExists(t, resp3)
+
+	// test without queue
 	var req4 *http.Request
-	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1", strings.NewReader(""))
+	req4, err = http.NewRequest("GET", "/ws/v1/partition/default/application/app-1", strings.NewReader(""))
 	assert.NilError(t, err, "HTTP request create failed")
 	req4 = req4.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "queue", Value: "root.noapps"},
 		httprouter.Param{Key: "application", Value: "app-1"},
 	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp4 := &MockResponseWriter{}
+	var appsDao4 *dao.ApplicationDAOInfo
 	getApplication(resp4, req4)
-	assertApplicationNotExists(t, resp4)
-
-	// test nonexistent application details
-	var req5 *http.Request
-	req5, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1?details=true", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req5 = req5.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "queue", Value: "root.noapps"},
-		httprouter.Param{Key: "application", Value: "app-1"},
-	}))
-	assert.NilError(t, err, "Get Application Handler request failed")
-	resp5 := &MockResponseWriter{}
-	getApplication(resp5, req5)
-	assertApplicationNotExists(t, resp5)
-
-	// test without queue
-	var req6 *http.Request
-	req6, err = http.NewRequest("GET", "/ws/v1/partition/default/application/app-1", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req6 = req6.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "application", Value: "app-1"},
-	}))
-	assert.NilError(t, err, "Get Application Handler request failed")
-	resp6 := &MockResponseWriter{}
-	var appsDao6 *dao.ApplicationDAOInfo
-	getApplication(resp6, req6)
-	err = json.Unmarshal(resp6.outputBytes, &appsDao6)
+	err = json.Unmarshal(resp4.outputBytes, &appsDao4)
 	assert.NilError(t, err, unmarshalError)
 
 	// test invalid queue name
-	var req7 *http.Request
-	req7, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	var req5 *http.Request
+	req5, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
 	assert.NilError(t, err, "HTTP request create failed")
-	req7 = req7.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+	req5 = req5.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "root.test.test123@"},
 		httprouter.Param{Key: "application", Value: "app-1"},
 	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
-	resp7 := &MockResponseWriter{}
-	getApplication(resp7, req7)
-	assertQueueInvalid(t, resp7, "root.test.test123@", "test123@")
+	resp5 := &MockResponseWriter{}
+	getApplication(resp5, req5)
+	assertQueueInvalid(t, resp5, "root.test.test123@", "test123@")
 
 	// test missing params name
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
@@ -1748,6 +1710,45 @@ func TestGetApplicationHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getApplication(resp, req)
 	assertParamsMissing(t, resp)
+
+	// test additional application details
+	var req6 *http.Request
+	req6, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1?details=true", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req6 = req6.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.default"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
+	assert.NilError(t, err, "Get Application Handler request failed")
+
+	resp6 := &MockResponseWriter{}
+	var appDetailsDao *dao.ApplicationDetailsDAOInfo
+	getApplication(resp6, req6)
+	appSummary := app.GetApplicationSummary(partitionNameWithoutClusterID)
+
+	err = json.Unmarshal(resp6.outputBytes, &appDetailsDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, "app-1", appDetailsDao.ApplicationDAOInfo.ApplicationID)
+	assert.Equal(t, app.StartTime().UnixMilli(), appDetailsDao.StartTime)
+	assert.Equal(t, appSummary.ResourceUsage.String(), appDetailsDao.ResourceUsage.String())
+	assert.Equal(t, appSummary.PreemptedResource.String(), appDetailsDao.PreemptedResource.String())
+	assert.Equal(t, appSummary.PlaceholderResource.String(), appDetailsDao.PlaceholderResource.String())
+
+	// test nonexistent application details
+	var req7 *http.Request
+	req7, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1?details=true", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req7 = req7.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.noapps"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	resp7 := &MockResponseWriter{}
+	getApplication(resp7, req7)
+	assertApplicationNotExists(t, resp7)
+
 }
 
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {

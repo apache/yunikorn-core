@@ -1703,7 +1703,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	var req5 *http.Request
 	req5, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1?details=true", strings.NewReader(""))
 	assert.NilError(t, err, "HTTP request create failed")
-	req5 = req4.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+	req5 = req5.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "queue", Value: "root.noapps"},
 		httprouter.Param{Key: "application", Value: "app-1"},

@@ -2192,7 +2192,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
-	childNonLeaf, err := NewDynamicQueue("nonleaf", false, parent)
+	childNonLeaf, err := NewDynamicQueue("nonleaf_Test-a_b_#_c_#_d_/_e@dom:ain", false, parent)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
 	assert.Equal(t, len(childNonLeaf.properties), 0)
@@ -2201,6 +2201,12 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Assert(t, childNonLeaf.prioritySortEnabled)
 	assert.Equal(t, childNonLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
 	assert.Equal(t, childNonLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+
+	// case 2: invalid queue name
+	_, err = NewDynamicQueue("invalid!queue", false, parent)
+	if err == nil {
+		t.Errorf("new dynamic queue should have failed to create, err is %v", err)
+	}
 }
 
 func TestTemplateIsNotOverrideByParent(t *testing.T) {

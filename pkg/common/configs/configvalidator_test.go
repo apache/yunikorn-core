@@ -2414,3 +2414,15 @@ func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 		})
 	}
 }
+
+func TestIsQueueNameValid(t *testing.T) {
+	assert.NilError(t, IsQueueNameValid("parent_Child_test-a_b_#_c_#_d_/_e@dom:ain"))
+	err := IsQueueNameValid("invalid!queue")
+	if err == nil {
+		t.Errorf("invalid queue name, validation should have failed. err is %v", err)
+	}
+	err = IsQueueNameValid("root.parent")
+	if err == nil {
+		t.Errorf("invalid queue name, validation should have failed. err is %v", err)
+	}
+}

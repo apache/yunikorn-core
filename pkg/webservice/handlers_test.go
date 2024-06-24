@@ -711,6 +711,7 @@ func TestMetricsNotEmpty(t *testing.T) {
 	assert.Assert(t, len(rr.Body.Bytes()) > 0, "Metrics response should not be empty")
 }
 
+//nolint:funlen
 func TestGetPartitionQueuesHandler(t *testing.T) {
 	setup(t, configTwoLevelQueues, 2)
 

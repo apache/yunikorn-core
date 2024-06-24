@@ -32,6 +32,8 @@ import (
 // this test simulates the scenario the cluster starts up with 0 nodes
 // then we submit an app, the app tasks will be pending; then we add a
 // node to the cluster, then we see the app gets the allocation it needed.
+//
+//nolint:funlen
 func TestSchedulerWithoutNodes(t *testing.T) {
 	// Register RM
 	configData := `
@@ -160,6 +162,7 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 2, 1000)
 }
 
+//nolint:funlen
 func TestAddRemoveNodes(t *testing.T) {
 	// Register RM
 	configData := `

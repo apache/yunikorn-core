@@ -1207,6 +1207,8 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 
 // removeAllocation removes the referenced allocation(s) from the applications and nodes
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
+//
+//nolint:funlen
 func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
 	if release == nil {
 		return nil, nil

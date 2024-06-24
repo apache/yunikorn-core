@@ -25,6 +25,7 @@ import (
 	"gotest.tools/v3/assert"
 )
 
+//nolint:funlen
 func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 	negativeResourceMap := map[string]string{"memory": "-50", "vcores": "33"}
 	resourceMapWithSyntaxError := map[string]string{"memory": "ten", "vcores": ""}

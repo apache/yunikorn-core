@@ -77,6 +77,7 @@ func (as applicationState) String() string {
 	return [...]string{"New", "Accepted", "Starting", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming"}[as]
 }
 
+//nolint:funlen
 func NewAppState() *fsm.FSM {
 	return fsm.NewFSM(
 		New.String(), fsm.Events{

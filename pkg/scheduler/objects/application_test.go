@@ -311,6 +311,8 @@ func TestUpdateRepeat(t *testing.T) {
 }
 
 // test pending calculation and ask addition
+//
+//nolint:funlen
 func TestAddAllocAsk(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	if app == nil || app.ApplicationID != appID1 {

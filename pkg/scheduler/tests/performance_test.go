@@ -32,6 +32,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+//nolint:funlen
 func benchmarkScheduling(b *testing.B, numNodes, numPods int) {
 	log.InitAndSetLevel(zap.InfoLevel)
 	// Start all tests

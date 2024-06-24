@@ -1247,6 +1247,7 @@ partitions:
 	}
 }
 
+//nolint:funlen
 func TestLimitsFail(t *testing.T) {
 	data := `
 partitions:

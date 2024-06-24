@@ -318,6 +318,61 @@ func TestNewQueueTracker(t *testing.T) {
 	assert.Assert(t, resources.IsZero(parent.resourceUsage))
 }
 
+func TestSetLimit(t *testing.T) {
+	manager := GetUserManager()
+	defer manager.ClearConfigLimits()
+	manager.userWildCardLimitsConfig = map[string]*LimitConfig{
+		path1: {
+			maxApplications: 3,
+			maxResources:    resources.NewResource(),
+		},
+	}
+	root := newRootQueueTracker(user)
+	assert.Assert(t, !root.useWildCard)
+	assert.Equal(t, uint64(0), root.maxRunningApps)
+	assert.Assert(t, root.maxResources == nil)
+
+	// create tracker hierarchy
+	limit := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"mem":   10,
+		"vcore": 10})
+	root.setLimit(strings.Split(queuePath1, configs.DOT), limit.Clone(), 9, true, user, true)
+
+	// check settings
+	parentQ := root.childQueueTrackers["parent"]
+	assert.Assert(t, parentQ.maxResources == nil)
+	assert.Equal(t, uint64(0), parentQ.maxRunningApps)
+	childQ := parentQ.childQueueTrackers["child1"]
+	assert.Assert(t, parentQ.maxResources == nil)
+	assert.Equal(t, uint64(9), childQ.maxRunningApps)
+	assert.Assert(t, resources.Equals(limit, childQ.maxResources))
+
+	// check if settings are overridden
+	newLimit := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"mem":   20,
+		"vcore": 20})
+	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit.Clone(), 3, false, user, true) // override
+	assert.Assert(t, resources.Equals(newLimit, childQ.maxResources))
+	assert.Assert(t, !childQ.useWildCard)
+	newLimit2 := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"mem":   30,
+		"vcore": 30})
+	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit2.Clone(), 2, true, user, true) // no override
+	assert.Assert(t, !childQ.useWildCard)
+	assert.Assert(t, resources.Equals(newLimit, childQ.maxResources))
+	assert.Equal(t, uint64(3), childQ.maxRunningApps)
+
+	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit2.Clone(), 4, true, user, false) // override -> changes qt.doWildCardCheck
+	assert.Assert(t, childQ.useWildCard)
+	assert.Assert(t, resources.Equals(newLimit2, childQ.maxResources))
+	assert.Equal(t, uint64(4), childQ.maxRunningApps)
+
+	root.setLimit(strings.Split(queuePath1, configs.DOT), newLimit.Clone(), 5, false, user, false) // override
+	assert.Assert(t, !childQ.useWildCard)
+	assert.Assert(t, resources.Equals(newLimit, childQ.maxResources))
+	assert.Equal(t, uint64(5), childQ.maxRunningApps)
+}
+
 func getQTResource(qt *QueueTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := qt.getResourceUsageDAOInfo("")

@@ -88,8 +88,8 @@ func TestNewFilterLists(t *testing.T) {
 	// test simple single user or group
 	conf = configs.Filter{}
 	conf.Type = ""
-	conf.Users = []string{"user1"}
-	conf.Groups = []string{"group1"}
+	conf.Users = []string{"user1_a_#_b_c-d-/-e:f_@_gmail.com"}
+	conf.Groups = []string{"group1_a_b_c-d-e:f_gmail.com"}
 
 	filter = newFilter(conf)
 	if !filter.allow {
@@ -191,6 +191,43 @@ func TestNewFilterExceptions(t *testing.T) {
 	}
 	if filter.groupExp != nil || len(filter.groupList) != 1 {
 		t.Error("filter create did not set group filter correctly regexp not in first entry")
+	}
+
+	// test single invalid user or group
+	conf = configs.Filter{}
+	conf.Type = ""
+	conf.Users = []string{"user!1"}
+	conf.Groups = []string{"grou#p1"}
+
+	filter = newFilter(conf)
+	if !filter.allow {
+		t.Error("filter create did not set allow flag correctly from empty string")
+	}
+	if filter.userExp != nil || len(filter.userList) != 0 {
+		t.Error("filter create cannot set user filter correctly single invalid entry not regexp")
+	}
+	if filter.groupExp != nil || len(filter.groupList) != 0 {
+		t.Error("filter create cannot not set group filter correctly single invalid entry not regexp")
+	}
+	if filter.empty {
+		t.Error("filter create did not set empty flag correctly")
+	}
+
+	// test multiple invalid user or group
+	conf = configs.Filter{}
+	conf.Type = ""
+	conf.Users = []string{"use!r1", "user2"}
+	conf.Groups = []string{"gro!up1", "gro#up2"}
+
+	filter = newFilter(conf)
+	if !filter.allow {
+		t.Error("filter create did not set allow flag correctly from empty string")
+	}
+	if filter.userExp != nil || len(filter.userList) != 1 {
+		t.Error("filter create cannot set user filter correctly invalid multiple entry not regexp")
+	}
+	if filter.groupExp != nil || len(filter.groupList) != 0 {
+		t.Error("filter create cannot set group filter correctly invalid multiple entry not regexp")
 	}
 }
 

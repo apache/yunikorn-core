@@ -285,12 +285,12 @@ func TestSetAndClearMaxLimits(t *testing.T) {
 
 	// clear limits
 	eventSystem.Reset()
-	userTracker.clearLimits(path1, true)
+	userTracker.clearLimits(path1, false)
 	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1), lowerParentHeadroom))
 	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), lowerParentHeadroom))
 	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4))
 	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4))
-	userTracker.clearLimits(path5, true)
+	userTracker.clearLimits(path5, false)
 	assert.Assert(t, userTracker.headroom(hierarchy1) == nil)
 	assert.Assert(t, userTracker.headroom(hierarchy5) == nil)
 	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4))

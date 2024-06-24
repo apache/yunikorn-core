@@ -188,7 +188,7 @@ func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Reso
 		if qt.childQueueTrackers[childName] == nil {
 			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType)
 		}
-		qt.childQueueTrackers[childName].setLimit(hierarchy[1:], maxResource, maxApps, useWildCard, trackType, false)
+		qt.childQueueTrackers[childName].setLimit(hierarchy[1:], maxResource, maxApps, useWildCard, trackType, doWildCardCheck)
 	} else if len(hierarchy) == 1 {
 		// don't override named user/group specific limits with wild card limits
 		if doWildCardCheck && !qt.useWildCard {

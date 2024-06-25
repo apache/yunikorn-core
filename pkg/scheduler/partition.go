@@ -829,22 +829,22 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 
 // Try regular allocation for the partition
 // Lock free call this all locks are taken when needed in called functions
-func (pc *PartitionContext) tryAllocate() *objects.Allocation {
+func (pc *PartitionContext) tryAllocate() *objects.AllocationResult {
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		// nothing to do just return
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.isPreemptionEnabled())
-	if alloc != nil {
-		return pc.allocate(alloc)
+	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.isPreemptionEnabled())
+	if result != nil {
+		return pc.allocate(result)
 	}
 	return nil
 }
 
 // Try process reservations for the partition
 // Lock free call this all locks are taken when needed in called functions
-func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
+func (pc *PartitionContext) tryReservedAllocate() *objects.AllocationResult {
 	if pc.getReservationCount() == 0 {
 		return nil
 	}
@@ -853,16 +853,16 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryReservedAllocate(pc.GetNodeIterator)
-	if alloc != nil {
-		return pc.allocate(alloc)
+	result := pc.root.TryReservedAllocate(pc.GetNodeIterator)
+	if result != nil {
+		return pc.allocate(result)
 	}
 	return nil
 }
 
 // Try process placeholder for the partition
 // Lock free call this all locks are taken when needed in called functions
-func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
+func (pc *PartitionContext) tryPlaceholderAllocate() *objects.AllocationResult {
 	if pc.getPhAllocationCount() == 0 {
 		return nil
 	}
@@ -871,23 +871,23 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.Allocation {
 		return nil
 	}
 	// try allocating from the root down
-	alloc := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
-	if alloc != nil {
+	result := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
+	if result != nil {
 		log.Log(log.SchedPartition).Info("scheduler replace placeholder processed",
-			zap.String("appID", alloc.GetApplicationID()),
-			zap.String("allocationKey", alloc.GetAllocationKey()),
-			zap.String("placeholder released allocationKey", alloc.GetRelease().GetAllocationKey()))
+			zap.String("appID", result.Ask.GetApplicationID()),
+			zap.String("allocationKey", result.Ask.GetAllocationKey()),
+			zap.String("placeholder released allocationKey", result.Allocation.GetRelease().GetAllocationKey()))
 		// pass the release back to the RM via the cluster context
-		return alloc
+		return result
 	}
 	return nil
 }
 
 // Process the allocation and make the left over changes in the partition.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocation {
+func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.AllocationResult {
 	// find the app make sure it still exists
-	appID := alloc.GetApplicationID()
+	appID := result.Ask.GetApplicationID()
 	app := pc.getApplication(appID)
 	if app == nil {
 		log.Log(log.SchedPartition).Info("Application was removed while allocating",
@@ -898,12 +898,13 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 	// if the node was passed in use that ID instead of the one from the allocation
 	// the node ID is set when a reservation is allocated on a non-reserved node
 	var nodeID string
-	if alloc.GetReservedNodeID() == "" {
-		nodeID = alloc.GetNodeID()
+	alloc := result.Allocation
+	if alloc == nil || result.ReservedNodeID == "" {
+		nodeID = result.NodeID
 	} else {
-		nodeID = alloc.GetReservedNodeID()
+		nodeID = result.ReservedNodeID
 		log.Log(log.SchedPartition).Debug("Reservation allocated on different node",
-			zap.String("current node", alloc.GetNodeID()),
+			zap.String("current node", result.NodeID),
 			zap.String("reserved node", nodeID),
 			zap.String("appID", appID))
 	}
@@ -914,36 +915,37 @@ func (pc *PartitionContext) allocate(alloc *objects.Allocation) *objects.Allocat
 			zap.String("appID", appID))
 		return nil
 	}
-	alloc.SetInstanceType(node.GetInstanceType())
 	// reservation
-	if alloc.GetResultType() == objects.Reserved {
-		pc.reserve(app, node, alloc.GetAsk())
+	if result.ResultType == objects.Reserved {
+		pc.reserve(app, node, result.Ask)
 		return nil
 	}
 	// unreserve
-	if alloc.GetResultType() == objects.Unreserved || alloc.GetResultType() == objects.AllocatedReserved {
-		pc.unReserve(app, node, alloc.GetAsk())
-		if alloc.GetResultType() == objects.Unreserved {
+	if result.ResultType == objects.Unreserved || result.ResultType == objects.AllocatedReserved {
+		pc.unReserve(app, node, result.Ask)
+		if result.ResultType == objects.Unreserved {
 			return nil
 		}
 		// remove the link to the reserved node
-		alloc.SetReservedNodeID("")
+		result.ReservedNodeID = ""
 	}
+
+	alloc.SetInstanceType(node.GetInstanceType())
 
 	// track the number of allocations
 	pc.updateAllocationCount(1)
-	if alloc.IsPlaceholder() {
+	if result.Ask.IsPlaceholder() {
 		pc.incPhAllocationCount()
 	}
 
 	log.Log(log.SchedPartition).Info("scheduler allocation processed",
-		zap.String("appID", alloc.GetApplicationID()),
-		zap.String("allocationKey", alloc.GetAllocationKey()),
-		zap.Stringer("allocatedResource", alloc.GetAllocatedResource()),
-		zap.Bool("placeholder", alloc.IsPlaceholder()),
+		zap.String("appID", result.Ask.GetApplicationID()),
+		zap.String("allocationKey", result.Ask.GetAllocationKey()),
+		zap.Stringer("allocatedResource", result.Ask.GetAllocatedResource()),
+		zap.Bool("placeholder", result.Ask.IsPlaceholder()),
 		zap.String("targetNode", alloc.GetNodeID()))
-	// pass the allocation back to the RM via the cluster context
-	return alloc
+	// pass the allocation result back to the RM via the cluster context
+	return result
 }
 
 // Process the reservation in the scheduler

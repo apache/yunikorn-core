@@ -2295,7 +2295,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			expectedErrorMsg: "invalid queue name 'thisQueueNameIsTooLongthisQueueNameIsTooLongthisQueueNameIsTooLong', max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed",
+			expectedErrorMsg: common.InvalidQueueName.Error(),
 		},
 		{
 			name: "Invalid Child Queue Name With Special Character",
@@ -2308,7 +2308,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			expectedErrorMsg: "invalid queue name 'queue_Name$', max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed",
+			expectedErrorMsg: common.InvalidQueueName.Error(),
 		},
 		{
 			name: "Valid Multiple Queues",

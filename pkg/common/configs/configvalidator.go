@@ -675,7 +675,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 
 func IsQueueNameValid(queueName string) error {
 	if !QueueNameRegExp.MatchString(queueName) {
-		return fmt.Errorf("invalid queue name '%s', max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed", queueName)
+		return common.InvalidQueueName
 	}
 	return nil
 }

@@ -130,22 +130,22 @@ func (cc *ClusterContext) schedule() bool {
 		}
 		// try reservations first
 		schedulingStart := time.Now()
-		alloc := psc.tryReservedAllocate()
-		if alloc == nil {
+		result := psc.tryReservedAllocate()
+		if result == nil {
 			// placeholder replacement second
-			alloc = psc.tryPlaceholderAllocate()
+			result = psc.tryPlaceholderAllocate()
 			// nothing reserved that can be allocated try normal allocate
-			if alloc == nil {
-				alloc = psc.tryAllocate()
+			if result == nil {
+				result = psc.tryAllocate()
 			}
 		}
-		if alloc != nil {
+		if result != nil {
 			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
-			if alloc.GetResultType() == objects.Replaced {
+			if result.ResultType == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, []*objects.Allocation{alloc.GetRelease()}, si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+alloc.GetAllocationKey())
+				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, []*objects.Allocation{result.Allocation.GetRelease()}, si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+result.Ask.GetAllocationKey())
 			} else {
-				cc.notifyRMNewAllocation(psc.RmID, alloc)
+				cc.notifyRMNewAllocation(psc.RmID, result.Allocation)
 			}
 			activity = true
 		}

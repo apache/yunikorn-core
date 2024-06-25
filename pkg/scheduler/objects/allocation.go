@@ -43,8 +43,27 @@ const (
 	Replaced
 )
 
-func (ar AllocationResultType) String() string {
-	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved", "Replaced"}[ar]
+func (art AllocationResultType) String() string {
+	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved", "Replaced"}[art]
+}
+
+type AllocationResult struct {
+	ResultType     AllocationResultType
+	NodeID         string
+	ReservedNodeID string
+	Ask            *AllocationAsk
+	Allocation     *Allocation
+}
+
+func (ar *AllocationResult) String() string {
+	if ar == nil {
+		return "nil allocation result"
+	}
+	allocationKey := ""
+	if ar.Ask != nil {
+		allocationKey = ar.Ask.GetAllocationKey()
+	}
+	return fmt.Sprintf("resultType=%s, nodeID=%s, reservedNodeID=%s, allocationKey=%s", ar.ResultType.String(), ar.NodeID, ar.ReservedNodeID, allocationKey)
 }
 
 type Allocation struct {
@@ -65,8 +84,6 @@ type Allocation struct {
 	bindTime              time.Time // the time this allocation was bound to a node
 	placeholderCreateTime time.Time
 	released              bool
-	reservedNodeID        string
-	resultType            AllocationResultType
 	release               *Allocation
 	preempted             bool
 	instType              string
@@ -87,22 +104,37 @@ func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 		allocatedResource: ask.GetAllocatedResource().Clone(),
 		taskGroupName:     ask.GetTaskGroup(),
 		placeholder:       ask.IsPlaceholder(),
-		resultType:        Allocated,
 	}
 }
 
-func newReservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
-	alloc := NewAllocation(nodeID, ask)
-	alloc.SetBindTime(time.Time{})
-	alloc.SetResultType(Reserved)
-	return alloc
+// newAllocatedAllocationResult creates a new allocation result for a new allocation.
+func newAllocatedAllocationResult(nodeID string, ask *AllocationAsk, alloc *Allocation) *AllocationResult {
+	return newAllocationResultInternal(Allocated, nodeID, ask, alloc)
 }
 
-func newUnreservedAllocation(nodeID string, ask *AllocationAsk) *Allocation {
-	alloc := NewAllocation(nodeID, ask)
-	alloc.SetBindTime(time.Time{})
-	alloc.SetResultType(Unreserved)
-	return alloc
+// newReservedAllocationResult creates a new allocation result for reserving a node.
+func newReservedAllocationResult(nodeID string, ask *AllocationAsk) *AllocationResult {
+	return newAllocationResultInternal(Reserved, nodeID, ask, nil)
+}
+
+// newUnreservedAllocationResult creates a new allocation result for unreserving a node.
+func newUnreservedAllocationResult(nodeID string, ask *AllocationAsk) *AllocationResult {
+	return newAllocationResultInternal(Unreserved, nodeID, ask, nil)
+}
+
+// newReplacedAllocationResult create a new allocation result for replaced allocations.
+func newReplacedAllocationResult(nodeID string, ask *AllocationAsk, alloc *Allocation) *AllocationResult {
+	return newAllocationResultInternal(Replaced, nodeID, ask, alloc)
+}
+
+// newAllocationResultInternal creates a new allocation result. It should not be called directly.
+func newAllocationResultInternal(resultType AllocationResultType, nodeID string, ask *AllocationAsk, alloc *Allocation) *AllocationResult {
+	return &AllocationResult{
+		ResultType: resultType,
+		NodeID:     nodeID,
+		Ask:        ask,
+		Allocation: alloc,
+	}
 }
 
 // Create a new Allocation from a node recovered allocation.
@@ -179,7 +211,7 @@ func (a *Allocation) String() string {
 	}
 	a.RLock()
 	defer a.RUnlock()
-	return fmt.Sprintf("applicationID=%s, allocationKey=%s, Node=%s, resultType=%s", a.applicationID, a.allocationKey, a.nodeID, a.resultType.String())
+	return fmt.Sprintf("applicationID=%s, allocationKey=%s, Node=%s", a.applicationID, a.allocationKey, a.nodeID)
 }
 
 // GetAsk returns the ask associated with this allocation
@@ -277,20 +309,6 @@ func (a *Allocation) GetPriority() int32 {
 	return a.priority
 }
 
-// GetReservedNodeID gets the node this allocation is reserved for
-func (a *Allocation) GetReservedNodeID() string {
-	a.RLock()
-	defer a.RUnlock()
-	return a.reservedNodeID
-}
-
-// SetReservedNodeID sets the node this allocation is reserved for
-func (a *Allocation) SetReservedNodeID(reservedNodeID string) {
-	a.Lock()
-	defer a.Unlock()
-	a.reservedNodeID = reservedNodeID
-}
-
 // IsReleased returns the release status of the allocation
 func (a *Allocation) IsReleased() bool {
 	a.RLock()
@@ -308,20 +326,6 @@ func (a *Allocation) SetReleased(released bool) {
 // GetTagsClone returns the copy of the tags for this allocation
 func (a *Allocation) GetTagsClone() map[string]string {
 	return CloneAllocationTags(a.tags)
-}
-
-// GetResultType gets the result type of this allocation
-func (a *Allocation) GetResultType() AllocationResultType {
-	a.RLock()
-	defer a.RUnlock()
-	return a.resultType
-}
-
-// SetResultType sets the result type of this allocation
-func (a *Allocation) SetResultType(resultType AllocationResultType) {
-	a.Lock()
-	defer a.Unlock()
-	a.resultType = resultType
 }
 
 // GetRelease returns the associated release for this allocation

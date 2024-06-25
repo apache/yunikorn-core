@@ -54,7 +54,6 @@ func TestNewAlloc(t *testing.T) {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
 	assert.Equal(t, alloc.GetAllocationKey(), "ask-1")
-	assert.Equal(t, alloc.GetResultType(), Allocated, "New alloc should default to result type Allocated")
 	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
 	assert.Assert(t, !alloc.IsPlaceholder(), "ask should not have been a placeholder")
 	assert.Equal(t, time.Now().Round(time.Second), alloc.GetCreateTime().Round(time.Second))
@@ -62,7 +61,7 @@ func TestNewAlloc(t *testing.T) {
 	alloc.SetInstanceType(instType1)
 	assert.Equal(t, alloc.GetInstanceType(), instType1, "Instance type not set as expected")
 	allocStr := alloc.String()
-	expected := "applicationID=app-1, allocationKey=ask-1, Node=node-1, resultType=Allocated"
+	expected := "applicationID=app-1, allocationKey=ask-1, Node=node-1"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
 	assert.Assert(t, !alloc.IsPlaceholderUsed(), fmt.Sprintf("Alloc should not be placeholder replacement by default: got %t, expected %t", alloc.IsPlaceholderUsed(), false))
 	// check that createTime is properly copied from the ask
@@ -74,34 +73,77 @@ func TestNewAlloc(t *testing.T) {
 	assert.Equal(t, alloc.GetCreateTime(), ask.GetCreateTime(), "createTime was not copied from the ask")
 }
 
-func TestNewReservedAlloc(t *testing.T) {
+func TestNewAllocatedAllocationResult(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := newReservedAllocation("node-1", ask)
-	if alloc == nil {
-		t.Fatal("NewReservedAllocation create failed while it should not")
+	alloc := NewAllocation("node-1", ask)
+	result := newAllocatedAllocationResult("node-1", ask, alloc)
+	if result == nil {
+		t.Fatal("NewAllocatedAllocationResult create failed while it should not")
 	}
-	assert.Equal(t, alloc.GetResultType(), Reserved, "NewReservedAlloc should have Reserved result type")
-	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
-	allocStr := alloc.String()
-	expected := "applicationID=app-1, allocationKey=ask-1, Node=node-1, resultType=Reserved"
-	assert.Equal(t, allocStr, expected, "Strings should have been equal")
+	assert.Equal(t, result.ResultType, Allocated, "NewAllocatedAllocationResult should have Allocated result type")
+	assert.Equal(t, ask, result.Ask, "wrong ask")
+	assert.Equal(t, alloc, result.Allocation, "wrong allocation")
+	assert.Equal(t, result.NodeID, "node-1", "wrong node id")
 }
 
-func TestNewUnreservedAlloc(t *testing.T) {
+func TestNewReservedAllocationResult(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
 	assert.NilError(t, err, "Resource creation failed")
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := newUnreservedAllocation("node-1", ask)
-	if alloc == nil {
-		t.Fatal("NewReservedAllocation create failed while it should not")
+	result := newReservedAllocationResult("node-1", ask)
+	if result == nil {
+		t.Fatal("NewReservedAllocationResult create failed while it should not")
 	}
-	assert.Equal(t, alloc.GetResultType(), Unreserved, "NewReservedAlloc should have Reserved result type")
-	assert.Assert(t, resources.Equals(alloc.GetAllocatedResource(), res), "Allocated resource not set correctly")
-	allocStr := alloc.String()
-	expected := "applicationID=app-1, allocationKey=ask-1, Node=node-1, resultType=Unreserved"
-	assert.Equal(t, allocStr, expected, "Strings should have been equal")
+	assert.Equal(t, result.ResultType, Reserved, "NewReservedAllocationResult should have Reserved result type")
+	assert.Equal(t, ask, result.Ask, "wrong ask")
+	assert.Equal(t, result.NodeID, "node-1", "wrong node id")
+}
+
+func TestNewUnreservedAllocationResult(t *testing.T) {
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "Resource creation failed")
+	ask := newAllocationAsk("ask-1", "app-1", res)
+	result := newUnreservedAllocationResult("node-1", ask)
+	if result == nil {
+		t.Fatal("NewReservedAllocationResult create failed while it should not")
+	}
+	assert.Equal(t, result.ResultType, Unreserved, "NewReservedAllocationResult should have Reserved result type")
+	assert.Equal(t, ask, result.Ask, "wrong ask")
+	assert.Equal(t, result.NodeID, "node-1", "wrong node id")
+}
+
+func TestNewReplacedAllocationResult(t *testing.T) {
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "Resource creation failed")
+	ask := newAllocationAsk("ask-1", "app-1", res)
+	alloc := NewAllocation("node-1", ask)
+	result := newReplacedAllocationResult("node-1", ask, alloc)
+	if result == nil {
+		t.Fatal("NewReplacedllocationResult create failed while it should not")
+	}
+	assert.Equal(t, result.ResultType, Replaced, "NewReplacedAllocationResult should have Allocated result type")
+	assert.Equal(t, ask, result.Ask, "wrong ask")
+	assert.Equal(t, alloc, result.Allocation, "wrong allocation")
+	assert.Equal(t, result.NodeID, "node-1", "wrong node id")
+}
+
+func TestAllocationResultString(t *testing.T) {
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "Resource creation failed")
+	ask := newAllocationAsk("ask-1", "app-1", res)
+	result := &AllocationResult{
+		ResultType:     Allocated,
+		NodeID:         "node-1",
+		ReservedNodeID: "node-2",
+		Ask:            ask,
+	}
+	assert.Equal(t, result.String(), "resultType=Allocated, nodeID=node-1, reservedNodeID=node-2, allocationKey=ask-1", "wrong content")
+
+	// validate nil ask
+	result.Ask = nil
+	assert.Equal(t, result.String(), "resultType=Allocated, nodeID=node-1, reservedNodeID=node-2, allocationKey=", "wrong content")
 }
 
 func TestSIFromNilAlloc(t *testing.T) {

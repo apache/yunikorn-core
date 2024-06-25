@@ -551,7 +551,7 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 	return "", nil, false
 }
 
-func (p *Preemptor) TryPreemption() (*Allocation, bool) {
+func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	// validate that sufficient capacity can be freed
 	if !p.checkPreemptionQueueGuarantees() {
 		return nil, false
@@ -649,7 +649,7 @@ func (p *Preemptor) TryPreemption() (*Allocation, bool) {
 		zap.String("allocationKey", p.ask.GetAllocationKey()),
 		zap.String("nodeID", nodeID),
 		zap.Int("victimCount", len(victims)))
-	return newReservedAllocation(nodeID, p.ask), true
+	return newReservedAllocationResult(nodeID, p.ask), true
 }
 
 type predicateCheckResult struct {

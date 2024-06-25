@@ -92,8 +92,20 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 	var parentName string
 	var err error
 	queueName := tagVal
-	// if we have a fully qualified queue in the value do not run the parent rule
-	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
+	// fully qualified queue, do not run the parent rule
+	if strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
+		parts := strings.Split(queueName, configs.DOT)
+		for _, part := range parts {
+			if err = configs.IsQueueNameValid(part); err != nil {
+				return "", err
+			}
+		}
+	} else {
+		// not fully qualified queue
+		childQueueName := replaceDot(tagVal)
+		if err = configs.IsQueueNameValid(childQueueName); err != nil {
+			return "", err
+		}
 		// run the parent rule if set
 		if tr.parent != nil {
 			parentName, err = tr.parent.placeApplication(app, queueFn)
@@ -119,10 +131,10 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 		if parentName == "" {
 			parentName = configs.RootQueue
 		}
-		queueName = parentName + configs.DOT + replaceDot(tagVal)
+		queueName = parentName + configs.DOT + childQueueName
 	}
 	// Log the result before we check the create flag
-	log.Log(log.SchedApplication).Debug("Tag rule intermediate result",
+	log.Log(log.SchedApplication).Info("Tag rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object

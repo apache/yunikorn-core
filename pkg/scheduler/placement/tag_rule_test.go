@@ -104,6 +104,14 @@ partitions:
 		t.Errorf("tag rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
 
+	// tag invalid queue
+	tags = map[string]string{"label1": "test!queue"}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	_, err = tr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("tag rule should have failed to place app, err %v", err)
+	}
+
 	// tag queue that does not exists
 	tags = map[string]string{"label1": "unknown"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
@@ -118,6 +126,14 @@ partitions:
 	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule did fail with qualified queue '%s', error %v", queue, err)
+	}
+
+	// tag invalid queue fully qualified
+	tags = map[string]string{"label1": "root.testparent.test!child"}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	_, err = tr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("tag rule should have failed with fully qualified invalid queue, error %v", err)
 	}
 
 	// tag queue references recovery
@@ -152,6 +168,13 @@ partitions:
 	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule with parent queue incorrect queue '%s', error %v", queue, err)
+	}
+
+	tags = map[string]string{"label1": "testchild", "label2": "testp!arent"}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	_, err = tr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("tag rule with parent queue should have failed, error %v", err)
 	}
 
 	// deny filter type should got got empty queue

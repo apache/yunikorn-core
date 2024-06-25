@@ -2478,7 +2478,10 @@ func TestQueueEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_QUEUE, records[3].Type)
 	assert.Equal(t, si.EventRecord_REMOVE, records[3].EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_APP, records[3].EventChangeDetail)
-	isRemoveApplicationEvent(t, app, records[4])
+	assert.Equal(t, si.EventRecord_APP, records[4].Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, records[4].ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_REMOVE, records[4].EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[4].EventChangeDetail, "incorrect change detail, expected none")
 
 	newConf := configs.QueueConfig{
 		Parent: false,
@@ -2545,4 +2548,11 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	app.RemoveAllocation(alloc.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
 	assert.Equal(t, app.CurrentState(), Completing.String(), "app state should be completing")
 	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
+}
+
+func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
+	assert.Equal(t, si.EventRecord_APP_NEW, record.EventChangeDetail, "incorrect change detail, expected none")
 }

@@ -45,9 +45,26 @@ func TestGetPreemptableResource(t *testing.T) {
 	// guaranteed set but no usage. so nothing to preempt
 	// clean start for the snapshot: whole hierarchy with guarantee
 	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	// clean start for the snapshot: all set guaranteed - new tests
+	// add usage to parent + root: use all guaranteed at parent level
+	// add usage to child2: use double than guaranteed
+	parentQ.guaranteedResource = smallestRes
+	rootQ.allocatedResource = resources.Multiply(smallestRes, 2)
+	parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
+	childQ2.allocatedResource = resources.Multiply(smallestRes, 2)
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+	assert.Assert(t, resources.Equals(rootPreemptable, resources.Multiply(smallestRes, 2)), "usage is equal to guaranteed in root queue. so nothing to preempt")
+	assert.Assert(t, resources.Equals(pPreemptable, smallestRes), "usage has exceeded twice than guaranteed in parent queue. preemtable resource should be equal to guaranteed res")
+	assert.Assert(t, resources.IsZero(cPreemptable1), "nothing to preempt as no usage in child1 queue")
+	assert.Assert(t, resources.Equals(cPreemptable2, smallestRes), "usage has exceeded twice than guaranteed in child2 queue. preemtable resource should be equal to guaranteed res")
+
 	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
 	parentQ.guaranteedResource = smallestRes
 	childQ2.guaranteedResource = smallestRes
+	rootQ.allocatedResource = nil
+	parentQ.allocatedResource = nil
+	childQ2.allocatedResource = nil
 	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
 	childQ1.guaranteedResource = childRes
 	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
@@ -105,25 +122,36 @@ func TestGetPreemptableResource(t *testing.T) {
 }
 
 func TestGetRemainingGuaranteedResource(t *testing.T) {
-	// no guaranteed and no usage. so nothing to preempt
-	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	// no guaranteed and no usage. so no remaining
+	rootQ, err := createRootQueue(map[string]string{})
 	assert.NilError(t, err)
 	var parentQ, childQ1, childQ2 *Queue
-	parentQ, err = createManagedQueue(rootQ, "parent", true, map[string]string{"first": "10"})
+	parentQ, err = createManagedQueue(rootQ, "parent", true, map[string]string{})
 	assert.NilError(t, err)
-	childQ1, err = createManagedQueue(parentQ, "child1", false, map[string]string{"first": "5"})
+	childQ1, err = createManagedQueue(parentQ, "child1", false, map[string]string{})
 	assert.NilError(t, err)
-	childQ2, err = createManagedQueue(parentQ, "child2", false, map[string]string{"first": "5"})
+	childQ2, err = createManagedQueue(parentQ, "child2", false, map[string]string{})
 	assert.NilError(t, err)
 	rootRemaining, pRemaining, cRemaining1, cRemaining2 := getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed not set, so no remaining")
-	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed not set, so no remaining")
-	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed not set, so no remaining")
-	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed not set, so no remaining")
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed and max res not set, so no remaining")
+
+	// no guaranteed and no usage, but max res set. so min of guaranteed and max should be remaining
+	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	rootQ.maxResource = resources.Multiply(smallestRes, 4)
+	parentQ.maxResource = resources.Multiply(smallestRes, 2)
+	childQ1.maxResource = smallestRes
+	childQ2.maxResource = smallestRes
+	rootRemaining, pRemaining, cRemaining1, cRemaining2 = getRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2)
+	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed and max res not set, so no remaining")
+	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed and max res not set, so no remaining")
 
 	// guaranteed set only for queue at specific levels but no usage.
 	// so remaining for queues without guaranteed quota inherits from parent queue based on min perm calculation
-	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
 	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
 	childQ1.guaranteedResource = childRes

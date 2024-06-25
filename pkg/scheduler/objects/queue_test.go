@@ -1697,7 +1697,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 
 	// verify no victims when no allocations exist
 	snapshot := leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
-	assert.Equal(t, 3, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
+	assert.Equal(t, 5, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 
 	// add two lower-priority allocs in leaf2

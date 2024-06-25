@@ -39,6 +39,7 @@ const (
 	appID0    = "app-0"
 	appID1    = "app-1"
 	appID2    = "app-2"
+	appID3    = "app-3"
 	aKey      = "alloc-1"
 	aKey2     = "alloc-2"
 	nodeID1   = "node-1"

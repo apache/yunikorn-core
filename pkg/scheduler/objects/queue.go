@@ -1764,17 +1764,22 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 			return
 		}
 
+		victims := sq.createPreemptionSnapshot(results)
+
 		// skip this queue if we are within guaranteed limits
-		guaranteed := resources.ComponentWiseMinPermissive(sq.GetActualGuaranteedResource(), sq.GetMaxResource())
-		if guaranteed.FitInMaxUndef(sq.GetAllocatedResource()) {
+		remaining := results[sq.QueuePath].GetRemainingGuaranteedResource()
+		if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
 			return
 		}
-
-		victims := sq.createPreemptionSnapshot(results)
 
 		// walk allocations and select those that are equal or lower than current priority
 		for _, app := range sq.GetCopyOfApps() {
 			for _, alloc := range app.GetAllAllocations() {
+				// at least any one of the ask resource type should match with potential victim
+				if !ask.GetAllocatedResource().MatchAny(alloc.allocatedResource) {
+					continue
+				}
+
 				// skip tasks which require a specific node
 				if alloc.GetAsk().GetRequiredNode() != "" {
 					continue
@@ -1840,7 +1845,7 @@ func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPr
 	priorityMap[sq.QueuePath] = currentPriority
 
 	// Return this queue as fence root if: 1. FencePreemptionPolicy is set 2. root queue 3. allocations in the queue reached maximum resources
-	if sq.parent == nil || sq.GetPreemptionPolicy() == policies.FencePreemptionPolicy || resources.Equals(sq.allocatedResource, sq.maxResource) {
+	if sq.parent == nil || sq.GetPreemptionPolicy() == policies.FencePreemptionPolicy || resources.Equals(sq.maxResource, sq.allocatedResource) {
 		return sq
 	}
 	return sq.parent.findPreemptionFenceRoot(priorityMap, currentPriority)

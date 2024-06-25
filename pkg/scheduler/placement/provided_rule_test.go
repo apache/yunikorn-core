@@ -136,6 +136,23 @@ partitions:
 	if err == nil {
 		t.Errorf("provided rule should have failed to place app, error %v", err)
 	}
+	// deny filter type should got got empty queue
+	conf = configs.PlacementRule{
+		Name: "provided",
+		Filter: configs.Filter{
+			Type: filterDeny,
+		},
+	}
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed with parent name, err %v", err)
+	}
+
+	appInfo = newApplication("app1", "default", "testchild", user, tags, nil, "")
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err != nil {
+		t.Errorf("provided rule with deny filter type should got empty queue, err nil")
+	}
 }
 
 func TestProvidedRuleParent(t *testing.T) {
@@ -247,6 +264,54 @@ func TestProvidedRuleParent(t *testing.T) {
 	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
 	queue, err = pr.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
+		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// failed parent rule
+	conf = configs.PlacementRule{
+		Name:   "provided",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testchild",
+			Parent: &configs.PlacementRule{
+				Name:  "fixed",
+				Value: "testchild",
+			},
+		},
+	}
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed, err %v", err)
+	}
+
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// parent name not has prefix
+	conf = configs.PlacementRule{
+		Name:   "provided",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "provided",
+			Create: true,
+			Parent: &configs.PlacementRule{
+				Name:  "fixed",
+				Value: "root",
+			},
+		},
+	}
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("provided rule create failed, err %v", err)
+	}
+
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if queue != "root.root.unknown.unknown" || err != nil {
 		t.Errorf("provided rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
 }

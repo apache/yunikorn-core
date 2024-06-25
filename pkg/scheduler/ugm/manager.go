@@ -99,15 +99,15 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 	}
 	userTracker.increaseTrackedResource(queuePath, applicationID, usage)
 	appGroup := userTracker.getGroupForApp(applicationID)
-	if appGroup == common.Empty {
-		return
-	}
 	log.Log(log.SchedUGM).Debug("Increasing resource usage for user",
 		zap.String("user", user.User),
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
 		zap.String("group", appGroup),
 		zap.Stringer("resource", usage))
+	if appGroup == common.Empty {
+		return
+	}
 	groupTracker := m.GetGroupTracker(appGroup)
 	if groupTracker == nil {
 		log.Log(log.SchedUGM).Error("group tracker should be available in groupTrackers map",

@@ -134,4 +134,11 @@ partitions:
 	if queue != "testchild" || err != nil {
 		t.Errorf("test rule placed app in incorrect queue '%s', err %v", queue, err)
 	}
+
+	// invalid queueName
+	appInfo = newApplication("app1", "default", "test$child", user, tags, nil, "")
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("invalid queueName should got empty queueName")
+	}
 }

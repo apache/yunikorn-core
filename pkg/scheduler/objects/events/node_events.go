@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package objects
+package events
 
 import (
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -25,11 +25,11 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type nodeEvents struct {
+type NodeEvents struct {
 	eventSystem events.EventSystem
 }
 
-func (n *nodeEvents) sendNodeAddedEvent(nodeID string, capacity *resources.Resource) {
+func (n *NodeEvents) SendNodeAddedEvent(nodeID string, capacity *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -38,7 +38,7 @@ func (n *nodeEvents) sendNodeAddedEvent(nodeID string, capacity *resources.Resou
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeRemovedEvent(nodeID string) {
+func (n *NodeEvents) SendNodeRemovedEvent(nodeID string) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -47,7 +47,7 @@ func (n *nodeEvents) sendNodeRemovedEvent(nodeID string) {
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendAllocationAddedEvent(nodeID, allocKey string, res *resources.Resource) {
+func (n *NodeEvents) SendAllocationAddedEvent(nodeID, allocKey string, res *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -56,7 +56,7 @@ func (n *nodeEvents) sendAllocationAddedEvent(nodeID, allocKey string, res *reso
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendAllocationRemovedEvent(nodeID, allocKey string, res *resources.Resource) {
+func (n *NodeEvents) SendAllocationRemovedEvent(nodeID, allocKey string, res *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -65,7 +65,7 @@ func (n *nodeEvents) sendAllocationRemovedEvent(nodeID, allocKey string, res *re
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeSchedulableChangedEvent(nodeID string, ready bool) {
+func (n *NodeEvents) SendNodeSchedulableChangedEvent(nodeID string, ready bool) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -80,7 +80,7 @@ func (n *nodeEvents) sendNodeSchedulableChangedEvent(nodeID string, ready bool) 
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeCapacityChangedEvent(nodeID string, total *resources.Resource) {
+func (n *NodeEvents) SendNodeCapacityChangedEvent(nodeID string, total *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -89,7 +89,7 @@ func (n *nodeEvents) sendNodeCapacityChangedEvent(nodeID string, total *resource
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendNodeOccupiedResourceChangedEvent(nodeID string, occupied *resources.Resource) {
+func (n *NodeEvents) SendNodeOccupiedResourceChangedEvent(nodeID string, occupied *resources.Resource) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -98,7 +98,7 @@ func (n *nodeEvents) sendNodeOccupiedResourceChangedEvent(nodeID string, occupie
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendReservedEvent(nodeID string, res *resources.Resource, askID string) {
+func (n *NodeEvents) SendReservedEvent(nodeID string, res *resources.Resource, askID string) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -107,7 +107,7 @@ func (n *nodeEvents) sendReservedEvent(nodeID string, res *resources.Resource, a
 	n.eventSystem.AddEvent(event)
 }
 
-func (n *nodeEvents) sendUnreservedEvent(nodeID string, res *resources.Resource, askID string) {
+func (n *NodeEvents) SendUnreservedEvent(nodeID string, res *resources.Resource, askID string) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -116,8 +116,8 @@ func (n *nodeEvents) sendUnreservedEvent(nodeID string, res *resources.Resource,
 	n.eventSystem.AddEvent(event)
 }
 
-func newNodeEvents(evt events.EventSystem) *nodeEvents {
-	return &nodeEvents{
+func NewNodeEvents(evt events.EventSystem) *NodeEvents {
+	return &NodeEvents{
 		eventSystem: evt,
 	}
 }

@@ -159,7 +159,7 @@ func NewAppState() *fsm.FSM {
 					return
 				}
 				if app.sendStateChangeEvents {
-					app.appEvents.sendStateChangeEvent(app.ApplicationID, eventDetails, eventInfo)
+					app.appEvents.SendStateChangeEvent(app.ApplicationID, eventDetails, eventInfo)
 				}
 			},
 			"leave_state": func(_ context.Context, event *fsm.Event) {

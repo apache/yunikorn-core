@@ -515,3 +515,10 @@ func createQueue(t *testing.T, queueName string) *Queue {
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	return queue
 }
+
+func isStateChangeEvent(t *testing.T, app *Application, changeDetail si.EventRecord_ChangeDetail, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_SET, record.EventChangeType, "incorrect change type, expected set")
+	assert.Equal(t, changeDetail, record.EventChangeDetail, "incorrect change detail")
+}

@@ -1710,6 +1710,45 @@ func TestGetApplicationHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getApplication(resp, req)
 	assertParamsMissing(t, resp)
+
+	// test additional application details
+	var req6 *http.Request
+	req6, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1?details=true", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req6 = req6.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.default"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
+	assert.NilError(t, err, "Get Application Handler request failed")
+
+	resp6 := &MockResponseWriter{}
+	var appDetailsDao *dao.ApplicationDetailsDAOInfo
+	getApplication(resp6, req6)
+	appSummary := app.GetApplicationSummary(partitionNameWithoutClusterID)
+
+	err = json.Unmarshal(resp6.outputBytes, &appDetailsDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, "app-1", appDetailsDao.ApplicationDAOInfo.ApplicationID)
+	assert.Equal(t, app.StartTime().UnixMilli(), appDetailsDao.StartTime)
+	assert.Equal(t, appSummary.ResourceUsage.String(), appDetailsDao.ResourceUsage.String())
+	assert.Equal(t, appSummary.PreemptedResource.String(), appDetailsDao.PreemptedResource.String())
+	assert.Equal(t, appSummary.PlaceholderResource.String(), appDetailsDao.PlaceholderResource.String())
+
+	// test nonexistent application details
+	var req7 *http.Request
+	req7, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1?details=true", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req7 = req7.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.noapps"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	resp7 := &MockResponseWriter{}
+	getApplication(resp7, req7)
+	assertApplicationNotExists(t, resp7)
+
 }
 
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {

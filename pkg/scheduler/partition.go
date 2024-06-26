@@ -1209,6 +1209,34 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 //
 //nolint:funlen
+func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
+	released := make([]*objects.Allocation, 0)
+	uuid := release.GetUUID()
+	if uuid == "" {
+		log.Logger().Info("remove all allocations",
+			zap.String("appID", app.ApplicationID))
+		released = append(released, app.RemoveAllAllocations()...)
+	} else {
+		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
+			log.Logger().Info("replacing placeholder allocation",
+				zap.String("appID", app.ApplicationID),
+				zap.String("allocationId", uuid))
+			if alloc := app.ReplaceAllocation(uuid); alloc != nil {
+				released = append(released, alloc)
+			}
+		} else {
+			log.Logger().Info("removing allocation from application",
+				zap.String("appID", app.ApplicationID),
+				zap.String("allocationId", uuid),
+				zap.Stringer("terminationType", release.TerminationType))
+			if alloc := app.RemoveAllocation(uuid, release.TerminationType); alloc != nil {
+				released = append(released, alloc)
+			}
+		}
+	}
+	return released
+}
+
 func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
 	if release == nil {
 		return nil, nil
@@ -1224,33 +1252,10 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			zap.Stringer("terminationType", release.TerminationType))
 		return nil, nil
 	}
-	// temp store for allocations manipulated
-	released := make([]*objects.Allocation, 0)
+
+	// Generate released allocations
+	released := pc.generateReleased(release, app)
 	var confirmed *objects.Allocation
-	// when uuid is not specified, remove all allocations from the app
-	if uuid == "" {
-		log.Logger().Info("remove all allocations",
-			zap.String("appID", appID))
-		released = append(released, app.RemoveAllAllocations()...)
-	} else {
-		// if we have an uuid the termination type is important
-		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			log.Logger().Info("replacing placeholder allocation",
-				zap.String("appID", appID),
-				zap.String("allocationId", uuid))
-			if alloc := app.ReplaceAllocation(uuid); alloc != nil {
-				released = append(released, alloc)
-			}
-		} else {
-			log.Logger().Info("removing allocation from application",
-				zap.String("appID", appID),
-				zap.String("allocationId", uuid),
-				zap.Stringer("terminationType", release.TerminationType))
-			if alloc := app.RemoveAllocation(uuid, release.TerminationType); alloc != nil {
-				released = append(released, alloc)
-			}
-		}
-	}
 
 	// for each allocation to release, update the node and queue.
 	total := resources.NewResource()

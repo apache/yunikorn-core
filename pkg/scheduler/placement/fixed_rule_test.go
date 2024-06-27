@@ -19,12 +19,14 @@
 package placement
 
 import (
+	"sort"
 	"testing"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 func TestFixedRule(t *testing.T) {
@@ -79,81 +81,46 @@ partitions:
 	tags := make(map[string]string)
 	app := newApplication("app1", "default", "ignored", user, tags, nil, "")
 
-	// fixed queue that exists directly under the root
-	conf := configs.PlacementRule{
-		Name:  "fixed",
-		Value: "testqueue",
-	}
-	var fr rule
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	var queue string
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.testqueue" || err != nil {
-		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
-	}
-
-	// fixed queue that exists directly in hierarchy
-	conf = configs.PlacementRule{
-		Name:  "fixed",
-		Value: "root.testparent.testchild",
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.testparent.testchild" || err != nil {
-		t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
+	var tests = []struct {
+		name          string
+		expectedQueue string
+		config        configs.PlacementRule
+		nilError      bool
+	}{
+		{"fixed queue that exists directly under the root", "root.testqueue", configs.PlacementRule{Name: "fixed", Value: "testqueue"}, true},
+		{"fixed queue that exists directly in hierarchy", "root.testparent.testchild", configs.PlacementRule{Name: "fixed", Value: "testparent.testchild"}, true},
+		{"fixed queue that does not exists", "root.newqueue", configs.PlacementRule{Name: "fixed", Value: "newqueue", Create: true}, true},
+		{"place in a parent queue should not fail: failure happens on create in this case", "root.testparent", configs.PlacementRule{Name: "fixed", Value: "root.testparent"}, true},
+		{"place in a child using a parent", "root.testparent.testchild", configs.PlacementRule{Name: "fixed", Value: "testchild", Parent: &configs.PlacementRule{Name: "fixed", Value: "testparent"}}, true},
+		{"invalid queue name", "", configs.PlacementRule{Name: "fixed", Value: "testqueue!>invalid<"}, false},
+		{"invalid queue name with full queue hierarchy", "", configs.PlacementRule{Name: "fixed", Value: "root.testparent!>invalid<test.testqueue"}, false},
+		{"deny filter type should got empty queue", "", configs.PlacementRule{Name: "fixed", Value: "testchild", Filter: configs.Filter{Type: filterDeny}}, true},
 	}
 
-	// fixed queue that does not exists
-	conf = configs.PlacementRule{
-		Name:   "fixed",
-		Value:  "newqueue",
-		Create: true,
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.newqueue" || err != nil {
-		t.Errorf("fixed rule failed to place queue in to be created queue '%s', err %v", queue, err)
-	}
-
-	// trying to place in a parent queue should not fail: failure happens on create in this case
-	conf = configs.PlacementRule{
-		Name:  "fixed",
-		Value: "root.testparent",
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.testparent" || err != nil {
-		t.Errorf("fixed rule did fail with parent queue '%s', error %v", queue, err)
-	}
-
-	// trying to place in a child using a parent
-	conf = configs.PlacementRule{
-		Name:  "fixed",
-		Value: "testchild",
-		Parent: &configs.PlacementRule{
-			Name:  "fixed",
-			Value: "testparent",
-		},
-	}
-	fr, err = newRule(conf)
-	if err != nil || fr == nil {
-		t.Errorf("fixed rule create failed with queue name, err %v", err)
-	}
-	queue, err = fr.placeApplication(app, queueFunc)
-	if queue != "root.testparent.testchild" || err != nil {
-		t.Errorf("fixed rule with parent queue should not have failed '%s', error %v", queue, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var fr rule
+			fr, err = newRule(tt.config)
+			if tt.nilError {
+				if err != nil || fr == nil {
+					t.Errorf("fixed rule create failed with queue name, err %v", err)
+				}
+				var queue string
+				if tt.nilError {
+					queue, err = fr.placeApplication(app, queueFunc)
+					if queue != tt.expectedQueue || err != nil {
+						t.Errorf("fixed rule failed to place queue in correct queue '%s', err %v", queue, err)
+					}
+				} else {
+					_, err = fr.placeApplication(app, queueFunc)
+					if err == nil {
+						t.Errorf("fixed rule should have failed to place queue, err %v", err)
+					}
+				}
+			} else if err == nil {
+				t.Errorf("fixed rule should have failed with queue name, err %v", err)
+			}
+		})
 	}
 }
 
@@ -229,6 +196,22 @@ func TestFixedRuleParent(t *testing.T) {
 		t.Errorf("fixed rule with non existing parent queue should created '%s', error %v", queue, err)
 	}
 
+	// trying to place in invalid child using a creatable parent
+	conf = configs.PlacementRule{
+		Name:   "fixed",
+		Value:  "testchild",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "fixed",
+			Value:  "test!invalid<tes>t",
+			Create: true,
+		},
+	}
+	_, err = newRule(conf)
+	if err == nil {
+		t.Errorf("fixed rule create should have failed with queue name, err %v", err)
+	}
+
 	// trying to place in a child using a parent which is defined as a leaf
 	conf = configs.PlacementRule{
 		Name:   "fixed",
@@ -246,5 +229,89 @@ func TestFixedRuleParent(t *testing.T) {
 	queue, err = fr.placeApplication(app, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
+	}
+
+	// failed parent rule
+	conf = configs.PlacementRule{
+		Name:  "fixed",
+		Value: "testchild",
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testchild",
+			Parent: &configs.PlacementRule{
+				Name:  "fixed",
+				Value: "testchild",
+			},
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(app, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
+	}
+
+	// parent name not has prefix
+	conf = configs.PlacementRule{
+		Name:   "fixed",
+		Value:  "testchild",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "root",
+		},
+	}
+	fr, err = newRule(conf)
+	if err != nil || fr == nil {
+		t.Errorf("fixed rule create failed with queue name, err %v", err)
+	}
+	queue, err = fr.placeApplication(app, queueFunc)
+	if queue != "root.root.testchild" || err != nil {
+		t.Errorf("fixed rule with parent declared as leaf should have failed '%s', error %v", queue, err)
+	}
+}
+
+func Test_fixedRule_ruleDAO(t *testing.T) {
+	tests := []struct {
+		name string
+		conf configs.PlacementRule
+		want *dao.RuleDAO
+	}{
+		{
+			"base",
+			configs.PlacementRule{Name: "fixed", Value: "default"},
+			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", "qualified": "false", "create": "false"}},
+		},
+		{
+			"qualified",
+			configs.PlacementRule{Name: "fixed", Value: "root.default"},
+			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "root.default", "qualified": "true", "create": "false"}},
+		},
+		{
+			"parent",
+			configs.PlacementRule{Name: "fixed", Value: "default", Create: true, Parent: &configs.PlacementRule{Name: "test", Create: true}},
+			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", "qualified": "false", "create": "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{"create": "true"}}},
+		},
+		{
+			"filter",
+			configs.PlacementRule{Name: "fixed", Value: "default", Create: true, Filter: configs.Filter{Type: filterAllow, Groups: []string{"group1", "group2"}}},
+			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", "qualified": "false", "create": "true"}, Filter: &dao.FilterDAO{Type: filterAllow, GroupList: []string{"group1", "group2"}}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ur, err := newRule(tt.conf)
+			assert.NilError(t, err, "setting up the rule failed")
+			ruleDAO := ur.ruleDAO()
+			if tt.want.Filter != nil {
+				sort.Strings(tt.want.Filter.UserList)
+				sort.Strings(ruleDAO.Filter.UserList)
+				sort.Strings(tt.want.Filter.GroupList)
+				sort.Strings(ruleDAO.Filter.GroupList)
+			}
+			assert.DeepEqual(t, tt.want, ruleDAO)
+		})
 	}
 }

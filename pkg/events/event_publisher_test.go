@@ -19,57 +19,16 @@
 package events
 
 import (
-	"fmt"
-	"sync"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
-	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
-
-type mockEventPlugin struct {
-	tests.MockResourceManagerCallback
-	records chan *si.EventRecord
-
-	sync.Mutex
-}
-
-// create and register mocked event plugin
-func createEventPluginForTest() (*mockEventPlugin, error) {
-	eventPlugin := mockEventPlugin{
-		records: make(chan *si.EventRecord, 3),
-	}
-	plugins.RegisterSchedulerPlugin(&eventPlugin)
-	if plugins.GetResourceManagerCallbackPlugin() == nil {
-		return nil, fmt.Errorf("event plugin is not registered")
-	}
-	return &eventPlugin, nil
-}
-
-func (ep *mockEventPlugin) SendEvent(events []*si.EventRecord) {
-	ep.Lock()
-	defer ep.Unlock()
-
-	for _, event := range events {
-		ep.records <- event
-	}
-}
-
-func (ep *mockEventPlugin) getNextEventRecord() *si.EventRecord {
-	ep.Lock()
-	defer ep.Unlock()
-
-	select {
-	case record := <-ep.records:
-		return record
-	default:
-		return nil
-	}
-}
 
 // creating a Publisher with nil store should still provide a non-nil object
 func TestCreateShimPublisher(t *testing.T) {
@@ -79,66 +38,73 @@ func TestCreateShimPublisher(t *testing.T) {
 
 // StartService() and Stop() functions should not cause panic
 func TestServiceStartStopInternal(t *testing.T) {
-	store := newEventStoreImpl()
-	publisher := createShimPublisherInternal(store)
+	store := newEventStore(1000)
+	publisher := CreateShimPublisher(store)
 	publisher.StartService()
+	defer publisher.Stop()
 	assert.Equal(t, publisher.getEventStore(), store)
-	publisher.Stop()
 }
 
 func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
-	pushEventInterval := 2 * time.Millisecond
-
-	store := newEventStoreImpl()
-	publisher := createShimPublisherWithParameters(store, pushEventInterval)
+	store := newEventStore(1000)
+	publisher := CreateShimPublisher(store)
+	publisher.pushEventInterval = time.Millisecond
 	publisher.StartService()
+	defer publisher.Stop()
 
 	event := &si.EventRecord{
 		Type:          si.EventRecord_REQUEST,
 		ObjectID:      "ask",
-		GroupID:       "app",
-		Reason:        "reason",
+		ReferenceID:   "app",
 		Message:       "message",
 		TimestampNano: 123456,
 	}
 	store.Store(event)
-	time.Sleep(2 * pushEventInterval)
-	assert.Equal(t, store.CountStoredEvents(), 0,
-		"the Publisher should erase the store even if no EventPlugin registered")
+
+	err := common.WaitForCondition(time.Millisecond,
+		time.Second,
+		func() bool {
+			return store.CountStoredEvents() == 0
+		},
+	)
+	assert.NilError(t, err, "the Publisher should erase the store even if no EventPlugin registered")
 }
 
 // we push an event to the publisher, and check that the same event
 // is published by observing the mocked EventPlugin
 func TestPublisherSendsEvent(t *testing.T) {
-	pushEventInterval := 2 * time.Millisecond
+	eventPlugin := mock.NewEventPlugin()
+	plugins.RegisterSchedulerPlugin(eventPlugin)
+	if plugins.GetResourceManagerCallbackPlugin() == nil {
+		t.Fatal("could not register event plugin for test")
+	}
 
-	eventPlugin, err := createEventPluginForTest()
-	assert.NilError(t, err, "could not create event plugin for test")
-
-	store := newEventStoreImpl()
-	publisher := createShimPublisherWithParameters(store, pushEventInterval)
+	store := newEventStore(1000)
+	publisher := CreateShimPublisher(store)
+	publisher.pushEventInterval = time.Millisecond
 	publisher.StartService()
+	defer publisher.Stop()
 
 	event := &si.EventRecord{
 		Type:          si.EventRecord_REQUEST,
 		ObjectID:      "ask",
-		GroupID:       "app",
-		Reason:        "reason",
+		ReferenceID:   "app",
 		Message:       "message",
 		TimestampNano: 123456,
 	}
 	store.Store(event)
-	time.Sleep(2 * pushEventInterval)
 
-	eventFromPlugin := eventPlugin.getNextEventRecord()
-	if eventFromPlugin == nil {
-		t.Fatal("EventRecord should not be nil!")
-	}
+	var eventFromPlugin *si.EventRecord
+	err := common.WaitForCondition(time.Millisecond,
+		time.Second,
+		func() bool {
+			eventFromPlugin = eventPlugin.GetNextEventRecord()
+			return eventFromPlugin != nil
+		},
+	)
+	assert.NilError(t, err, "event was not received in time: %v", err)
 	assert.Equal(t, eventFromPlugin.ObjectID, "ask")
-	assert.Equal(t, eventFromPlugin.GroupID, "app")
-	assert.Equal(t, eventFromPlugin.Reason, "reason")
+	assert.Equal(t, eventFromPlugin.ReferenceID, "app")
 	assert.Equal(t, eventFromPlugin.Message, "message")
 	assert.Equal(t, eventFromPlugin.TimestampNano, int64(123456))
-
-	publisher.Stop()
 }

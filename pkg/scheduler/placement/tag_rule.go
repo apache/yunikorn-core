@@ -20,6 +20,7 @@ package placement
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // A rule to place an application based on the a tag on the application.
@@ -41,6 +43,22 @@ type tagRule struct {
 
 func (tr *tagRule) getName() string {
 	return types.Tag
+}
+
+func (tr *tagRule) ruleDAO() *dao.RuleDAO {
+	var pDAO *dao.RuleDAO
+	if tr.parent != nil {
+		pDAO = tr.parent.ruleDAO()
+	}
+	return &dao.RuleDAO{
+		Name: tr.getName(),
+		Parameters: map[string]string{
+			"tagName": tr.tagName,
+			"create":  strconv.FormatBool(tr.create),
+		},
+		ParentRule: pDAO,
+		Filter:     tr.filter.filterDAO(),
+	}
 }
 
 func (tr *tagRule) initialise(conf configs.PlacementRule) error {
@@ -65,7 +83,7 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 	}
 	// before anything run the filter
 	if !tr.filter.allowUser(app.GetUser()) {
-		log.Logger().Debug("Tag rule filtered",
+		log.Log(log.SchedApplication).Debug("Tag rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()),
 			zap.String("tagName", tr.tagName))
@@ -74,8 +92,20 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 	var parentName string
 	var err error
 	queueName := tagVal
-	// if we have a fully qualified queue in the value do not run the parent rule
-	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
+	// fully qualified queue, do not run the parent rule
+	if strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
+		parts := strings.Split(queueName, configs.DOT)
+		for _, part := range parts {
+			if err = configs.IsQueueNameValid(part); err != nil {
+				return "", err
+			}
+		}
+	} else {
+		// not fully qualified queue
+		childQueueName := replaceDot(tagVal)
+		if err = configs.IsQueueNameValid(childQueueName); err != nil {
+			return "", err
+		}
 		// run the parent rule if set
 		if tr.parent != nil {
 			parentName, err = tr.parent.placeApplication(app, queueFn)
@@ -101,9 +131,10 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 		if parentName == "" {
 			parentName = configs.RootQueue
 		}
-		queueName = parentName + configs.DOT + replaceDot(tagVal)
+		queueName = parentName + configs.DOT + childQueueName
 	}
-	log.Logger().Debug("Tag rule intermediate result",
+	// Log the result before we check the create flag
+	log.Log(log.SchedApplication).Info("Tag rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
@@ -112,7 +143,7 @@ func (tr *tagRule) placeApplication(app *objects.Application, queueFn func(strin
 	if !tr.create && queue == nil {
 		return "", nil
 	}
-	log.Logger().Info("Tag rule application placed",
+	log.Log(log.SchedApplication).Info("Tag rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	return queueName, nil

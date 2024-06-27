@@ -28,6 +28,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const noTransition = "no transition"
@@ -59,10 +60,10 @@ func (ae applicationEvent) String() string {
 // ----------------------------------
 type applicationState int
 
+// Application states are used for filtering in the webservice handlers. Please check&update the logic as needed if the state machine is modified
 const (
 	New applicationState = iota
 	Accepted
-	Starting
 	Running
 	Rejected
 	Completing
@@ -73,8 +74,20 @@ const (
 	Resuming
 )
 
+var stateEvents = map[string]si.EventRecord_ChangeDetail{
+	Accepted.String():   si.EventRecord_APP_ACCEPTED,
+	Running.String():    si.EventRecord_APP_RUNNING,
+	Rejected.String():   si.EventRecord_APP_REJECT,
+	Completing.String(): si.EventRecord_APP_COMPLETING,
+	Completed.String():  si.EventRecord_APP_COMPLETED,
+	Failing.String():    si.EventRecord_APP_FAILING,
+	Failed.String():     si.EventRecord_APP_FAILED,
+	Resuming.String():   si.EventRecord_APP_RESUMING,
+	Expired.String():    si.EventRecord_APP_EXPIRED,
+}
+
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Starting", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming"}[as]
+	return [...]string{"New", "Accepted", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming"}[as]
 }
 
 //nolint:funlen

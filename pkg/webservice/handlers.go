@@ -28,15 +28,19 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
 
-	"github.com/gorilla/mux"
+	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	metrics2 "github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
@@ -47,12 +51,57 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
-const PartitionDoesNotExists = "Partition not found"
-const QueueDoesNotExists = "Queue not found"
-const UserDoesNotExists = "User not found"
-const GroupDoesNotExists = "Group not found"
-const UserNameMissing = "User name is missing"
-const GroupNameMissing = "Group name is missing"
+const (
+	PartitionDoesNotExists   = "Partition not found"
+	MissingParamsName        = "Missing parameters"
+	QueueDoesNotExists       = "Queue not found"
+	UserDoesNotExists        = "User not found"
+	GroupDoesNotExists       = "Group not found"
+	UserNameMissing          = "User name is missing"
+	GroupNameMissing         = "Group name is missing"
+	ApplicationDoesNotExists = "Application not found"
+	NodeDoesNotExists        = "Node not found"
+)
+
+var allowedActiveStatusMsg string
+var allowedAppActiveStatuses map[string]bool
+var streamingLimiter *StreamingLimiter
+var maxRESTResponseSize atomic.Uint64
+
+func init() {
+	allowedAppActiveStatuses = make(map[string]bool)
+
+	allowedAppActiveStatuses["new"] = true
+	allowedAppActiveStatuses["accepted"] = true
+	allowedAppActiveStatuses["running"] = true
+	allowedAppActiveStatuses["completing"] = true
+	allowedAppActiveStatuses["failing"] = true
+	allowedAppActiveStatuses["resuming"] = true
+
+	var activeStatuses []string
+	for k := range allowedAppActiveStatuses {
+		activeStatuses = append(activeStatuses, k)
+	}
+	allowedActiveStatusMsg = fmt.Sprintf("Only following active statuses are allowed: %s", strings.Join(activeStatuses, ","))
+
+	streamingLimiter = NewStreamingLimiter()
+
+	configs.AddConfigMapCallback("rest-response-size", func() {
+		newSize := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMRESTResponseSize, configs.DefaultRESTResponseSize)
+		if newSize == 0 {
+			log.Log(log.REST).Warn("Illegal value `0` for config key, using default",
+				zap.String("key", configs.CMRESTResponseSize),
+				zap.Uint64("default", configs.DefaultRESTResponseSize))
+			newSize = configs.DefaultRESTResponseSize
+		}
+
+		log.Log(log.REST).Info("Reloading max REST event response size setting",
+			zap.Uint64("current", maxRESTResponseSize.Load()),
+			zap.Uint64("new", newSize))
+		maxRESTResponseSize.Store(newSize)
+	})
+	maxRESTResponseSize.Store(configs.DefaultRESTResponseSize)
+}
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
@@ -67,7 +116,7 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if _, err := w.Write(stack()); err != nil {
-		log.Logger().Error("GetStackInfo error", zap.Error(err))
+		log.Log(log.REST).Error("GetStackInfo error", zap.Error(err))
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -86,10 +135,8 @@ func validateQueue(queuePath string) error {
 	if queuePath != "" {
 		queueNameArr := strings.Split(queuePath, ".")
 		for _, name := range queueNameArr {
-			if !configs.QueueNameRegExp.MatchString(name) {
-				return fmt.Errorf("problem in queue query parameter parsing as queue param "+
-					"%s contains invalid queue name %s. Queue name must only have "+
-					"alphanumeric characters, - or _, and be no longer than 64 characters", queuePath, name)
+			if err := configs.IsQueueNameValid(name); err != nil {
+				return err
 			}
 		}
 	}
@@ -126,7 +173,7 @@ func buildJSONErrorResponse(w http.ResponseWriter, detail string, code int) {
 	w.WriteHeader(code)
 	errorInfo := dao.NewYAPIError(nil, code, detail)
 	if jsonErr := json.NewEncoder(w).Encode(errorInfo); jsonErr != nil {
-		log.Logger().Error(fmt.Sprintf("Problem in sending error response in JSON format. Error response: %s", detail))
+		log.Log(log.REST).Error(fmt.Sprintf("Problem in sending error response in JSON format. Error response: %s", detail))
 	}
 }
 
@@ -142,7 +189,7 @@ func getClusterJSON(partition *scheduler.PartitionContext) *dao.ClusterDAOInfo {
 
 func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUtilDAOInfo {
 	var utils []*dao.ClusterUtilDAOInfo
-	var getResource bool = true
+	var getResource = true
 	total := partition.GetTotalPartitionResource()
 	if resources.IsZero(total) {
 		getResource = false
@@ -158,7 +205,7 @@ func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUti
 				ResourceType: name,
 				Total:        int64(total.Resources[name]),
 				Used:         int64(used.Resources[name]),
-				Usage:        fmt.Sprintf("%d", int64(value)) + "%",
+				Usage:        fmt.Sprintf("%d%%", int64(value)),
 			}
 			utils = append(utils, utilization)
 		}
@@ -188,7 +235,6 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 		RequestTime:      requestTime,
 		AllocationTime:   allocTime,
 		AllocationDelay:  allocTime - requestTime,
-		UUID:             alloc.GetUUID(),
 		ResourcePerAlloc: alloc.GetAllocatedResource().DAOMap(),
 		PlaceholderUsed:  alloc.IsPlaceholderUsed(),
 		Placeholder:      alloc.IsPlaceholder(),
@@ -196,7 +242,6 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 		Priority:         strconv.Itoa(int(alloc.GetPriority())),
 		NodeID:           alloc.GetNodeID(),
 		ApplicationID:    alloc.GetApplicationID(),
-		Partition:        alloc.GetPartitionName(),
 		Preempted:        alloc.IsPreempted(),
 	}
 	return allocDAO
@@ -294,23 +339,23 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 		AllocationTags:      ask.GetTagsClone(),
 		RequestTime:         ask.GetCreateTime().UnixNano(),
 		ResourcePerAlloc:    ask.GetAllocatedResource().DAOMap(),
-		PendingCount:        ask.GetPendingAskRepeat(),
 		Priority:            strconv.Itoa(int(ask.GetPriority())),
 		RequiredNodeID:      ask.GetRequiredNode(),
 		ApplicationID:       ask.GetApplicationID(),
-		Partition:           common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		Placeholder:         ask.IsPlaceholder(),
-		PlaceholderTimeout:  ask.GetTimeout().Nanoseconds(),
 		TaskGroupName:       ask.GetTaskGroup(),
 		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),
 		TriggeredPreemption: ask.HasTriggeredPreemption(),
+		Originator:          ask.IsOriginator(),
+		SchedulingAttempted: ask.IsSchedulingAttempted(),
+		TriggeredScaleUp:    ask.HasTriggeredScaleUp(),
 	}
 }
 
 func getAllocationAsksDAO(asks []*objects.AllocationAsk) []*dao.AllocationAskDAOInfo {
 	asksDAO := make([]*dao.AllocationAskDAOInfo, 0, len(asks))
 	for _, ask := range asks {
-		if ask.GetPendingAskRepeat() > 0 {
+		if !ask.IsAllocated() {
 			asksDAO = append(asksDAO, getAllocationAskDAO(ask))
 		}
 	}
@@ -322,6 +367,7 @@ func getNodeDAO(node *objects.Node) *dao.NodeDAOInfo {
 		NodeID:       node.NodeID,
 		HostName:     node.Hostname,
 		RackName:     node.Rackname,
+		Attributes:   node.GetAttributes(),
 		Capacity:     node.GetCapacity().DAOMap(),
 		Occupied:     node.GetOccupiedResource().DAOMap(),
 		Allocated:    node.GetAllocatedResource().DAOMap(),
@@ -342,29 +388,59 @@ func getNodesDAO(entries []*objects.Node) []*dao.NodeDAOInfo {
 	return nodesDAO
 }
 
+// getNodeUtilisation loads the node utilisation based on the dominant resource used
+// for the default partition. Dominant resource is defined as the highest utilised resource
+// type on the root queue based on the registered resources.
+// Only check the default partition
+// Deprecated - To be removed in next major release. Replaced with getNodesUtilisations
+func getNodeUtilisation(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(configs.DefaultPartition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusInternalServerError)
+		return
+	}
+	// calculate the dominant resource based on root queue usage and size
+	rootQ := partitionContext.GetQueue(configs.RootQueue)
+	rootMax := rootQ.GetMaxResource()
+	// if no nodes have been registered return an empty object
+	nodesDao := &dao.NodesUtilDAOInfo{}
+	if !resources.IsZero(rootMax) {
+		// if nothing is used we get an empty dominant resource and return an empty object
+		rootUsed := rootQ.GetAllocatedResource()
+		dominant := rootUsed.DominantResourceType(rootMax)
+		nodesDao = getNodesUtilJSON(partitionContext, dominant)
+	}
+	if err := json.NewEncoder(w).Encode(nodesDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// getNodesUtilJSON loads the nodes utilisation for a partition for a specific resource type.
+// Deprecated - To be removed in next major release. Replaced with getPartitionNodesUtilJSON
 func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.NodesUtilDAOInfo {
 	mapResult := make([]int, 10)
 	mapName := make([][]string, 10)
 	var v float64
 	var nodeUtil []*dao.NodeUtilDAOInfo
+	var idx int
 	for _, node := range partition.GetNodes() {
-		resourceExist := true
-		// check resource exist or not
+		// check resource exist or not: only count if node advertises the resource
 		total := node.GetCapacity()
-		if total.Resources[name] <= 0 {
-			resourceExist = false
+		if _, ok := total.Resources[name]; !ok {
+			continue
 		}
 		resourceAllocated := node.GetAllocatedResource()
-		if _, ok := resourceAllocated.Resources[name]; !ok {
-			resourceExist = false
-		}
-		// if resource exist in node, record the bucket it should go
-		if resourceExist {
+		// if resource exist in node, record the bucket it should go into,
+		// otherwise none is used, and it should end up in the 0 bucket
+		if _, ok := resourceAllocated.Resources[name]; ok {
 			v = float64(resources.CalculateAbsUsedCapacity(total, resourceAllocated).Resources[name])
-			idx := int(math.Dim(math.Ceil(v/10), 1))
-			mapResult[idx]++
-			mapName[idx] = append(mapName[idx], node.NodeID)
+			idx = int(math.Dim(math.Ceil(v/10), 1))
+		} else {
+			idx = 0
 		}
+		mapResult[idx]++
+		mapName[idx] = append(mapName[idx], node.NodeID)
 	}
 	// put number of nodes and node name to different buckets
 	for k := 0; k < 10; k++ {
@@ -381,12 +457,85 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 	}
 }
 
+func getNodeUtilisations(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	var result []*dao.PartitionNodesUtilDAOInfo
+	for _, part := range schedulerContext.GetPartitionMapClone() {
+		result = append(result, getPartitionNodesUtilJSON(part))
+	}
+
+	if err := json.NewEncoder(w).Encode(result); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+// getPartitionNodesUtilJSON retrieves the utilization of all resource types for nodes within a specific partition.
+func getPartitionNodesUtilJSON(partition *scheduler.PartitionContext) *dao.PartitionNodesUtilDAOInfo {
+	type UtilizationBucket struct {
+		NodeCount []int      // 10 buckets, each bucket contains number of nodes
+		NodeList  [][]string // 10 buckets, each bucket contains node name list
+	}
+	resourceBuckets := make(map[string]*UtilizationBucket) // key is resource type, value is UtilizationBucket
+
+	// put nodes to buckets
+	for _, node := range partition.GetNodes() {
+		capacity := node.GetCapacity()
+		resourceAllocated := node.GetAllocatedResource()
+		absUsedCapacity := resources.CalculateAbsUsedCapacity(capacity, resourceAllocated)
+
+		// append to bucket based on resource type, only count if node advertises the resource
+		for resourceType := range capacity.Resources {
+			idx := 0
+			if absValue, ok := absUsedCapacity.Resources[resourceType]; ok {
+				v := float64(absValue)
+				idx = int(math.Dim(math.Ceil(v/10), 1))
+			}
+
+			// create resource bucket if not exist
+			if _, ok := resourceBuckets[resourceType]; !ok {
+				resourceBuckets[resourceType] = &UtilizationBucket{
+					NodeCount: make([]int, 10),
+					NodeList:  make([][]string, 10),
+				}
+			}
+
+			resourceBuckets[resourceType].NodeCount[idx]++
+			resourceBuckets[resourceType].NodeList[idx] = append(resourceBuckets[resourceType].NodeList[idx], node.NodeID)
+		}
+	}
+
+	// build result
+	var nodesUtilList []*dao.NodesUtilDAOInfo
+	for resourceType, bucket := range resourceBuckets {
+		var nodesUtil []*dao.NodeUtilDAOInfo
+		for k := 0; k < 10; k++ {
+			util := &dao.NodeUtilDAOInfo{
+				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
+				NumOfNodes: int64(bucket.NodeCount[k]),
+				NodeNames:  bucket.NodeList[k],
+			}
+			nodesUtil = append(nodesUtil, util)
+		}
+		nodeUtilization := &dao.NodesUtilDAOInfo{
+			ResourceType: resourceType,
+			NodesUtil:    nodesUtil,
+		}
+		nodesUtilList = append(nodesUtilList, nodeUtilization)
+	}
+
+	return &dao.PartitionNodesUtilDAOInfo{
+		ClusterID:     partition.RmID,
+		Partition:     common.GetPartitionNameWithoutClusterID(partition.Name),
+		NodesUtilList: nodesUtilList,
+	}
+}
+
 func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
 	// There is nothing to return but we did not really encounter a problem
 	if imHistory == nil {
-		buildJSONErrorResponse(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
+		buildJSONErrorResponse(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 		return
 	}
 	// get a copy of the records: if the array contains nil values they will always be at the
@@ -403,7 +552,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 
 	// There is nothing to return but we did not really encounter a problem
 	if imHistory == nil {
-		buildJSONErrorResponse(w, "Internal metrics collection is not enabled.", http.StatusNotImplemented)
+		buildJSONErrorResponse(w, "Internal metrics collection is not enabled.", http.StatusInternalServerError)
 		return
 	}
 	// get a copy of the records: if the array contains nil values they will always be at the
@@ -418,9 +567,11 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 
-	conf := configs.ConfigContext.Get(schedulerContext.GetPolicyGroup())
 	var marshalledConf []byte
 	var err error
+
+	conf := getClusterConfigDAO()
+
 	// check if we have a request for json output
 	if r.Header.Get("Accept") == "application/json" {
 		marshalledConf, err = json.Marshal(&conf)
@@ -430,10 +581,23 @@ func getClusterConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	if _, err = w.Write(marshalledConf); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func getClusterConfigDAO() *dao.ConfigDAOInfo {
+	// merge core config with extra config
+	conf := dao.ConfigDAOInfo{
+		SchedulerConfig:          configs.ConfigContext.Get(schedulerContext.GetPolicyGroup()),
+		Extra:                    configs.GetConfigMap(),
+		DeadlockDetectionEnabled: locking.IsTrackingEnabled(),
+		DeadlockTimeoutSeconds:   locking.GetDeadlockTimeoutSeconds(),
+	}
+
+	return &conf
 }
 
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
@@ -443,34 +607,23 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	result := schedulerContext.GetLastHealthCheckResult()
 	if result != nil {
 		if !result.Healthy {
-			log.Logger().Error("Scheduler is not healthy", zap.Any("health check info", *result))
-			buildJSONErrorResponse(w, "Scheduler is not healthy", http.StatusServiceUnavailable)
+			log.Log(log.SchedHealth).Error("Scheduler is not healthy", zap.Any("health check info", *result))
+			if err := json.NewEncoder(w).Encode(result); err != nil {
+				buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+			}
 		} else {
-			log.Logger().Info("Scheduler is healthy", zap.Any("health check info", *result))
+			log.Log(log.SchedHealth).Info("Scheduler is healthy", zap.Any("health check info", *result))
 			if err := json.NewEncoder(w).Encode(result); err != nil {
 				buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 			}
 		}
 	} else {
-		log.Logger().Info("The healthy status of scheduler is not found", zap.Any("health check info", ""))
-		buildJSONErrorResponse(w, "The healthy status of scheduler is not found", http.StatusNotFound)
+		log.Log(log.SchedHealth).Info("Health check is not available")
+		buildJSONErrorResponse(w, "Health check is not available", http.StatusNotFound)
 	}
 }
 
-func buildUpdateResponse(err error, w http.ResponseWriter) {
-	if err == nil {
-		w.WriteHeader(http.StatusOK)
-		if _, err = w.Write([]byte("Configuration updated successfully")); err != nil {
-			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
-		}
-	} else {
-		log.Logger().Info("Configuration update failed with errors",
-			zap.Error(err))
-		buildJSONErrorResponse(w, err.Error(), http.StatusConflict)
-	}
-}
-
-func getPartitions(w http.ResponseWriter, r *http.Request) {
+func getPartitions(w http.ResponseWriter, _ *http.Request) {
 	writeHeaders(w)
 
 	lists := schedulerContext.GetPartitionMapClone()
@@ -481,15 +634,19 @@ func getPartitions(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
 	writeHeaders(w)
-	partitionName := vars["partition"]
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partitionName := vars.ByName("partition")
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
 	var partition = schedulerContext.GetPartitionWithoutClusterID(partitionName)
 	if partition != nil {
 		partitionQueuesDAOInfo = partition.GetPartitionQueues()
 	} else {
-		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
 	if err := json.NewEncoder(w).Encode(partitionQueuesDAOInfo); err != nil {
@@ -497,10 +654,44 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	partition := vars["partition"]
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+	queueName := vars.ByName("queue")
+	queueErr := validateQueue(queueName)
+	if queueErr != nil {
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+		return
+	}
+	queue := partitionContext.GetQueue(queueName)
+	if queue == nil {
+		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
+		return
+	}
+	queueDao := queue.GetPartitionQueueDAOInfo(r.URL.Query().Has("subtree"))
+	if err := json.NewEncoder(w).Encode(queueDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
 		nodesDao := getNodesDAO(partitionContext.GetNodes())
@@ -508,15 +699,44 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 		}
 	} else {
-		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+	}
+}
+
+func getPartitionNode(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext != nil {
+		nodeID := vars.ByName("node")
+		node := partitionContext.GetNode(nodeID)
+		if node == nil {
+			buildJSONErrorResponse(w, NodeDoesNotExists, http.StatusNotFound)
+			return
+		}
+		nodeDao := getNodeDAO(node)
+		if err := json.NewEncoder(w).Encode(nodeDao); err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		}
+	} else {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 	}
 }
 
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
 	writeHeaders(w)
-	partition := vars["partition"]
-	queueName := vars["queue"]
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	queueName := vars.ByName("queue")
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
@@ -524,12 +744,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
-		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
 	queue := partitionContext.GetQueue(queueName)
 	if queue == nil {
-		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
+		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
 	}
 
@@ -543,30 +763,87 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getApplication(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	partition := vars["partition"]
-	queueName := vars["queue"]
-	application := vars["application"]
-	queueErr := validateQueue(queueName)
-	if queueErr != nil {
-		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
+	partition := vars.ByName("partition")
+	appState := strings.ToLower(vars.ByName("state"))
+
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
-		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusBadRequest)
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	queue := partitionContext.GetQueue(queueName)
-	if queue == nil {
-		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusBadRequest)
+	var appList []*objects.Application
+	switch appState {
+	case "active":
+		if status := strings.ToLower(r.URL.Query().Get("status")); status != "" {
+			if !allowedAppActiveStatuses[status] {
+				buildJSONErrorResponse(w, allowedActiveStatusMsg, http.StatusBadRequest)
+				return
+			}
+			for _, app := range partitionContext.GetApplications() {
+				if strings.ToLower(app.CurrentState()) == status {
+					appList = append(appList, app)
+				}
+			}
+		} else {
+			appList = partitionContext.GetApplications()
+		}
+	case "rejected":
+		appList = partitionContext.GetRejectedApplications()
+	case "completed":
+		appList = partitionContext.GetCompletedApplications()
+	default:
+		buildJSONErrorResponse(w, "Only following application states are allowed: active, rejected, completed", http.StatusBadRequest)
 		return
 	}
-	app := queue.GetApplication(application)
+	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(appList))
+	for _, app := range appList {
+		appsDao = append(appsDao, getApplicationDAO(app))
+	}
+	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getApplication(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	queueName := vars.ByName("queue")
+	application := vars.ByName("application")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+	var app *objects.Application
+	if len(queueName) == 0 {
+		app = partitionContext.GetApplication(application)
+	} else {
+		queueErr := validateQueue(queueName)
+		if queueErr != nil {
+			buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+			return
+		}
+		queue := partitionContext.GetQueue(queueName)
+		if queue == nil {
+			buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
+			return
+		}
+		app = queue.GetApplication(application)
+	}
 	if app == nil {
-		buildJSONErrorResponse(w, "Application not found", http.StatusBadRequest)
+		buildJSONErrorResponse(w, ApplicationDoesNotExists, http.StatusNotFound)
 		return
 	}
 	appDao := getApplicationDAO(app)
@@ -575,26 +852,27 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func setLogLevel(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
+func getPartitionRules(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
-	level := vars["level"]
-	if err := log.SetLogLevel(level); err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
 	}
-}
-
-func getLogLevel(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	zapConfig := log.GetConfig()
-	if _, err := w.Write([]byte(zapConfig.Level.Level().String())); err != nil {
-		log.Logger().Error("Could not get log level", zap.Error(err))
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+	rulesDao := partitionContext.GetPlacementRules()
+	if err := json.NewEncoder(w).Encode(rulesDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
 
 func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.PartitionInfo {
-	var result []*dao.PartitionInfo
+	result := make([]*dao.PartitionInfo, 0, len(lists))
 
 	for _, partitionContext := range lists {
 		partitionInfo := &dao.PartitionInfo{}
@@ -635,7 +913,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 }
 
 func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistoryDAOInfo {
-	var result []*dao.ApplicationHistoryDAOInfo
+	result := make([]*dao.ApplicationHistoryDAOInfo, 0)
 
 	for _, record := range records {
 		if record == nil {
@@ -652,7 +930,7 @@ func getAppHistoryDAO(records []*history.MetricsRecord) []*dao.ApplicationHistor
 }
 
 func getPartitionNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.NodesDAOInfo {
-	var result []*dao.NodesDAOInfo
+	result := make([]*dao.NodesDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		nodesDao := getNodesDAO(partition.GetNodes())
@@ -666,7 +944,7 @@ func getPartitionNodesDAO(lists map[string]*scheduler.PartitionContext) []*dao.N
 }
 
 func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHistoryDAOInfo {
-	var result []*dao.ContainerHistoryDAOInfo
+	result := make([]*dao.ContainerHistoryDAOInfo, 0)
 
 	for _, record := range records {
 		if record == nil {
@@ -683,7 +961,7 @@ func getContainerHistoryDAO(records []*history.MetricsRecord) []*dao.ContainerHi
 }
 
 func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.ApplicationDAOInfo {
-	var result []*dao.ApplicationDAOInfo
+	result := make([]*dao.ApplicationDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		var appList []*objects.Application
@@ -699,8 +977,21 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 	return result
 }
 
+func getPlacementRulesDAO(lists map[string]*scheduler.PartitionContext) []*dao.RuleDAOInfo {
+	result := make([]*dao.RuleDAOInfo, 0, len(lists))
+
+	for _, partition := range lists {
+		result = append(result, &dao.RuleDAOInfo{
+			Partition: common.GetPartitionNameWithoutClusterID(partition.Name),
+			Rules:     partition.GetPlacementRules(),
+		})
+	}
+
+	return result
+}
+
 func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.PartitionQueueDAOInfo {
-	var result []dao.PartitionQueueDAOInfo
+	result := make([]dao.PartitionQueueDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		result = append(result, partition.GetPartitionQueues())
@@ -710,7 +1001,7 @@ func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.P
 }
 
 func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
-	var result []*dao.ClusterDAOInfo
+	result := make([]*dao.ClusterDAOInfo, 0, len(lists))
 
 	for _, partition := range lists {
 		result = append(result, getClusterJSON(partition))
@@ -720,7 +1011,7 @@ func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterD
 }
 
 func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[string]string {
-	var result []map[string]string
+	result := make([]map[string]string, 0, len(lists))
 
 	for _, rmInfo := range lists {
 		result = append(result, rmInfo.RMBuildInformation)
@@ -730,22 +1021,27 @@ func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[stri
 }
 
 func getResourceManagerDiagnostics() map[string]interface{} {
-	result := make(map[string]interface{}, 0)
+	result := make(map[string]interface{})
 
+	// if the RM has not registered state dump the plugin will be nil
 	plugin := plugins.GetStateDumpPlugin()
+	if plugin == nil {
+		result["empty"] = "Resource Manager did not register callback"
+		return result
+	}
 
 	// get state dump from RM
 	dumpStr, err := plugin.GetStateDump()
 	if err != nil {
 		// might be not implemented
-		log.Logger().Debug("Unable to get RM state dump", zap.Error(err))
+		log.Log(log.REST).Debug("Unable to get RM state dump", zap.Error(err))
 		result["Error"] = err.Error()
 		return result
 	}
 
 	// convert to JSON map
 	if err = json.Unmarshal([]byte(dumpStr), &result); err != nil {
-		log.Logger().Warn("Unable to parse RM state dump", zap.Error(err))
+		log.Log(log.REST).Warn("Unable to parse RM state dump", zap.Error(err))
 		result["Error"] = err.Error()
 	}
 
@@ -757,12 +1053,13 @@ func getMetrics(w http.ResponseWriter, r *http.Request) {
 	promhttp.Handler().ServeHTTP(w, r)
 }
 
-func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
+func getUsersResourceUsage(w http.ResponseWriter, _ *http.Request) {
+	writeHeaders(w)
 	userManager := ugm.GetUserManager()
 	usersResources := userManager.GetUsersResources()
-	var result []*dao.UserResourceUsageDAOInfo
-	for _, tracker := range usersResources {
-		result = append(result, tracker.GetUserResourceUsageDAOInfo())
+	result := make([]*dao.UserResourceUsageDAOInfo, len(usersResources))
+	for i, tracker := range usersResources {
+		result[i] = tracker.GetUserResourceUsageDAOInfo()
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -770,15 +1067,20 @@ func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	user := vars["user"]
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	user := vars.ByName("user")
 	if user == "" {
 		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
 		return
 	}
 	userTracker := ugm.GetUserManager().GetUserTracker(user)
 	if userTracker == nil {
-		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusBadRequest)
+		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusNotFound)
 		return
 	}
 	var result = userTracker.GetUserResourceUsageDAOInfo()
@@ -788,11 +1090,12 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
 	userManager := ugm.GetUserManager()
 	groupsResources := userManager.GetGroupsResources()
-	var result []*dao.GroupResourceUsageDAOInfo
-	for _, tracker := range groupsResources {
-		result = append(result, tracker.GetGroupResourceUsageDAOInfo())
+	result := make([]*dao.GroupResourceUsageDAOInfo, len(groupsResources))
+	for i, tracker := range groupsResources {
+		result[i] = tracker.GetGroupResourceUsageDAOInfo()
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -800,19 +1103,163 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	group := vars["group"]
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	group := vars.ByName("group")
 	if group == "" {
 		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
 		return
 	}
 	groupTracker := ugm.GetUserManager().GetGroupTracker(group)
 	if groupTracker == nil {
-		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusBadRequest)
+		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusNotFound)
 		return
 	}
 	var result = groupTracker.GetGroupResourceUsageDAOInfo()
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getEvents(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	eventSystem := events.GetEventSystem()
+	if !eventSystem.IsEventTrackingEnabled() {
+		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusInternalServerError)
+		return
+	}
+
+	maxCount := maxRESTResponseSize.Load()
+	count := maxCount
+	if countStr := r.URL.Query().Get("count"); countStr != "" {
+		var err error
+		count, err = strconv.ParseUint(countStr, 10, 64)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if count > maxCount {
+			count = maxCount
+		}
+		if count == 0 {
+			buildJSONErrorResponse(w, `0 is not a valid value for "count"`, http.StatusBadRequest)
+			return
+		}
+	}
+
+	var start uint64
+	if startStr := r.URL.Query().Get("start"); startStr != "" {
+		var err error
+		start, err = strconv.ParseUint(startStr, 10, 64)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	records, lowestID, highestID := eventSystem.GetEventsFromID(start, count)
+	eventDao := dao.EventRecordDAO{
+		InstanceUUID: schedulerContext.GetUUID(),
+		LowestID:     lowestID,
+		HighestID:    highestID,
+		EventRecords: records,
+	}
+	if err := json.NewEncoder(w).Encode(eventDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getStream(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	eventSystem := events.GetEventSystem()
+	if !eventSystem.IsEventTrackingEnabled() {
+		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusInternalServerError)
+		return
+	}
+
+	f, ok := w.(http.Flusher)
+	if !ok {
+		buildJSONErrorResponse(w, "Writer does not implement http.Flusher", http.StatusInternalServerError)
+		return
+	}
+
+	if !streamingLimiter.AddHost(r.Host) {
+		buildJSONErrorResponse(w, "Too many streaming connections", http.StatusServiceUnavailable)
+		return
+	}
+	defer streamingLimiter.RemoveHost(r.Host)
+
+	var count uint64
+	if countStr := r.URL.Query().Get("count"); countStr != "" {
+		var err error
+		count, err = strconv.ParseUint(countStr, 10, 64)
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
+	rc := http.NewResponseController(w)
+	// make sure both deadlines can be set
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
+		buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if err := rc.SetReadDeadline(time.Time{}); err != nil {
+		log.Log(log.REST).Error("Cannot set read deadline", zap.Error(err))
+		buildJSONErrorResponse(w, fmt.Sprintf("Cannot set read deadline: %v", err), http.StatusInternalServerError)
+		return
+	}
+	enc := json.NewEncoder(w)
+	stream := eventSystem.CreateEventStream(r.Host, count)
+	defer eventSystem.RemoveStream(stream)
+
+	if err := enc.Encode(dao.YunikornID{
+		InstanceUUID: schedulerContext.GetUUID(),
+	}); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	f.Flush()
+
+	// Reading events in an infinite loop until either the client disconnects or Yunikorn closes the channel.
+	// This results in a persistent HTTP connection where the message body is never closed.
+	// Write deadline is adjusted before sending data to the client.
+	for {
+		select {
+		case <-r.Context().Done():
+			log.Log(log.REST).Info("Connection closed for event stream client",
+				zap.String("host", r.Host))
+			return
+		case e, ok := <-stream.Events:
+			err := rc.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			if err != nil {
+				// should not fail at this point
+				log.Log(log.REST).Error("Cannot set write deadline", zap.Error(err))
+				buildJSONErrorResponse(w, fmt.Sprintf("Cannot set write deadline: %v", err), http.StatusOK) // status code is already 200 at this point
+				return
+			}
+
+			if !ok {
+				// the channel was closed by the event system itself
+				msg := "Event stream was closed by the producer"
+				buildJSONErrorResponse(w, msg, http.StatusOK) // status code is 200 at this point, cannot be changed
+				log.Log(log.REST).Error(msg)
+				return
+			}
+
+			if err := enc.Encode(e); err != nil {
+				log.Log(log.REST).Error("Marshalling error",
+					zap.String("host", r.Host))
+				buildJSONErrorResponse(w, err.Error(), http.StatusOK) // status code is 200 at this point, cannot be changed
+				return
+			}
+			f.Flush()
+		}
 	}
 }

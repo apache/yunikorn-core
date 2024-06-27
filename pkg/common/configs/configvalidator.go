@@ -21,16 +21,15 @@ package configs
 import (
 	"fmt"
 	"math"
-	"os"
-	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
@@ -52,7 +51,15 @@ const (
 	// app sort priority values
 	ApplicationSortPriorityEnabled  = "enabled"
 	ApplicationSortPriorityDisabled = "disabled"
+
+	// placement rule validation
+	placementOK placementPathCheckResult = iota
+	errNonExistingQueue
+	errQueueNotLeaf
+	errLastQueueLeaf
 )
+
+type placementPathCheckResult int
 
 // Priority
 var MinPriority int32 = math.MinInt32
@@ -62,14 +69,14 @@ var DefaultPreemptionDelay = 30 * time.Second
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
-var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_:#/@-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
-var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_.@-]*[$]?$`)
+var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:#/_.@-]*[$]?$`)
 
 // Groups should have a slightly more restrictive regexp (no @ . or $ at the end)
-var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_-]*$`)
+var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.-]*$`)
 
 // all characters that make a name different from a regexp
 var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
@@ -78,26 +85,19 @@ var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
 var RuleNameRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_]*$`)
 
 type placementStaticPath struct {
-	path      string
-	ruleChain string
-	create    bool
-	ruleNo    int
+	path           string
+	ruleChain      string
+	create         bool
+	hasDynamicPart bool
+	ruleNo         int
 }
-
-type placementPathCheckResult int
-
-const (
-	checkOK placementPathCheckResult = iota
-	nonExistingQueue
-	queueNotParent
-)
 
 // Check the ACL
 func checkACL(acl string) error {
 	// trim any white space
 	acl = strings.TrimSpace(acl)
 	// handle special cases: deny and wildcard
-	if len(acl) == 0 || acl == security.WildCard {
+	if len(acl) == 0 || acl == common.Wildcard {
 		return nil
 	}
 
@@ -127,7 +127,7 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 		}
 		sumG.AddTo(childG)
 	}
-	if !resources.IsZero(curG) && !resources.FitIn(curG, sumG) {
+	if !curG.FitInMaxUndef(sumG) {
 		return nil, fmt.Errorf("guaranteed resource of parent %s is smaller than sum of guaranteed resources %s of the children for queue %s", curG.String(), sumG.String(), cur.Name)
 	}
 	if !curM.FitInMaxUndef(sumG) {
@@ -139,13 +139,155 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 	return curG, nil
 }
 
+func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.Resource, groups map[string]map[string]*resources.Resource, queuePath string) error {
+	var curQueuePath string
+	if cur.Name == RootQueue {
+		curQueuePath = RootQueue
+	} else {
+		curQueuePath = queuePath + DOT + cur.Name
+	}
+
+	users[curQueuePath] = make(map[string]*resources.Resource)
+	groups[curQueuePath] = make(map[string]*resources.Resource)
+
+	// Carry forward (populate) the parent limit settings to the next level
+	for u, v := range users[queuePath] {
+		users[curQueuePath][u] = v.Clone()
+	}
+	for g, v := range groups[queuePath] {
+		groups[curQueuePath][g] = v.Clone()
+	}
+
+	// compare user & group limit setting between the current queue and parent queue
+	for _, limit := range cur.Limits {
+		limitMaxResources, err := resources.NewResourceFromConf(limit.MaxResources)
+		if err != nil {
+			return err
+		}
+
+		for _, user := range limit.Users {
+			// Is user limit setting exists?
+			if userMaxResource, ok := users[queuePath][user]; ok {
+				if !userMaxResource.FitInMaxUndef(limitMaxResources) {
+					return fmt.Errorf("user %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", user, limitMaxResources.String(), cur.Name, userMaxResource.String())
+				}
+				users[curQueuePath][user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
+			} else if wildcardMaxResource, ok := users[queuePath][common.Wildcard]; user != common.Wildcard && ok {
+				if !wildcardMaxResource.FitInMaxUndef(limitMaxResources) {
+					return fmt.Errorf("user %s max resource %s of queue %s is greater than wildcard maximum resource %s of immediate or ancestor parent queue", user, limitMaxResources.String(), cur.Name, wildcardMaxResource.String())
+				}
+				users[curQueuePath][user] = limitMaxResources
+			} else {
+				users[curQueuePath][user] = limitMaxResources
+			}
+		}
+		for _, group := range limit.Groups {
+			// Is group limit setting exists?
+			if groupMaxResource, ok := groups[queuePath][group]; ok {
+				if !groupMaxResource.FitInMaxUndef(limitMaxResources) {
+					return fmt.Errorf("group %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", group, limitMaxResources.String(), cur.Name, groupMaxResource.String())
+				}
+				// Override with min resource
+				groups[curQueuePath][group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
+			} else if wildcardMaxResource, ok := groups[queuePath][common.Wildcard]; group != common.Wildcard && ok {
+				if !wildcardMaxResource.FitInMaxUndef(limitMaxResources) {
+					return fmt.Errorf("group %s max resource %s of queue %s is greater than wildcard maximum resource %s of immediate or ancestor parent queue", group, limitMaxResources.String(), cur.Name, wildcardMaxResource.String())
+				}
+				groups[curQueuePath][group] = limitMaxResources
+			} else {
+				groups[curQueuePath][group] = limitMaxResources
+			}
+		}
+	}
+
+	// traverse child queues
+	for _, child := range cur.Queues {
+		err := checkLimitResource(child, users, groups, curQueuePath)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func checkQueueMaxApplications(cur QueueConfig) error {
 	var err error
 	for _, child := range cur.Queues {
-		if cur.MaxApplications != 0 && (cur.MaxApplications < child.MaxApplications || child.MaxApplications == 0) {
-			return fmt.Errorf("parent maxRunningApps must be larger than child maxRunningApps")
+		if cur.MaxApplications != 0 && cur.MaxApplications < child.MaxApplications {
+			return fmt.Errorf("parent maxApplications must be larger than child maxApplications")
+		}
+		if cur.MaxApplications != 0 && child.MaxApplications == 0 {
+			return fmt.Errorf("maxApplications is either undefined or zero, which is not allowed when parent queue's maxApplications is defined")
 		}
 		err = checkQueueMaxApplications(child)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func checkLimitMaxApplications(cur QueueConfig, users map[string]map[string]uint64, groups map[string]map[string]uint64, queuePath string) error {
+	var curQueuePath string
+	if cur.Name == RootQueue {
+		curQueuePath = RootQueue
+	} else {
+		curQueuePath = queuePath + DOT + cur.Name
+	}
+
+	users[curQueuePath] = make(map[string]uint64)
+	groups[curQueuePath] = make(map[string]uint64)
+
+	// Carry forward (populate) the parent limit settings to the next level
+	// queuePath is the parent queue path and curQueuePath is the current queue path.
+	// For example, queuePath is root and curQueuePath is root.current.
+	for u, maxapplications := range users[queuePath] {
+		users[curQueuePath][u] = maxapplications
+	}
+	for g, maxapplications := range groups[queuePath] {
+		groups[curQueuePath][g] = maxapplications
+	}
+
+	// compare user & group limit setting between the current queue and parent queue
+	for _, limit := range cur.Limits {
+		limitMaxApplications := limit.MaxApplications
+		for _, user := range limit.Users {
+			// Is user limit setting exists?
+			if userMaxApplications, ok := users[queuePath][user]; ok {
+				if userMaxApplications != 0 && (userMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+					return fmt.Errorf("user %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", user, limitMaxApplications, cur.Name, userMaxApplications)
+				}
+				users[curQueuePath][user] = limitMaxApplications
+			} else if wildcardMaxApplications, ok := users[queuePath][common.Wildcard]; user != common.Wildcard && ok {
+				if wildcardMaxApplications != 0 && (wildcardMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+					return fmt.Errorf("user %s max applications %d of queue %s is greater than wildcard max applications %d of immediate or ancestor parent queue", user, limitMaxApplications, cur.Name, wildcardMaxApplications)
+				}
+				users[curQueuePath][user] = limitMaxApplications
+			} else {
+				users[curQueuePath][user] = limitMaxApplications
+			}
+		}
+
+		for _, group := range limit.Groups {
+			// Is user limit setting exists?
+			if groupMaxApplications, ok := groups[queuePath][group]; ok {
+				if groupMaxApplications != 0 && (groupMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+					return fmt.Errorf("group %s max applications %d of queue %s is greater than immediate or ancestor parent max applications %d", group, limitMaxApplications, cur.Name, groupMaxApplications)
+				}
+				groups[curQueuePath][group] = limitMaxApplications
+			} else if wildcardMaxApplications, ok := groups[queuePath][common.Wildcard]; group != common.Wildcard && ok {
+				if wildcardMaxApplications != 0 && (wildcardMaxApplications < limitMaxApplications || limitMaxApplications == 0) {
+					return fmt.Errorf("group %s max applications %d of queue %s is greater than wildcard max applications %d of immediate or ancestor parent queue", group, limitMaxApplications, cur.Name, wildcardMaxApplications)
+				}
+				groups[curQueuePath][group] = limitMaxApplications
+			} else {
+				groups[curQueuePath][group] = limitMaxApplications
+			}
+		}
+	}
+	// traverse child queues
+	for _, child := range cur.Queues {
+		err := checkLimitMaxApplications(child, users, groups, curQueuePath)
 		if err != nil {
 			return err
 		}
@@ -177,7 +319,7 @@ func checkPlacementRules(partition *PartitionConfig) error {
 		return nil
 	}
 
-	log.Logger().Debug("checking placement rule config",
+	log.Log(log.Config).Debug("checking placement rule config",
 		zap.String("partitionName", partition.Name))
 	// top level rule checks, parents are called recursively
 	for _, rule := range partition.PlacementRules {
@@ -186,33 +328,50 @@ func checkPlacementRules(partition *PartitionConfig) error {
 		}
 	}
 
-	placementStaticPaths := getLongestPlacementPaths(partition.PlacementRules)
+	placementStaticPaths, err := getLongestPlacementPaths(partition.PlacementRules)
+	if err != nil {
+		return err
+	}
 	for _, staticPath := range placementStaticPaths {
 		queuePath := staticPath.path
+		create := staticPath.create
+		hasDynamicPart := staticPath.hasDynamicPart
+
 		parts := strings.Split(strings.ToLower(queuePath), DOT)
-		result := checkQueueHierarchyForPlacement(parts, staticPath.create, partition.Queues)
-		if result == queueNotParent {
-			return fmt.Errorf("placement rule no. #%d (%s) references a queue (%s) which is a leaf",
+		result, lastQueue := checkQueueHierarchyForPlacement(parts, create, hasDynamicPart, partition.Queues, nil)
+		if result == errQueueNotLeaf {
+			return fmt.Errorf("placement rule no. #%d (%s) references a queue (%s) which is not a leaf",
 				staticPath.ruleNo, staticPath.ruleChain, queuePath)
 		}
-		if result == nonExistingQueue {
+		if result == errNonExistingQueue {
 			return fmt.Errorf("placement rule no. #%d (%s) references non-existing queues (%s) and create is 'false'",
 				staticPath.ruleNo, staticPath.ruleChain, queuePath)
+		}
+		if result == errLastQueueLeaf {
+			return fmt.Errorf("placement rule no. #%d (%s) references non-existing queues (%s) which cannot be created because the last queue (%s) in the hierarchy is a leaf",
+				staticPath.ruleNo, staticPath.ruleChain, queuePath, lastQueue)
 		}
 	}
 
 	return nil
 }
 
-func checkQueueHierarchyForPlacement(path []string, create bool, conf []QueueConfig) placementPathCheckResult {
+func checkQueueHierarchyForPlacement(path []string, create, hasDynamicPart bool, conf []QueueConfig, parentConf *QueueConfig) (placementPathCheckResult, string) {
 	queueName := path[0]
+	lastQueueName := ""
 
 	// no more queues in the configuration
 	if len(conf) == 0 {
-		if !create {
-			return nonExistingQueue
+		if !parentConf.Parent {
+			// path in the hierarchy is shorter, but the last queue is a leaf
+			lastQueueName = parentConf.Name
+			return errLastQueueLeaf, lastQueueName
 		}
-		return checkOK
+		if !create {
+			return errNonExistingQueue, lastQueueName
+		}
+
+		return placementOK, lastQueueName
 	}
 
 	var queueConf *QueueConfig
@@ -227,21 +386,31 @@ func checkQueueHierarchyForPlacement(path []string, create bool, conf []QueueCon
 	// queue not found on this level
 	if queueConf == nil {
 		if !create {
-			return nonExistingQueue
+			return errNonExistingQueue, lastQueueName
 		}
-		return checkOK
-	}
 
-	if !queueConf.Parent {
-		return queueNotParent
+		return placementOK, lastQueueName
 	}
 
 	if len(path) == 1 {
-		return checkOK
+		if hasDynamicPart {
+			// the "fixed" rule is followed by other rules like tag, user, etc. (root.dev.<user>),
+			// which means that the "fixed" part must point to a parent
+			if queueConf.Parent {
+				return placementOK, lastQueueName
+			}
+
+			return errQueueNotLeaf, lastQueueName
+		}
+		if queueConf.Parent {
+			return errQueueNotLeaf, lastQueueName
+		}
+
+		return placementOK, lastQueueName
 	}
 
 	path = path[1:]
-	return checkQueueHierarchyForPlacement(path, create, queueConf.Queues)
+	return checkQueueHierarchyForPlacement(path, create, hasDynamicPart, queueConf.Queues, queueConf)
 }
 
 // Check the specific rule for syntax.
@@ -254,7 +423,7 @@ func checkPlacementRule(rule PlacementRule) error {
 	// check the parent rule
 	if rule.Parent != nil {
 		if err := checkPlacementRule(*rule.Parent); err != nil {
-			log.Logger().Debug("parent placement rule failed",
+			log.Log(log.Config).Debug("parent placement rule failed",
 				zap.String("rule", rule.Name),
 				zap.String("parentRule", rule.Parent.Name))
 			return err
@@ -262,7 +431,7 @@ func checkPlacementRule(rule PlacementRule) error {
 	}
 	// check filter if given
 	if err := checkPlacementFilter(rule.Filter); err != nil {
-		log.Logger().Debug("placement rule filter failed",
+		log.Log(log.Config).Debug("placement rule filter failed",
 			zap.String("rule", rule.Name),
 			zap.Any("filter", rule.Filter))
 		return err
@@ -284,21 +453,23 @@ func checkPlacementFilter(filter Filter) error {
 	// anything that does not parse in a list of users is ignored (like ACL list)
 	if len(filter.Users) == 1 {
 		// for a length of 1 we could either have regexp or username
-		isUser := UserRegExp.MatchString(filter.Users[0])
+		user := filter.Users[0]
+		isUser := UserRegExp.MatchString(user)
 		// if it is not a user name it must be a regexp
 		// two step check: first compile if that fails it is
 		if !isUser {
-			if _, err := regexp.Compile(filter.Users[0]); err != nil || !SpecialRegExp.MatchString(filter.Users[0]) {
+			if _, err := regexp.Compile(user); err != nil || !SpecialRegExp.MatchString(user) {
 				return fmt.Errorf("invalid rule filter user list is not a proper list or regexp: %v", filter.Users)
 			}
 		}
 	}
 	if len(filter.Groups) == 1 {
 		// for a length of 1 we could either have regexp or groupname
-		isGroup := GroupRegExp.MatchString(filter.Groups[0])
+		group := filter.Groups[0]
+		isGroup := GroupRegExp.MatchString(group)
 		// if it is not a group name it must be a regexp
 		if !isGroup {
-			if _, err := regexp.Compile(filter.Groups[0]); err != nil || !SpecialRegExp.MatchString(filter.Groups[0]) {
+			if _, err := regexp.Compile(group); err != nil || !SpecialRegExp.MatchString(group) {
 				return fmt.Errorf("invalid rule filter group list is not a proper list or regexp: %v", filter.Groups)
 			}
 		}
@@ -307,7 +478,7 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName map[string]bool, queue *QueueConfig) error {
+func checkLimit(limit Limit, existingUserName map[string]bool, existingGroupName map[string]bool, queue *QueueConfig) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
@@ -317,15 +488,15 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 			return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
 		}
 
-		if existedUserName[name] {
-			return fmt.Errorf("duplicated user name %s , already existed", name)
+		if existingUserName[name] {
+			return fmt.Errorf("duplicated user name '%s', already exists", name)
 		}
-		existedUserName[name] = true
+		existingUserName[name] = true
 
 		// The user without wildcard should not happen after the wildcard user
 		// It means the wildcard for user should be the last item for limits object list which including the username,
 		// and we should only set one wildcard user for all limits
-		if existedUserName["*"] && name != "*" {
+		if existingUserName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
 	}
@@ -334,15 +505,15 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 			return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
 		}
 
-		if existedGroupName[name] {
-			return fmt.Errorf("duplicated group name %s , already existed", name)
+		if existingGroupName[name] {
+			return fmt.Errorf("duplicated group name '%s'", name)
 		}
-		existedGroupName[name] = true
+		existingGroupName[name] = true
 
 		// The group without wildcard should not happen after the wildcard group
 		// It means the wildcard for group should be the last item for limits object list which including the group name,
 		// and we should only set one wildcard group for all limits
-		if existedGroupName["*"] && name != "*" {
+		if existingGroupName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
 		}
 	}
@@ -351,7 +522,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 	// If there is no specific group mentioned the wildcard group limit would thus be the same as the queue limit.
 	// For that reason we do not allow specifying only one group limit that is using the wildcard.
 	// There must be at least one limit with a group name defined.
-	if existedGroupName["*"] && len(existedGroupName) == 1 {
+	if existingGroupName["*"] && len(existingGroupName) == 1 {
 		return fmt.Errorf("should not specify only one group limit that is using the wildcard. " +
 			"There must be at least one limit with a group name defined ")
 	}
@@ -362,23 +533,21 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 	if len(limit.MaxResources) != 0 {
 		limitResource, err = resources.NewResourceFromConf(limit.MaxResources)
 		if err != nil {
-			log.Logger().Debug("resource parsing failed",
+			log.Log(log.Config).Debug("resource parsing failed",
 				zap.Error(err))
 			return err
 		}
+		if !resources.StrictlyGreaterThanZero(limitResource) {
+			return fmt.Errorf("MaxResources should be greater than zero in '%s' limit", limit.Limit)
+		}
 	}
 	// at least some resource should be not null
-	if limit.MaxApplications == 0 && resources.IsZero(limitResource) {
+	if limit.MaxApplications == 0 && len(limit.MaxResources) == 0 {
 		return fmt.Errorf("invalid resource combination for limit %s all resource limits are null", limit.Limit)
 	}
 
-	if queue.MaxApplications != 0 {
-		if limit.MaxApplications > queue.MaxApplications {
-			return fmt.Errorf("invalid MaxApplications settings for limit %s exeecd current the queue MaxApplications", limit.Limit)
-		}
-		if limit.MaxApplications == 0 {
-			return fmt.Errorf("MaxApplications is 0 in limit name %s, it should be 1 ~ %d", limit.Limit, queue.MaxApplications)
-		}
+	if queue.MaxApplications != 0 && queue.MaxApplications < limit.MaxApplications {
+		return fmt.Errorf("invalid MaxApplications settings for limit %s exceed current the queue MaxApplications", limit.Limit)
 	}
 
 	// If queue is RootQueue, the queue.Resources.Max will be null, we don't need to check for root queue
@@ -386,7 +555,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 	if queue.Name != RootQueue {
 		queueMaxResource, err := resources.NewResourceFromConf(queue.Resources.Max)
 		if err != nil {
-			log.Logger().Debug("resource parsing failed",
+			log.Log(log.Config).Debug("resource parsing failed",
 				zap.Error(err))
 			return fmt.Errorf("parse queue %s max resource failed: %s", queue.Name, err.Error())
 		}
@@ -405,28 +574,38 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 		return nil
 	}
 	// walk over the list of limits
-	log.Logger().Debug("checking limits configs",
+	log.Log(log.Config).Debug("checking limits configs",
 		zap.String("objName", obj),
 		zap.Int("limitsLength", len(limits)))
 
-	existedUserName := make(map[string]bool)
-	existedGroupName := make(map[string]bool)
-
-	defer func() {
-		for k := range existedUserName {
-			delete(existedUserName, k)
-		}
-
-		for k := range existedGroupName {
-			delete(existedGroupName, k)
-		}
-	}()
+	existingUserName := make(map[string]bool)
+	existingGroupName := make(map[string]bool)
 
 	for _, limit := range limits {
-		if err := checkLimit(limit, existedUserName, existedGroupName, queue); err != nil {
+		if err := checkLimit(limit, existingUserName, existingGroupName, queue); err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func checkLimitsStructure(partitionConfig *PartitionConfig) error {
+	partitionLimits := partitionConfig.Limits
+	rootQueue := &partitionConfig.Queues[0]
+
+	if len(partitionConfig.Queues) < 1 || strings.ToLower(rootQueue.Name) != RootQueue {
+		return fmt.Errorf("top queue name is %s not root", rootQueue.Name)
+	}
+
+	if len(partitionLimits) > 0 && len(rootQueue.Limits) > 0 && !reflect.DeepEqual(partitionLimits, rootQueue.Limits) {
+		return fmt.Errorf("partition limits and root queue limits are not equivalent")
+	}
+
+	// if root queue limits not defined, apply partition limits
+	if len(partitionLimits) > 0 && len(rootQueue.Limits) == 0 {
+		rootQueue.Limits = partitionLimits
+	}
+
 	return nil
 }
 
@@ -453,7 +632,7 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 // Check the queue names configured for compliance and uniqueness
 // - no duplicate names at each branched level in the tree
 // - queue name is alphanumeric (case ignore) with - and _
-// - queue name is maximum 16 char long
+// - queue name is maximum 64 char long
 func checkQueues(queue *QueueConfig, level int) error {
 	// check the ACLs (if defined)
 	err := checkACL(queue.AdminACL)
@@ -474,12 +653,12 @@ func checkQueues(queue *QueueConfig, level int) error {
 	// check this level for name compliance and uniqueness
 	queueMap := make(map[string]bool)
 	for _, child := range queue.Queues {
-		if !QueueNameRegExp.MatchString(child.Name) {
-			return fmt.Errorf("invalid child name %s, a name must only have alphanumeric characters,"+
-				" - or _, and be no longer than 64 characters", child.Name)
+		err = IsQueueNameValid(child.Name)
+		if err != nil {
+			return err
 		}
 		if queueMap[strings.ToLower(child.Name)] {
-			return fmt.Errorf("duplicate child name found with name %s, level %d", child.Name, level)
+			return fmt.Errorf("duplicate child name found with name '%s', level %d", child.Name, level)
 		}
 		queueMap[strings.ToLower(child.Name)] = true
 	}
@@ -494,6 +673,13 @@ func checkQueues(queue *QueueConfig, level int) error {
 	return nil
 }
 
+func IsQueueNameValid(queueName string) error {
+	if !QueueNameRegExp.MatchString(queueName) {
+		return common.InvalidQueueName
+	}
+	return nil
+}
+
 // Check the structure of the queue in the config:
 // - exactly 1 root queue, added if missing
 // - the parent flag is set on queues that are missing it
@@ -504,7 +690,7 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 		return fmt.Errorf("queue config is not set")
 	}
 
-	log.Logger().Debug("checking partition queue config",
+	log.Log(log.Config).Debug("checking partition queue config",
 		zap.String("partitionName", partition.Name))
 
 	// handle no root queue cases
@@ -524,7 +710,7 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 
 	// insert the root queue if not there
 	if insertRoot {
-		log.Logger().Debug("inserting root queue",
+		log.Log(log.Config).Debug("inserting root queue",
 			zap.Int("numOfQueues", len(partition.Queues)))
 		var rootQueue QueueConfig
 		rootQueue.Name = RootQueue
@@ -540,21 +726,6 @@ func checkQueuesStructure(partition *PartitionConfig) error {
 	// special check for root resources: must not be set
 	if rootQueue.Resources.Guaranteed != nil || rootQueue.Resources.Max != nil {
 		return fmt.Errorf("root queue must not have resource limits set")
-	}
-	return checkQueues(&rootQueue, 1)
-}
-
-// Check the state dump file path, if configured, is a valid path that can be written to.
-func checkDeprecatedStateDumpFilePath(partition *PartitionConfig) error {
-	if partition.StateDumpFilePath != "" {
-		log.Logger().Warn("Ignoring deprecated partition setting 'statedumpfilepath'. This parameter will be removed in a future release.")
-	}
-	return nil
-}
-
-func ensureDir(fileName string) error {
-	if err := os.MkdirAll(filepath.Dir(fileName), os.ModePerm); err != nil {
-		return err
 	}
 	return nil
 }
@@ -576,7 +747,8 @@ func Validate(newConfig *SchedulerConfig) error {
 
 	// check uniqueness
 	partitionMap := make(map[string]bool)
-	for i, partition := range newConfig.Partitions {
+	for i := range newConfig.Partitions {
+		partition := newConfig.Partitions[i]
 		if partition.Name == "" || strings.ToLower(partition.Name) == DefaultPartition {
 			partition.Name = DefaultPartition
 		}
@@ -589,6 +761,14 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
+		err = checkLimitsStructure(&partition)
+		if err != nil {
+			return err
+		}
+		err = checkQueues(&partition.Queues[0], 1)
+		if err != nil {
+			return err
+		}
 		_, err = checkQueueResource(partition.Queues[0], nil)
 		if err != nil {
 			return err
@@ -597,20 +777,21 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err != nil {
 			return err
 		}
-		err = checkLimits(partition.Limits, partition.Name, &partition.Queues[0])
-		if err != nil {
-			return err
-		}
 		err = checkNodeSortingPolicy(&partition)
 		if err != nil {
 			return err
 		}
-		err = checkDeprecatedStateDumpFilePath(&newConfig.Partitions[i])
+
+		err = checkQueueMaxApplications(partition.Queues[0])
 		if err != nil {
 			return err
 		}
-		err = checkQueueMaxApplications(partition.Queues[0])
-		if err != nil {
+
+		if err = checkLimitResource(partition.Queues[0], make(map[string]map[string]*resources.Resource), make(map[string]map[string]*resources.Resource), common.Empty); err != nil {
+			return err
+		}
+
+		if err = checkLimitMaxApplications(partition.Queues[0], make(map[string]map[string]uint64), make(map[string]map[string]uint64), common.Empty); err != nil {
 			return err
 		}
 		// write back the partition to keep changes
@@ -620,51 +801,79 @@ func Validate(newConfig *SchedulerConfig) error {
 }
 
 // returns the longest fixed queue path defined by the placement rule chain
-// e.g. the chain is user->tag->fixed, returns something like "root.users.<tag>.<user>",
+// e.g. the chain is fixed->tag->user, returns something like "root.users.<tag>.<user>",
 // the longest static part is "root.users"
-func getLongestPlacementPaths(rules []PlacementRule) []placementStaticPath {
+func getLongestPlacementPaths(rules []PlacementRule) ([]placementStaticPath, error) {
 	paths := make([]placementStaticPath, 0)
 
 	for i, rule := range rules {
-		path, ruleChain, _ := getLongestStaticPath(rule)
+		path, ruleChain, hasDynamicPart, err := getLongestStaticPath(rule)
+		if err != nil {
+			return nil, err
+		}
+		if strings.Index(path, RootQueue) != 0 {
+			continue
+		}
 		placementPath := placementStaticPath{
-			path:      path,
-			create:    rule.Create,
-			ruleChain: ruleChain,
-			ruleNo:    i,
+			path:           path,
+			create:         rule.Create,
+			ruleChain:      ruleChain,
+			hasDynamicPart: hasDynamicPart,
+			ruleNo:         i,
 		}
 		paths = append(paths, placementPath)
 	}
 
-	return paths
+	return paths, nil
 }
 
-func getLongestStaticPath(rule PlacementRule) (string, string, bool) {
-	var parentPath string
-	var ruleChain string
-	dynamicParent := false
+func getLongestStaticPath(rule PlacementRule) (staticPath, ruleChain string, foundDynamicRule bool, err error) {
+	rules := getRuleChain(rule)
 
-	if rule.Parent != nil {
-		var chain string
-		parentPath, chain, dynamicParent = getLongestStaticPath(*rule.Parent)
-		ruleChain = rule.Name + "->" + chain
-	} else {
-		ruleChain = rule.Name
-		parentPath = RootQueue
-	}
+	for _, r := range rules {
+		if ruleChain == "" {
+			ruleChain = r.Name
+		} else {
+			ruleChain = ruleChain + "->" + r.Name
+		}
+		if foundDynamicRule {
+			continue
+		}
 
-	if rule.Name == types.Fixed {
-		queueName := strings.ToLower(rule.Value)
+		if r.Name != types.Fixed {
+			if staticPath == "" {
+				staticPath = "<dynamic>"
+			}
+			foundDynamicRule = true
+			continue
+		}
+
+		queueName := r.Value
 		qualified := strings.HasPrefix(queueName, RootQueue)
 		if qualified {
-			return queueName, ruleChain, false
+			if staticPath != "" {
+				// error, only the first fixed rule can be fully qualified
+				err = fmt.Errorf("illegal fully qualified 'fixed' rule with value %s", queueName)
+				return staticPath, ruleChain, foundDynamicRule, err
+			}
+			staticPath = queueName
+			continue
 		}
-		// there is a parent rule other than "fixed", we can't do anything about that
-		if dynamicParent {
-			return RootQueue, ruleChain, true
+		if staticPath == "" {
+			staticPath = RootQueue
 		}
-		return parentPath + "." + queueName, ruleChain, false
+		staticPath = staticPath + "." + queueName
 	}
 
-	return parentPath, ruleChain, true
+	return staticPath, ruleChain, foundDynamicRule, nil
+}
+
+func getRuleChain(r PlacementRule) []PlacementRule {
+	rules := make([]PlacementRule, 0)
+	if r.Parent != nil {
+		rules = append(rules, getRuleChain(*r.Parent)...)
+	}
+
+	rules = append(rules, r)
+	return rules
 }

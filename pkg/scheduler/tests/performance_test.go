@@ -24,7 +24,6 @@ import (
 	"testing"
 	"time"
 
-	"go.uber.org/zap"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
@@ -34,7 +33,9 @@ import (
 
 //nolint:funlen
 func benchmarkScheduling(b *testing.B, numNodes, numPods int) {
-	log.InitAndSetLevel(zap.InfoLevel)
+	log.UpdateLoggingConfig(map[string]string{"log.level": "WARN"})
+	defer log.UpdateLoggingConfig(nil)
+
 	// Start all tests
 	serviceContext := entrypoint.StartAllServices()
 	defer serviceContext.StopAll()
@@ -72,6 +73,9 @@ partitions:
 			Version:     "0.0.2",
 			BuildInfo:   BuildInfoMap,
 			Config:      configData,
+			ExtraConfig: map[string]string{
+				"log.level": "WARN",
+			},
 		}, mockRM)
 
 	assert.NilError(b, err, "RegisterResourceManager failed")
@@ -123,40 +127,43 @@ partitions:
 
 	// Request pods
 	app1NumPods := numPods / 2
-	err = proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: int64(requestMem)},
-						"vcore":  {Value: int64(requestVcore)},
-					},
+	app1Asks := make([]*si.AllocationAsk, app1NumPods)
+	for i := 0; i < app1NumPods; i++ {
+		app1Asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-1-%d", i),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: int64(requestMem)},
+					"vcore":  {Value: int64(requestVcore)},
 				},
-				MaxAllocations: int32(app1NumPods),
-				ApplicationID:  appID1,
 			},
-		},
+			ApplicationID: appID1,
+		}
+	}
+	err = proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: app1Asks,
 		RmID: "rm:123",
 	})
 	if err != nil {
 		b.Error(err.Error())
 	}
 
-	err = proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: int64(requestMem)},
-						"vcore":  {Value: int64(requestVcore)},
-					},
+	app2NumPods := numPods - app1NumPods
+	app2Asks := make([]*si.AllocationAsk, app2NumPods)
+	for i := 0; i < app2NumPods; i++ {
+		app2Asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-2-%d", i),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: int64(requestMem)},
+					"vcore":  {Value: int64(requestVcore)},
 				},
-				MaxAllocations: int32(numPods - app1NumPods),
-				ApplicationID:  appID2,
 			},
-		},
+			ApplicationID: appID2,
+		}
+	}
+	err = proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: app2Asks,
 		RmID: "rm:123",
 	})
 	if err != nil {
@@ -164,6 +171,8 @@ partitions:
 	}
 
 	// Reset  timer for this benchmark
+	duration = time.Since(startTime)
+	b.Logf("Total time to add %d pods in %s, %f per second", numPods, duration, float64(numPods)/duration.Seconds())
 	startTime = time.Now()
 	b.ResetTimer()
 

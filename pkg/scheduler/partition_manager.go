@@ -60,7 +60,7 @@ func newPartitionManager(pc *PartitionContext, cc *ClusterContext) *partitionMan
 // - remove rejected applications from the partition
 // When the manager exits the partition is removed from the system and must be cleaned up
 func (manager *partitionManager) Run() {
-	log.Logger().Info("starting partition manager",
+	log.Log(log.SchedPartition).Info("starting partition manager",
 		zap.String("partition", manager.pc.Name),
 		zap.Stringer("cleanRootInterval", manager.cleanRootInterval))
 	go manager.cleanExpiredApps()
@@ -68,6 +68,7 @@ func (manager *partitionManager) Run() {
 }
 
 func (manager *partitionManager) cleanRoot() {
+	log.Log(log.SchedPartition).Info("Starting partition queue cleaner")
 	// exit only when the partition this manager belongs to exits
 	for {
 		cleanRootInterval := manager.cleanRootInterval
@@ -80,7 +81,7 @@ func (manager *partitionManager) cleanRoot() {
 		case <-time.After(cleanRootInterval):
 			runStart := time.Now()
 			manager.cleanQueues(manager.pc.root)
-			log.Logger().Debug("time consumed for queue cleaner",
+			log.Log(log.SchedPartition).Debug("time consumed for queue cleaner",
 				zap.Stringer("duration", time.Since(runStart)))
 		}
 	}
@@ -89,11 +90,11 @@ func (manager *partitionManager) cleanRoot() {
 // Set the flag that the will allow the manager to exit.
 // No locking needed as there is just one place where this is called which is already locked.
 func (manager *partitionManager) Stop() {
-	go func() {
-		manager.stopCleanExpiredApps <- struct{}{}
-		manager.stopCleanRoot <- struct{}{}
-		manager.remove()
-	}()
+	log.Log(log.SchedPartition).Info("Stopping partition manager",
+		zap.String("partition", manager.pc.Name))
+	close(manager.stopCleanExpiredApps)
+	close(manager.stopCleanRoot)
+	manager.remove()
 }
 
 // Remove drained managed and empty unmanaged queues. Perform the action recursively.
@@ -110,20 +111,20 @@ func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 	}
 	// when we have done the children (or have none) this queue might be removable
 	if queue.IsDraining() || !queue.IsManaged() {
-		log.Logger().Debug("removing queue",
+		log.Log(log.SchedPartition).Debug("removing queue",
 			zap.String("queueName", queue.QueuePath),
 			zap.String("partitionName", manager.pc.Name))
 		// make sure the queue is empty
 		if queue.IsEmpty() {
 			// all OK update the queue hierarchy and partition
 			if !queue.RemoveQueue() {
-				log.Logger().Debug("unexpected failure removing the queue",
+				log.Log(log.SchedPartition).Debug("unexpected failure removing the queue",
 					zap.String("partitionName", manager.pc.Name),
 					zap.String("queue", queue.QueuePath))
 			}
 		} else {
 			// TODO time out waiting for draining and removal
-			log.Logger().Debug("skip removing the queue",
+			log.Log(log.SchedPartition).Debug("skip removing the queue",
 				zap.String("reason", "there are existing assigned apps or leaf queues"),
 				zap.String("queue", queue.QueuePath),
 				zap.String("partitionName", manager.pc.Name))
@@ -137,15 +138,16 @@ func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 // - applications
 // - nodes
 // last action is to remove the cluster links
+//
 //nolint:errcheck
 func (manager *partitionManager) remove() {
-	log.Logger().Info("marking all queues for removal",
+	log.Log(log.SchedPartition).Info("marking all queues for removal",
 		zap.String("partitionName", manager.pc.Name))
 	// mark all queues for removal
 	manager.pc.root.MarkQueueForRemoval()
 	// remove applications: we do not care about return values or issues
 	apps := manager.pc.GetApplications()
-	log.Logger().Info("removing all applications from partition",
+	log.Log(log.SchedPartition).Info("removing all applications from partition",
 		zap.Int("numOfApps", len(apps)),
 		zap.String("partitionName", manager.pc.Name))
 	for i := range apps {
@@ -155,19 +157,20 @@ func (manager *partitionManager) remove() {
 	}
 	// remove the nodes
 	nodes := manager.pc.GetNodes()
-	log.Logger().Info("removing all nodes from partition",
+	log.Log(log.SchedPartition).Info("removing all nodes from partition",
 		zap.Int("numOfNodes", len(nodes)),
 		zap.String("partitionName", manager.pc.Name))
 	for i := range nodes {
 		_, _ = manager.pc.removeNode(nodes[i].NodeID)
 	}
-	log.Logger().Info("removing partition",
+	log.Log(log.SchedPartition).Info("removing partition",
 		zap.String("partitionName", manager.pc.Name))
 	// remove the scheduler object
 	manager.cc.removePartition(manager.pc.Name)
 }
 
 func (manager *partitionManager) cleanExpiredApps() {
+	log.Log(log.SchedPartition).Info("Starting partition expired apps cleaner")
 	for {
 		cleanExpiredAppsInterval := manager.cleanExpiredAppsInterval
 		if cleanExpiredAppsInterval <= 0 {

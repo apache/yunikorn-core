@@ -20,6 +20,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -34,8 +36,14 @@ const (
 )
 
 func main() {
+	if err := runApp(); err != nil {
+		log.Fatalf("error: %v", err)
+	}
+}
+
+func runApp() error {
 	// Set up a connection to the server.
-	conn, err := grpc.Dial(address, grpc.WithInsecure())
+	conn, err := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatalf("did not connect: %v", err)
 	}
@@ -46,13 +54,13 @@ func main() {
 	defer cancel()
 	_, err = c.RegisterResourceManager(ctx, &si.RegisterResourceManagerRequest{})
 	if err != nil {
-		log.Fatalf("could not greet: %v", err)
+		return fmt.Errorf("could not greet: %v", err)
 	}
 	log.Printf("Responded")
 
 	stream, err := c.UpdateAllocation(ctx)
 	if err != nil {
-		log.Fatalf("error on update: %v", err)
+		return fmt.Errorf("error on update: %v", err)
 	}
 	done := make(chan bool)
 
@@ -68,9 +76,6 @@ func main() {
 			log.Print("Send request")
 			time.Sleep(time.Millisecond * 100)
 		}
-		//if err := stream.CloseSend(); err != nil {
-		//   log.Println(err)
-		//}
 	}()
 
 	// second goroutine receives data from stream
@@ -103,4 +108,5 @@ func main() {
 
 	<-done
 	log.Printf("Finished")
+	return nil
 }

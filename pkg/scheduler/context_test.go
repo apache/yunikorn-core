@@ -19,7 +19,6 @@
 package scheduler
 
 import (
-	"strconv"
 	"strings"
 	"testing"
 
@@ -49,12 +48,6 @@ func newMockEventHandler() *mockEventHandler {
 		rejectedNodes: make([]*si.RejectedNode, 0),
 		acceptedNodes: make([]*si.AcceptedNode, 0),
 	}
-}
-
-func (m *mockEventHandler) reset() {
-	m.eventHandled = false
-	m.rejectedNodes = make([]*si.RejectedNode, 0)
-	m.acceptedNodes = make([]*si.AcceptedNode, 0)
 }
 
 func (m *mockEventHandler) HandleEvent(ev interface{}) {
@@ -111,7 +104,7 @@ func TestContext_UpdateNode(t *testing.T) {
 	context.updateNode(n)
 	assert.Equal(t, 0, len(partition.GetNodes()), "unexpected node found on partition (correct partition set)")
 	// add the node to the context
-	err := context.addNode(n)
+	err := context.addNode(n, true)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 	assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
 	assert.Assert(t, resources.Equals(full, partition.GetTotalPartitionResource()), "partition resource should be updated")
@@ -154,12 +147,12 @@ func TestContext_AddNode(t *testing.T) {
 		Attributes:          map[string]string{"si/node-partition": "unknown"},
 		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
 	}
-	err := context.addNode(n)
+	err := context.addNode(n, true)
 	if err == nil {
 		t.Fatalf("unknown node partition should have failed the node add")
 	}
 	n.Attributes = map[string]string{"si/node-partition": pName}
-	err = context.addNode(n)
+	err = context.addNode(n, true)
 	assert.NilError(t, err, "unexpected error returned adding node")
 	partition := context.GetPartition(pName)
 	if partition == nil {
@@ -167,10 +160,49 @@ func TestContext_AddNode(t *testing.T) {
 	}
 	assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
 	// add same node again should show an error
-	err = context.addNode(n)
+	err = context.addNode(n, true)
 	if err == nil {
 		t.Fatalf("existing node addition should have failed")
 	}
+}
+
+func TestContext_AddNodeDrained(t *testing.T) {
+	context := createTestContext(t, pName)
+
+	draining, err := metrics.GetSchedulerMetrics().GetDrainingNodes()
+	assert.NilError(t, err, "failed to get draining node count")
+
+	n := &si.NodeInfo{
+		NodeID:              "test-1",
+		Action:              si.NodeInfo_CREATE_DRAIN,
+		Attributes:          map[string]string{"si/node-partition": "unknown"},
+		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
+	}
+	err = context.addNode(n, false)
+	if err == nil {
+		t.Fatalf("unknown node partition should have failed the node add")
+	}
+	n.Attributes = map[string]string{"si/node-partition": pName}
+	err = context.addNode(n, false)
+	assert.NilError(t, err, "unexpected error returned adding node")
+	partition := context.GetPartition(pName)
+	if partition == nil {
+		t.Fatalf("partition should have been found")
+	}
+	assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
+	// add same node again should show an error
+	err = context.addNode(n, false)
+	if err == nil {
+		t.Fatalf("existing node addition should have failed")
+	}
+	// verify that node is draining
+	node := partition.GetNode(n.NodeID)
+	assert.Assert(t, node != nil, "node not found in partition")
+	assert.Equal(t, false, node.IsSchedulable(), "node was schedulable and should not be")
+	expectedDraining := draining + 1
+	draining, err = metrics.GetSchedulerMetrics().GetDrainingNodes()
+	assert.NilError(t, err, "failed to get draining node count")
+	assert.Equal(t, expectedDraining, draining, "wrong draining node count")
 }
 
 func TestContext_AddRMBuildInformation(t *testing.T) {
@@ -235,48 +267,15 @@ func TestContext_ProcessNode(t *testing.T) {
 	}
 }
 
-func TestContextUpdateNodeMetrics(t *testing.T) {
-	metrics.GetSchedulerMetrics().Reset()
-	context := createTestContext(t, pName)
-
-	n := getNodeInfoForAddingNode(true)
-
-	err := context.addNode(n)
-	assert.NilError(t, err, "unexpected error returned from addNode")
-	verifyMetrics(t, 1, "active")
-
-	// Update: node became unhealthy
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_UPDATE, false)
-	context.updateNode(n)
-	verifyMetrics(t, 1, "unhealthy")
-
-	// Update: node became healthy
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_UPDATE, true)
-	context.updateNode(n)
-	verifyMetrics(t, 0, "unhealthy")
-}
-
-func TestContextAddUnhealthyNodeMetrics(t *testing.T) {
-	metrics.GetSchedulerMetrics().Reset()
-	context := createTestContext(t, pName)
-
-	n := getNodeInfoForAddingNode(false)
-
-	err := context.addNode(n)
-	assert.NilError(t, err, "unexpected error returned from addNode")
-	verifyMetrics(t, 1, "active")
-	verifyMetrics(t, 1, "unhealthy")
-}
-
 func TestContextDrainingNodeMetrics(t *testing.T) {
 	metrics.GetSchedulerMetrics().Reset()
 	context := createTestContext(t, pName)
 
-	n := getNodeInfoForAddingNode(true)
-	err := context.addNode(n)
+	n := getNodeInfoForAddingNode()
+	err := context.addNode(n, true)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE, true)
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE)
 	context.updateNode(n)
 	verifyMetrics(t, 1, "draining")
 }
@@ -285,39 +284,37 @@ func TestContextDrainingNodeBackToSchedulableMetrics(t *testing.T) {
 	metrics.GetSchedulerMetrics().Reset()
 	context := createTestContext(t, pName)
 
-	n := getNodeInfoForAddingNode(true)
-	err := context.addNode(n)
+	n := getNodeInfoForAddingNode()
+	err := context.addNode(n, true)
 	assert.NilError(t, err, "unexpected error returned from addNode")
 
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE, true)
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_NODE)
 	context.updateNode(n)
 
-	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_TO_SCHEDULABLE, true)
+	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_TO_SCHEDULABLE)
 	context.updateNode(n)
 	verifyMetrics(t, 0, "draining")
 }
 
-func getNodeInfoForAddingNode(ready bool) *si.NodeInfo {
+func getNodeInfoForAddingNode() *si.NodeInfo {
 	n := &si.NodeInfo{
 		NodeID:              "test-1",
 		Action:              si.NodeInfo_UNKNOWN_ACTION_FROM_RM,
 		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
 		Attributes: map[string]string{
-			siCommon.NodePartition:      pName,
-			siCommon.NodeReadyAttribute: strconv.FormatBool(ready),
+			siCommon.NodePartition: pName,
 		},
 	}
 
 	return n
 }
 
-func getNodeInfoForUpdatingNode(action si.NodeInfo_ActionFromRM, ready bool) *si.NodeInfo {
+func getNodeInfoForUpdatingNode(action si.NodeInfo_ActionFromRM) *si.NodeInfo {
 	n := &si.NodeInfo{
 		NodeID: "test-1",
 		Action: action,
 		Attributes: map[string]string{
-			siCommon.NodePartition:      pName,
-			siCommon.NodeReadyAttribute: strconv.FormatBool(ready),
+			siCommon.NodePartition: pName,
 		},
 	}
 

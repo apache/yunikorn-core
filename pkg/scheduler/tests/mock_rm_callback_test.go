@@ -19,30 +19,31 @@
 package tests
 
 import (
-	"sync"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/locking"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type mockRMCallback struct {
-	MockResourceManagerCallback
+	mock.ResourceManagerCallback
 	acceptedApplications map[string]bool
 	rejectedApplications map[string]bool
 	acceptedNodes        map[string]bool
 	rejectedNodes        map[string]bool
 	nodeAllocations      map[string][]*si.Allocation
 	Allocations          map[string]*si.Allocation
+	releasedPhs          map[string]*si.AllocationRelease
+	appStates            map[string]string
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
-// This is only exported to allow the use in the simple_example.go.
-// Lint exclusion added as the non-export return is OK
 func newMockRMCallbackHandler() *mockRMCallback {
 	return &mockRMCallback{
 		acceptedApplications: make(map[string]bool),
@@ -51,6 +52,8 @@ func newMockRMCallbackHandler() *mockRMCallback {
 		rejectedNodes:        make(map[string]bool),
 		nodeAllocations:      make(map[string][]*si.Allocation),
 		Allocations:          make(map[string]*si.Allocation),
+		releasedPhs:          make(map[string]*si.AllocationRelease),
+		appStates:            make(map[string]string),
 	}
 }
 
@@ -64,6 +67,10 @@ func (m *mockRMCallback) UpdateApplication(response *si.ApplicationResponse) err
 	for _, app := range response.Rejected {
 		m.rejectedApplications[app.ApplicationID] = true
 		delete(m.acceptedApplications, app.ApplicationID)
+		delete(m.appStates, app.ApplicationID)
+	}
+	for _, app := range response.Updated {
+		m.appStates[app.ApplicationID] = app.State
 	}
 	return nil
 }
@@ -72,7 +79,7 @@ func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error
 	m.Lock()
 	defer m.Unlock()
 	for _, alloc := range response.New {
-		m.Allocations[alloc.UUID] = alloc
+		m.Allocations[alloc.AllocationKey] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
 			val = append(val, alloc)
 			m.nodeAllocations[alloc.NodeID] = val
@@ -83,7 +90,10 @@ func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error
 		}
 	}
 	for _, alloc := range response.Released {
-		delete(m.Allocations, alloc.UUID)
+		delete(m.Allocations, alloc.AllocationKey)
+		if alloc.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
+			m.releasedPhs[alloc.AllocationKey] = alloc
+		}
 	}
 	return nil
 }
@@ -114,7 +124,7 @@ func (m *mockRMCallback) getAllocations() map[string]*si.Allocation {
 }
 
 func (m *mockRMCallback) waitForAcceptedApplication(tb testing.TB, appID string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		return m.acceptedApplications[appID]
@@ -125,7 +135,7 @@ func (m *mockRMCallback) waitForAcceptedApplication(tb testing.TB, appID string,
 }
 
 func (m *mockRMCallback) waitForRejectedApplication(t *testing.T, appID string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		return m.rejectedApplications[appID]
@@ -133,8 +143,17 @@ func (m *mockRMCallback) waitForRejectedApplication(t *testing.T, appID string, 
 	assert.NilError(t, err, "Failed to wait for rejected application: %s, called from: %s", appID, caller())
 }
 
+func (m *mockRMCallback) waitForApplicationState(t *testing.T, appID, state string, timeoutMs int) {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		m.RLock()
+		defer m.RUnlock()
+		return m.appStates[appID] == state
+	})
+	assert.NilError(t, err, "Failed to wait for application %s state: %s, called from: %s", appID, state, caller())
+}
+
 func (m *mockRMCallback) waitForAcceptedNode(t *testing.T, nodeID string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		return m.acceptedNodes[nodeID]
@@ -144,7 +163,7 @@ func (m *mockRMCallback) waitForAcceptedNode(t *testing.T, nodeID string, timeou
 
 func (m *mockRMCallback) waitForMinAcceptedNodes(tb testing.TB, minNumNode int, timeoutMs int) {
 	var numNodes int
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		numNodes = len(m.acceptedNodes)
@@ -156,7 +175,7 @@ func (m *mockRMCallback) waitForMinAcceptedNodes(tb testing.TB, minNumNode int, 
 }
 
 func (m *mockRMCallback) waitForRejectedNode(t *testing.T, nodeID string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		return m.rejectedNodes[nodeID]
@@ -166,7 +185,7 @@ func (m *mockRMCallback) waitForRejectedNode(t *testing.T, nodeID string, timeou
 
 func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs int) {
 	var allocLen int
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		allocLen = len(m.Allocations)
@@ -177,7 +196,7 @@ func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs 
 
 func (m *mockRMCallback) waitForMinAllocations(tb testing.TB, nAlloc int, timeoutMs int) {
 	var allocLen int
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		allocLen = len(m.Allocations)
@@ -186,4 +205,15 @@ func (m *mockRMCallback) waitForMinAllocations(tb testing.TB, nAlloc int, timeou
 	if err != nil {
 		tb.Fatalf("Failed to wait for min allocations expected %d, actual %d, called from: %s", nAlloc, allocLen, caller())
 	}
+}
+
+func (m *mockRMCallback) waitForReleasedPlaceholders(t *testing.T, releases int, timeoutMs int) {
+	var releasesLen int
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		m.RLock()
+		defer m.RUnlock()
+		releasesLen = len(m.releasedPhs)
+		return releasesLen == releases
+	})
+	assert.NilError(t, err, "Failed to wait for placeholder releases, expected %d, actual %d, called from: %s", releases, releasesLen, caller())
 }

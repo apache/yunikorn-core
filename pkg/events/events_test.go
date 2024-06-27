@@ -23,48 +23,42 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestCreateEventRecord(t *testing.T) {
-	record, err := createEventRecord(si.EventRecord_NODE, "ask", "app", "reason", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record := createEventRecord(si.EventRecord_NODE, "ask", "app", "message",
+		si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, resources.NewResourceFromMap(
+			map[string]resources.Quantity{
+				"cpu": 1,
+			},
+		))
 	assert.Equal(t, record.Type, si.EventRecord_NODE)
 	assert.Equal(t, record.ObjectID, "ask")
-	assert.Equal(t, record.GroupID, "app")
-	assert.Equal(t, record.Reason, "reason")
+	assert.Equal(t, record.ReferenceID, "app")
 	assert.Equal(t, record.Message, "message")
+	assert.Equal(t, int64(1), record.Resource.Resources["cpu"].Value)
+	assert.Equal(t, si.EventRecord_NONE, record.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, record.EventChangeDetail)
 	if record.TimestampNano == 0 {
 		t.Fatal("the timestamp should have been created")
 	}
 }
 
 func TestCreateEventRecordTypes(t *testing.T) {
-	record, err := CreateRequestEventRecord("ask", "app", "reason", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record := CreateRequestEventRecord("ask", "app", "message", nil)
 	assert.Equal(t, record.Type, si.EventRecord_REQUEST)
 
-	record, err = CreateAppEventRecord("ask", "app", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record = CreateAppEventRecord("app", "message", "ask", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_APP)
 
-	record, err = CreateNodeEventRecord("ask", "app", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record = CreateNodeEventRecord("node", "message", "ask", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_NODE)
 
-	record, err = CreateQueueEventRecord("ask", "app", "reason", "message")
-	assert.NilError(t, err, "the error should be nil")
+	record = CreateQueueEventRecord("queue", "message", "app", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
 	assert.Equal(t, record.Type, si.EventRecord_QUEUE)
-}
 
-func TestEmptyFields(t *testing.T) {
-	record, err := createEventRecord(si.EventRecord_QUEUE, "obj", "group", "reason", "message")
-	assert.NilError(t, err)
-	assert.Assert(t, record != nil, "the EventRecord should be created with a non-empty objectID")
-
-	_, err = createEventRecord(si.EventRecord_QUEUE, "", "group", "reason", "message")
-	assert.Assert(t, err != nil, "the EventRecord should not be created with empty objectID")
-
-	_, err = createEventRecord(si.EventRecord_QUEUE, "obj", "group", "", "message")
-	assert.Assert(t, err != nil, "the EventRecord should not be created with empty reason")
+	record = CreateUserGroupEventRecord("user", "message", "queue", si.EventRecord_NONE, si.EventRecord_DETAILS_NONE, nil)
+	assert.Equal(t, record.Type, si.EventRecord_USERGROUP)
 }

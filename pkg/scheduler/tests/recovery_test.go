@@ -19,6 +19,7 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -55,7 +56,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of scheduler.GetClusterContext() and scheduler.
@@ -71,7 +72,7 @@ func TestSchedulerRecovery(t *testing.T) {
 
 	// Check scheduling queue a
 	queue := part.GetQueue("root.a")
-	assert.Assert(t, 150 == queue.GetMaxResource().Resources[common.Memory])
+	assert.Equal(t, resources.Quantity(150), queue.GetMaxResource().Resources[common.Memory])
 
 	// Register nodes, and add apps
 	err = ms.proxy.UpdateNode(&si.NodeRequest{
@@ -126,6 +127,16 @@ func TestSchedulerRecovery(t *testing.T) {
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
+				AllocationKey: "alloc-0",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+			},
+			{
 				AllocationKey: "alloc-1",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
@@ -133,8 +144,7 @@ func TestSchedulerRecovery(t *testing.T) {
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -170,32 +180,23 @@ func TestSchedulerRecovery(t *testing.T) {
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
-	// ask for two more resources
+	// ask for 4 more allocations
+	asks := make([]*si.AllocationAsk, 4)
+	mem := [4]int64{50, 100, 50, 100}
+	for i := 0; i < 4; i++ {
+		asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-%d", i+2),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: mem[i]},
+					"vcore":  {Value: 5},
+				},
+			},
+			ApplicationID: appID1,
+		}
+	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 50},
-						"vcore":  {Value: 5},
-					},
-				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
-			},
-			{
-				AllocationKey: "alloc-3",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 100},
-						"vcore":  {Value: 5},
-					},
-				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
-			},
-		},
+		Asks: asks,
 		RmID: "rm:123",
 	})
 
@@ -233,7 +234,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	mockRM := ms.mockRM
 	ms.serviceContext.StopAll()
 	// restart
-	err = ms.Init(configData, false)
+	err = ms.Init(configData, false, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// Register nodes, and add apps
@@ -343,7 +344,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register node, and add app
@@ -391,8 +392,17 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -411,7 +421,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	mockRM := ms.mockRM
 	ms.serviceContext.StopAll()
 	// restart
-	err = ms.Init(configData, false)
+	err = ms.Init(configData, false, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 
 	// Register nodes, and add apps
@@ -455,7 +465,7 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register nodes, and add apps
@@ -475,7 +485,6 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
-						UUID:          "UUID01",
 						ApplicationID: "app-01",
 						PartitionName: "default",
 						NodeID:        "node-1:1234",
@@ -543,7 +552,6 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 				ExistingAllocations: []*si.Allocation{
 					{
 						AllocationKey: "allocation-key-01",
-						UUID:          "UUID01",
 						ApplicationID: "app-01",
 						PartitionName: "default",
 						NodeID:        "node-1:1234",
@@ -585,6 +593,7 @@ func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 // test scheduler recovery that only registers nodes and apps
 func TestAppRecovery(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	defer serviceContext.StopAll()
 	proxy := serviceContext.RMProxy
 
 	BuildInfoMap := make(map[string]string)
@@ -656,6 +665,7 @@ func TestAppRecovery(t *testing.T) {
 // test scheduler recovery that only registers apps
 func TestAppRecoveryAlone(t *testing.T) {
 	serviceContext := entrypoint.StartAllServicesWithManualScheduler()
+	defer serviceContext.StopAll()
 	proxy := serviceContext.RMProxy
 
 	BuildInfoMap := make(map[string]string)
@@ -729,7 +739,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// initially there is only 1 root queue exist
@@ -802,8 +812,17 @@ partitions:
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -847,7 +866,6 @@ partitions:
 			existingAllocations = append(existingAllocations, &si.Allocation{
 				AllocationKey:    alloc.AllocationKey,
 				AllocationTags:   alloc.AllocationTags,
-				UUID:             alloc.UUID,
 				ResourcePerAlloc: alloc.ResourcePerAlloc,
 				Priority:         alloc.Priority,
 				NodeID:           alloc.NodeID,
@@ -864,7 +882,7 @@ partitions:
 	ms.serviceContext.StopAll()
 
 	// restart
-	err = ms.Init(configData, false)
+	err = ms.Init(configData, false, false)
 	assert.NilError(t, err, "2nd RegisterResourceManager failed")
 	part = ms.scheduler.GetClusterContext().GetPartition(ms.partitionName)
 	rootQ = part.GetQueue("root")
@@ -932,4 +950,165 @@ partitions:
 	assert.Equal(t, len(rootQ.GetCopyOfChildren()), 1)
 	appQueue = part.GetQueue("root.app-1-namespace")
 	assert.Assert(t, appQueue != nil, "application queue was not created after recovery")
+}
+
+func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
+	// create an existing allocation
+	existingAllocations := make([]*si.Allocation, 1)
+	existingAllocations[0] = &si.Allocation{
+		AllocationKey: "ph-alloc-1",
+		NodeID:        "node-1:1234",
+		ApplicationID: appID1,
+		TaskGroupName: "tg-1",
+		ResourcePerAlloc: &si.Resource{
+			Resources: map[string]*si.Quantity{
+				"memory": {
+					Value: 10,
+				},
+				"vcore": {
+					Value: 1,
+				},
+			},
+		},
+		Placeholder: true,
+	}
+
+	config := `partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: default`
+	ms := &mockScheduler{}
+	defer ms.Stop()
+	err := ms.Init(config, true, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	// Add application
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New:  newAddAppRequest(map[string]string{appID1: "root.default"}),
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "ApplicationRequest failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+
+	// Add node
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{
+			{
+				NodeID:     "node-1:1234",
+				Attributes: map[string]string{},
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100},
+						"vcore":  {Value: 20},
+					},
+				},
+				Action:              si.NodeInfo_CREATE,
+				ExistingAllocations: existingAllocations,
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "NodeRequest nodes and app for recovery failed")
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+
+	// Add a new placeholder ask with a different task group
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "ph-alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+				TaskGroupName: "tg-2",
+				Placeholder:   true,
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationRequest failed for placeholder ask")
+	ms.mockRM.waitForAllocations(t, 1, 1000)
+
+	// Add two real asks
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: []*si.AllocationAsk{
+			{
+				AllocationKey: "real-alloc-1",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+				TaskGroupName: "tg-1",
+			},
+			{
+				AllocationKey: "real-alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10},
+						"vcore":  {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+				TaskGroupName: "tg-2",
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationRequest failed for real asks")
+	ms.mockRM.waitForReleasedPlaceholders(t, 2, 1000)
+
+	// remove placeholder allocations
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationRelease{
+				{
+					ApplicationID:   appID1,
+					PartitionName:   "default",
+					AllocationKey:   "ph-alloc-1",
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+				},
+				{
+					ApplicationID:   appID1,
+					PartitionName:   "default",
+					AllocationKey:   "ph-alloc-2",
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationReleasesRequest failed for placeholders")
+
+	// remove real allocations
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationRelease{
+				{
+					ApplicationID:   appID1,
+					PartitionName:   "default",
+					AllocationKey:   "real-alloc-1",
+					TerminationType: si.TerminationType_STOPPED_BY_RM,
+				},
+				{
+					ApplicationID:   appID1,
+					PartitionName:   "default",
+					AllocationKey:   "real-alloc-2",
+					TerminationType: si.TerminationType_STOPPED_BY_RM,
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "AllocationReleasesRequest failed for real allocations")
+
+	ms.mockRM.waitForApplicationState(t, appID1, "Completing", 1000)
 }

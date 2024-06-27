@@ -19,21 +19,22 @@
 package dao
 
 type NodesDAOInfo struct {
-	PartitionName string         `json:"partitionName"`
-	Nodes         []*NodeDAOInfo `json:"nodesInfo"`
+	PartitionName string         `json:"partitionName"` // no omitempty, partition name shoud not be empty
+	Nodes         []*NodeDAOInfo `json:"nodesInfo,omitempty"`
 }
 
 type NodeDAOInfo struct {
-	NodeID       string               `json:"nodeID"`
-	HostName     string               `json:"hostName"`
-	RackName     string               `json:"rackName"`
-	Capacity     map[string]int64     `json:"capacity"`
-	Allocated    map[string]int64     `json:"allocated"`
-	Occupied     map[string]int64     `json:"occupied"`
-	Available    map[string]int64     `json:"available"`
-	Utilized     map[string]int64     `json:"utilized"`
-	Allocations  []*AllocationDAOInfo `json:"allocations"`
-	Schedulable  bool                 `json:"schedulable"`
-	IsReserved   bool                 `json:"isReserved"`
-	Reservations []string             `json:"reservations"`
+	NodeID       string               `json:"nodeID"` // no omitempty, node id should not be empty
+	HostName     string               `json:"hostName,omitempty"`
+	RackName     string               `json:"rackName,omitempty"`
+	Attributes   map[string]string    `json:"attributes,omitempty"`
+	Capacity     map[string]int64     `json:"capacity,omitempty"`
+	Allocated    map[string]int64     `json:"allocated,omitempty"`
+	Occupied     map[string]int64     `json:"occupied,omitempty"`
+	Available    map[string]int64     `json:"available,omitempty"`
+	Utilized     map[string]int64     `json:"utilized,omitempty"`
+	Allocations  []*AllocationDAOInfo `json:"allocations,omitempty"`
+	Schedulable  bool                 `json:"schedulable"` // no omitempty, a false value gives a quick way to understand whether a node is schedulable.
+	IsReserved   bool                 `json:"isReserved"`  // no omitempty, a false value gives a quick way to understand whether a node is reserved.
+	Reservations []string             `json:"reservations,omitempty"`
 }

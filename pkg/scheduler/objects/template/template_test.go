@@ -19,10 +19,9 @@
 package template
 
 import (
-	"reflect"
+	"math/rand"
 	"strconv"
 	"testing"
-	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -32,14 +31,14 @@ import (
 
 func getResourceConf() map[string]string {
 	resource := make(map[string]string)
-	resource["memory"] = strconv.Itoa(time.Now().Second()%1000 + 10)
-	resource["vcore"] = strconv.Itoa(time.Now().Second()%1000 + 10)
+	resource["memory"] = strconv.Itoa(rand.Intn(10000) + 10) //nolint:gosec
+	resource["vcore"] = strconv.Itoa(rand.Intn(10000) + 10)  //nolint:gosec
 	return resource
 }
 
 func getProperties() map[string]string {
 	properties := make(map[string]string)
-	properties[strconv.Itoa(time.Now().Second()%1000)] = strconv.Itoa(time.Now().Second() % 1000)
+	properties[strconv.Itoa(rand.Intn(10000))] = strconv.Itoa(rand.Intn(10000)) //nolint:gosec
 	return properties
 }
 
@@ -49,34 +48,39 @@ func getResource(t *testing.T) *resources.Resource {
 	return r
 }
 
-func checkMembers(t *testing.T, template *Template, properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) {
+func checkMembers(t *testing.T, template *Template, maxApplications uint64, properties map[string]string, maxResource *resources.Resource, guaranteedResource *resources.Resource) {
 	// test inner members
-	assert.Assert(t, reflect.DeepEqual(template.properties, properties))
-	assert.Assert(t, reflect.DeepEqual(template.maxResource, maxResource))
-	assert.Assert(t, reflect.DeepEqual(template.guaranteedResource, guaranteedResource))
+	assert.Equal(t, template.maxApplications, maxApplications)
+	assert.DeepEqual(t, template.properties, properties)
+	assert.DeepEqual(t, template.maxResource, maxResource)
+	assert.DeepEqual(t, template.guaranteedResource, guaranteedResource)
 
 	// test all getters
-	assert.Assert(t, reflect.DeepEqual(template.GetProperties(), properties))
-	assert.Assert(t, reflect.DeepEqual(template.GetMaxResource(), maxResource))
-	assert.Assert(t, reflect.DeepEqual(template.GetGuaranteedResource(), guaranteedResource))
+	assert.Equal(t, template.GetMaxApplications(), maxApplications)
+	assert.DeepEqual(t, template.GetProperties(), properties)
+	assert.DeepEqual(t, template.GetMaxResource(), maxResource)
+	assert.DeepEqual(t, template.GetGuaranteedResource(), guaranteedResource)
 }
 
 func TestNewTemplate(t *testing.T) {
 	properties := getProperties()
 	guaranteedResource := getResource(t)
 	maxResource := getResource(t)
+	maxApplications := uint64(1)
 
-	checkMembers(t, newTemplate(properties, maxResource, guaranteedResource), properties, maxResource, guaranteedResource)
+	checkMembers(t, newTemplate(maxApplications, properties, maxResource, guaranteedResource), maxApplications, properties, maxResource, guaranteedResource)
 }
 
 func TestFromConf(t *testing.T) {
+	maxApplications := uint64(1)
 	properties := getProperties()
 	guaranteedResourceConf := getResourceConf()
 	maxResourceConf := getResourceConf()
 
 	// case 0: normal case
 	template, err := FromConf(&configs.ChildTemplate{
-		Properties: properties,
+		MaxApplications: maxApplications,
+		Properties:      properties,
 		Resources: configs.Resources{
 			Max:        maxResourceConf,
 			Guaranteed: guaranteedResourceConf,
@@ -88,7 +92,7 @@ func TestFromConf(t *testing.T) {
 	assert.NilError(t, err, "failed to parse resource: %v", err)
 	guaranteedResource, err := resources.NewResourceFromConf(guaranteedResourceConf)
 	assert.NilError(t, err, "failed to parse resource: %v", err)
-	checkMembers(t, template, properties, maxResource, guaranteedResource)
+	checkMembers(t, template, maxApplications, properties, maxResource, guaranteedResource)
 
 	// case 1: empty map produces nil template
 	empty0, err := FromConf(&configs.ChildTemplate{

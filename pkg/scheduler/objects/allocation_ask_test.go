@@ -26,6 +26,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -45,42 +46,36 @@ func TestAskToString(t *testing.T) {
 func TestNewAsk(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	siAsk := &si.AllocationAsk{
-		AllocationKey:  "ask-1",
-		ApplicationID:  "app-1",
-		MaxAllocations: 1,
-		ResourceAsk:    res.ToProto(),
+		AllocationKey: "ask-1",
+		ApplicationID: "app-1",
+		ResourceAsk:   res.ToProto(),
 	}
 	ask := NewAllocationAskFromSI(siAsk)
 	if ask == nil {
 		t.Fatal("NewAllocationAskFromSI create failed while it should not")
 	}
 	askStr := ask.String()
-	expected := "allocationKey ask-1, applicationID app-1, Resource map[first:10], PendingRepeats 1"
+	expected := "allocationKey ask-1, applicationID app-1, Resource map[first:10], Allocated false"
 	assert.Equal(t, askStr, expected, "Strings should have been equal")
+	assert.Equal(t, "app-1|ask-1", ask.resKeyWithoutNode) //nolint:staticcheck
 }
 
-func TestPendingAskRepeat(t *testing.T) {
+func TestAskAllocateDeallocate(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	ask := newAllocationAsk("alloc-1", "app-1", res)
-	assert.Equal(t, ask.GetPendingAskRepeat(), int32(1), "pending ask repeat should be 1")
-	if !ask.updatePendingAskRepeat(1) {
-		t.Errorf("increase of pending ask with 1 failed, expected repeat 2, current repeat: %d", ask.GetPendingAskRepeat())
-	}
-	if !ask.updatePendingAskRepeat(-1) {
-		t.Errorf("decrease of pending ask with 1 failed, expected repeat 1, current repeat: %d", ask.GetPendingAskRepeat())
-	}
-	if ask.updatePendingAskRepeat(-2) {
-		t.Errorf("decrease of pending ask with 2 did not fail, expected repeat 1, current repeat: %d", ask.GetPendingAskRepeat())
-	}
-	if !ask.updatePendingAskRepeat(-1) {
-		t.Errorf("decrease of pending ask with 1 failed, expected repeat 0, current repeat: %d", ask.GetPendingAskRepeat())
-	}
+	assert.Assert(t, !ask.IsAllocated(), "pending ask should return false for IsAllocated()")
+	assert.Assert(t, !ask.deallocate(), "attempt to deallocate pending ask should fail")
+	assert.Assert(t, ask.allocate(), "attempt to allocate pending ask should not fail")
+	assert.Assert(t, ask.IsAllocated(), "allocated ask should return true for IsAllocated()")
+	assert.Assert(t, !ask.allocate(), "attempt to allocate previously allocated ask should fail")
+	assert.Assert(t, ask.deallocate(), "deallocating previously allocated ask should succeed")
+	assert.Assert(t, !ask.IsAllocated(), "deallocated ask should return false for IsAllocated()")
 }
 
 // the create time should not be manipulated but we need it for reservation testing
 func TestGetCreateTime(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	ask := newAllocationAskRepeat("alloc-1", "app-1", res, 2)
+	ask := newAllocationAsk("alloc-1", "app-1", res)
 	created := ask.GetCreateTime()
 	// move time 10 seconds back
 	ask.createTime = created.Add(time.Second * -10)
@@ -146,24 +141,6 @@ func TestPlaceHolder(t *testing.T) {
 	assert.Equal(t, ask.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 }
 
-func TestGetTimeout(t *testing.T) {
-	siAsk := &si.AllocationAsk{
-		AllocationKey: "ask1",
-		ApplicationID: "app1",
-		PartitionName: "default",
-	}
-	ask := NewAllocationAskFromSI(siAsk)
-	assert.Equal(t, ask.GetTimeout(), time.Duration(0), "standard ask should not have timeout")
-	siAsk = &si.AllocationAsk{
-		AllocationKey:                "ask1",
-		ApplicationID:                "app1",
-		PartitionName:                "default",
-		ExecutionTimeoutMilliSeconds: 10,
-	}
-	ask = NewAllocationAskFromSI(siAsk)
-	assert.Equal(t, ask.GetTimeout(), 10*time.Millisecond, "ask timeout not set as expected")
-}
-
 func TestGetRequiredNode(t *testing.T) {
 	tag := make(map[string]string)
 	// unset case
@@ -190,10 +167,9 @@ func TestGetRequiredNode(t *testing.T) {
 func TestAllocationLog(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	siAsk := &si.AllocationAsk{
-		AllocationKey:  "ask-1",
-		ApplicationID:  "app-1",
-		MaxAllocations: 1,
-		ResourceAsk:    res.ToProto(),
+		AllocationKey: "ask-1",
+		ApplicationID: "app-1",
+		ResourceAsk:   res.ToProto(),
 	}
 	ask := NewAllocationAskFromSI(siAsk)
 
@@ -226,6 +202,27 @@ func TestAllocationLog(t *testing.T) {
 	assert.Equal(t, "alloc2", log[1].Message, "wrong message for event 2")
 	assert.Equal(t, 2, int(log[0].Count), "wrong count for event 1")
 	assert.Equal(t, 1, int(log[1].Count), "wrong count for event 2")
+}
+
+func TestSendPredicateFailed(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	siAsk := &si.AllocationAsk{
+		AllocationKey: "ask-1",
+		ApplicationID: "app-1",
+		ResourceAsk:   res.ToProto(),
+	}
+	ask := NewAllocationAskFromSI(siAsk)
+	eventSystem := mock.NewEventSystemDisabled()
+	ask.askEvents = newAskEvents(eventSystem)
+	ask.SendPredicateFailedEvent("failed")
+	assert.Equal(t, 0, len(eventSystem.Events))
+
+	eventSystem = mock.NewEventSystem()
+	ask.askEvents = newAskEvents(eventSystem)
+	ask.SendPredicateFailedEvent("failure")
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
+	assert.Equal(t, "Predicate failed for request 'ask-1' with message: 'failure'", event.Message)
 }
 
 func sortedLog(ask *AllocationAsk) []*AllocationLogEntry {

@@ -21,7 +21,6 @@ package objects
 import (
 	"testing"
 
-	"github.com/google/uuid"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -157,10 +156,6 @@ func TestSortPolicyWeighting(t *testing.T) {
 	nc.SetNodeSortingPolicy(fair)
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 2000, "memory": 16000})
 
-	if nc.GetNodeIterator() != nil {
-		t.Fatal("Shouldn't have any nodes when there are not any nodes in nodeCollection.")
-	}
-
 	proto1 := newProto("test1", totalRes, nil, map[string]string{})
 	node1 := NewNode(proto1)
 	if err := nc.AddNode(node1); err != nil {
@@ -175,11 +170,11 @@ func TestSortPolicyWeighting(t *testing.T) {
 
 	// add allocations
 	res1 := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 500, "memory": 12000})
-	alloc1 := newAllocation("test-app-1", uuid.NewString(), "test1", "root.default", res1)
+	alloc1 := newAllocation("test-app-1", "test1", res1)
 	node1.AddAllocation(alloc1)
 
 	res2 := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1500, "memory": 4000})
-	alloc2 := newAllocation("test-app-1", uuid.NewString(), "test2", "root.default", res2)
+	alloc2 := newAllocation("test-app-1", "test2", res2)
 	node2.AddAllocation(alloc2)
 
 	// node1 w/ fair: 25% vcore, 75% memory => ((.25 * 4) + (.75 * 1)) / 5 = 0.35
@@ -196,9 +191,10 @@ func TestSortPolicyWeighting(t *testing.T) {
 
 	// node1 should be first as it is the least-loaded
 	nodes := make([]*Node, 0)
-	for it := nc.GetNodeIterator(); it.HasNext(); {
-		nodes = append(nodes, it.Next())
-	}
+	nc.GetNodeIterator().ForEachNode(func(node *Node) bool {
+		nodes = append(nodes, node)
+		return true
+	})
 
 	assert.Equal(t, 2, len(nodes), "node length != 2")
 	assert.Equal(t, node1.NodeID, nodes[0].NodeID, "wrong initial node (fair)")
@@ -209,9 +205,10 @@ func TestSortPolicyWeighting(t *testing.T) {
 
 	// node2 should now be first as it is most-loaded
 	nodes = make([]*Node, 0)
-	for it := nc.GetNodeIterator(); it.HasNext(); {
-		nodes = append(nodes, it.Next())
-	}
+	nc.GetNodeIterator().ForEachNode(func(node *Node) bool {
+		nodes = append(nodes, node)
+		return true
+	})
 
 	assert.Equal(t, 2, len(nodes), "node length != 2")
 	assert.Equal(t, node2.NodeID, nodes[0].NodeID, "wrong initial node (binpacking)")
@@ -239,9 +236,10 @@ func TestSortPolicy(t *testing.T) {
 
 	// nodes should be in ascending order before any allocations
 	nodes := make([]*Node, 0)
-	for it := nc.GetNodeIterator(); it.HasNext(); {
-		nodes = append(nodes, it.Next())
-	}
+	nc.GetNodeIterator().ForEachNode(func(node *Node) bool {
+		nodes = append(nodes, node)
+		return true
+	})
 	assert.Equal(t, 2, len(nodes), "node length != 2")
 	assert.Equal(t, node1.NodeID, nodes[0].NodeID, "wrong initial node (binpacking, empty allocation)")
 	assert.Equal(t, node2.NodeID, nodes[1].NodeID, "wrong second node (binpacking, empty allocation)")
@@ -250,9 +248,10 @@ func TestSortPolicy(t *testing.T) {
 	nc.SetNodeSortingPolicy(fair)
 
 	nodes = make([]*Node, 0)
-	for it := nc.GetNodeIterator(); it.HasNext(); {
-		nodes = append(nodes, it.Next())
-	}
+	nc.GetNodeIterator().ForEachNode(func(node *Node) bool {
+		nodes = append(nodes, node)
+		return true
+	})
 	assert.Equal(t, 2, len(nodes), "node length != 2")
 	assert.Equal(t, node1.NodeID, nodes[0].NodeID, "wrong initial node (fair, empty allocation)")
 	assert.Equal(t, node2.NodeID, nodes[1].NodeID, "wrong second node (fair, empty allocation)")
@@ -262,15 +261,15 @@ func TestSortPolicy(t *testing.T) {
 
 	// add allocation to second node
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000, "memory": 2000})
-	alloc := newAllocation("test-app-1", uuid.NewString(), "test2", "root.default", half)
+	alloc := newAllocation("test-app-1", "test2", half)
 	node2.AddAllocation(alloc)
 
 	// node2 should now be first as it is the highest-loaded
 	nodes = make([]*Node, 0)
-	for it := nc.GetNodeIterator(); it.HasNext(); {
-		nodes = append(nodes, it.Next())
-	}
-
+	nc.GetNodeIterator().ForEachNode(func(node *Node) bool {
+		nodes = append(nodes, node)
+		return true
+	})
 	assert.Equal(t, 2, len(nodes), "node length != 2")
 	assert.Equal(t, node2.NodeID, nodes[0].NodeID, "wrong initial node (binpacking, node2 half-filled)")
 	assert.Equal(t, node1.NodeID, nodes[1].NodeID, "wrong second node (binpacking, node2 half-filled")
@@ -280,9 +279,10 @@ func TestSortPolicy(t *testing.T) {
 
 	// node1 should again be first, as it is least-loaded
 	nodes = make([]*Node, 0)
-	for it := nc.GetNodeIterator(); it.HasNext(); {
-		nodes = append(nodes, it.Next())
-	}
+	nc.GetNodeIterator().ForEachNode(func(node *Node) bool {
+		nodes = append(nodes, node)
+		return true
+	})
 	assert.Equal(t, 2, len(nodes), "node length != 2")
 	assert.Equal(t, node1.NodeID, nodes[0].NodeID, "wrong initial node (fair, node2 half-filled)")
 	assert.Equal(t, node2.NodeID, nodes[1].NodeID, "wrong second node (binpacking, node2 half-filled")

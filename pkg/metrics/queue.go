@@ -20,32 +20,79 @@ package metrics
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
+const (
+	AppAccepted  = "accepted"
+	AppRunning   = "running"
+	AppFailed    = "failed"
+	AppRejected  = "rejected"
+	AppCompleted = "completed"
+
+	ContainerReleased  = "released"
+	ContainerAllocated = "allocated"
+	ContainerRejected  = "rejected"
+
+	QueueGuaranteed = "guaranteed"
+	QueueMax        = "max"
+	QueuePending    = "pending"
+	QueuePreempting = "preempting"
+)
+
 // QueueMetrics to declare queue metrics
 type QueueMetrics struct {
-	appMetrics      *prometheus.GaugeVec
-	ResourceMetrics *prometheus.GaugeVec
+	appMetricsLabel *prometheus.GaugeVec
+	// Deprecated - To be removed in 1.7.0. Replaced with queue label Metrics
+	appMetricsSubsystem  *prometheus.GaugeVec
+	containerMetrics     *prometheus.CounterVec
+	resourceMetricsLabel *prometheus.GaugeVec
+	// Deprecated - To be removed in 1.7.0. Replaced with queue label Metrics
+	resourceMetricsSubsystem *prometheus.GaugeVec
 }
 
 // InitQueueMetrics to initialize queue metrics
-func InitQueueMetrics(name string) CoreQueueMetrics {
+func InitQueueMetrics(name string) *QueueMetrics {
 	q := &QueueMetrics{}
 
 	replaceStr := formatMetricName(name)
 
-	q.appMetrics = prometheus.NewGaugeVec(
+	q.appMetricsLabel = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace:   Namespace,
+			Name:        "queue_app",
+			ConstLabels: prometheus.Labels{"queue": name},
+			Help:        "Queue application metrics. State of the application includes `accepted`, `rejected`, `running`, `failed`, `completed`.",
+		}, []string{"state"})
+
+	q.appMetricsSubsystem = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: replaceStr,
 			Name:      "queue_app",
-			Help:      "Queue application metrics. State of the application includes `running`.",
+			Help:      "Queue application metrics. State of the application includes `accepted`, `rejected`, `running`, `failed`, `completed`.",
 		}, []string{"state"})
 
-	q.ResourceMetrics = prometheus.NewGaugeVec(
+	q.containerMetrics = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Subsystem: replaceStr,
+			Name:      "queue_container",
+			Help:      "Queue container metrics. State of the attempt includes `allocated`, `released`.",
+		}, []string{"state"})
+
+	q.resourceMetricsLabel = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace:   Namespace,
+			Name:        "queue_resource",
+			ConstLabels: prometheus.Labels{"queue": name},
+			Help:        "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`.",
+		}, []string{"state", "resource"})
+
+	q.resourceMetricsSubsystem = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: replaceStr,
@@ -54,8 +101,11 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 		}, []string{"state", "resource"})
 
 	var queueMetricsList = []prometheus.Collector{
-		q.appMetrics,
-		q.ResourceMetrics,
+		q.appMetricsLabel,
+		q.appMetricsSubsystem,
+		q.containerMetrics,
+		q.resourceMetricsLabel,
+		q.resourceMetricsSubsystem,
 	}
 
 	// Register the metrics
@@ -64,78 +114,132 @@ func InitQueueMetrics(name string) CoreQueueMetrics {
 		// metrics name must be complied with regex: [a-zA-Z_:][a-zA-Z0-9_:]*,
 		// queue name regex: ^[a-zA-Z0-9_-]{1,64}$
 		if err := prometheus.Register(metric); err != nil {
-			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
+			log.Log(log.Metrics).Warn("failed to register metrics collector", zap.Error(err))
 		}
 	}
 
 	return q
 }
 
+func (m *QueueMetrics) incQueueApplications(state string) {
+	m.appMetricsLabel.WithLabelValues(state).Inc()
+	m.appMetricsSubsystem.WithLabelValues(state).Inc()
+}
+
+func (m *QueueMetrics) decQueueApplications(state string) {
+	m.appMetricsLabel.WithLabelValues(state).Dec()
+	m.appMetricsSubsystem.WithLabelValues(state).Dec()
+}
+
+func (m *QueueMetrics) setQueueResource(state string, resourceName string, value float64) {
+	m.resourceMetricsLabel.WithLabelValues(state, resourceName).Set(value)
+	m.resourceMetricsSubsystem.WithLabelValues(state, resourceName).Set(value)
+}
+
 func (m *QueueMetrics) Reset() {
-	m.appMetrics.Reset()
-	m.ResourceMetrics.Reset()
+	m.appMetricsLabel.Reset()
+	m.appMetricsSubsystem.Reset()
+	m.resourceMetricsLabel.Reset()
+	m.resourceMetricsSubsystem.Reset()
 }
 
 func (m *QueueMetrics) IncQueueApplicationsRunning() {
-	m.appMetrics.With(prometheus.Labels{"state": "running"}).Inc()
+	m.incQueueApplications(AppRunning)
 }
 
 func (m *QueueMetrics) DecQueueApplicationsRunning() {
-	m.appMetrics.With(prometheus.Labels{"state": "running"}).Dec()
+	m.decQueueApplications(AppRunning)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsRunning() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppRunning).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *QueueMetrics) IncQueueApplicationsAccepted() {
-	m.appMetrics.With(prometheus.Labels{"state": "accepted"}).Inc()
+	m.incQueueApplications(AppAccepted)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsAccepted() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppAccepted).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *QueueMetrics) IncQueueApplicationsRejected() {
-	m.appMetrics.With(prometheus.Labels{"state": "rejected"}).Inc()
+	m.incQueueApplications(AppRejected)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppRejected).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *QueueMetrics) IncQueueApplicationsFailed() {
-	m.appMetrics.With(prometheus.Labels{"state": "failed"}).Inc()
+	m.incQueueApplications(AppFailed)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppFailed).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *QueueMetrics) IncQueueApplicationsCompleted() {
-	m.appMetrics.With(prometheus.Labels{"state": "completed"}).Inc()
+	m.incQueueApplications(AppCompleted)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppCompleted).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *QueueMetrics) IncAllocatedContainer() {
-	m.appMetrics.With(prometheus.Labels{"state": "allocated"}).Inc()
+	m.containerMetrics.WithLabelValues(ContainerAllocated).Inc()
 }
 
 func (m *QueueMetrics) IncReleasedContainer() {
-	m.appMetrics.With(prometheus.Labels{"state": "released"}).Inc()
+	m.containerMetrics.WithLabelValues(ContainerReleased).Inc()
+}
+
+func (m *QueueMetrics) AddReleasedContainers(value int) {
+	m.containerMetrics.WithLabelValues(ContainerReleased).Add(float64(value))
 }
 
 func (m *QueueMetrics) SetQueueGuaranteedResourceMetrics(resourceName string, value float64) {
-	m.ResourceMetrics.With(prometheus.Labels{"state": "guaranteed", "resource": resourceName}).Set(value)
+	m.setQueueResource(QueueGuaranteed, resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueueMaxResourceMetrics(resourceName string, value float64) {
-	m.ResourceMetrics.With(prometheus.Labels{"state": "max", "resource": resourceName}).Set(value)
+	m.setQueueResource(QueueMax, resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueueAllocatedResourceMetrics(resourceName string, value float64) {
-	m.ResourceMetrics.With(prometheus.Labels{"state": "allocated", "resource": resourceName}).Set(value)
-}
-
-func (m *QueueMetrics) AddQueueAllocatedResourceMetrics(resourceName string, value float64) {
-	m.ResourceMetrics.With(prometheus.Labels{"state": "allocated", "resource": resourceName}).Add(value)
+	m.setQueueResource(ContainerAllocated, resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueuePendingResourceMetrics(resourceName string, value float64) {
-	m.ResourceMetrics.With(prometheus.Labels{"state": "pending", "resource": resourceName}).Set(value)
-}
-
-func (m *QueueMetrics) AddQueuePendingResourceMetrics(resourceName string, value float64) {
-	m.ResourceMetrics.With(prometheus.Labels{"state": "pending", "resource": resourceName}).Add(value)
+	m.setQueueResource(QueuePending, resourceName, value)
 }
 
 func (m *QueueMetrics) SetQueuePreemptingResourceMetrics(resourceName string, value float64) {
-	m.ResourceMetrics.With(prometheus.Labels{"state": "preempting", "resource": resourceName}).Set(value)
-}
-
-func (m *QueueMetrics) AddQueuePreemptingResourceMetrics(resourceName string, value float64) {
-	m.ResourceMetrics.With(prometheus.Labels{"state": "preempting", "resource": resourceName}).Add(value)
+	m.setQueueResource(QueuePreempting, resourceName, value)
 }

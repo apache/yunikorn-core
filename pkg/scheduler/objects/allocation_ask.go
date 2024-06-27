@@ -20,14 +20,17 @@ package objects
 
 import (
 	"fmt"
-	"sync"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -35,27 +38,32 @@ type AllocationAsk struct {
 	// Read-only fields
 	allocationKey     string
 	applicationID     string
-	partitionName     string
-	taskGroupName     string        // task group this allocation ask belongs to
-	placeholder       bool          // is this a placeholder allocation ask
-	execTimeout       time.Duration // execTimeout for the allocation ask
-	createTime        time.Time     // the time this ask was created (used in reservations)
+	taskGroupName     string    // task group this allocation ask belongs to
+	placeholder       bool      // is this a placeholder allocation ask
+	createTime        time.Time // the time this ask was created (used in reservations)
 	priority          int32
-	maxAllocations    int32
 	requiredNode      string
 	allowPreemptSelf  bool
 	allowPreemptOther bool
 	originator        bool
 	tags              map[string]string
 	allocatedResource *resources.Resource
+	resKeyWithoutNode string // the reservation key without node
 
 	// Mutable fields which need protection
-	pendingAskRepeat    int32
+	allocated           bool
 	allocLog            map[string]*AllocationLogEntry
 	preemptionTriggered bool
 	preemptCheckTime    time.Time
+	schedulingAttempted bool              // whether scheduler core has tried to schedule this ask
+	scaleUpTriggered    bool              // whether this ask has triggered autoscaling or not
+	resKeyPerNode       map[string]string // reservation key for a given node
 
-	sync.RWMutex
+	askEvents            *askEvents
+	userQuotaCheckFailed bool
+	headroomCheckFailed  bool
+
+	locking.RWMutex
 }
 
 type AllocationLogEntry struct {
@@ -65,27 +73,37 @@ type AllocationLogEntry struct {
 }
 
 func NewAllocationAsk(allocationKey string, applicationID string, allocatedResource *resources.Resource) *AllocationAsk {
-	return &AllocationAsk{
+	aa := &AllocationAsk{
 		allocationKey:     allocationKey,
 		applicationID:     applicationID,
 		allocatedResource: allocatedResource,
 		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
+		askEvents:         newAskEvents(events.GetEventSystem()),
 	}
+	aa.resKeyWithoutNode = reservationKeyWithoutNode(applicationID, allocationKey)
+	return aa
 }
 
 func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
+
+	var createTime time.Time
+	siCreationTime, err := strconv.ParseInt(ask.Tags[siCommon.CreationTime], 10, 64)
+	if err != nil {
+		log.Log(log.SchedAllocation).Debug("CreationTime is not set on the AllocationAsk object or invalid",
+			zap.String("creationTime", ask.Tags[siCommon.CreationTime]))
+		createTime = time.Now()
+	} else {
+		createTime = time.Unix(siCreationTime, 0)
+	}
+
 	saa := &AllocationAsk{
 		allocationKey:     ask.AllocationKey,
 		allocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
-		pendingAskRepeat:  ask.MaxAllocations,
-		maxAllocations:    ask.MaxAllocations,
 		applicationID:     ask.ApplicationID,
-		partitionName:     ask.PartitionName,
-
 		tags:              CloneAllocationTags(ask.Tags),
-		createTime:        time.Now(),
+		createTime:        createTime,
 		priority:          ask.Priority,
-		execTimeout:       common.ConvertSITimeout(ask.ExecutionTimeoutMilliSeconds),
 		placeholder:       ask.Placeholder,
 		taskGroupName:     ask.TaskGroupName,
 		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
@@ -93,14 +111,17 @@ func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
 		allowPreemptOther: common.IsAllowPreemptOther(ask.PreemptionPolicy),
 		originator:        ask.Originator,
 		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
+		askEvents:         newAskEvents(events.GetEventSystem()),
 	}
 	// this is a safety check placeholder and task group name must be set as a combo
 	// order is important as task group can be set without placeholder but not the other way around
 	if saa.placeholder && saa.taskGroupName == "" {
-		log.Logger().Debug("ask cannot be a placeholder without a TaskGroupName",
+		log.Log(log.SchedAllocation).Debug("ask cannot be a placeholder without a TaskGroupName",
 			zap.Stringer("SI ask", ask))
 		return nil
 	}
+	saa.resKeyWithoutNode = reservationKeyWithoutNode(ask.ApplicationID, ask.AllocationKey)
 	return saa
 }
 
@@ -108,7 +129,7 @@ func (aa *AllocationAsk) String() string {
 	if aa == nil {
 		return "ask is nil"
 	}
-	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, PendingRepeats %d", aa.allocationKey, aa.applicationID, aa.allocatedResource, aa.GetPendingAskRepeat())
+	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, Allocated %t", aa.allocationKey, aa.applicationID, aa.allocatedResource, aa.IsAllocated())
 }
 
 // GetAllocationKey returns the allocation key for this ask
@@ -121,31 +142,35 @@ func (aa *AllocationAsk) GetApplicationID() string {
 	return aa.applicationID
 }
 
-// GetPartitionName returns the partition name for this ask
-func (aa *AllocationAsk) GetPartitionName() string {
-	return aa.partitionName
-}
-
-// updatePendingAskRepeat updates the pending ask repeat with the delta given.
-// Update the pending ask repeat counter with the delta (pos or neg). The pending repeat is always 0 or higher.
-// If the update would cause the repeat to go negative the update is discarded and false is returned.
-// In all other cases the repeat is updated and true is returned.
-func (aa *AllocationAsk) updatePendingAskRepeat(delta int32) bool {
+// allocate marks the ask as allocated and returns true if successful. An ask may not be allocated multiple times.
+func (aa *AllocationAsk) allocate() bool {
 	aa.Lock()
 	defer aa.Unlock()
 
-	if aa.pendingAskRepeat+delta >= 0 {
-		aa.pendingAskRepeat += delta
-		return true
+	if aa.allocated {
+		return false
 	}
-	return false
+	aa.allocated = true
+	return true
 }
 
-// GetPendingAskRepeat gets the number of repeat asks remaining
-func (aa *AllocationAsk) GetPendingAskRepeat() int32 {
+// deallocate marks the ask as pending and returns true if successful. An ask may not be deallocated multiple times.
+func (aa *AllocationAsk) deallocate() bool {
+	aa.Lock()
+	defer aa.Unlock()
+
+	if !aa.allocated {
+		return false
+	}
+	aa.allocated = false
+	return true
+}
+
+// IsAllocated determines if this ask has been allocated yet
+func (aa *AllocationAsk) IsAllocated() bool {
 	aa.RLock()
 	defer aa.RUnlock()
-	return aa.pendingAskRepeat
+	return aa.allocated
 }
 
 // GetCreateTime returns the time this ask was created
@@ -175,11 +200,6 @@ func (aa *AllocationAsk) IsPlaceholder() bool {
 // GetTaskGroup returns the task group name for this ask
 func (aa *AllocationAsk) GetTaskGroup() string {
 	return aa.taskGroupName
-}
-
-// GetTimeout returns the timeout for this ask
-func (aa *AllocationAsk) GetTimeout() time.Duration {
-	return aa.execTimeout
 }
 
 // GetRequiredNode gets the node (if any) required by this ask.
@@ -252,6 +272,10 @@ func (aa *AllocationAsk) LogAllocationFailure(message string, allocate bool) {
 	entry.Count++
 }
 
+func (aa *AllocationAsk) SendPredicateFailedEvent(message string) {
+	aa.askEvents.sendPredicateFailed(aa.allocationKey, aa.applicationID, message, aa.GetAllocatedResource())
+}
+
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met
 func (aa *AllocationAsk) GetAllocationLog() []*AllocationLogEntry {
 	aa.RLock()
@@ -282,4 +306,84 @@ func (aa *AllocationAsk) HasTriggeredPreemption() bool {
 	aa.RLock()
 	defer aa.RUnlock()
 	return aa.preemptionTriggered
+}
+
+func (aa *AllocationAsk) LessThan(other *AllocationAsk) bool {
+	if aa.priority == other.priority {
+		return aa.createTime.After(other.createTime) || aa.createTime.Equal(other.createTime)
+	}
+
+	return aa.priority < other.priority
+}
+
+func (aa *AllocationAsk) SetSchedulingAttempted(attempted bool) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.schedulingAttempted = attempted
+}
+
+func (aa *AllocationAsk) IsSchedulingAttempted() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.schedulingAttempted
+}
+
+func (aa *AllocationAsk) SetScaleUpTriggered(triggered bool) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.scaleUpTriggered = triggered
+}
+
+func (aa *AllocationAsk) HasTriggeredScaleUp() bool {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.scaleUpTriggered
+}
+
+func (aa *AllocationAsk) setReservationKeyForNode(node, resKey string) {
+	aa.Lock()
+	defer aa.Unlock()
+	aa.resKeyPerNode[node] = resKey
+}
+
+func (aa *AllocationAsk) getReservationKeyForNode(node string) string {
+	aa.RLock()
+	defer aa.RUnlock()
+	return aa.resKeyPerNode[node]
+}
+
+func (aa *AllocationAsk) setHeadroomCheckFailed(headroom *resources.Resource, queue string) {
+	aa.Lock()
+	defer aa.Unlock()
+	if !aa.headroomCheckFailed {
+		aa.headroomCheckFailed = true
+		aa.askEvents.sendRequestExceedsQueueHeadroom(aa.allocationKey, aa.applicationID, headroom, aa.allocatedResource, queue)
+	}
+}
+
+func (aa *AllocationAsk) setHeadroomCheckPassed(queue string) {
+	aa.Lock()
+	defer aa.Unlock()
+	if aa.headroomCheckFailed {
+		aa.headroomCheckFailed = false
+		aa.askEvents.sendRequestFitsInQueue(aa.allocationKey, aa.applicationID, queue, aa.allocatedResource)
+	}
+}
+
+func (aa *AllocationAsk) setUserQuotaCheckFailed(available *resources.Resource) {
+	aa.Lock()
+	defer aa.Unlock()
+	if !aa.userQuotaCheckFailed {
+		aa.userQuotaCheckFailed = true
+		aa.askEvents.sendRequestExceedsUserQuota(aa.allocationKey, aa.applicationID, available, aa.allocatedResource)
+	}
+}
+
+func (aa *AllocationAsk) setUserQuotaCheckPassed() {
+	aa.Lock()
+	defer aa.Unlock()
+	if aa.userQuotaCheckFailed {
+		aa.userQuotaCheckFailed = false
+		aa.askEvents.sendRequestFitsInUserQuota(aa.allocationKey, aa.applicationID, aa.allocatedResource)
+	}
 }

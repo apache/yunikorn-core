@@ -85,7 +85,7 @@ func TestBasicReservation(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(SingleQueueConfig, false)
+	err := ms.Init(SingleQueueConfig, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// override the reservation delay, and cleanup when done
@@ -161,7 +161,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(DualQueueConfig, false)
+	err := ms.Init(DualQueueConfig, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 	// override the reservation delay, and cleanup when done
 	objects.SetReservationDelay(10 * time.Nanosecond)
@@ -265,7 +265,7 @@ func TestRemoveReservedNode(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(SingleQueueConfig, false)
+	err := ms.Init(SingleQueueConfig, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 	// override the reservation delay, and cleanup when done
 	objects.SetReservationDelay(10 * time.Nanosecond)
@@ -316,7 +316,7 @@ func TestAddNewNode(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(SingleQueueConfig, false)
+	err := ms.Init(SingleQueueConfig, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// override the reservation delay, and cleanup when done
@@ -374,7 +374,7 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(SingleQueueConfig, false)
+	err := ms.Init(SingleQueueConfig, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// override the reservation delay, and cleanup when done
@@ -422,7 +422,7 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	}
 	// delete existing allocations
 	for _, alloc := range ms.mockRM.getAllocations() {
-		err = ms.releaseAllocRequest(appID1, alloc.UUID)
+		err = ms.releaseAllocRequest(appID1, alloc.AllocationKey)
 		assert.NilError(t, err, "allocation release update failed")
 	}
 	ms.scheduler.MultiStepSchedule(5)

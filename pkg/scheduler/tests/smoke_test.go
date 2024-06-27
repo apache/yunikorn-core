@@ -19,6 +19,7 @@
 package tests
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -65,7 +66,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// memorize the checksum of current configs
@@ -117,7 +118,7 @@ partitions:
 	assert.NilError(t, err, "configuration reload failed")
 
 	// wait until configuration is reloaded
-	if err = common.WaitFor(time.Second, 5*time.Second, func() bool {
+	if err = common.WaitForCondition(time.Second, 5*time.Second, func() bool {
 		return configs.ConfigContext.Get("policygroup").Checksum != configChecksum
 	}); err != nil {
 		t.Errorf("timeout waiting for configuration to be reloaded: %v", err)
@@ -164,7 +165,7 @@ func TestBasicScheduler(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configDataSmokeTest, false)
+	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -234,15 +235,24 @@ func TestBasicScheduler(t *testing.T) {
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
-				AllocationKey: "alloc-1",
+				AllocationKey: "alloc-1a",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-1b",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -276,30 +286,48 @@ func TestBasicScheduler(t *testing.T) {
 	// Check allocated resources of nodes
 	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, []string{"node-1:1234", "node-2:1234"}, 20000000, 1000)
 
-	// ask for two more resources
+	// ask for 4 more tasks
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Asks: []*si.AllocationAsk{
 			{
-				AllocationKey: "alloc-2",
+				AllocationKey: "alloc-2a",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 50000000},
 						"vcore":  {Value: 5000},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
 			},
 			{
-				AllocationKey: "alloc-3",
+				AllocationKey: "alloc-2b",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 50000000},
+						"vcore":  {Value: 5000},
+					},
+				},
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-3a",
 				ResourceAsk: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100000000},
 						"vcore":  {Value: 5000},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-3b",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 100000000},
+						"vcore":  {Value: 5000},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -340,7 +368,7 @@ func TestBasicScheduler(t *testing.T) {
 	// Release all allocations
 	for _, v := range ms.mockRM.getAllocations() {
 		updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationRelease{
-			UUID:          v.UUID,
+			AllocationKey: v.AllocationKey,
 			ApplicationID: v.ApplicationID,
 			PartitionName: v.PartitionName,
 		})
@@ -386,7 +414,7 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configDataSmokeTest, true)
+	err := ms.Init(configDataSmokeTest, true, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -434,20 +462,21 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10000000},
-						"vcore":  {Value: 1000},
-					},
+	asks := make([]*si.AllocationAsk, 20)
+	for i := 0; i < 20; i++ {
+		asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-%d", i),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: 10000000},
+					"vcore":  {Value: 1000},
 				},
-				MaxAllocations: 20,
-				ApplicationID:  appID,
 			},
-		},
+			ApplicationID: appID,
+		}
+	}
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: asks,
 		RmID: "rm:123",
 	})
 
@@ -493,7 +522,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafApp1 := "root.leaf1"
@@ -544,31 +573,22 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
+	asks := make([]*si.AllocationAsk, 40)
+	appIDs := []string{app1ID, app2ID}
+	for i := 0; i < 40; i++ {
+		asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-%d", i),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: 10000000},
+					"vcore":  {Value: 1000},
+				},
+			},
+			ApplicationID: appIDs[(i / 20)],
+		}
+	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10000000},
-						"vcore":  {Value: 1000},
-					},
-				},
-				MaxAllocations: 20,
-				ApplicationID:  app1ID,
-			},
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10000000},
-						"vcore":  {Value: 1000},
-					},
-				},
-				MaxAllocations: 20,
-				ApplicationID:  app2ID,
-			},
-		},
+		Asks: asks,
 		RmID: "rm:123",
 	})
 
@@ -616,7 +636,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.leaf"
@@ -666,31 +686,22 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
+	asks := make([]*si.AllocationAsk, 40)
+	appIDs := []string{app1ID, app2ID}
+	for i := 0; i < 40; i++ {
+		asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-%d", i),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: 10000000},
+					"vcore":  {Value: 1000},
+				},
+			},
+			ApplicationID: appIDs[i/20],
+		}
+	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10000000},
-						"vcore":  {Value: 1000},
-					},
-				},
-				MaxAllocations: 20,
-				ApplicationID:  app1ID,
-			},
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10000000},
-						"vcore":  {Value: 1000},
-					},
-				},
-				MaxAllocations: 20,
-				ApplicationID:  app2ID,
-			},
-		},
+		Asks: asks,
 		RmID: "rm:123",
 	})
 
@@ -741,7 +752,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register a node, and add applications
@@ -833,7 +844,7 @@ partitions:
 			ms := &mockScheduler{}
 			defer ms.Stop()
 
-			err := ms.Init(param.configData, false)
+			err := ms.Init(param.configData, false, false)
 			assert.NilError(t, err, "RegisterResourceManager failed in run %s", param.name)
 
 			// Register a node, and add applications
@@ -865,20 +876,21 @@ partitions:
 
 			ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
-			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-				Asks: []*si.AllocationAsk{
-					{
-						AllocationKey: "alloc-1",
-						ResourceAsk: &si.Resource{
-							Resources: map[string]*si.Quantity{
-								"memory": {Value: param.askMemory},
-								"vcore":  {Value: param.askCPU},
-							},
+			asks := make([]*si.AllocationAsk, param.numOfAsk)
+			for i := int32(0); i < param.numOfAsk; i++ {
+				asks[i] = &si.AllocationAsk{
+					AllocationKey: fmt.Sprintf("alloc-%d", i),
+					ResourceAsk: &si.Resource{
+						Resources: map[string]*si.Quantity{
+							"memory": {Value: param.askMemory},
+							"vcore":  {Value: param.askCPU},
 						},
-						MaxAllocations: param.numOfAsk,
-						ApplicationID:  appID1,
 					},
-				},
+					ApplicationID: appID1,
+				}
+			}
+			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+				Asks: asks,
 				RmID: "rm:123",
 			})
 
@@ -908,7 +920,7 @@ partitions:
 				allocReleases = append(allocReleases, &si.AllocationRelease{
 					PartitionName: "default",
 					ApplicationID: appID1,
-					UUID:          alloc.UUID,
+					AllocationKey: alloc.AllocationKey,
 					Message:       "",
 				})
 			}
@@ -945,7 +957,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	node1ID := "node-1:1234"
@@ -1006,7 +1018,7 @@ partitions:
 
 	assert.NilError(t, err, "NodeRequest 2 failed")
 
-	err = common.WaitFor(10*time.Millisecond, 10*time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, 10*time.Second, func() bool {
 		return !ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
 			ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node2ID).IsSchedulable()
 	})
@@ -1026,7 +1038,7 @@ partitions:
 
 	assert.NilError(t, err, "NodeRequest 3 failed")
 
-	err = common.WaitFor(10*time.Millisecond, 10*time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, 10*time.Second, func() bool {
 		return ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
 			ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node2ID).IsSchedulable()
 	})
@@ -1067,7 +1079,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.leaf"
@@ -1115,31 +1127,22 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
+	asks := make([]*si.AllocationAsk, 40)
+	appIDs := []string{app1ID, app2ID}
+	for i := 0; i < 40; i++ {
+		asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-%d", i),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: 10000000},
+					"vcore":  {Value: 1000},
+				},
+			},
+			ApplicationID: appIDs[i/20],
+		}
+	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10000000},
-						"vcore":  {Value: 1000},
-					},
-				},
-				MaxAllocations: 20,
-				ApplicationID:  app1ID,
-			},
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10000000},
-						"vcore":  {Value: 1000},
-					},
-				},
-				MaxAllocations: 20,
-				ApplicationID:  app2ID,
-			},
-		},
+		Asks: asks,
 		RmID: "rm:123",
 	})
 
@@ -1185,7 +1188,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Register 10 nodes, and add applications
@@ -1233,21 +1236,22 @@ partitions:
 		waitForNewNode(t, context, node.NodeID, partition, 1000)
 	}
 
-	// Request ask with 20 allocations
-	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 10000000},
-						"vcore":  {Value: 1000},
-					},
+	// Request 20 allocations
+	asks := make([]*si.AllocationAsk, 20)
+	for i := 0; i < 20; i++ {
+		asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("alloc-%d", i),
+			ResourceAsk: &si.Resource{
+				Resources: map[string]*si.Quantity{
+					"memory": {Value: 10000000},
+					"vcore":  {Value: 1000},
 				},
-				MaxAllocations: 20,
-				ApplicationID:  appID,
 			},
-		},
+			ApplicationID: appID,
+		}
+	}
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Asks: asks,
 		RmID: "rm:123",
 	})
 
@@ -1286,7 +1290,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configDataSmokeTest, false)
+	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	leafName := "root.singleleaf"
@@ -1354,10 +1358,9 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 						"vcore":  {Value: 1000},
 					},
 				},
-				TaskGroupName:  "tg",
-				Placeholder:    true,
-				MaxAllocations: 1,
-				ApplicationID:  appID1,
+				TaskGroupName: "tg",
+				Placeholder:   true,
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -1389,10 +1392,9 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 						"vcore":  {Value: 1000},
 					},
 				},
-				MaxAllocations: 1,
-				ApplicationID:  appID1,
-				Placeholder:    false,
-				TaskGroupName:  "tg",
+				ApplicationID: appID1,
+				Placeholder:   false,
+				TaskGroupName: "tg",
 			},
 		},
 		RmID: "rm:123",
@@ -1412,7 +1414,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				{
 					PartitionName:   "default",
 					ApplicationID:   appID1,
-					UUID:            placeholderAlloc.GetUUID(),
+					AllocationKey:   placeholderAlloc.GetAllocationKey(),
 					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},
@@ -1441,7 +1443,7 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 				{
 					PartitionName:   "default",
 					ApplicationID:   appID1,
-					UUID:            placeholderAlloc.GetUUID(),
+					AllocationKey:   placeholderAlloc.GetAllocationKey(),
 					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 				},
 			},
@@ -1472,7 +1474,7 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, false)
+	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// Check queues of cache and scheduler.
@@ -1552,8 +1554,17 @@ partitions:
 						"vcore":  {Value: 1000},
 					},
 				},
-				MaxAllocations: 2,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
+			},
+			{
+				AllocationKey: "alloc-2",
+				ResourceAsk: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"memory": {Value: 10000000},
+						"vcore":  {Value: 1000},
+					},
+				},
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -1597,7 +1608,7 @@ partitions:
 	// Release all allocations
 	for _, v := range ms.mockRM.getAllocations() {
 		updateRequest.Releases.AllocationsToRelease = append(updateRequest.Releases.AllocationsToRelease, &si.AllocationRelease{
-			UUID:          v.UUID,
+			AllocationKey: v.AllocationKey,
 			ApplicationID: v.ApplicationID,
 			PartitionName: v.PartitionName,
 		})
@@ -1621,10 +1632,10 @@ partitions:
 	// Check app to Completing status
 	assert.Equal(t, app01.CurrentState(), objects.Completing.String())
 	// the app changes from completing state to completed state
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsCompleted)
+	err = common.WaitForCondition(1*time.Millisecond, time.Millisecond*200, app.IsCompleted)
 	assert.NilError(t, err, "App should be in Completed state")
 	// partition manager should be able to clean up the dynamically created queue.
-	if err = common.WaitFor(1*time.Millisecond, time.Second*11, func() bool {
+	if err = common.WaitForCondition(1*time.Millisecond, time.Second*11, func() bool {
 		return part.GetQueue(leafName) == nil
 	}); err != nil {
 		t.Errorf("timeout waiting for queue is cleared %v", err)

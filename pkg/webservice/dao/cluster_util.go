@@ -18,14 +18,9 @@
 
 package dao
 
-type ClustersUtilDAOInfo struct {
-	PartitionName string                `json:"partition"`
-	ClustersUtil  []*ClusterUtilDAOInfo `json:"utilization"`
-}
-
 type ClusterUtilDAOInfo struct {
-	ResourceType string `json:"type"`
-	Total        int64  `json:"total"`
-	Used         int64  `json:"used"`
-	Usage        string `json:"usage"`
+	ResourceType string `json:"type,omitempty"`
+	Total        int64  `json:"total,omitempty"`
+	Used         int64  `json:"used,omitempty"`
+	Usage        string `json:"usage,omitempty"`
 }

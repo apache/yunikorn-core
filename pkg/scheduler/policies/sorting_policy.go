@@ -20,16 +20,18 @@ package policies
 
 import (
 	"fmt"
+
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 // Sort type for queues & apps.
 type SortPolicy int
 
 const (
-	FifoSortPolicy   SortPolicy = iota // first in first out, submit time
-	FairSortPolicy                     // fair based on usage
-	StateAwarePolicy                   // only 1 app in starting state
-	Undefined                          // not initialised or parsing failed
+	FifoSortPolicy             SortPolicy = iota // first in first out, submit time
+	FairSortPolicy                               // fair based on usage
+	deprecatedStateAwarePolicy                   // deprecated: now alias for FIFO
+	Undefined                                    // not initialised or parsing failed
 )
 
 func (s SortPolicy) String() string {
@@ -43,8 +45,9 @@ func SortPolicyFromString(str string) (SortPolicy, error) {
 		return FifoSortPolicy, nil
 	case FairSortPolicy.String():
 		return FairSortPolicy, nil
-	case StateAwarePolicy.String():
-		return StateAwarePolicy, nil
+	case deprecatedStateAwarePolicy.String():
+		log.Log(log.Deprecation).Warn("Sort policy 'stateaware' is deprecated; using 'fifo' instead")
+		return FifoSortPolicy, nil
 	default:
 		return Undefined, fmt.Errorf("undefined policy: %s", str)
 	}

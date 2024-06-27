@@ -19,6 +19,10 @@
 package ugm
 
 import (
+	"testing"
+
+	"gotest.tools/v3/assert"
+
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -31,4 +35,11 @@ func internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*
 		}
 	}
 	return resources
+}
+
+func TestGetParentQueuePath(t *testing.T) {
+	assert.Equal(t, getParentPath(""), "")
+	assert.Equal(t, getParentPath("root"), "")
+	assert.Equal(t, getParentPath("root.parent.leaf"), "root.parent")
+	assert.Equal(t, getParentPath("parent.leaf"), "parent")
 }

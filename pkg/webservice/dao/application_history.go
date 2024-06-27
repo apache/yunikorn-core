@@ -19,6 +19,6 @@
 package dao
 
 type ApplicationHistoryDAOInfo struct {
-	Timestamp         int64  `json:"timestamp"`
-	TotalApplications string `json:"totalApplications"`
+	Timestamp         int64  `json:"timestamp,omitempty"`
+	TotalApplications string `json:"totalApplications,omitempty"`
 }

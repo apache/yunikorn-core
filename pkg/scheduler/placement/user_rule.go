@@ -20,6 +20,7 @@ package placement
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // A rule to place an application based on the user name of the submitting user.
@@ -37,6 +39,21 @@ type userRule struct {
 
 func (ur *userRule) getName() string {
 	return types.User
+}
+
+func (ur *userRule) ruleDAO() *dao.RuleDAO {
+	var pDAO *dao.RuleDAO
+	if ur.parent != nil {
+		pDAO = ur.parent.ruleDAO()
+	}
+	return &dao.RuleDAO{
+		Name: ur.getName(),
+		Parameters: map[string]string{
+			"create": strconv.FormatBool(ur.create),
+		},
+		ParentRule: pDAO,
+		Filter:     ur.filter.filterDAO(),
+	}
 }
 
 func (ur *userRule) initialise(conf configs.PlacementRule) error {
@@ -53,10 +70,14 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 	// before anything run the filter
 	userName := app.GetUser().User
 	if !ur.filter.allowUser(app.GetUser()) {
-		log.Logger().Debug("User rule filtered",
+		log.Log(log.SchedApplication).Debug("User rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()))
 		return "", nil
+	}
+	childQueueName := replaceDot(userName)
+	if err := configs.IsQueueNameValid(childQueueName); err != nil {
+		return "", err
 	}
 	var parentName string
 	var err error
@@ -85,8 +106,9 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 	if parentName == "" {
 		parentName = configs.RootQueue
 	}
-	queueName := parentName + configs.DOT + replaceDot(userName)
-	log.Logger().Debug("User rule intermediate result",
+	queueName := parentName + configs.DOT + childQueueName
+	// Log the result before we check the create flag
+	log.Log(log.SchedApplication).Debug("User rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
@@ -95,7 +117,7 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 	if !ur.create && queue == nil {
 		return "", nil
 	}
-	log.Logger().Info("User rule application placed",
+	log.Log(log.SchedApplication).Info("User rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	return queueName, nil

@@ -21,6 +21,7 @@ package objects
 import (
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -40,7 +41,7 @@ type reservation struct {
 // appBased must be true for a reservation for an app and false for a reservation on a node
 func newReservation(node *Node, app *Application, ask *AllocationAsk, appBased bool) *reservation {
 	if ask == nil || app == nil || node == nil {
-		log.Logger().Warn("Illegal reservation requested: one input is nil",
+		log.Log(log.SchedReservation).Warn("Illegal reservation requested: one input is nil",
 			zap.Stringer("node", node),
 			zap.Stringer("app", app),
 			zap.Stringer("ask", ask))
@@ -62,16 +63,27 @@ func newReservation(node *Node, app *Application, ask *AllocationAsk, appBased b
 
 func reservationKey(node *Node, app *Application, ask *AllocationAsk) string {
 	if ask == nil || (app == nil && node == nil) || (app != nil && node != nil) {
-		log.Logger().Warn("Illegal reservation key requested",
+		log.Log(log.SchedReservation).Warn("Illegal reservation key requested",
 			zap.Any("node", node),
 			zap.Any("app", app),
 			zap.Any("ask", ask))
 		return ""
 	}
 	if node == nil {
-		return app.ApplicationID + "|" + ask.GetAllocationKey()
+		return ask.resKeyWithoutNode
 	}
-	return node.NodeID + "|" + ask.GetAllocationKey()
+	key := ask.getReservationKeyForNode(node.NodeID)
+	if key != common.Empty {
+		return key
+	}
+
+	key = node.NodeID + "|" + ask.GetAllocationKey()
+	ask.setReservationKeyForNode(node.NodeID, key)
+	return key
+}
+
+func reservationKeyWithoutNode(appID, allocKey string) string {
+	return appID + "|" + allocKey
 }
 
 // Return the reservation key

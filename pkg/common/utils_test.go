@@ -27,8 +27,14 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/google/uuid"
+
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+)
+
+const (
+	testKey = "testKey"
 )
 
 func TestGetNormalizedPartitionName(t *testing.T) {
@@ -157,6 +163,18 @@ func TestAllowPreemptOther(t *testing.T) {
 	assert.Check(t, !IsAllowPreemptOther(&si.PreemptionPolicy{AllowPreemptOther: false}), "Preempt other should not be allowed if policy does not allow")
 }
 
+func TestIsAppCreationForced(t *testing.T) {
+	assert.Check(t, !IsAppCreationForced(nil), "nil tags should not result in forced app creation")
+	tags := make(map[string]string)
+	assert.Check(t, !IsAppCreationForced(tags), "empty tags should not result in forced app creation")
+	tags[common.AppTagCreateForce] = "false"
+	assert.Check(t, !IsAppCreationForced(tags), "false creation tag should not result in forced app creation")
+	tags[common.AppTagCreateForce] = "invalid"
+	assert.Check(t, !IsAppCreationForced(tags), "invalid creation tag should not result in forced app creation")
+	tags[common.AppTagCreateForce] = "true"
+	assert.Check(t, IsAppCreationForced(tags), "creation tag should result in forced app creation")
+}
+
 func TestConvertSITimeoutWithAdjustment(t *testing.T) {
 	created := time.Now().Unix() - 600
 	defaultTimeout := 15 * time.Minute
@@ -218,35 +236,181 @@ func TestConvertSITimestamp(t *testing.T) {
 	assert.Equal(t, result, time.Time{})
 }
 
-func TestWaitFor(t *testing.T) {
-	var tests = []struct {
-		testname   string
-		bound      int
-		ErrorExist bool
-	}{
-		{"Timeout case", 10000, true},
-		{"Fullfilling case", 10, false},
+func TestWaitForCondition(t *testing.T) {
+	target := false
+	eval := func() bool {
+		return target
 	}
-	for _, tt := range tests {
-		t.Run(tt.testname, func(t *testing.T) {
-			count := 0
-			err := WaitFor(time.Nanosecond, time.Millisecond, func() bool {
-				if count <= tt.bound {
-					count++
-					return false
-				}
-				return true
-			})
-			switch tt.ErrorExist {
-			case true:
-				if errorExist := (err != nil); !errorExist {
-					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-				}
-			case false:
-				if errorExist := (err == nil); !errorExist {
-					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-				}
-			}
+	tests := []struct {
+		input    bool
+		interval time.Duration
+		timeout  time.Duration
+		output   error
+	}{
+		{true, time.Duration(1) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(1) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
+		{true, time.Duration(3) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(3) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
+	}
+	for _, test := range tests {
+		target = test.input
+		get := WaitForCondition(test.interval, test.timeout, eval)
+		if test.output == nil {
+			assert.NilError(t, get)
+		} else {
+			assert.Equal(t, get.Error(), test.output.Error())
+		}
+	}
+}
+
+func TestGetConfigurationBool(t *testing.T) {
+	testCases := []struct {
+		name          string
+		configs       map[string]string
+		defaultValue  bool
+		expectedValue bool
+	}{
+		{
+			name:          "configs is nil",
+			configs:       nil,
+			defaultValue:  true,
+			expectedValue: true,
+		},
+		{
+			name:          "key not exist",
+			configs:       map[string]string{},
+			defaultValue:  true,
+			expectedValue: true,
+		},
+		{
+			name:          "key exist, value is not bool",
+			configs:       map[string]string{testKey: "xyz"},
+			defaultValue:  true,
+			expectedValue: true,
+		},
+		{
+			name:          "key exist, value is different from default value",
+			configs:       map[string]string{testKey: "false"},
+			defaultValue:  true,
+			expectedValue: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedValue, GetConfigurationBool(tc.configs, testKey, tc.defaultValue))
 		})
 	}
+}
+
+func TestGetConfigurationUint(t *testing.T) {
+	testCases := []struct {
+		name          string
+		configs       map[string]string
+		defaultValue  uint64
+		expectedValue uint64
+	}{
+		{
+			name:          "configs is nil",
+			configs:       nil,
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key not exist",
+			configs:       map[string]string{},
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key exist, value is not uint64",
+			configs:       map[string]string{testKey: "-1000"},
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key exist, value is different from default value",
+			configs:       map[string]string{testKey: "1"},
+			defaultValue:  100,
+			expectedValue: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedValue, GetConfigurationUint(tc.configs, testKey, tc.defaultValue))
+		})
+	}
+}
+
+func TestGetConfigurationInt(t *testing.T) {
+	testCases := []struct {
+		name          string
+		configs       map[string]string
+		defaultValue  int
+		expectedValue int
+	}{
+		{
+			name:          "configs is nil",
+			configs:       nil,
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key not exist",
+			configs:       map[string]string{},
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key exist, value is not int",
+			configs:       map[string]string{testKey: "xyz"},
+			defaultValue:  100,
+			expectedValue: 100,
+		},
+		{
+			name:          "key exist, value is different from default value",
+			configs:       map[string]string{testKey: "-1"},
+			defaultValue:  100,
+			expectedValue: -1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expectedValue, GetConfigurationInt(tc.configs, testKey, tc.defaultValue))
+		})
+	}
+}
+
+func TestZeroTimeInUnixNano(t *testing.T) {
+	// zero time
+	var nilValue *int64 = nil
+	assert.Equal(t, ZeroTimeInUnixNano(time.Time{}), nilValue)
+
+	// non-zero time
+	date := time.Date(2024, time.June, 6, 0, 0, 0, 0, time.UTC)
+	assert.Equal(t, *ZeroTimeInUnixNano(date), date.UnixNano())
+
+	// time in different timezone
+	date = time.Date(2024, time.June, 6, 0, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
+	assert.Equal(t, *ZeroTimeInUnixNano(date), date.UnixNano())
+}
+
+func TestGetNewUUID(t *testing.T) {
+	newUUID := GetNewUUID()
+	if _, err := uuid.Parse(newUUID); err != nil {
+		t.Errorf("Generated UUID is not valid: %s", newUUID)
+	}
+}
+
+func TestIsRecoveryQueue(t *testing.T) {
+	// valid case
+	assert.Assert(t, IsRecoveryQueue("root.@recovery@"))
+	assert.Assert(t, IsRecoveryQueue("ROOT.@RECOVERY@"))
+	assert.Assert(t, IsRecoveryQueue("RoOT.@rECoVeRY@"))
+
+	// invalid case
+	assert.Assert(t, !IsRecoveryQueue("otherQueue"))
+	assert.Assert(t, !IsRecoveryQueue(""))
 }

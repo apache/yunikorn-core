@@ -19,24 +19,24 @@
 package dao
 
 type PartitionInfo struct {
-	ClusterID               string            `json:"clusterId"`
-	Name                    string            `json:"name"`
-	Capacity                PartitionCapacity `json:"capacity"`
-	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"`
-	TotalNodes              int               `json:"totalNodes"`
-	Applications            map[string]int    `json:"applications"`
-	TotalContainers         int               `json:"totalContainers"`
-	State                   string            `json:"state"`
-	LastStateTransitionTime int64             `json:"lastStateTransitionTime"`
+	ClusterID               string            `json:"clusterId"`         // no omitempty, cluster id should not be empty
+	Name                    string            `json:"name"`              // no omitempty, name should not be empty
+	Capacity                PartitionCapacity `json:"capacity"`          // no omitempty, omitempty doesn't work on a structure value
+	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"` // no omitempty, omitempty doesn't work on a structure value
+	TotalNodes              int               `json:"totalNodes,omitempty"`
+	Applications            map[string]int    `json:"applications,omitempty"`
+	TotalContainers         int               `json:"totalContainers,omitempty"`
+	State                   string            `json:"state,omitempty"`
+	LastStateTransitionTime int64             `json:"lastStateTransitionTime,omitempty"`
 }
 
 type PartitionCapacity struct {
-	Capacity     map[string]int64 `json:"capacity"`
-	UsedCapacity map[string]int64 `json:"usedCapacity"`
-	Utilization  map[string]int64 `json:"utilization"`
+	Capacity     map[string]int64 `json:"capacity,omitempty"`
+	UsedCapacity map[string]int64 `json:"usedCapacity,omitempty"`
+	Utilization  map[string]int64 `json:"utilization,omitempty"`
 }
 
 type NodeSortingPolicy struct {
-	Type            string             `json:"type"`
-	ResourceWeights map[string]float64 `json:"resourceWeights"`
+	Type            string             `json:"type,omitempty"`
+	ResourceWeights map[string]float64 `json:"resourceWeights,omitempty"`
 }

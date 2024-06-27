@@ -60,32 +60,32 @@ func caller() string {
 }
 
 func waitForPendingQueueResource(t *testing.T, queue *objects.Queue, memory resources.Quantity, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return queue.GetPendingResource().Resources[siCommon.Memory] == memory
 	})
 	if err != nil {
-		log.Logger().Info("queue detail",
+		log.Log(log.Test).Info("queue detail",
 			zap.Any("queue", queue))
 		t.Fatalf("Failed to wait pending resource on queue %s, expected %v, actual %v, called from: %s", queue.QueuePath, memory, queue.GetPendingResource().Resources[siCommon.Memory], caller())
 	}
 }
 
 func waitForPendingAppResource(t *testing.T, app *objects.Application, memory resources.Quantity, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return app.GetPendingResource().Resources[siCommon.Memory] == memory
 	})
 	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[siCommon.Memory], caller())
 }
 
 func waitForAllocatedAppResource(t *testing.T, app *objects.Application, memory resources.Quantity, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return app.GetAllocatedResource().Resources[siCommon.Memory] == memory
 	})
 	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[siCommon.Memory], caller())
 }
 
 func waitForAllocatedQueueResource(t *testing.T, queue *objects.Queue, memory resources.Quantity, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return queue.GetAllocatedResource().Resources[siCommon.Memory] == memory
 	})
 	assert.NilError(t, err, "Failed to wait for allocations on queue %s, called from: %s", queue.QueuePath, caller())
@@ -93,7 +93,7 @@ func waitForAllocatedQueueResource(t *testing.T, queue *objects.Queue, memory re
 
 func waitForAllocatedNodeResource(t *testing.T, cc *scheduler.ClusterContext, partitionName string, nodeIDs []string, allocatedMemory resources.Quantity, timeoutMs int) {
 	var totalNodeResource resources.Quantity
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		totalNodeResource = 0
 		for _, nodeID := range nodeIDs {
 			totalNodeResource += cc.GetPartition(partitionName).GetNode(nodeID).GetAllocatedResource().Resources[siCommon.Memory]
@@ -105,7 +105,7 @@ func waitForAllocatedNodeResource(t *testing.T, cc *scheduler.ClusterContext, pa
 
 func waitForAvailableNodeResource(t *testing.T, cc *scheduler.ClusterContext, partitionName string, nodeIDs []string, availableMemory resources.Quantity, timeoutMs int) {
 	var totalNodeResource resources.Quantity
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		totalNodeResource = 0
 		for _, nodeID := range nodeIDs {
 			totalNodeResource += cc.GetPartition(partitionName).GetNode(nodeID).GetAvailableResource().Resources[siCommon.Memory]
@@ -116,7 +116,7 @@ func waitForAvailableNodeResource(t *testing.T, cc *scheduler.ClusterContext, pa
 }
 
 func waitForNewNode(t *testing.T, cc *scheduler.ClusterContext, nodeID string, partitionName string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		node := cc.GetNode(nodeID, partitionName)
 		return node != nil
 	})
@@ -124,11 +124,18 @@ func waitForNewNode(t *testing.T, cc *scheduler.ClusterContext, nodeID string, p
 }
 
 func waitForRemovedNode(t *testing.T, context *scheduler.ClusterContext, nodeID string, partitionName string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		node := context.GetNode(nodeID, partitionName)
 		return node == nil
 	})
 	assert.NilError(t, err, "Failed to wait for removal of scheduling node on partition %s, node %v, called from: %s", partitionName, nodeID, caller())
+}
+
+func waitForUpdatePartitionResource(t *testing.T, pc *scheduler.PartitionContext, resourcesName string, availableQuantity resources.Quantity, timeoutMs int) {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		return pc.GetTotalPartitionResource().Resources[resourcesName] == availableQuantity
+	})
+	assert.NilError(t, err, "Failed to wait for available resource %v with target quantity %v, called from: %s", resourcesName, availableQuantity, caller())
 }
 
 func getApplication(pc *scheduler.PartitionContext, appID string) (*objects.Application, error) {

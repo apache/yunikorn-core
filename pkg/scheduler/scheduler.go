@@ -24,6 +24,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/plugins"
@@ -36,6 +37,9 @@ type Scheduler struct {
 	clusterContext  *ClusterContext  // main context
 	pendingEvents   chan interface{} // queue for events
 	activityPending chan bool        // activity pending channel
+	stop            chan struct{}    // channel to signal stop request
+	healthChecker   *HealthChecker
+	nodesMonitor    *nodesResourceUsageMonitor
 }
 
 func NewScheduler() *Scheduler {
@@ -43,6 +47,7 @@ func NewScheduler() *Scheduler {
 	m.clusterContext = newClusterContext()
 	m.pendingEvents = make(chan interface{}, 1024*1024)
 	m.activityPending = make(chan bool, 1)
+	m.stop = make(chan struct{})
 	return m
 }
 
@@ -55,12 +60,12 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	go s.handleRMEvent()
 
 	// Start resource monitor if necessary (majorly for testing)
-	monitor := newNodesResourceUsageMonitor(s.clusterContext)
-	monitor.start()
+	s.nodesMonitor = newNodesResourceUsageMonitor(s.clusterContext)
+	s.nodesMonitor.start()
 
 	// Start health check periodically
-	c := NewHealthChecker(s.clusterContext)
-	c.Start()
+	s.healthChecker = NewHealthChecker(s.clusterContext)
+	s.healthChecker.Start()
 
 	if !manualSchedule {
 		go s.internalSchedule()
@@ -71,7 +76,15 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 // Internal start scheduling service
 func (s *Scheduler) internalSchedule() {
 	for {
-		s.awaitActivity()
+		select {
+		case <-s.stop:
+			return
+		case <-s.activityPending:
+			// activity pending
+		case <-time.After(100 * time.Millisecond):
+			// timeout, run scheduler anyway
+		}
+
 		if s.clusterContext.schedule() {
 			s.registerActivity()
 		}
@@ -80,8 +93,16 @@ func (s *Scheduler) internalSchedule() {
 
 func (s *Scheduler) internalInspectOutstandingRequests() {
 	for {
-		time.Sleep(1000 * time.Millisecond)
-		s.inspectOutstandingRequests()
+		select {
+		case <-s.stop:
+			return
+		case <-time.After(time.Second):
+			if noRequests, totalResources := s.inspectOutstandingRequests(); noRequests > 0 {
+				log.Log(log.Scheduler).Info("Found outstanding requests that will trigger autoscaling",
+					zap.Int("number of requests", noRequests),
+					zap.Stringer("total resources", totalResources))
+			}
+		}
 	}
 }
 
@@ -93,37 +114,41 @@ func (s *Scheduler) HandleEvent(ev interface{}) {
 func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	select {
 	case queue <- ev:
-		log.Logger().Debug("enqueued event",
+		log.Log(log.Scheduler).Debug("enqueued event",
 			zap.Stringer("eventType", reflect.TypeOf(ev)),
 			zap.Any("event", ev),
 			zap.Int("currentQueueSize", len(queue)))
 	default:
-		log.Logger().DPanic("failed to enqueue event",
+		log.Log(log.Scheduler).DPanic("failed to enqueue event",
 			zap.Stringer("event", reflect.TypeOf(ev)))
 	}
 }
 
 func (s *Scheduler) handleRMEvent() {
 	for {
-		ev := <-s.pendingEvents
-		switch v := ev.(type) {
-		case *rmevent.RMUpdateAllocationEvent:
-			s.clusterContext.handleRMUpdateAllocationEvent(v)
-		case *rmevent.RMUpdateApplicationEvent:
-			s.clusterContext.handleRMUpdateApplicationEvent(v)
-		case *rmevent.RMUpdateNodeEvent:
-			s.clusterContext.handleRMUpdateNodeEvent(v)
-		case *rmevent.RMPartitionsRemoveEvent:
-			s.clusterContext.removePartitionsByRMID(v)
-		case *rmevent.RMRegistrationEvent:
-			s.clusterContext.processRMRegistrationEvent(v)
-		case *rmevent.RMConfigUpdateEvent:
-			s.clusterContext.processRMConfigUpdateEvent(v)
-		default:
-			log.Logger().Error("Received type is not an acceptable type for RM event.",
-				zap.Stringer("received type", reflect.TypeOf(v)))
+		select {
+		case ev := <-s.pendingEvents:
+			switch v := ev.(type) {
+			case *rmevent.RMUpdateAllocationEvent:
+				s.clusterContext.handleRMUpdateAllocationEvent(v)
+			case *rmevent.RMUpdateApplicationEvent:
+				s.clusterContext.handleRMUpdateApplicationEvent(v)
+			case *rmevent.RMUpdateNodeEvent:
+				s.clusterContext.handleRMUpdateNodeEvent(v)
+			case *rmevent.RMPartitionsRemoveEvent:
+				s.clusterContext.removePartitionsByRMID(v)
+			case *rmevent.RMRegistrationEvent:
+				s.clusterContext.processRMRegistrationEvent(v)
+			case *rmevent.RMConfigUpdateEvent:
+				s.clusterContext.processRMConfigUpdateEvent(v)
+			default:
+				log.Log(log.Scheduler).Error("Received type is not an acceptable type for RM event.",
+					zap.Stringer("received type", reflect.TypeOf(v)))
+			}
+			s.registerActivity()
+		case <-s.stop:
+			return
 		}
-		s.registerActivity()
 	}
 }
 
@@ -137,45 +162,41 @@ func (s *Scheduler) registerActivity() {
 	}
 }
 
-// awaitActivity waits for scheduler activity to occur.
-func (s *Scheduler) awaitActivity() {
-	select {
-	case <-s.activityPending:
-		// activity pending
-	case <-time.After(100 * time.Millisecond):
-		// timeout, run scheduler anyway
-	}
-}
-
 // inspect on the outstanding requests for each of the queues,
 // update request state accordingly to shim if needed.
 // this function filters out all outstanding requests that being
 // skipped due to insufficient cluster resources and update the
 // state through the ContainerSchedulingStateUpdaterPlugin in order
 // to trigger the auto-scaling.
-func (s *Scheduler) inspectOutstandingRequests() {
-	log.Logger().Debug("inspect outstanding requests")
+func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
+	log.Log(log.Scheduler).Debug("inspect outstanding requests")
 	// schedule each partition defined in the cluster
+	total := resources.NewResource()
+	noRequests := 0
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
 		requests := psc.calculateOutstandingRequests()
-		if len(requests) > 0 {
+		noRequests = len(requests)
+		if noRequests > 0 {
 			for _, ask := range requests {
-				log.Logger().Debug("outstanding request",
+				log.Log(log.Scheduler).Debug("outstanding request",
 					zap.String("appID", ask.GetApplicationID()),
 					zap.String("allocationKey", ask.GetAllocationKey()))
 				// these asks are queue outstanding requests,
 				// they can fit into the max head room, but they are pending because lack of partition resources
 				if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
 					updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
-						ApplicartionID: ask.GetApplicationID(),
-						AllocationKey:  ask.GetAllocationKey(),
-						State:          si.UpdateContainerSchedulingStateRequest_FAILED,
-						Reason:         "request is waiting for cluster resources become available",
+						ApplicationID: ask.GetApplicationID(),
+						AllocationKey: ask.GetAllocationKey(),
+						State:         si.UpdateContainerSchedulingStateRequest_FAILED,
+						Reason:        "request is waiting for cluster resources become available",
 					})
 				}
+				total.AddTo(ask.GetAllocatedResource())
+				ask.SetScaleUpTriggered(true)
 			}
 		}
 	}
+	return noRequests, total
 }
 
 // Visible by tests
@@ -187,7 +208,7 @@ func (s *Scheduler) GetClusterContext() *ClusterContext {
 // Visible by tests
 func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 	for i := 0; i < nAlloc; i++ {
-		log.Logger().Debug("Scheduler manual stepping",
+		log.Log(log.Scheduler).Debug("Scheduler manual stepping",
 			zap.Int("count", i))
 		s.clusterContext.schedule()
 
@@ -198,4 +219,12 @@ func (s *Scheduler) MultiStepSchedule(nAlloc int) {
 		// Note, this sleep only works in tests.
 		time.Sleep(100 * time.Millisecond)
 	}
+}
+
+func (s *Scheduler) Stop() {
+	log.Log(log.Scheduler).Info("Stopping scheduler & background services")
+	s.healthChecker.Stop()
+	s.nodesMonitor.stop()
+	s.clusterContext.Stop()
+	close(s.stop)
 }

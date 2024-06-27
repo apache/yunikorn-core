@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package scheduler
+package mock
 
 import (
 	"fmt"
@@ -24,46 +24,45 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
-	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type fakePredicatePlugin struct {
-	tests.MockResourceManagerCallback
+type PredicatePlugin struct {
+	ResourceManagerCallback
 	mustFail bool
 	nodes    map[string]int
 }
 
-func (f *fakePredicatePlugin) Predicates(args *si.PredicatesArgs) error {
+func (f *PredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 	if f.mustFail {
-		log.Logger().Info("fake predicate plugin fail: must fail set")
+		log.Log(log.Test).Info("fake predicate plugin fail: must fail set")
 		return fmt.Errorf("fake predicate plugin failed")
 	}
 	if fail, ok := f.nodes[args.NodeID]; ok {
 		if args.Allocate && fail >= 0 {
-			log.Logger().Info("fake predicate plugin node allocate fail",
+			log.Log(log.Test).Info("fake predicate plugin node allocate fail",
 				zap.String("node", args.NodeID),
 				zap.Int("fail mode", fail))
 			return fmt.Errorf("fake predicate plugin failed")
 		}
 		if !args.Allocate && fail <= 0 {
-			log.Logger().Info("fake predicate plugin node reserve fail",
+			log.Log(log.Test).Info("fake predicate plugin node reserve fail",
 				zap.String("node", args.NodeID),
 				zap.Int("fail mode", fail))
 			return fmt.Errorf("fake predicate plugin failed")
 		}
 	}
-	log.Logger().Info("fake predicate plugin pass",
+	log.Log(log.Test).Info("fake predicate plugin pass",
 		zap.String("node", args.NodeID))
 	return nil
 }
 
-// A fake predicate plugin that can either always fail or fail based on the node that is checked.
+// NewPredicatePlugin returns a mock that can either always fail or fail based on the node that is checked.
 // mustFail will cause the predicate check to always fail
 // nodes allows specifying which node to fail for which check using the nodeID:
 // possible values: -1 fail reserve, 0 fail always, 1 fail alloc (defaults to always)
-func newFakePredicatePlugin(mustFail bool, nodes map[string]int) *fakePredicatePlugin {
-	return &fakePredicatePlugin{
+func NewPredicatePlugin(mustFail bool, nodes map[string]int) *PredicatePlugin {
+	return &PredicatePlugin{
 		mustFail: mustFail,
 		nodes:    nodes,
 	}

@@ -36,17 +36,26 @@ type startupOptions struct {
 	manualScheduleFlag bool
 	startWebAppFlag    bool
 	metricsHistorySize int
-	eventCacheEnabled  bool
 }
 
 func StartAllServices() *ServiceContext {
-	log.Logger().Info("ServiceContext start all services")
+	log.Log(log.Entrypoint).Info("ServiceContext start all services")
 	return startAllServicesWithParameters(
 		startupOptions{
 			manualScheduleFlag: false,
 			startWebAppFlag:    true,
 			metricsHistorySize: 1440,
-			eventCacheEnabled:  false,
+		})
+}
+
+// VisibleForTesting
+func StartAllServicesWithParams(manualSchedule, withWebapp bool) *ServiceContext {
+	log.Log(log.Entrypoint).Info("ServiceContext start all services")
+	return startAllServicesWithParameters(
+		startupOptions{
+			manualScheduleFlag: manualSchedule,
+			startWebAppFlag:    withWebapp,
+			metricsHistorySize: 1440,
 		})
 }
 
@@ -57,44 +66,30 @@ func StartAllServicesWithLogger(logger *zap.Logger, zapConfigs *zap.Config) *Ser
 
 // Visible by tests
 func StartAllServicesWithManualScheduler() *ServiceContext {
-	log.Logger().Info("ServiceContext start all services (manual scheduler)")
+	log.Log(log.Entrypoint).Info("ServiceContext start all services (manual scheduler)")
 	return startAllServicesWithParameters(
 		startupOptions{
 			manualScheduleFlag: true,
 			startWebAppFlag:    false,
 			metricsHistorySize: 0,
-			eventCacheEnabled:  false,
 		})
 }
 
 func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
-	var eventCache *events.EventCache
-	var eventPublisher events.EventPublisher
-	if opts.eventCacheEnabled {
-		log.Logger().Info("creating event cache")
-		events.CreateAndSetEventCache()
-		eventCache = events.GetEventCache()
-		eventPublisher = events.CreateShimPublisher(eventCache.Store)
-	}
+	log.Log(log.Entrypoint).Info("Starting event system")
+	events.GetEventSystem().StartService()
 
 	sched := scheduler.NewScheduler()
-	proxy := rmproxy.NewRMProxy()
-
+	proxy := rmproxy.NewRMProxy(sched)
 	eventHandler := handler.EventHandlers{
 		SchedulerEventHandler: sched,
 		RMProxyEventHandler:   proxy,
 	}
 
 	// start services
-	log.Logger().Info("ServiceContext start scheduling services")
+	log.Log(log.Entrypoint).Info("ServiceContext start scheduling services")
 	sched.StartService(eventHandler, opts.manualScheduleFlag)
-	proxy.StartService(eventHandler)
-	if opts.eventCacheEnabled && eventCache != nil {
-		eventCache.StartService()
-		if eventPublisher != nil {
-			eventPublisher.StartService()
-		}
-	}
+	proxy.StartService()
 
 	context := &ServiceContext{
 		RMProxy:   proxy,
@@ -103,14 +98,15 @@ func startAllServicesWithParameters(opts startupOptions) *ServiceContext {
 
 	var imHistory *history.InternalMetricsHistory
 	if opts.metricsHistorySize != 0 {
-		log.Logger().Info("creating InternalMetricsHistory")
+		log.Log(log.Entrypoint).Info("creating InternalMetricsHistory")
 		imHistory = history.NewInternalMetricsHistory(opts.metricsHistorySize)
 		metricsCollector := metrics.NewInternalMetricsCollector(imHistory)
 		metricsCollector.StartService()
+		context.MetricsCollector = metricsCollector
 	}
 
 	if opts.startWebAppFlag {
-		log.Logger().Info("ServiceContext start web application service")
+		log.Log(log.Entrypoint).Info("ServiceContext start web application service")
 		webapp := webservice.NewWebApp(sched.GetClusterContext(), imHistory)
 		webapp.StartWebApp()
 		context.WebApp = webapp

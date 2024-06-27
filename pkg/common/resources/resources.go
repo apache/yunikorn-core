@@ -95,9 +95,6 @@ func NewResourceFromConf(configMap map[string]string) (*Resource, error) {
 		if err != nil {
 			return nil, err
 		}
-		if intValue < 0 {
-			return nil, fmt.Errorf("negative resources not permitted: %v", configMap)
-		}
 		res.Resources[key] = intValue
 	}
 	return res, nil
@@ -237,13 +234,13 @@ func addVal(valA, valB Quantity) Quantity {
 	if (result < valA) != (valB < 0) {
 		if valA < 0 {
 			// return the minimum possible
-			log.Logger().Warn("Resource calculation wrapped: returned minimum value possible",
+			log.Log(log.Resources).Warn("Resource calculation wrapped: returned minimum value possible",
 				zap.Int64("valueA", int64(valA)),
 				zap.Int64("valueB", int64(valB)))
 			return math.MinInt64
 		}
 		// return the maximum possible
-		log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
+		log.Log(log.Resources).Warn("Resource calculation wrapped: returned maximum value possible",
 			zap.Int64("valueA", int64(valA)),
 			zap.Int64("valueB", int64(valB)))
 		return math.MaxInt64
@@ -268,13 +265,13 @@ func mulVal(valA, valB Quantity) Quantity {
 	if (result/valB != valA) || (valA == math.MinInt64 && valB == -1) {
 		if (valA < 0) != (valB < 0) {
 			// return the minimum possible
-			log.Logger().Warn("Resource calculation wrapped: returned minimum value possible",
+			log.Log(log.Resources).Warn("Resource calculation wrapped: returned minimum value possible",
 				zap.Int64("valueA", int64(valA)),
 				zap.Int64("valueB", int64(valB)))
 			return math.MinInt64
 		}
 		// return the maximum possible
-		log.Logger().Warn("Resource calculation wrapped: returned maximum value possible",
+		log.Log(log.Resources).Warn("Resource calculation wrapped: returned maximum value possible",
 			zap.Int64("valueA", int64(valA)),
 			zap.Int64("valueB", int64(valB)))
 		return math.MaxInt64
@@ -291,14 +288,14 @@ func mulValRatio(value Quantity, ratio float64) Quantity {
 	result := float64(value) * ratio
 	// protect against positive integer overflow
 	if result > math.MaxInt64 {
-		log.Logger().Warn("Multiplication result positive overflow",
+		log.Log(log.Resources).Warn("Multiplication result positive overflow",
 			zap.Float64("value", float64(value)),
 			zap.Float64("ratio", ratio))
 		return math.MaxInt64
 	}
 	// protect against negative integer overflow
 	if result < math.MinInt64 {
-		log.Logger().Warn("Multiplication result negative overflow",
+		log.Log(log.Resources).Warn("Multiplication result negative overflow",
 			zap.Float64("value", float64(value)),
 			zap.Float64("ratio", ratio))
 		return math.MinInt64
@@ -417,14 +414,14 @@ func subNonNegative(left, right *Resource) (*Resource, string) {
 	return out, message
 }
 
-// Check if smaller fits in larger
-// Types not defined in the larger resource are considered 0 values for Quantity
-// A nil resource is treated as an empty resource (all types are 0)
-func FitIn(larger, smaller *Resource) bool {
-	return larger.fitIn(smaller, false)
+// FitIn checks if smaller fits in the defined resource
+// Types not defined in resource this is called against are considered 0 for Quantity
+// A nil resource is treated as an empty resource (no types defined)
+func (r *Resource) FitIn(smaller *Resource) bool {
+	return r.fitIn(smaller, false)
 }
 
-// Check if smaller fits in the defined resource
+// FitInMaxUndef checks if smaller fits in the defined resource
 // Types not defined in resource this is called against are considered the maximum value for Quantity
 // A nil resource is treated as an empty resource (no types defined)
 func (r *Resource) FitInMaxUndef(smaller *Resource) bool {
@@ -450,9 +447,7 @@ func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
 		if skipUndef && !ok {
 			continue
 		}
-		if largerValue < 0 {
-			largerValue = 0
-		}
+		largerValue = max(0, largerValue)
 		if v > largerValue {
 			return false
 		}
@@ -483,7 +478,7 @@ func getShares(res, total *Resource) []float64 {
 		if total == nil || total.Resources[k] == 0 {
 			// negative share is logged
 			if v < 0 {
-				log.Logger().Debug("usage is negative no total, share is also negative",
+				log.Log(log.Resources).Debug("usage is negative no total, share is also negative",
 					zap.String("resource key", k),
 					zap.Int64("resource quantity", int64(v)))
 			}
@@ -494,7 +489,7 @@ func getShares(res, total *Resource) []float64 {
 		shares[idx] = float64(v) / float64(total.Resources[k])
 		// negative share is logged
 		if shares[idx] < 0 {
-			log.Logger().Debug("share set is negative",
+			log.Log(log.Resources).Debug("share set is negative",
 				zap.String("resource key", k),
 				zap.Int64("resource quantity", int64(v)),
 				zap.Int64("total quantity", int64(total.Resources[k])))
@@ -650,6 +645,25 @@ func Equals(left, right *Resource) bool {
 	return true
 }
 
+// MatchAny returns true if at least one type in the defined resource exists in the other resource.
+// False if none of the types exist in the other resource.
+// A nil resource is treated as an empty resource (no types defined) and returns false
+// Values are not considered during the checks
+func (r *Resource) MatchAny(other *Resource) bool {
+	if r == nil || other == nil {
+		return false
+	}
+	if r == other {
+		return true
+	}
+	for k := range r.Resources {
+		if _, ok := other.Resources[k]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // Compare the resources equal returns the specific values for following cases:
 // left  right  return
 // nil   nil    true
@@ -756,6 +770,55 @@ func StrictlyGreaterThanOrEquals(larger, smaller *Resource) bool {
 	return true
 }
 
+// StrictlyGreaterThanOnlyExisting returns true if all quantities for types in the defined resource are greater than
+// the quantity for the same type in smaller.
+// Types defined in smaller that are not in the defined resource are ignored.
+// Two resources that are equal are not considered strictly larger than each other.
+func (r *Resource) StrictlyGreaterThanOnlyExisting(smaller *Resource) bool {
+	if r == nil {
+		r = Zero
+	}
+	if smaller == nil {
+		smaller = Zero
+	}
+
+	// keep track of the number of not equal values
+	notEqual := false
+
+	// Is larger and smaller completely disjoint?
+	atleastOneResourcePresent := false
+	// Is all resource in larger greater than zero?
+	isAllPositiveInLarger := true
+
+	for k, v := range r.Resources {
+		// even when smaller is empty, all resource type in larger should be greater than zero
+		if smaller.IsEmpty() && v <= 0 {
+			isAllPositiveInLarger = false
+		}
+		// when smaller is not empty
+		if val, ok := smaller.Resources[k]; ok {
+			// at least one common resource type is there
+			atleastOneResourcePresent = true
+			if val > v {
+				return false
+			}
+			if val != v {
+				notEqual = true
+			}
+		}
+	}
+
+	switch {
+	case smaller.IsEmpty() && !r.IsEmpty():
+		return isAllPositiveInLarger
+	case atleastOneResourcePresent:
+		return notEqual
+	default:
+		// larger and smaller is completely disjoint. none of the resource match.
+		return !r.IsEmpty() && !smaller.IsEmpty()
+	}
+}
+
 // Have at least one quantity > 0, and no quantities < 0
 // A nil resource is not strictly greater than zero.
 func StrictlyGreaterThanZero(larger *Resource) bool {
@@ -774,22 +837,6 @@ func StrictlyGreaterThanZero(larger *Resource) bool {
 	return greater
 }
 
-// Return the smallest quantity
-func MinQuantity(x, y Quantity) Quantity {
-	if x < y {
-		return x
-	}
-	return y
-}
-
-// Return the largest quantity
-func MaxQuantity(x, y Quantity) Quantity {
-	if x > y {
-		return x
-	}
-	return y
-}
-
 // Returns a new resource with the smallest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
 // If a resource type is missing from one of the Resource, it is considered 0
@@ -797,10 +844,10 @@ func ComponentWiseMin(left, right *Resource) *Resource {
 	out := NewResource()
 	if left != nil && right != nil {
 		for k, v := range left.Resources {
-			out.Resources[k] = MinQuantity(v, right.Resources[k])
+			out.Resources[k] = min(v, right.Resources[k])
 		}
 		for k, v := range right.Resources {
-			out.Resources[k] = MinQuantity(v, left.Resources[k])
+			out.Resources[k] = min(v, left.Resources[k])
 		}
 	}
 	return out
@@ -822,14 +869,37 @@ func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 	}
 	for k, v := range left.Resources {
 		if val, ok := right.Resources[k]; ok {
-			out.Resources[k] = MinQuantity(v, val)
+			out.Resources[k] = min(v, val)
 		} else {
 			out.Resources[k] = v
 		}
 	}
 	for k, v := range right.Resources {
 		if val, ok := left.Resources[k]; ok {
-			out.Resources[k] = MinQuantity(v, val)
+			out.Resources[k] = min(v, val)
+		} else {
+			out.Resources[k] = v
+		}
+	}
+	return out
+}
+
+// ComponentWiseMinOnlyExisting Returns a new Resource with the smallest value for resource type
+// existing only in left but not vice versa.
+func ComponentWiseMinOnlyExisting(left, right *Resource) *Resource {
+	out := NewResource()
+	if right == nil && left == nil {
+		return nil
+	}
+	if left == nil {
+		return nil
+	}
+	if right == nil {
+		return left.Clone()
+	}
+	for k, v := range left.Resources {
+		if val, ok := right.Resources[k]; ok {
+			out.Resources[k] = min(v, val)
 		} else {
 			out.Resources[k] = v
 		}
@@ -849,16 +919,21 @@ func (r *Resource) HasNegativeValue() bool {
 	return false
 }
 
+// IsEmpty returns true if the resource is nil or has no component resources specified.
+func (r *Resource) IsEmpty() bool {
+	return r == nil || len(r.Resources) == 0
+}
+
 // Returns a new resource with the largest value for each quantity in the resources
 // If either resource passed in is nil a zero resource is returned
 func ComponentWiseMax(left, right *Resource) *Resource {
 	out := NewResource()
 	if left != nil && right != nil {
 		for k, v := range left.Resources {
-			out.Resources[k] = MaxQuantity(v, right.Resources[k])
+			out.Resources[k] = max(v, right.Resources[k])
 		}
 		for k, v := range right.Resources {
-			out.Resources[k] = MaxQuantity(v, left.Resources[k])
+			out.Resources[k] = max(v, left.Resources[k])
 		}
 	}
 	return out
@@ -878,52 +953,96 @@ func IsZero(zero *Resource) bool {
 	return true
 }
 
+// CalculateAbsUsedCapacity returns absolute used as a percentage, a positive integer value, for each defined resource
+// named in the capacity comparing usage to the capacity.
+// If usage is 0 or below 0, absolute used is always 0
+// if capacity is 0 or below 0, absolute used is always 100
+// if used is larger than capacity a value larger than 100 can be returned. The percentage value returned is capped at
+// math.MaxInt32 (resolved value 2147483647)
 func CalculateAbsUsedCapacity(capacity, used *Resource) *Resource {
 	absResource := NewResource()
 	if capacity == nil || used == nil {
-		log.Logger().Debug("Cannot calculate absolute capacity because of missing capacity or usage")
+		log.Log(log.Resources).Debug("Cannot calculate absolute capacity because of missing capacity or usage")
 		return absResource
 	}
 	missingResources := &strings.Builder{}
-	for resourceName, availableResource := range capacity.Resources {
+	for resourceName, capResource := range capacity.Resources {
 		var absResValue int64
-		if usedResource, ok := used.Resources[resourceName]; ok {
-			if availableResource < usedResource {
-				log.Logger().Warn("Higher usage than max capacity",
-					zap.String("resource", resourceName),
-					zap.Int64("capacity", int64(availableResource)),
-					zap.Int64("usage", int64(usedResource)))
-			}
-			div := float64(usedResource) / float64(availableResource)
-			absResValue = int64(div * 100)
-			// protect against positive integer overflow
-			if absResValue < 0 && div > 0 {
-				log.Logger().Warn("Absolute resource value result positive overflow",
-					zap.String("resource", resourceName),
-					zap.Int64("capacity", int64(availableResource)),
-					zap.Int64("usage", int64(usedResource)))
-				absResValue = math.MaxInt64
-			}
-			// protect against negative integer overflow
-			if absResValue > 0 && div < 0 {
-				log.Logger().Warn("Absolute resource value result negative overflow",
-					zap.String("resource", resourceName),
-					zap.Int64("capacity", int64(availableResource)),
-					zap.Int64("usage", int64(usedResource)))
-				absResValue = math.MinInt64
-			}
-		} else {
+		usedResource, ok := used.Resources[resourceName]
+		// track this for troubleshooting only
+		if !ok {
 			if missingResources.Len() != 0 {
 				missingResources.WriteString(", ")
 			}
 			missingResources.WriteString(resourceName)
 			continue
 		}
+		switch {
+		// used is 0 or below nothing is used -> 0%
+		// below 0 should never happen
+		case usedResource <= 0:
+			absResValue = 0
+		// capacity is 0 or below any usage is full -> 100% (prevents divide by 0)
+		// below 0 should never happen
+		case capResource <= 0:
+			absResValue = 100
+		// calculate percentage: never wraps, could overflow int64 due to percentage conversion ONLY
+		default:
+			div := (float64(usedResource) / float64(capResource)) * 100
+			// we really do not want to show a percentage value that is larger than a 32-bit integer.
+			// even that is already really large and could easily lead to UI render issues.
+			if div > float64(math.MaxInt32) {
+				absResValue = math.MaxInt32
+			} else {
+				absResValue = int64(div)
+			}
+		}
 		absResource.Resources[resourceName] = Quantity(absResValue)
 	}
 	if missingResources.Len() != 0 {
-		log.Logger().Debug("Absolute usage result is missing resource information",
+		log.Log(log.Resources).Debug("Absolute usage result is missing resource information",
 			zap.Stringer("missing resource(s)", missingResources))
 	}
 	return absResource
+}
+
+// DominantResourceType calculates the most used resource type based on the ratio of used compared to
+// the capacity. If a capacity type is set to 0 assume full usage.
+// Dominant type should be calculated with queue usage and capacity. Queue capacities should never
+// contain 0 values when there is a usage also, however in the root queue this could happen. If the
+// last node reporting that resource was removed but not everything has been updated.
+// immediately
+// Ignores resources types that are used but not defined in the capacity.
+func (r *Resource) DominantResourceType(capacity *Resource) string {
+	if r == nil || capacity == nil {
+		return ""
+	}
+	var div, temp float64
+	dominant := ""
+	for name, usedVal := range r.Resources {
+		capVal, ok := capacity.Resources[name]
+		if !ok {
+			log.Log(log.Resources).Debug("missing resource in dominant calculation",
+				zap.String("missing resource", name))
+			continue
+		}
+		// calculate the ratio between usage and capacity
+		// ratio should be somewhere between 0 and 1, but do not restrict
+		// handle 0 values specifically just to be safe should never happen
+		if capVal == 0 {
+			if usedVal == 0 {
+				temp = 0 // no usage, no cap: consider empty
+			} else {
+				temp = 1 // usage, no cap: fully used
+			}
+		} else {
+			temp = float64(usedVal) / float64(capVal) // both not zero calculate ratio
+		}
+		// if we have exactly the same use the latest one
+		if temp >= div {
+			div = temp
+			dominant = name
+		}
+	}
+	return dominant
 }

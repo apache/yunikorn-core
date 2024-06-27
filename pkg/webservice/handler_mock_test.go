@@ -19,6 +19,7 @@ package webservice
 
 import (
 	"net/http"
+	"time"
 )
 
 // InternalMetricHistory needs resetting between tests
@@ -42,10 +43,14 @@ func (trw *MockResponseWriter) Header() http.Header {
 }
 
 func (trw *MockResponseWriter) Write(bytes []byte) (int, error) {
-	trw.outputBytes = bytes
+	trw.outputBytes = append(trw.outputBytes, bytes...)
 	return len(bytes), nil
 }
 
 func (trw *MockResponseWriter) WriteHeader(statusCode int) {
 	trw.statusCode = statusCode
+}
+
+func (trw *MockResponseWriter) SetWriteDeadline(deadline time.Time) error {
+	return nil
 }

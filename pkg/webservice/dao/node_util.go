@@ -18,13 +18,19 @@
 
 package dao
 
+type PartitionNodesUtilDAOInfo struct {
+	ClusterID     string              `json:"clusterId"` // no omitempty, cluster id should not be empty
+	Partition     string              `json:"partition"` // no omitempty, partition should not be empty
+	NodesUtilList []*NodesUtilDAOInfo `json:"utilizations,omitempty"`
+}
+
 type NodesUtilDAOInfo struct {
-	ResourceType string             `json:"type"`
-	NodesUtil    []*NodeUtilDAOInfo `json:"utilization"`
+	ResourceType string             `json:"type,omitempty"`
+	NodesUtil    []*NodeUtilDAOInfo `json:"utilization,omitempty"`
 }
 
 type NodeUtilDAOInfo struct {
-	BucketName string   `json:"bucketName"`
-	NumOfNodes int64    `json:"numOfNodes"`
-	NodeNames  []string `json:"nodeNames"`
+	BucketName string   `json:"bucketName,omitempty"`
+	NumOfNodes int64    `json:"numOfNodes,omitempty"`
+	NodeNames  []string `json:"nodeNames,omitempty"`
 }

@@ -61,13 +61,14 @@ func sortQueuesByPriorityAndFairness(queues []*Queue) {
 		rPriority := r.GetCurrentPriority()
 		if lPriority > rPriority {
 			return true
-		} else if lPriority < rPriority {
+		}
+		if lPriority < rPriority {
 			return false
 		}
 		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(),
 			r.GetAllocatedResource(), r.GetGuaranteedResource())
 		if comp == 0 {
-			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
+			return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
 		}
 		return comp < 0
 	})
@@ -84,10 +85,11 @@ func sortQueuesByFairnessAndPriority(queues []*Queue) {
 			rPriority := r.GetCurrentPriority()
 			if lPriority > rPriority {
 				return true
-			} else if lPriority < rPriority {
+			}
+			if lPriority < rPriority {
 				return false
 			}
-			return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
+			return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
 		}
 		return comp < 0
 	})
@@ -106,13 +108,6 @@ func sortApplications(apps map[string]*Application, sortType policies.SortPolicy
 		}
 	case policies.FifoSortPolicy:
 		sortedApps = filterOnPendingResources(apps)
-		if considerPriority {
-			sortApplicationsByPriorityAndSubmissionTime(sortedApps)
-		} else {
-			sortApplicationsBySubmissionTimeAndPriority(sortedApps)
-		}
-	case policies.StateAwarePolicy:
-		sortedApps = stateAwareFilter(apps)
 		if considerPriority {
 			sortApplicationsByPriorityAndSubmissionTime(sortedApps)
 		} else {
@@ -142,7 +137,8 @@ func sortApplicationsByPriorityAndFairness(sortedApps []*Application, globalReso
 		rightPriority := r.GetAskMaxPriority()
 		if leftPriority > rightPriority {
 			return true
-		} else if leftPriority < rightPriority {
+		}
+		if leftPriority < rightPriority {
 			return false
 		}
 		return resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource) < 0
@@ -155,7 +151,8 @@ func sortApplicationsBySubmissionTimeAndPriority(sortedApps []*Application) {
 		r := sortedApps[j]
 		if l.SubmissionTime.Before(r.SubmissionTime) {
 			return true
-		} else if r.SubmissionTime.Before(r.SubmissionTime) {
+		}
+		if r.SubmissionTime.Before(l.SubmissionTime) {
 			return false
 		}
 		return l.GetAskMaxPriority() > r.GetAskMaxPriority()
@@ -170,7 +167,8 @@ func sortApplicationsByPriorityAndSubmissionTime(sortedApps []*Application) {
 		rightPriority := r.GetAskMaxPriority()
 		if leftPriority > rightPriority {
 			return true
-		} else if leftPriority < rightPriority {
+		}
+		if leftPriority < rightPriority {
 			return false
 		}
 		return l.SubmissionTime.Before(r.SubmissionTime)
@@ -186,57 +184,4 @@ func filterOnPendingResources(apps map[string]*Application) []*Application {
 		}
 	}
 	return filteredApps
-}
-
-// This filter only allows one (1) application with a state that is not running in the list of candidates.
-// The preference is a state of Starting. If we can not find an app with a starting state we will use an app
-// with an Accepted state. However if there is an app with a Starting state even with no pending resource
-// requests, no Accepted apps can be scheduled. An app in New state does not have any asks and can never be
-// scheduled.
-func stateAwareFilter(apps map[string]*Application) []*Application {
-	filteredApps := make([]*Application, 0)
-	var acceptedApp *Application
-	var foundStarting bool
-	for _, app := range apps {
-		// found a starting app clear out the accepted app (independent of pending resources)
-		if app.IsStarting() {
-			foundStarting = true
-			acceptedApp = nil
-		}
-		// Now just look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
-			// filter accepted apps
-			if app.IsAccepted() {
-				// check if we have not seen a starting app
-				// replace the currently tracked accepted app if this is an older one
-				if !foundStarting && (acceptedApp == nil || acceptedApp.SubmissionTime.After(app.SubmissionTime)) {
-					acceptedApp = app
-				}
-				continue
-			}
-			// this is a running or starting app add it to the list
-			filteredApps = append(filteredApps, app)
-		}
-	}
-	// just add the accepted app if we need to: apps are not sorted yet
-	if acceptedApp != nil {
-		filteredApps = append(filteredApps, acceptedApp)
-	}
-	return filteredApps
-}
-
-func sortAskByPriority(requests []*AllocationAsk, ascending bool) {
-	sort.SliceStable(requests, func(i, j int) bool {
-		l := requests[i]
-		r := requests[j]
-
-		if l.GetPriority() == r.GetPriority() {
-			return l.GetCreateTime().Before(r.GetCreateTime())
-		}
-
-		if ascending {
-			return l.GetPriority() < r.GetPriority()
-		}
-		return l.GetPriority() > r.GetPriority()
-	})
 }

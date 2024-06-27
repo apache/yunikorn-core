@@ -19,12 +19,15 @@
 package configs
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/apache/yunikorn-core/pkg/log"
 )
@@ -43,18 +46,17 @@ type SchedulerConfig struct {
 // - a list of users specifying limits on the partition
 // - the preemption configuration for the partition
 type PartitionConfig struct {
-	Name              string
-	Queues            []QueueConfig
-	PlacementRules    []PlacementRule           `yaml:",omitempty" json:",omitempty"`
-	Limits            []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"` // deprecated
-	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
-	StateDumpFilePath string                    `yaml:",omitempty" json:",omitempty"`
+	Name           string
+	Queues         []QueueConfig
+	PlacementRules []PlacementRule           `yaml:",omitempty" json:",omitempty"`
+	Limits         []Limit                   `yaml:",omitempty" json:",omitempty"`
+	Preemption     PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
+	NodeSortPolicy NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
 }
 
-// deprecated
+// The partition preemption configuration
 type PartitionPreemptionConfig struct {
-	Enabled bool
+	Enabled *bool `yaml:",omitempty" json:",omitempty"`
 }
 
 // The queue object for each queue:
@@ -146,7 +148,6 @@ type NodeSortingPolicy struct {
 	ResourceWeights map[string]float64 `yaml:",omitempty" json:",omitempty"`
 }
 
-// Visible by tests
 func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) {
 	conf, err := ParseAndValidateConfig(content)
 	if err != nil {
@@ -164,16 +165,18 @@ func SetChecksum(content []byte, conf *SchedulerConfig) {
 
 func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	conf := &SchedulerConfig{}
-	err := yaml.UnmarshalStrict(content, conf)
-	if err != nil {
-		log.Logger().Error("failed to parse queue configuration",
+	decoder := yaml.NewDecoder(bytes.NewReader(content))
+	decoder.KnownFields(true) // Enable strict unmarshaling behavior
+	err := decoder.Decode(conf)
+	if err != nil && !errors.Is(err, io.EOF) { // empty content may have EOF error, skip it
+		log.Log(log.Config).Error("failed to parse queue configuration",
 			zap.Error(err))
 		return nil, err
 	}
 	// validate the config
 	err = Validate(conf)
 	if err != nil {
-		log.Logger().Error("queue configuration validation failed",
+		log.Log(log.Config).Error("queue configuration validation failed",
 			zap.Error(err))
 		return nil, err
 	}

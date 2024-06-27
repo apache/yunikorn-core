@@ -19,8 +19,8 @@
 package dao
 
 type ClusterDAOInfo struct {
-	StartTime          int64               `json:"startTime"`
-	RMBuildInformation []map[string]string `json:"rmBuildInformation"`
-	PartitionName      string              `json:"partition"`
-	ClusterName        string              `json:"clusterName"`
+	StartTime          int64               `json:"startTime,omitempty"`
+	RMBuildInformation []map[string]string `json:"rmBuildInformation,omitempty"`
+	PartitionName      string              `json:"partition"`   // no omitempty, partition name should not be empty
+	ClusterName        string              `json:"clusterName"` // no omitempty, cluster name should not be empty
 }

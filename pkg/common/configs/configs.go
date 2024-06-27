@@ -19,35 +19,61 @@
 package configs
 
 import (
-	"sync"
 	"time"
+
+	"github.com/apache/yunikorn-core/pkg/locking"
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 const (
-	HealthCheckInterval = "health.checkInterval"
-)
+	// prefixes
+	PrefixEvent  = "event."
+	PrefixHealth = "health."
 
-var DefaultHealthCheckInterval = 30 * time.Second
+	HealthCheckInterval = PrefixHealth + "checkInterval"
+
+	// events
+	CMEventTrackingEnabled    = PrefixEvent + "trackingEnabled"    // Application Tracking
+	CMEventRequestCapacity    = PrefixEvent + "requestCapacity"    // Request Capacity
+	CMEventRingBufferCapacity = PrefixEvent + "ringBufferCapacity" // Ring Buffer Capacity
+	CMMaxEventStreams         = PrefixEvent + "maxStreams"
+	CMMaxEventStreamsPerHost  = PrefixEvent + "maxStreamsPerHost"
+	CMRESTResponseSize        = PrefixEvent + "RESTResponseSize"
+
+	// defaults
+	DefaultHealthCheckInterval     = 30 * time.Second
+	DefaultEventTrackingEnabled    = true
+	DefaultEventRequestCapacity    = 1000
+	DefaultEventRingBufferCapacity = 100000
+	DefaultMaxStreams              = uint64(100)
+	DefaultMaxStreamsPerHost       = uint64(15)
+	DefaultRESTResponseSize        = uint64(10000)
+)
 
 var ConfigContext *SchedulerConfigContext
 
 var configMap map[string]string
 var configMapCallbacks map[string]func()
-var configMapLock sync.RWMutex
+var configMapLock locking.RWMutex
 
 func init() {
 	configMap = make(map[string]string)
 	configMapCallbacks = make(map[string]func())
 	ConfigContext = &SchedulerConfigContext{
 		configs: make(map[string]*SchedulerConfig),
-		lock:    &sync.RWMutex{},
+		lock:    &locking.RWMutex{},
 	}
+
+	// add a callback to reconfigure logging
+	AddConfigMapCallback("logging", func() {
+		log.UpdateLoggingConfig(GetConfigMap())
+	})
 }
 
 // scheduler config context provides thread-safe access for scheduler configurations
 type SchedulerConfigContext struct {
 	configs map[string]*SchedulerConfig
-	lock    *sync.RWMutex
+	lock    *locking.RWMutex
 }
 
 func (ctx *SchedulerConfigContext) Set(policyGroup string, config *SchedulerConfig) {

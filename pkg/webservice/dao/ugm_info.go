@@ -21,20 +21,22 @@ package dao
 import "github.com/apache/yunikorn-core/pkg/common/resources"
 
 type UserResourceUsageDAOInfo struct {
-	UserName string                `json:"userName"`
-	Groups   map[string]string     `json:"groups"`
-	Queues   *ResourceUsageDAOInfo `json:"queues"`
+	UserName string                `json:"userName"` // no omitempty, user name should not be empty
+	Groups   map[string]string     `json:"groups,omitempty"`
+	Queues   *ResourceUsageDAOInfo `json:"queues,omitempty"`
 }
 
 type GroupResourceUsageDAOInfo struct {
-	GroupName    string                `json:"groupName"`
-	Applications []string              `json:"applications"`
-	Queues       *ResourceUsageDAOInfo `json:"queues"`
+	GroupName    string                `json:"groupName"` // no omitempty, group name should not be empty
+	Applications []string              `json:"applications,omitempty"`
+	Queues       *ResourceUsageDAOInfo `json:"queues,omitempty"`
 }
 
 type ResourceUsageDAOInfo struct {
-	QueuePath           string                  `json:"queuePath"`
-	ResourceUsage       *resources.Resource     `json:"resourceUsage"`
-	RunningApplications []string                `json:"runningApplications"`
-	Children            []*ResourceUsageDAOInfo `json:"children"`
+	QueuePath           string                  `json:"queuePath"` // no omitempty, queue path should not be empty
+	ResourceUsage       *resources.Resource     `json:"resourceUsage,omitempty"`
+	RunningApplications []string                `json:"runningApplications,omitempty"`
+	MaxResources        *resources.Resource     `json:"maxResources,omitempty"`
+	MaxApplications     uint64                  `json:"maxApplications,omitempty"`
+	Children            []*ResourceUsageDAOInfo `json:"children,omitempty"`
 }

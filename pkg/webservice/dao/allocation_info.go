@@ -19,19 +19,17 @@
 package dao
 
 type AllocationDAOInfo struct {
-	AllocationKey    string            `json:"allocationKey"`
-	AllocationTags   map[string]string `json:"allocationTags"`
-	RequestTime      int64             `json:"requestTime"`     // Allocation ask's createTime if PlaceholderUsed is false, otherwise equivalent to placeholder allocation's createTime
-	AllocationTime   int64             `json:"allocationTime"`  // Allocation's createTime
-	AllocationDelay  int64             `json:"allocationDelay"` // Difference between AllocationTime and RequestTime
-	UUID             string            `json:"uuid"`
-	ResourcePerAlloc map[string]int64  `json:"resource"`
-	Priority         string            `json:"priority"`
-	NodeID           string            `json:"nodeId"`
-	ApplicationID    string            `json:"applicationId"`
-	Partition        string            `json:"partition"`
-	Placeholder      bool              `json:"placeholder"`
-	PlaceholderUsed  bool              `json:"placeholderUsed"`
-	TaskGroupName    string            `json:"taskGroupName"`
-	Preempted        bool              `json:"preempted"`
+	AllocationKey    string            `json:"allocationKey"` // no omitempty, allocation key should not be empty
+	AllocationTags   map[string]string `json:"allocationTags,omitempty"`
+	RequestTime      int64             `json:"requestTime,omitempty"`     // Allocation ask's createTime if PlaceholderUsed is false, otherwise equivalent to placeholder allocation's createTime
+	AllocationTime   int64             `json:"allocationTime,omitempty"`  // Allocation's createTime
+	AllocationDelay  int64             `json:"allocationDelay,omitempty"` // Difference between AllocationTime and RequestTime
+	ResourcePerAlloc map[string]int64  `json:"resource,omitempty"`
+	Priority         string            `json:"priority,omitempty"`
+	NodeID           string            `json:"nodeId,omitempty"`
+	ApplicationID    string            `json:"applicationId,omitempty"`
+	Placeholder      bool              `json:"placeholder,omitempty"`
+	PlaceholderUsed  bool              `json:"placeholderUsed,omitempty"`
+	TaskGroupName    string            `json:"taskGroupName,omitempty"`
+	Preempted        bool              `json:"preempted,omitempty"`
 }

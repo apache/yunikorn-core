@@ -52,6 +52,15 @@ func TestNewRule(t *testing.T) {
 	if err != nil || nr == nil {
 		t.Errorf("new normalised newRule build failed which should not, newRule 'nil' , err: %v, ", err)
 	}
+
+	// test deny recovery rule name
+	conf = configs.PlacementRule{
+		Name: "recovery",
+	}
+	nr, err = newRule(conf)
+	if err == nil || nr != nil {
+		t.Errorf("new newRule did not fail with recovery rule name, err 'nil' , newRule: %v, ", nr)
+	}
 }
 
 // Test for a basic test rule.
@@ -104,5 +113,17 @@ func TestReplaceDot(t *testing.T) {
 	name = replaceDot(".name.")
 	if name != "_dot_name_dot_" {
 		t.Errorf("replace start or end dots failed, name: %s, ", name)
+	}
+}
+
+func TestBasicRule(t *testing.T) {
+	rule := &basicRule{}
+	if name := rule.getName(); name != "unnamed rule" {
+		t.Errorf("expected %s, got %s", "unnamed rule", name)
+	}
+
+	dao := rule.ruleDAO()
+	if dao.Name != "unnamed rule" {
+		t.Errorf("expected %s, got %s", "unnamed rule", dao.Name)
 	}
 }

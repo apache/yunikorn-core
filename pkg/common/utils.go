@@ -19,6 +19,7 @@
 package common
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -31,6 +32,11 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	interfaceCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+)
+
+var (
+	// ErrorTimeout returned if waiting for a condition times out
+	ErrorTimeout = errors.New("timeout waiting for condition")
 )
 
 func GetNormalizedPartitionName(partitionName string, rmID string) string {
@@ -62,20 +68,6 @@ func GetPartitionNameWithoutClusterID(partitionName string) string {
 	return partitionName
 }
 
-func WaitFor(interval time.Duration, timeout time.Duration, condition func() bool) error {
-	deadline := time.Now().Add(timeout)
-	for {
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for condition")
-		}
-		if condition() {
-			return nil
-		}
-		time.Sleep(interval)
-		continue
-	}
-}
-
 // Generate a new uuid. The chance that we generate a collision is really small.
 // As long as we check the UUID before we communicate it back to the RM we can still replace it without a problem.
 func GetNewUUID() string {
@@ -86,7 +78,7 @@ func GetBoolEnvVar(key string, defaultVal bool) bool {
 	if value, ok := os.LookupEnv(key); ok {
 		boolValue, err := strconv.ParseBool(value)
 		if err != nil {
-			log.Logger().Debug("Failed to parse environment variable, using default value",
+			log.Log(log.Utils).Debug("Failed to parse environment variable, using default value",
 				zap.String("name", key),
 				zap.String("value", value),
 				zap.Bool("default", defaultVal))
@@ -109,7 +101,7 @@ func ConvertSITimeout(millis int64) time.Duration {
 	// just handle max wrapping, no need to handle min wrapping
 	result := millis * int64(time.Millisecond)
 	if result/millis != int64(time.Millisecond) {
-		log.Logger().Warn("Timeout conversion wrapped: returned no timeout",
+		log.Log(log.Utils).Warn("Timeout conversion wrapped: returned no timeout",
 			zap.Int64("configured timeout in ms", millis))
 		return time.Duration(0)
 	}
@@ -142,14 +134,14 @@ func adjustTimeout(timeout time.Duration, siApp *si.AddApplicationRequest) time.
 	adjusted := time.Until(expectedTimeout)
 
 	if adjusted <= 0 {
-		log.Logger().Info("Placeholder timeout reached - expected timeout is in the past",
+		log.Log(log.Utils).Info("Placeholder timeout reached - expected timeout is in the past",
 			zap.Duration("timeout duration", timeout),
 			zap.Time("creation time", created),
 			zap.Time("expected timeout", expectedTimeout))
 		return time.Millisecond // smallest allowed timeout value
 	}
 
-	log.Logger().Info("Adjusting placeholder timeout",
+	log.Log(log.Utils).Info("Adjusting placeholder timeout",
 		zap.Duration("timeout duration", timeout),
 		zap.Time("creation time", created),
 		zap.Time("expected timeout", expectedTimeout))
@@ -164,7 +156,7 @@ func ConvertSITimestamp(ts string) time.Time {
 
 	tm, err := strconv.ParseInt(ts, 10, 64)
 	if err != nil {
-		log.Logger().Warn("Unable to parse timestamp string", zap.String("timestamp", ts),
+		log.Log(log.Utils).Warn("Unable to parse timestamp string", zap.String("timestamp", ts),
 			zap.Error(err))
 		return time.Time{}
 	}
@@ -191,6 +183,29 @@ func IsAllowPreemptOther(policy *si.PreemptionPolicy) bool {
 	return policy != nil && policy.AllowPreemptOther
 }
 
+// IsAppCreationForced returns true if the application creation is triggered by the shim
+// reporting an existing allocation. In this case, it needs to be accepted regardless
+// of whether it maps to a valid queue.
+func IsAppCreationForced(tags map[string]string) bool {
+	tagVal := ""
+	for key, val := range tags {
+		if strings.EqualFold(key, interfaceCommon.AppTagCreateForce) {
+			tagVal = val
+			break
+		}
+	}
+	result, err := strconv.ParseBool(tagVal)
+	if err != nil {
+		return false
+	}
+	return result
+}
+
+// IsRecoveryQueue returns true if the given queue represents the recovery queue
+func IsRecoveryQueue(queueName string) bool {
+	return strings.EqualFold(queueName, RecoveryQueueFull)
+}
+
 // ZeroTimeInUnixNano return the unix nano or nil if the time is zero.
 func ZeroTimeInUnixNano(t time.Time) *int64 {
 	if t.IsZero() {
@@ -200,17 +215,65 @@ func ZeroTimeInUnixNano(t time.Time) *int64 {
 	return &tInt
 }
 
-func WaitForCondition(eval func() bool, interval time.Duration, timeout time.Duration) error {
+func WaitForCondition(interval time.Duration, timeout time.Duration, eval func() bool) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		if eval() {
 			return nil
 		}
 
-		if time.Now().After(deadline) {
-			return fmt.Errorf("timeout waiting for condition")
+		if time.Now().After(deadline) || time.Now().Add(interval).After(deadline) {
+			return ErrorTimeout
 		}
 
 		time.Sleep(interval)
 	}
+}
+
+func GetConfigurationBool(configs map[string]string, key string, defaultValue bool) bool {
+	value, ok := configs[key]
+	if !ok {
+		return defaultValue
+	}
+	boolValue, err := strconv.ParseBool(value)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse configuration value",
+			zap.String("key", key),
+			zap.String("value", value),
+			zap.Error(err))
+		return defaultValue
+	}
+	return boolValue
+}
+
+func GetConfigurationUint(configs map[string]string, key string, defaultValue uint64) uint64 {
+	value, ok := configs[key]
+	if !ok {
+		return defaultValue
+	}
+	uintVal, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse configuration value",
+			zap.String("key", key),
+			zap.String("value", value),
+			zap.Error(err))
+		return defaultValue
+	}
+	return uintVal
+}
+
+func GetConfigurationInt(configs map[string]string, key string, defaultValue int) int {
+	value, ok := configs[key]
+	if !ok {
+		return defaultValue
+	}
+	intVal, err := strconv.ParseInt(value, 10, 32)
+	if err != nil {
+		log.Log(log.Events).Warn("Failed to parse configuration value",
+			zap.String("key", key),
+			zap.String("value", value),
+			zap.Error(err))
+		return defaultValue
+	}
+	return int(intVal)
 }

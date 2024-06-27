@@ -19,15 +19,14 @@
 package examples
 
 import (
-	"sync"
-
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
-	"github.com/apache/yunikorn-core/pkg/scheduler/tests"
+	"github.com/apache/yunikorn-core/pkg/locking"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type exampleRMCallback struct {
-	tests.MockResourceManagerCallback
+	mock.ResourceManagerCallback
 	acceptedApplications map[string]bool
 	rejectedApplications map[string]bool
 	acceptedNodes        map[string]bool
@@ -35,14 +34,14 @@ type exampleRMCallback struct {
 	nodeAllocations      map[string][]*si.Allocation
 	Allocations          map[string]*si.Allocation
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) error {
 	m.Lock()
 	defer m.Unlock()
 	for _, alloc := range response.New {
-		m.Allocations[alloc.UUID] = alloc
+		m.Allocations[alloc.AllocationKey] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
 			val = append(val, alloc)
 			m.nodeAllocations[alloc.NodeID] = val
@@ -54,7 +53,7 @@ func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) er
 	}
 
 	for _, alloc := range response.Released {
-		delete(m.Allocations, alloc.UUID)
+		delete(m.Allocations, alloc.AllocationKey)
 	}
 	return nil
 }
@@ -205,7 +204,7 @@ partitions:
 		panic(err)
 	}
 
-	// Refer to mock_rm_callback.go:109
+	// Refer to mock/rm_callback.go:109
 	// You need to check app accepted by scheduler before proceed.
 
 	// Send request
@@ -219,8 +218,7 @@ partitions:
 						"vcore":  {Value: 1},
 					},
 				},
-				MaxAllocations: 20,
-				ApplicationID:  "app-1",
+				ApplicationID: "app-1",
 			},
 		},
 		RmID: "rm:123",

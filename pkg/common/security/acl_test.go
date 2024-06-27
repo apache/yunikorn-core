@@ -22,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/apache/yunikorn-core/pkg/common"
 )
 
 func IsSameACL(got, expected ACL) error {
@@ -111,23 +113,23 @@ func TestACLCreate(t *testing.T) {
 			ACL{users: make(map[string]bool), groups: map[string]bool{"group1": true, "group2": true}, allAllowed: false},
 		},
 		{
-			"* group1,group2",
+			common.Wildcard + " group1,group2",
 			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: true},
 		},
 		{
-			"user1,user2 *",
+			"user1,user2 " + common.Wildcard,
 			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: true},
 		},
 		{
-			"*",
+			common.Wildcard,
 			ACL{users: make(map[string]bool), allAllowed: true},
 		},
 		{
-			"* ",
+			common.Wildcard + " ",
 			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: true},
 		},
 		{
-			" *",
+			" " + common.Wildcard,
 			ACL{users: make(map[string]bool), groups: make(map[string]bool), allAllowed: true},
 		},
 		{
@@ -145,6 +147,10 @@ func TestACLCreate(t *testing.T) {
 		{
 			" group,group",
 			ACL{users: make(map[string]bool), groups: map[string]bool{"group": true}, allAllowed: false},
+		},
+		{
+			"#user1,user2",
+			ACL{users: map[string]bool{"user2": true}, groups: make(map[string]bool), allAllowed: false},
 		},
 	}
 	for _, tt := range tests {
@@ -210,12 +216,12 @@ func TestACLAccess(t *testing.T) {
 			false,
 		},
 		{
-			"*",
+			common.Wildcard,
 			UserGroup{User: "", Groups: nil},
 			true,
 		},
 		{
-			"*",
+			common.Wildcard,
 			UserGroup{User: "user1", Groups: []string{"group1"}},
 			true,
 		},

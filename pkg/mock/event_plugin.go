@@ -16,30 +16,44 @@
  limitations under the License.
 */
 
-package dao
+package mock
 
-type SchedulerHealthDAOInfo struct {
-	Healthy      bool
-	HealthChecks []HealthCheckInfo
+import (
+	"github.com/apache/yunikorn-core/pkg/locking"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
+)
+
+type EventPlugin struct {
+	ResourceManagerCallback
+	records chan *si.EventRecord
+
+	locking.Mutex
 }
 
-type HealthCheckInfo struct {
-	Name             string
-	Succeeded        bool
-	Description      string
-	DiagnosisMessage string
-}
+func (m *EventPlugin) SendEvent(events []*si.EventRecord) {
+	m.Lock()
+	defer m.Unlock()
 
-func (s *SchedulerHealthDAOInfo) SetHealthStatus() {
-	s.Healthy = len(s.HealthChecks) == 0
-}
-
-func (s *SchedulerHealthDAOInfo) AddHealthCheckInfo(succeeded bool, name, description, diagnosis string) {
-	info := HealthCheckInfo{
-		Name:             name,
-		Succeeded:        succeeded,
-		Description:      description,
-		DiagnosisMessage: diagnosis,
+	for _, event := range events {
+		m.records <- event
 	}
-	s.HealthChecks = append(s.HealthChecks, info)
+}
+
+func (m *EventPlugin) GetNextEventRecord() *si.EventRecord {
+	m.Lock()
+	defer m.Unlock()
+
+	select {
+	case record := <-m.records:
+		return record
+	default:
+		return nil
+	}
+}
+
+// NewEventPlugin creates a mocked event plugin
+func NewEventPlugin() *EventPlugin {
+	return &EventPlugin{
+		records: make(chan *si.EventRecord, 3),
+	}
 }

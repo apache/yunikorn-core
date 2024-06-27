@@ -20,6 +20,7 @@ package placement
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -28,26 +29,50 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
+// A rule to place an application based on the queue in the configuration.
+// If the queue provided is fully qualified, starts with "root.", the parent rule is skipped and the queue is created as
+// configured. If the queue is not qualified all "." characters will be replaced and the parent rule run before making
+// the queue name fully qualified.
 type fixedRule struct {
 	basicRule
 	queue     string
 	qualified bool
 }
 
-// A rule to place an application based on the queue in the configuration.
-// If the queue provided is fully qualified, starts with "root.", the parent rule is skipped and the queue is created as
-// configured. If the queue is not qualified all "." characters will be replaced and the parent rule run before making
-// the queue name fully qualified.
 func (fr *fixedRule) getName() string {
 	return types.Fixed
+}
+
+func (fr *fixedRule) ruleDAO() *dao.RuleDAO {
+	var pDAO *dao.RuleDAO
+	if fr.parent != nil {
+		pDAO = fr.parent.ruleDAO()
+	}
+	return &dao.RuleDAO{
+		Name: fr.getName(),
+		Parameters: map[string]string{
+			"queue":     fr.queue,
+			"create":    strconv.FormatBool(fr.create),
+			"qualified": strconv.FormatBool(fr.qualified),
+		},
+		ParentRule: pDAO,
+		Filter:     fr.filter.filterDAO(),
+	}
 }
 
 func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 	fr.queue = normalise(conf.Value)
 	if fr.queue == "" {
 		return fmt.Errorf("a fixed queue rule must have a queue name set")
+	}
+	parts := strings.Split(fr.queue, configs.DOT)
+	for _, part := range parts {
+		if err := configs.IsQueueNameValid(part); err != nil {
+			return err
+		}
 	}
 	fr.create = conf.Create
 	fr.filter = newFilter(conf.Filter)
@@ -66,17 +91,17 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(string) *objects.Queue) (string, error) {
 	// before anything run the filter
 	if !fr.filter.allowUser(app.GetUser()) {
-		log.Logger().Debug("Fixed rule filtered",
+		log.Log(log.SchedApplication).Debug("Fixed rule filtered",
 			zap.String("application", app.ApplicationID),
 			zap.Any("user", app.GetUser()),
 			zap.String("queueName", fr.queue))
 		return "", nil
 	}
-	var parentName string
-	var err error
 	queueName := fr.queue
-	// if the fixed queue is already fully qualified skip the parent check
+	// not fully qualified queue, run the parent rule if set
 	if !fr.qualified {
+		var parentName string
+		var err error
 		// run the parent rule if set
 		if fr.parent != nil {
 			parentName, err = fr.parent.placeApplication(app, queueFn)
@@ -104,8 +129,8 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 		}
 		queueName = parentName + configs.DOT + fr.queue
 	}
-	// Log the result before we really create
-	log.Logger().Debug("Fixed rule intermediate result",
+	// Log the result before we check the create flag
+	log.Log(log.SchedApplication).Debug("Fixed rule intermediate result",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	// get the queue object
@@ -114,7 +139,7 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 	if !fr.create && queue == nil {
 		return "", nil
 	}
-	log.Logger().Info("Fixed rule application placed",
+	log.Log(log.SchedApplication).Info("Fixed rule application placed",
 		zap.String("application", app.ApplicationID),
 		zap.String("queue", queueName))
 	return queueName, nil

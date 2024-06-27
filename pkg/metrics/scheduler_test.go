@@ -30,48 +30,37 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-var csm CoreSchedulerMetrics
+var sm *SchedulerMetrics
 
 func TestDrainingNodes(t *testing.T) {
-	csm = getSchedulerMetrics(t)
-	defer unregisterMetrics(t)
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
 
-	csm.IncDrainingNodes()
+	sm.IncDrainingNodes()
 	verifyMetric(t, 1, "draining")
 
-	csm.DecDrainingNodes()
+	sm.DecDrainingNodes()
 	verifyMetric(t, 0, "draining")
 }
 
 func TestTotalDecommissionedNodes(t *testing.T) {
-	csm = getSchedulerMetrics(t)
-	defer unregisterMetrics(t)
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
 
-	csm.IncTotalDecommissionedNodes()
+	sm.IncTotalDecommissionedNodes()
 	verifyMetric(t, 1, "decommissioned")
 }
 
-func TestUnhealthyNodes(t *testing.T) {
-	csm = getSchedulerMetrics(t)
-	defer unregisterMetrics(t)
-
-	csm.IncUnhealthyNodes()
-	verifyMetric(t, 1, "unhealthy")
-
-	csm.DecUnhealthyNodes()
-	verifyMetric(t, 0, "unhealthy")
-}
-
 func TestTryPreemptionLatency(t *testing.T) {
-	csm = getSchedulerMetrics(t)
-	defer unregisterMetrics(t)
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
 
-	csm.ObserveTryPreemptionLatency(time.Now().Add(-1 * time.Minute))
+	sm.ObserveTryPreemptionLatency(time.Now().Add(-1 * time.Minute))
 	verifyHistogram(t, "trypreemption_latency_milliseconds", 60, 1)
 }
 
 func getSchedulerMetrics(t *testing.T) *SchedulerMetrics {
-	unregisterMetrics(t)
+	unregisterMetrics()
 	return InitSchedulerMetrics()
 }
 
@@ -112,12 +101,8 @@ func verifyMetric(t *testing.T, expectedCounter float64, expectedState string) {
 	assert.Assert(t, checked, "Failed to find metric")
 }
 
-func unregisterMetrics(t *testing.T) {
-	sm, ok := GetSchedulerMetrics().(*SchedulerMetrics)
-	if !ok {
-		t.Fatalf("Type assertion failed, metrics is not SchedulerMetrics")
-	}
-
+func unregisterMetrics() {
+	sm := GetSchedulerMetrics()
 	prometheus.Unregister(sm.containerAllocation)
 	prometheus.Unregister(sm.applicationSubmission)
 	prometheus.Unregister(sm.application)

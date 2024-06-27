@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"strconv"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -29,23 +30,28 @@ import (
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const (
-	appID1    = "app-1"
-	appID2    = "app-2"
-	appID3    = "app-3"
-	nodeID1   = "node-1"
-	nodeID2   = "node-2"
-	defQueue  = "root.default"
-	rmID      = "testRM"
-	taskGroup = "tg-1"
-	phID      = "ph-1"
-	allocID   = "alloc-1"
-	allocID2  = "alloc-2"
-	allocID3  = "alloc-3"
+	appID1          = "app-1"
+	appID2          = "app-2"
+	appID3          = "app-3"
+	nodeID1         = "node-1"
+	instType1       = "itype-1"
+	nodeID2         = "node-2"
+	instType2       = "itype-2"
+	defQueue        = "root.default"
+	rmID            = "testRM"
+	taskGroup       = "tg-1"
+	phID            = "ph-1"
+	phID2           = "ph-2"
+	allocKey        = "alloc-1"
+	allocKey2       = "alloc-2"
+	allocKey3       = "alloc-3"
+	maxresources    = "maxresources"
+	maxapplications = "maxapplications"
 )
 
 func newBasePartition() (*PartitionContext, error) {
@@ -61,6 +67,38 @@ func newBasePartition() (*PartitionContext, error) {
 						Name:   "default",
 						Parent: false,
 						Queues: nil,
+						Limits: []configs.Limit{
+							{
+								Limit: "default queue limit",
+								Users: []string{
+									"testuser",
+								},
+								Groups: []string{
+									"testgroup",
+								},
+								MaxResources: map[string]string{
+									"memory": "5",
+									"vcores": "5",
+								},
+								MaxApplications: 8,
+							},
+						},
+					},
+				},
+				Limits: []configs.Limit{
+					{
+						Limit: "root queue limit",
+						Users: []string{
+							"testuser",
+						},
+						Groups: []string{
+							"testgroup",
+						},
+						MaxResources: map[string]string{
+							"memory": "10",
+							"vcores": "10",
+						},
+						MaxApplications: 10,
 					},
 				},
 			},
@@ -86,6 +124,22 @@ func newConfiguredPartition() (*PartitionContext, error) {
 						Name:   "leaf",
 						Parent: false,
 						Queues: nil,
+						Limits: []configs.Limit{
+							{
+								Limit: "leaf queue limit",
+								Users: []string{
+									"testuser",
+								},
+								Groups: []string{
+									"testgroup",
+								},
+								MaxResources: map[string]string{
+									"memory": "5",
+									"vcores": "5",
+								},
+								MaxApplications: 1,
+							},
+						},
 					}, {
 						Name:   "parent",
 						Parent: true,
@@ -94,8 +148,56 @@ func newConfiguredPartition() (*PartitionContext, error) {
 								Name:   "sub-leaf",
 								Parent: false,
 								Queues: nil,
+								Limits: []configs.Limit{
+									{
+										Limit: "sub-leaf queue limit",
+										Users: []string{
+											"testuser",
+										},
+										Groups: []string{
+											"testgroup",
+										},
+										MaxResources: map[string]string{
+											"memory": "3",
+											"vcores": "3",
+										},
+										MaxApplications: 2,
+									},
+								},
 							},
 						},
+						Limits: []configs.Limit{
+							{
+								Limit: "parent queue limit",
+								Users: []string{
+									"testuser",
+								},
+								Groups: []string{
+									"testgroup",
+								},
+								MaxResources: map[string]string{
+									"memory": "5",
+									"vcores": "5",
+								},
+								MaxApplications: 8,
+							},
+						},
+					},
+				},
+				Limits: []configs.Limit{
+					{
+						Limit: "root queue limit",
+						Users: []string{
+							"testuser",
+						},
+						Groups: []string{
+							"testgroup",
+						},
+						MaxResources: map[string]string{
+							"memory": "10",
+							"vcores": "10",
+						},
+						MaxApplications: 10,
 					},
 				},
 			},
@@ -131,6 +233,22 @@ func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarant
 									Guaranteed: leafGuarantees,
 								},
 								Properties: map[string]string{configs.PreemptionDelay: "1ms"},
+								Limits: []configs.Limit{
+									{
+										Limit: "leaf1 queue limit",
+										Users: []string{
+											"testuser",
+										},
+										Groups: []string{
+											"testgroup",
+										},
+										MaxResources: map[string]string{
+											"memory": "5",
+											"vcores": "5",
+										},
+										MaxApplications: 8,
+									},
+								},
 							},
 							{
 								Name:   "leaf2",
@@ -140,14 +258,61 @@ func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarant
 									Guaranteed: leafGuarantees,
 								},
 								Properties: map[string]string{configs.PreemptionDelay: "1ms"},
+								Limits: []configs.Limit{
+									{
+										Limit: "leaf2 queue limit",
+										Users: []string{
+											"testuser",
+										},
+										Groups: []string{
+											"testgroup",
+										},
+										MaxResources: map[string]string{
+											"memory": "5",
+											"vcores": "5",
+										},
+										MaxApplications: 6,
+									},
+								},
 							},
 						},
+						Limits: []configs.Limit{
+							{
+								Limit: "parent queue limit",
+								Users: []string{
+									"testuser",
+								},
+								Groups: []string{
+									"testgroup",
+								},
+								MaxResources: map[string]string{
+									"memory": "5",
+									"vcores": "5",
+								},
+								MaxApplications: 8,
+							},
+						},
+					},
+				},
+				Limits: []configs.Limit{
+					{
+						Limit: "root queue limit",
+						Users: []string{
+							"testuser",
+						},
+						Groups: []string{
+							"testgroup",
+						},
+						MaxResources: map[string]string{
+							"memory": "10",
+							"vcores": "10",
+						},
+						MaxApplications: 10,
 					},
 				},
 			},
 		},
 		PlacementRules: nil,
-		Limits:         nil,
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 	return newPartitionContext(conf, rmID, nil)
@@ -169,6 +334,38 @@ func newLimitedPartition(resLimit map[string]string) (*PartitionContext, error) 
 						Resources: configs.Resources{
 							Max: resLimit,
 						},
+						Limits: []configs.Limit{
+							{
+								Limit: "limited queue limit",
+								Users: []string{
+									"testuser",
+								},
+								Groups: []string{
+									"testgroup",
+								},
+								MaxResources: map[string]string{
+									"memory": "5",
+									"vcores": "5",
+								},
+								MaxApplications: 2,
+							},
+						},
+					},
+				},
+				Limits: []configs.Limit{
+					{
+						Limit: "root queue limit",
+						Users: []string{
+							"testuser",
+						},
+						Groups: []string{
+							"testgroup",
+						},
+						MaxResources: map[string]string{
+							"memory": "10",
+							"vcores": "10",
+						},
+						MaxApplications: 2,
 					},
 				},
 			},
@@ -190,6 +387,22 @@ func newPlacementPartition() (*PartitionContext, error) {
 				Parent:    true,
 				SubmitACL: "*",
 				Queues:    nil,
+				Limits: []configs.Limit{
+					{
+						Limit: "root queue limit",
+						Users: []string{
+							"testuser",
+						},
+						Groups: []string{
+							"testgroup",
+						},
+						MaxResources: map[string]string{
+							"memory": "10",
+							"vcores": "10",
+						},
+						MaxApplications: 2,
+					},
+				},
 			},
 		},
 		PlacementRules: []configs.PlacementRule{
@@ -208,10 +421,24 @@ func newPlacementPartition() (*PartitionContext, error) {
 }
 
 func newApplication(appID, partition, queueName string) *objects.Application {
+	return newApplicationTags(appID, partition, queueName, nil)
+}
+
+func newApplicationTags(appID, partition, queueName string, tags map[string]string) *objects.Application {
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{"testgroup"},
 	}
+	siApp := &si.AddApplicationRequest{
+		ApplicationID: appID,
+		QueueName:     queueName,
+		PartitionName: partition,
+		Tags:          tags,
+	}
+	return objects.NewApplication(siApp, user, nil, rmID)
+}
+
+func newApplicationWithUser(appID, partition, queueName string, user security.UserGroup) *objects.Application {
 	siApp := &si.AddApplicationRequest{
 		ApplicationID: appID,
 		QueueName:     queueName,
@@ -270,44 +497,38 @@ func newApplicationTGTagsWithPhTimeout(appID, partition, queueName string, task 
 }
 
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, 1, placeHolder)
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, placeHolder)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.AllocationAsk {
-	return newAllocationAskRepeat(allocKey, appID, res, 1)
+	return newAllocationAskAll(allocKey, appID, "", res, 1, false)
 }
 
-func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int32) *objects.AllocationAsk {
-	return newAllocationAskPriority(allocKey, appID, res, repeat, 1)
+func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, prio int32) *objects.AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, "", res, prio, false)
 }
 
-func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, repeat int32, prio int32) *objects.AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, repeat, prio, false)
-}
-
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int32, prio int32, placeHolder bool) *objects.AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.AllocationAsk {
 	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		AllocationKey:  allocKey,
-		ApplicationID:  appID,
-		PartitionName:  "test",
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: repeat,
-		Priority:       prio,
-		TaskGroupName:  taskGroup,
-		Placeholder:    placeHolder,
+		AllocationKey: allocKey,
+		ApplicationID: appID,
+		PartitionName: "test",
+		ResourceAsk:   res.ToProto(),
+		Priority:      prio,
+		TaskGroupName: taskGroup,
+		Placeholder:   placeHolder,
 	})
 }
 
 func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.AllocationAsk {
 	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		AllocationKey:  allocKey,
-		ApplicationID:  appID,
-		PartitionName:  "default",
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: 1,
-		Priority:       prio,
-		TaskGroupName:  taskGroup,
-		Placeholder:    false,
+		AllocationKey: allocKey,
+		ApplicationID: appID,
+		PartitionName: "default",
+		ResourceAsk:   res.ToProto(),
+		Priority:      prio,
+		TaskGroupName: taskGroup,
+		Placeholder:   false,
 		PreemptionPolicy: &si.PreemptionPolicy{
 			AllowPreemptSelf:  true,
 			AllowPreemptOther: true,
@@ -316,10 +537,8 @@ func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.
 }
 func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
 	proto := &si.NodeInfo{
-		NodeID: nodeID,
-		Attributes: map[string]string{
-			common.NodeReadyAttribute: "true",
-		},
+		NodeID:              nodeID,
+		Attributes:          map[string]string{},
 		SchedulableResource: max.ToProto(),
 		OccupiedResource:    occupied.ToProto(),
 	}
@@ -373,10 +592,78 @@ func getTestUserGroup() security.UserGroup {
 	return security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
 }
 
-func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
-	ugm := ugm.GetUserManager()
-	userResource := ugm.GetUserResources(userGroup)
-	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
+func assertLimits(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
+	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
+	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
+	expectedQueuesMaxLimits["root.default"] = make(map[string]interface{})
+	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
+	expectedQueuesMaxLimits["root.default"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
+	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
+	expectedQueuesMaxLimits["root.default"][maxapplications] = uint64(8)
+	assertUserGroupResourceMaxLimits(t, userGroup, expected, expectedQueuesMaxLimits)
+}
+
+func assertUserGroupResourceMaxLimits(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, expectedQueuesMaxLimits map[string]map[string]interface{}) {
+	manager := ugm.GetUserManager()
+	userResource := manager.GetUserResources(userGroup)
+	groupResource := manager.GetGroupResources(userGroup.Groups[0])
+	ut := manager.GetUserTracker(userGroup.User)
+	if ut != nil {
+		maxResources := make(map[string]*resources.Resource)
+		usage := ut.GetUserResourceUsageDAOInfo()
+		getMaxResource(usage.Queues, maxResources)
+		for q, qMaxLimits := range expectedQueuesMaxLimits {
+			if qRes, ok := maxResources[q]; ok {
+				assert.Equal(t, resources.Equals(qRes, qMaxLimits[maxresources].(*resources.Resource)), true)
+			}
+		}
+		maxApplications := make(map[string]uint64)
+		getMaxApplications(usage.Queues, maxApplications)
+		for q, qMaxLimits := range expectedQueuesMaxLimits {
+			if qApps, ok := maxApplications[q]; ok {
+				assert.Equal(t, qApps, qMaxLimits[maxapplications].(uint64), "queue path is "+q+" actual: "+strconv.Itoa(int(qApps))+", expected: "+strconv.Itoa(int(qMaxLimits[maxapplications].(uint64))))
+			}
+		}
+	}
+
+	gt := manager.GetUserTracker(userGroup.User)
+	if gt != nil {
+		gMaxResources := make(map[string]*resources.Resource)
+		gUsage := gt.GetUserResourceUsageDAOInfo()
+		getMaxResource(gUsage.Queues, gMaxResources)
+		for q, qMaxLimits := range expectedQueuesMaxLimits {
+			if qRes, ok := gMaxResources[q]; ok {
+				assert.Equal(t, resources.Equals(qRes, qMaxLimits[maxresources].(*resources.Resource)), true)
+			}
+		}
+		gMaxApps := make(map[string]uint64)
+		getMaxApplications(gUsage.Queues, gMaxApps)
+		for q, qMaxLimits := range expectedQueuesMaxLimits {
+			if qApps, ok := gMaxApps[q]; ok {
+				assert.Equal(t, qApps, qMaxLimits[maxapplications].(uint64))
+			}
+		}
+	}
 	assert.Equal(t, resources.Equals(userResource, expected), true)
 	assert.Equal(t, resources.Equals(groupResource, expected), true)
+}
+
+func getMaxResource(usage *dao.ResourceUsageDAOInfo, maxResources map[string]*resources.Resource) map[string]*resources.Resource {
+	maxResources[usage.QueuePath] = usage.MaxResources
+	if len(usage.Children) > 0 {
+		for _, resourceUsage := range usage.Children {
+			getMaxResource(resourceUsage, maxResources)
+		}
+	}
+	return maxResources
+}
+
+func getMaxApplications(usage *dao.ResourceUsageDAOInfo, maxApplications map[string]uint64) map[string]uint64 {
+	maxApplications[usage.QueuePath] = usage.MaxApplications
+	if len(usage.Children) > 0 {
+		for _, resourceUsage := range usage.Children {
+			getMaxApplications(resourceUsage, maxApplications)
+		}
+	}
+	return maxApplications
 }

@@ -68,7 +68,7 @@ func NewObjectState() *fsm.FSM {
 				Dst:  Draining.String(),
 			}, {
 				Name: Start.String(),
-				Src:  []string{Active.String(), Stopped.String()},
+				Src:  []string{Active.String(), Stopped.String(), Draining.String()},
 				Dst:  Active.String(),
 			}, {
 				Name: Stop.String(),
@@ -78,7 +78,7 @@ func NewObjectState() *fsm.FSM {
 		},
 		fsm.Callbacks{
 			"enter_state": func(_ context.Context, event *fsm.Event) {
-				log.Logger().Info("object transition",
+				log.Log(log.SchedFSM).Info("object transition",
 					zap.Any("object", event.Args[0]),
 					zap.String("source", event.Src),
 					zap.String("destination", event.Dst),

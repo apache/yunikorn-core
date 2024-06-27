@@ -19,8 +19,13 @@
 package tests
 
 import (
+	"fmt"
+	"net"
+	"time"
+
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/entrypoint"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
@@ -41,23 +46,34 @@ type mockScheduler struct {
 // MultiStepSchedule(int) to allocate.
 // Auto scheduling does not give control over the scheduling steps and should only
 // be used in specific use case testing.
-func (m *mockScheduler) Init(config string, autoSchedule bool) error {
+func (m *mockScheduler) Init(config string, autoSchedule bool, withWebapp bool) error {
 	m.rmID = "rm:123"
 	m.partitionName = common.GetNormalizedPartitionName("default", m.rmID)
 
 	BuildInfoMap := make(map[string]string)
 	BuildInfoMap["k"] = "v"
 
-	// Start all tests
-	if autoSchedule {
-		m.serviceContext = entrypoint.StartAllServices()
-	} else {
-		m.serviceContext = entrypoint.StartAllServicesWithManualScheduler()
-	}
+	events.Init()
+	m.serviceContext = entrypoint.StartAllServicesWithParams(!autoSchedule, withWebapp)
+
 	m.proxy = m.serviceContext.RMProxy
 	m.scheduler = m.serviceContext.Scheduler
 
 	m.mockRM = newMockRMCallbackHandler()
+
+	if withWebapp {
+		err := common.WaitForCondition(500*time.Millisecond, 2*time.Second, func() bool {
+			conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", "9080"), time.Second)
+			if err == nil {
+				defer conn.Close()
+				return true
+			}
+			return false
+		})
+		if err != nil {
+			return fmt.Errorf("webapp failed to start in 2 seconds")
+		}
+	}
 
 	_, err := m.proxy.RegisterResourceManager(
 		&si.RegisterResourceManagerRequest{
@@ -130,27 +146,28 @@ func (m *mockScheduler) removeApp(appID, partition string) error {
 	})
 }
 
-func (m *mockScheduler) addAppRequest(appID, allocID string, resource *si.Resource, repeat int32) error {
+func (m *mockScheduler) addAppRequest(appID, allocKeyPrefix string, resource *si.Resource, repeat int) error {
+	asks := make([]*si.AllocationAsk, repeat)
+	for i := 0; i < repeat; i++ {
+		asks[i] = &si.AllocationAsk{
+			AllocationKey: fmt.Sprintf("%s-%d", allocKeyPrefix, i),
+			ApplicationID: appID,
+			ResourceAsk:   resource,
+		}
+	}
 	return m.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
-			{
-				AllocationKey:  allocID,
-				ApplicationID:  appID,
-				ResourceAsk:    resource,
-				MaxAllocations: repeat,
-			},
-		},
+		Asks: asks,
 		RmID: m.rmID,
 	})
 }
 
-func (m *mockScheduler) releaseAllocRequest(appID, uuid string) error {
+func (m *mockScheduler) releaseAllocRequest(appID, allocationKey string) error {
 	return m.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
 			AllocationsToRelease: []*si.AllocationRelease{
 				{
 					ApplicationID: appID,
-					UUID:          uuid,
+					AllocationKey: allocationKey,
 					PartitionName: m.partitionName,
 				},
 			},

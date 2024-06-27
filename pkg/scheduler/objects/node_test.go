@@ -19,12 +19,17 @@
 package objects
 
 import (
+	"fmt"
 	"testing"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	evtMock "github.com/apache/yunikorn-core/pkg/events/mock"
+	"github.com/apache/yunikorn-core/pkg/mock"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const testNode = "testnode"
@@ -114,31 +119,29 @@ func TestPreAllocateCheck(t *testing.T) {
 	}
 
 	// special cases
-	if err := node.preAllocateCheck(nil, ""); err == nil {
+	if node.preAllocateCheck(nil, "") {
 		t.Errorf("nil resource should not have fitted on node")
 	}
 	resNeg := resources.NewResourceFromMap(map[string]resources.Quantity{"first": -1})
-	if err := node.preAllocateCheck(resNeg, ""); err == nil {
+	if node.preAllocateCheck(resNeg, "") {
 		t.Errorf("negative resource should not have fitted on node")
 	}
 	// Check if we can allocate on scheduling node
 	resSmall := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	resLarge := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
-	err := node.preAllocateCheck(resNode, "")
-	assert.NilError(t, err, "node resource should have fitted on node")
-	err = node.preAllocateCheck(resSmall, "")
-	assert.NilError(t, err, "small resource should have fitted on node")
-	if err = node.preAllocateCheck(resLarge, ""); err == nil {
-		t.Errorf("too large resource should not have fitted on node: %v", err)
-	}
+	assert.Assert(t, node.preAllocateCheck(resNode, ""), "node resource should have fitted on node")
+	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted on node")
+	assert.Assert(t, !node.preAllocateCheck(resLarge, ""), "too large resource should not have fitted on node")
+
+	// unknown resource type in request is rejected always
+	resOther := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	assert.Assert(t, !node.preAllocateCheck(resOther, ""), "unknown resource type should not have fitted on node")
 
 	// set allocated resource
-	node.AddAllocation(newAllocation(appID1, "UUID1", nodeID, "root.default", resSmall))
-	err = node.preAllocateCheck(resSmall, "")
-	assert.NilError(t, err, "small resource should have fitted in available allocation")
-	if err = node.preAllocateCheck(resNode, ""); err == nil {
-		t.Errorf("node resource should not have fitted in available allocation: %v", err)
-	}
+	alloc := newAllocation(appID1, nodeID, resSmall)
+	node.AddAllocation(alloc)
+	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted in available allocation")
+	assert.Assert(t, !node.preAllocateCheck(resNode, ""), "node resource should not have fitted in available allocation")
 
 	// check if we can allocate on a reserved node
 	q := map[string]resources.Quantity{"first": 0}
@@ -149,39 +152,42 @@ func TestPreAllocateCheck(t *testing.T) {
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
 	node.reservations[reserve.getKey()] = reserve
-	if err = node.preAllocateCheck(resSmall, "app-2"); err == nil {
-		t.Errorf("node was reserved for different app but check passed: %v", err)
-	}
-	if err = node.preAllocateCheck(resSmall, "app-1|alloc-2"); err == nil {
-		t.Errorf("node was reserved for this app but not the alloc and check passed: %v", err)
-	}
-	err = node.preAllocateCheck(resSmall, appID1)
-	assert.NilError(t, err, "node was reserved for this app but check did not pass check")
-	err = node.preAllocateCheck(resSmall, "app-1|alloc-1")
-	assert.NilError(t, err, "node was reserved for this app/alloc but check did not pass check")
+	assert.Assert(t, !node.preAllocateCheck(resSmall, "app-2"), "node was reserved for different app but check passed")
+	assert.Assert(t, !node.preAllocateCheck(resSmall, "app-1|alloc-2"), "node was reserved for this app but not the alloc and check passed")
+	assert.Assert(t, node.preAllocateCheck(resSmall, appID1), "node was reserved for this app but check did not pass check")
+	assert.Assert(t, node.preAllocateCheck(resSmall, "app-1|alloc-1"), "node was reserved for this app/alloc but check did not pass check")
 
 	// Check if we can allocate on non scheduling node
 	node.SetSchedulable(false)
-	if err = node.preAllocateCheck(resSmall, ""); err == nil {
-		t.Errorf("node with scheduling set to false should not allow allocation: %v", err)
-	}
+	assert.Assert(t, !node.preAllocateCheck(resSmall, ""), "node with scheduling set to false should not allow allocation")
 }
 
 // Only test the CanAllocate code, the used logic in preAllocateCheck has its own test
 func TestCanAllocate(t *testing.T) {
-	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
-	if node == nil || node.NodeID != nodeID1 {
-		t.Fatalf("node create failed which should not have %v", node)
+	available := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	request := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+	other := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	tests := []struct {
+		name      string
+		available *resources.Resource
+		request   *resources.Resource
+		want      bool
+	}{
+		{"all nils", nil, nil, true},
+		{"nil node available", nil, request, false},
+		{"all matching, req smaller", available, request, true},
+		{"partial match request", available, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), true},
+		{"all matching, req larger", available, resources.Add(request, available), false},
+		{"partial match available", available, resources.Add(request, other), false},
+		{"unmatched request", available, other, false},
 	}
-	// normal alloc
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	if !node.CanAllocate(res) {
-		t.Error("node should have accepted allocation")
-	}
-	// check one that pushes node over its size
-	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})
-	if node.CanAllocate(res) {
-		t.Error("node should have rejected allocation (oversize)")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sn := &Node{
+				availableResource: tt.available,
+			}
+			assert.Equal(t, sn.CanAllocate(tt.request), tt.want, "unexpected node can run resultType")
+		})
 	}
 }
 
@@ -206,14 +212,22 @@ func TestNodeReservation(t *testing.T) {
 		t.Errorf("illegal reservation requested but did not fail: error %v", err)
 	}
 
+	// too large for node
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
 	ask := newAllocationAsk(aKey, appID1, res)
 	app := newApplication(appID1, "default", "root.unknown")
-
-	// too large for node
 	err = node.Reserve(app, ask)
 	if err == nil {
 		t.Errorf("requested reservation does not fit in node resource but did not fail: error %v", err)
+	}
+
+	// resource type not available on node
+	res = resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	ask = newAllocationAsk(aKey, appID1, res)
+	app = newApplication(appID1, "default", "root.unknown")
+	err = node.Reserve(app, ask)
+	if err == nil {
+		t.Errorf("requested reservation does not match node resource types but did not fail: error %v", err)
 	}
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
@@ -292,24 +306,61 @@ func TestIsReservedForApp(t *testing.T) {
 }
 
 func TestAttributes(t *testing.T) {
-	proto := newProto(testNode, nil, nil, map[string]string{
-		common.NodePartition: "partition1",
-		"something":          "just a text",
-	})
-
-	node := NewNode(proto)
-	if node == nil || node.NodeID != testNode {
-		t.Fatal("node not returned correctly: node is nul or incorrect name")
+	type outputFormat struct {
+		hostname, rackname, partition string
+		attribites                    map[string]string
 	}
+	attribitesOfNode1 := map[string]string{common.NodePartition: "partition1", "something": "just a text"}
+	attribitesOfNode2 := map[string]string{common.HostName: "test", common.NodePartition: "partition2", "disk": "SSD", "GPU-type": "3090"}
+	var tests = []struct {
+		inputs   map[string]string
+		expected outputFormat
+	}{
+		{
+			attribitesOfNode1,
+			outputFormat{"", "", "partition1", attribitesOfNode1},
+		},
+		{
+			attribitesOfNode2,
+			outputFormat{"test", "", "partition2", attribitesOfNode2},
+		},
+	}
+	for index, tt := range tests {
+		testname := fmt.Sprintf("Attributes in the node %d", index)
+		t.Run(testname, func(t *testing.T) {
+			nodename := fmt.Sprintf("%s-%d", testNode, index)
+			node := NewNode(newProto(nodename, nil, nil, tt.inputs))
+			if node == nil || node.NodeID != nodename {
+				t.Error("node not returned correctly: node is nul or incorrect name")
+			}
 
-	assert.Equal(t, "", node.Hostname)
-	assert.Equal(t, "", node.Rackname)
-	assert.Equal(t, "partition1", node.Partition)
+			if got, expect := node.Hostname, tt.expected.hostname; got != expect {
+				t.Errorf("node hostname: got %s, expected %s", got, expect)
+			}
 
-	value := node.GetAttribute(common.NodePartition)
-	assert.Equal(t, "partition1", value, "node attributes not set, expected 'partition1' got '%v'", value)
-	value = node.GetAttribute("something")
-	assert.Equal(t, "just a text", value, "node attributes not set, expected 'just a text' got '%v'", value)
+			if got, expect := node.Rackname, tt.expected.rackname; got != expect {
+				t.Errorf("node rackname: got %s, expected %s", got, expect)
+			}
+
+			if got, expect := node.Partition, tt.expected.partition; got != expect {
+				t.Errorf("node partition: got %s, expected %s", got, expect)
+			}
+
+			attribites := node.GetAttributes()
+			if got, expect := len(attribites), len(tt.expected.attribites); got != expect {
+				t.Errorf("length of attributes: got %d, expected %d", got, expect)
+			}
+
+			for key, expect := range tt.expected.attribites {
+				if got := node.GetAttribute(key); got != expect {
+					t.Errorf("Attribute %s: got %s, expect %s", key, got, expect)
+				}
+				if got := attribites[key]; got != expect {
+					t.Errorf("Attribute %s: got %s, expect %s", key, got, expect)
+				}
+			}
+		})
+	}
 }
 
 func TestGetInstanceType(t *testing.T) {
@@ -340,14 +391,17 @@ func TestAddAllocation(t *testing.T) {
 	}
 
 	// check nil alloc
-	node.AddAllocation(nil)
-	if len(node.GetAllAllocations()) > 0 {
-		t.Fatalf("nil allocation should not have been added: %v", node)
-	}
+	assert.Assert(t, !node.AddAllocation(nil), "nil allocation should not have been added: %v", node)
+	// check alloc that does not match
+	unknown := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	alloc := newAllocation(appID1, nodeID1, unknown)
+	assert.Assert(t, !node.AddAllocation(alloc), "unmatched resource type in allocation should not have been added: %v", node)
+
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, "queue-1", half))
-	if node.GetAllocation("1") == nil {
+	alloc = newAllocation(appID1, nodeID1, half)
+	assert.Assert(t, node.AddAllocation(alloc), "add allocation 1 should not have failed")
+	if node.GetAllocation(alloc.GetAllocationKey()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
 	if !resources.Equals(node.GetAllocatedResource(), half) {
@@ -362,8 +416,9 @@ func TestAddAllocation(t *testing.T) {
 	}
 	// second and check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", piece))
-	if node.GetAllocation("2") == nil {
+	alloc = newAllocation(appID1, nodeID1, piece)
+	assert.Assert(t, node.AddAllocation(alloc), "add allocation 2 should not have failed")
+	if node.GetAllocation(alloc.GetAllocationKey()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
 	piece.AddTo(half)
@@ -388,8 +443,9 @@ func TestRemoveAllocation(t *testing.T) {
 
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, "queue-1", half))
-	if node.GetAllocation("1") == nil {
+	alloc1 := newAllocation(appID1, nodeID1, half)
+	node.AddAllocation(alloc1)
+	if node.GetAllocation(alloc1.GetAllocationKey()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
 	// check empty alloc
@@ -405,11 +461,12 @@ func TestRemoveAllocation(t *testing.T) {
 
 	// add second alloc and remove first check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", piece))
-	if node.GetAllocation("2") == nil {
+	alloc2 := newAllocation(appID1, nodeID1, piece)
+	node.AddAllocation(alloc2)
+	if node.GetAllocation(alloc2.GetAllocationKey()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
-	alloc := node.RemoveAllocation("1")
+	alloc := node.RemoveAllocation(alloc1.GetAllocationKey())
 	if alloc == nil {
 		t.Error("allocation should have been removed but was not")
 	}
@@ -431,27 +488,28 @@ func TestNodeReplaceAllocation(t *testing.T) {
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "failed to initialize node")
 
 	// allocate half of the resources available and check the calculation
-	phID := "ph-1"
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	ph := newPlaceholderAlloc(appID1, phID, nodeID1, "queue-1", half)
+	ph := newPlaceholderAlloc(appID1, nodeID1, half)
 	node.AddAllocation(ph)
-	assert.Assert(t, node.GetAllocation(phID) != nil, "failed to add placeholder allocation")
+	assert.Assert(t, node.GetAllocation(ph.GetAllocationKey()) != nil, "failed to add placeholder allocation")
 	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), half), "allocated resource not set correctly %v got %v", half, node.GetAllocatedResource())
+	assert.Assert(t, resources.Equals(node.GetAvailableResource(), half), "available resource not set correctly %v got %v", half, node.GetAvailableResource())
 
-	allocID := "real-1"
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
-	alloc := newAllocation(appID1, allocID, nodeID1, "queue-1", piece)
+	alloc := newAllocation(appID1, nodeID1, piece)
 	// calculate the delta: new allocation resource - placeholder (should be negative!)
 	delta := resources.Sub(piece, half)
 	assert.Assert(t, delta.HasNegativeValue(), "expected negative values in delta")
 	// swap and check the calculation
-	node.ReplaceAllocation(phID, alloc, delta)
-	assert.Assert(t, node.GetAllocation(allocID) != nil, "failed to replace allocation: allocation not returned")
+	node.ReplaceAllocation(ph.GetAllocationKey(), alloc, delta)
+	assert.Assert(t, node.GetAllocation(alloc.GetAllocationKey()) != nil, "failed to replace allocation: allocation not returned")
 	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), piece), "allocated resource not set correctly %v got %v", piece, node.GetAllocatedResource())
+	assert.Assert(t, resources.Equals(node.GetAvailableResource(), resources.Sub(node.GetCapacity(), piece)), "available resource not set correctly %v got %v", resources.Sub(node.GetCapacity(), piece), node.GetAvailableResource())
 
 	// clean up all should be zero
-	assert.Assert(t, node.RemoveAllocation(allocID) != nil, "allocation should have been removed but was not")
+	assert.Assert(t, node.RemoveAllocation(alloc.GetAllocationKey()) != nil, "allocation should have been removed but was not")
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "allocated resource not updated correctly")
+	assert.Assert(t, resources.Equals(node.GetAvailableResource(), node.GetCapacity()), "available resource not set correctly %v got %v", node.GetCapacity(), node.GetAvailableResource())
 }
 
 func TestGetAllocation(t *testing.T) {
@@ -464,15 +522,16 @@ func TestGetAllocation(t *testing.T) {
 	if alloc != nil {
 		t.Fatalf("allocation should not have been found")
 	}
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, "queue-1", nil))
-	alloc = node.GetAllocation("1")
+	alloc = newAllocation(appID1, nodeID1, nil)
+	node.AddAllocation(alloc)
+	alloc = node.GetAllocation(alloc.GetAllocationKey())
 	if alloc == nil {
 		t.Fatalf("allocation should have been found")
 	}
 	// unknown allocation get a nil
 	alloc = node.GetAllocation("fake")
 	if alloc != nil {
-		t.Fatalf("allocation should not have been found (fake ID)")
+		t.Fatalf("allocation should not have been found (fake key)")
 	}
 }
 
@@ -487,13 +546,15 @@ func TestGetAllocations(t *testing.T) {
 	if allocs == nil || len(allocs) != 0 {
 		t.Fatalf("allocation length should be 0 on new node")
 	}
+	alloc1 := newAllocation(appID1, nodeID1, nil)
+	alloc2 := newAllocation(appID1, nodeID1, nil)
 
 	// allocate
-	node.AddAllocation(newAllocation(appID1, "1", nodeID1, "queue-1", nil))
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", nil))
+	node.AddAllocation(alloc1)
+	node.AddAllocation(alloc2)
 	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
 	// This should not happen in real code just making sure the code does do what is expected
-	node.AddAllocation(newAllocation(appID1, "2", nodeID1, "queue-1", nil))
+	node.AddAllocation(alloc2)
 	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
 }
 
@@ -578,7 +639,7 @@ type testListener struct {
 	updateCount int
 }
 
-func (tl *testListener) NodeUpdated(node *Node) {
+func (tl *testListener) NodeUpdated(_ *Node) {
 	tl.updateCount++
 }
 
@@ -595,33 +656,149 @@ func TestAddRemoveListener(t *testing.T) {
 	assert.Equal(t, 1, tl.updateCount, "listener should not have fired again")
 }
 
-func TestReadyAttribute(t *testing.T) {
-	// missing
-	proto := newProto(testNode, nil, nil, nil)
-	node := NewNode(proto)
-	assert.Equal(t, true, node.ready, "Node should be in ready state")
-
-	// exists, but faulty
-	attr := map[string]string{
-		"readyX": "true",
-	}
-	proto = newProto(testNode, nil, nil, attr)
-	node = NewNode(proto)
-	assert.Equal(t, true, node.ready, "Node should be in ready state")
-
-	// exists, true
-	attr = map[string]string{
+func TestNodeEvents(t *testing.T) {
+	mockEvents := evtMock.NewEventSystem()
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
+	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
+	proto := newProto(testNode, total, occupied, map[string]string{
 		"ready": "true",
-	}
-	proto = newProto(testNode, nil, nil, attr)
-	node = NewNode(proto)
-	assert.Equal(t, true, node.ready, "Node should be in ready state")
+	})
+	node := NewNode(proto)
+	node.nodeEvents = newNodeEvents(mockEvents)
 
-	// exists, false
-	attr = map[string]string{
-		"ready": "false",
+	node.SendNodeAddedEvent()
+	assert.Equal(t, 1, len(mockEvents.Events))
+	event := mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+
+	mockEvents.Reset()
+	node.SendNodeRemovedEvent()
+	assert.Equal(t, 1, len(mockEvents.Events))
+	event = mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+
+	mockEvents.Reset()
+	node.AddAllocation(&Allocation{
+		allocatedResource: resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 1, "memory": 1}),
+		allocationKey:     aKey,
+	})
+	assert.Equal(t, 1, len(mockEvents.Events))
+	event = mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	node.RemoveAllocation(aKey)
+	event = mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	node.SetOccupiedResource(resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 20, "memory": 20}))
+	event = mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_OCCUPIED, event.EventChangeDetail)
+	assert.Equal(t, int64(20), event.Resource.Resources["cpu"].Value)
+	assert.Equal(t, int64(20), event.Resource.Resources["memory"].Value)
+
+	mockEvents.Reset()
+	node.SetCapacity(resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 90, "memory": 90}))
+	event = mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_CAPACITY, event.EventChangeDetail)
+	assert.Equal(t, int64(90), event.Resource.Resources["cpu"].Value)
+	assert.Equal(t, int64(90), event.Resource.Resources["memory"].Value)
+
+	mockEvents.Reset()
+	node.SetSchedulable(false)
+	event = mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_SCHEDULABLE, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10})
+	ask := newAllocationAsk(aKey, appID1, res)
+	app := newApplication(appID1, "default", "root.unknown")
+	err := node.Reserve(app, ask)
+	assert.NilError(t, err, "could not reserve")
+	event = mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
+
+	mockEvents.Reset()
+	_, err = node.unReserve(app, ask)
+	assert.NilError(t, err, "could not unreserve")
+	event = mockEvents.Events[0]
+	assert.Equal(t, si.EventRecord_NODE, event.Type)
+	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
+}
+
+func TestNode_FitInNode(t *testing.T) {
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
+	request := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+	other := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
+	tests := []struct {
+		name       string
+		totalRes   *resources.Resource
+		resRequest *resources.Resource
+		want       bool
+	}{
+		{"all nils", nil, nil, true},
+		{"nil node size", nil, request, false},
+		{"all matching, req smaller", total, request, true},
+		{"partial match request", total, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), true},
+		{"all matching, req larger", total, resources.Add(request, total), false},
+		{"partial match total", total, resources.Add(request, other), false},
+		{"unmatched request", total, other, false},
 	}
-	proto = newProto(testNode, nil, nil, attr)
-	node = NewNode(proto)
-	assert.Equal(t, false, node.ready, "Node should not be in ready state")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sn := &Node{
+				totalResource: tt.totalRes,
+			}
+			assert.Equal(t, sn.FitInNode(tt.resRequest), tt.want, "unexpected node fit resultType")
+		})
+	}
+}
+
+func TestPreconditions(t *testing.T) {
+	current := plugins.GetResourceManagerCallbackPlugin()
+	defer func() {
+		plugins.RegisterSchedulerPlugin(current)
+	}()
+
+	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(true, map[string]int{}))
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
+	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
+	proto := newProto(testNode, total, occupied, map[string]string{
+		"ready": "true",
+	})
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAsk("test", "app001", res)
+	eventSystem := evtMock.NewEventSystem()
+	ask.askEvents = newAskEvents(eventSystem)
+	node := NewNode(proto)
+
+	// failure
+	node.preConditions(ask, true)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	assert.Equal(t, "Predicate failed for request 'test' with message: 'fake predicate plugin failed'", eventSystem.Events[0].Message)
+	assert.Equal(t, 1, len(ask.allocLog))
+	assert.Equal(t, "fake predicate plugin failed", ask.allocLog["fake predicate plugin failed"].Message)
+
+	// pass
+	eventSystem.Reset()
+	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(false, map[string]int{}))
+	node.preConditions(ask, true)
+	assert.Equal(t, 0, len(eventSystem.Events))
+	assert.Equal(t, 1, len(ask.allocLog))
 }

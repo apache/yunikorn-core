@@ -20,14 +20,25 @@ package metrics
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
+)
+
+const (
+	SchedulingError = "error"
+
+	SortingApp   = "app"
+	SortingQueue = "queue"
+
+	NodeActive         = "active"
+	NodeDraining       = "draining"
+	NodeDecommissioned = "decommissioned"
 )
 
 var resourceUsageRangeBuckets = []string{
@@ -54,13 +65,13 @@ type SchedulerMetrics struct {
 	sortingLatency        *prometheus.HistogramVec
 	tryNodeLatency        prometheus.Histogram
 	tryPreemptionLatency  prometheus.Histogram
-	lock                  sync.RWMutex
+	lock                  locking.RWMutex
 }
 
 // InitSchedulerMetrics to initialize scheduler metrics
 func InitSchedulerMetrics() *SchedulerMetrics {
 	s := &SchedulerMetrics{
-		lock: sync.RWMutex{},
+		lock: locking.RWMutex{},
 	}
 
 	s.nodeResourceUsage = make(map[string]*prometheus.GaugeVec) // Note: This map might be updated at runtime
@@ -86,7 +97,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_total",
-			Help:      "Total number of applications. State of the application includes `running` and `completed`.",
+			Help:      "Total number of applications. State of the application includes `running`, `completed` and `failed`.",
 		}, []string{"state"})
 
 	s.node = prometheus.NewGaugeVec(
@@ -148,12 +159,14 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 	}
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
-			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
+			log.Log(log.Metrics).Warn("failed to register metrics collector", zap.Error(err))
 		}
 	}
 	return s
 }
 
+// Reset all metrics that implement the Reset functionality.
+// should only be used in tests
 func (m *SchedulerMetrics) Reset() {
 	m.node.Reset()
 	m.application.Reset()
@@ -169,16 +182,12 @@ func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
 	m.schedulingLatency.Observe(SinceInSeconds(start))
 }
 
-func (m *SchedulerMetrics) ObserveNodeSortingLatency(start time.Time) {
-	m.sortingLatency.With(prometheus.Labels{"level": "node"}).Observe(SinceInSeconds(start))
-}
-
 func (m *SchedulerMetrics) ObserveAppSortingLatency(start time.Time) {
-	m.sortingLatency.With(prometheus.Labels{"level": "app"}).Observe(SinceInSeconds(start))
+	m.sortingLatency.WithLabelValues(SortingApp).Observe(SinceInSeconds(start))
 }
 
 func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
-	m.sortingLatency.With(prometheus.Labels{"level": "queue"}).Observe(SinceInSeconds(start))
+	m.sortingLatency.WithLabelValues(SortingQueue).Observe(SinceInSeconds(start))
 }
 
 func (m *SchedulerMetrics) ObserveTryNodeLatency(start time.Time) {
@@ -189,59 +198,43 @@ func (m *SchedulerMetrics) ObserveTryPreemptionLatency(start time.Time) {
 	m.tryPreemptionLatency.Observe(SinceInSeconds(start))
 }
 
-func (m *SchedulerMetrics) IncAllocatedContainer() {
-	m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Inc()
-}
-
 func (m *SchedulerMetrics) AddAllocatedContainers(value int) {
-	m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Add(float64(value))
+	m.containerAllocation.WithLabelValues(ContainerAllocated).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) getAllocatedContainers() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.containerAllocation.With(prometheus.Labels{"state": "allocated"}).Write(metricDto)
+	err := m.containerAllocation.WithLabelValues(ContainerAllocated).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Counter.Value), nil
 	}
 	return -1, err
 }
 
-func (m *SchedulerMetrics) IncReleasedContainer() {
-	m.containerAllocation.With(prometheus.Labels{"state": "released"}).Inc()
-}
-
 func (m *SchedulerMetrics) AddReleasedContainers(value int) {
-	m.containerAllocation.With(prometheus.Labels{"state": "released"}).Add(float64(value))
+	m.containerAllocation.WithLabelValues(ContainerReleased).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) getReleasedContainers() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.containerAllocation.With(prometheus.Labels{"state": "released"}).Write(metricDto)
+	err := m.containerAllocation.WithLabelValues(ContainerReleased).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Counter.Value), nil
 	}
 	return -1, err
 }
 
-func (m *SchedulerMetrics) IncRejectedContainer() {
-	m.containerAllocation.With(prometheus.Labels{"state": "rejected"}).Inc()
-}
-
 func (m *SchedulerMetrics) AddRejectedContainers(value int) {
-	m.containerAllocation.With(prometheus.Labels{"state": "rejected"}).Add(float64(value))
+	m.containerAllocation.WithLabelValues(ContainerRejected).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) IncSchedulingError() {
-	m.containerAllocation.With(prometheus.Labels{"state": "error"}).Inc()
-}
-
-func (m *SchedulerMetrics) AddSchedulingErrors(value int) {
-	m.containerAllocation.With(prometheus.Labels{"state": "error"}).Add(float64(value))
+	m.containerAllocation.WithLabelValues(SchedulingError).Inc()
 }
 
 func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.containerAllocation.With(prometheus.Labels{"state": "error"}).Write(metricDto)
+	err := m.containerAllocation.WithLabelValues(SchedulingError).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Counter.Value), nil
 	}
@@ -249,44 +242,45 @@ func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsAccepted() {
-	m.applicationSubmission.With(prometheus.Labels{"result": "accepted"}).Inc()
+	m.applicationSubmission.WithLabelValues(AppAccepted).Inc()
 }
 
 func (m *SchedulerMetrics) AddTotalApplicationsAccepted(value int) {
-	m.applicationSubmission.With(prometheus.Labels{"result": "accepted"}).Add(float64(value))
+	m.applicationSubmission.WithLabelValues(AppAccepted).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsRejected() {
-	m.applicationSubmission.With(prometheus.Labels{"result": "rejected"}).Inc()
+	m.applicationSubmission.WithLabelValues(ContainerRejected).Inc()
 }
 
 func (m *SchedulerMetrics) AddTotalApplicationsRejected(value int) {
-	m.applicationSubmission.With(prometheus.Labels{"result": "rejected"}).Add(float64(value))
+	m.applicationSubmission.WithLabelValues(ContainerRejected).Add(float64(value))
+}
+
+func (m *SchedulerMetrics) GetTotalApplicationsRejected() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.applicationSubmission.WithLabelValues(ContainerRejected).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Counter.Value), nil
+	}
+	return -1, err
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsRunning() {
-	m.application.With(prometheus.Labels{"state": "running"}).Inc()
-}
-
-func (m *SchedulerMetrics) AddTotalApplicationsRunning(value int) {
-	m.application.With(prometheus.Labels{"state": "running"}).Add(float64(value))
+	m.application.WithLabelValues(AppRunning).Inc()
 }
 
 func (m *SchedulerMetrics) DecTotalApplicationsRunning() {
-	m.application.With(prometheus.Labels{"state": "running"}).Dec()
+	m.application.WithLabelValues(AppRunning).Dec()
 }
 
 func (m *SchedulerMetrics) SubTotalApplicationsRunning(value int) {
-	m.application.With(prometheus.Labels{"state": "running"}).Sub(float64(value))
+	m.application.WithLabelValues(AppRunning).Sub(float64(value))
 }
 
-func (m *SchedulerMetrics) SetTotalApplicationsRunning(value int) {
-	m.application.With(prometheus.Labels{"state": "running"}).Set(float64(value))
-}
-
-func (m *SchedulerMetrics) getTotalApplicationsRunning() (int, error) {
+func (m *SchedulerMetrics) GetTotalApplicationsRunning() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.application.With(prometheus.Labels{"state": "running"}).Write(metricDto)
+	err := m.application.WithLabelValues(AppRunning).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -294,71 +288,45 @@ func (m *SchedulerMetrics) getTotalApplicationsRunning() (int, error) {
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsFailed() {
-	m.application.With(prometheus.Labels{"state": "failed"}).Inc()
+	m.application.WithLabelValues(AppFailed).Inc()
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsCompleted() {
-	m.application.With(prometheus.Labels{"state": "completed"}).Inc()
+	m.application.WithLabelValues(AppCompleted).Inc()
 }
 
 func (m *SchedulerMetrics) AddTotalApplicationsCompleted(value int) {
-	m.application.With(prometheus.Labels{"state": "completed"}).Add(float64(value))
+	m.application.WithLabelValues(AppCompleted).Add(float64(value))
 }
 
-func (m *SchedulerMetrics) DecTotalApplicationsCompleted() {
-	m.application.With(prometheus.Labels{"state": "completed"}).Dec()
-}
-
-func (m *SchedulerMetrics) SubTotalApplicationsCompleted(value int) {
-	m.application.With(prometheus.Labels{"state": "completed"}).Sub(float64(value))
-}
-
-func (m *SchedulerMetrics) SetTotalApplicationsCompleted(value int) {
-	m.application.With(prometheus.Labels{"state": "completed"}).Set(float64(value))
+func (m *SchedulerMetrics) GetTotalApplicationsCompleted() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.application.WithLabelValues(AppCompleted).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *SchedulerMetrics) IncActiveNodes() {
-	m.node.With(prometheus.Labels{"state": "active"}).Inc()
-}
-
-func (m *SchedulerMetrics) AddActiveNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "active"}).Add(float64(value))
+	m.node.WithLabelValues(NodeActive).Inc()
 }
 
 func (m *SchedulerMetrics) DecActiveNodes() {
-	m.node.With(prometheus.Labels{"state": "active"}).Dec()
-}
-
-func (m *SchedulerMetrics) SubActiveNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "active"}).Sub(float64(value))
-}
-
-func (m *SchedulerMetrics) SetActiveNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "active"}).Set(float64(value))
+	m.node.WithLabelValues(NodeActive).Dec()
 }
 
 func (m *SchedulerMetrics) IncFailedNodes() {
-	m.node.With(prometheus.Labels{"state": "failed"}).Inc()
-}
-
-func (m *SchedulerMetrics) AddFailedNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "failed"}).Add(float64(value))
+	m.node.WithLabelValues(AppFailed).Inc()
 }
 
 func (m *SchedulerMetrics) DecFailedNodes() {
-	m.node.With(prometheus.Labels{"state": "failed"}).Dec()
+	m.node.WithLabelValues(AppFailed).Dec()
 }
 
-func (m *SchedulerMetrics) SubFailedNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "failed"}).Sub(float64(value))
-}
-
-func (m *SchedulerMetrics) SetFailedNodes(value int) {
-	m.node.With(prometheus.Labels{"state": "failed"}).Set(float64(value))
-}
 func (m *SchedulerMetrics) GetFailedNodes() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.node.With(prometheus.Labels{"state": "failed"}).Write(metricDto)
+	err := m.node.WithLabelValues(AppFailed).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -380,30 +348,31 @@ func (m *SchedulerMetrics) SetNodeResourceUsage(resourceName string, rangeIdx in
 				Help:      "Total resource usage of node, by resource name.",
 			}, []string{"range"})
 		if err := prometheus.Register(resourceMetrics); err != nil {
-			log.Logger().Warn("failed to register metrics collector", zap.Error(err))
+			log.Log(log.Metrics).Warn("failed to register metrics collector", zap.Error(err))
 			return
 		}
 		m.nodeResourceUsage[resourceName] = resourceMetrics
 	}
-	resourceMetrics.With(prometheus.Labels{"range": resourceUsageRangeBuckets[rangeIdx]}).Set(value)
+	resourceMetrics.WithLabelValues(resourceUsageRangeBuckets[rangeIdx]).Set(value)
 }
 
 func (m *SchedulerMetrics) IncDrainingNodes() {
-	m.node.With(prometheus.Labels{"state": "draining"}).Inc()
+	m.node.WithLabelValues(NodeDraining).Inc()
 }
 
 func (m *SchedulerMetrics) DecDrainingNodes() {
-	m.node.With(prometheus.Labels{"state": "draining"}).Dec()
+	m.node.WithLabelValues(NodeDraining).Dec()
+}
+
+func (m *SchedulerMetrics) GetDrainingNodes() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.node.WithLabelValues(NodeDraining).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
 }
 
 func (m *SchedulerMetrics) IncTotalDecommissionedNodes() {
-	m.node.With(prometheus.Labels{"state": "decommissioned"}).Inc()
-}
-
-func (m *SchedulerMetrics) IncUnhealthyNodes() {
-	m.node.With(prometheus.Labels{"state": "unhealthy"}).Inc()
-}
-
-func (m *SchedulerMetrics) DecUnhealthyNodes() {
-	m.node.With(prometheus.Labels{"state": "unhealthy"}).Dec()
+	m.node.WithLabelValues(NodeDecommissioned).Inc()
 }

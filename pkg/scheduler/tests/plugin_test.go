@@ -19,34 +19,16 @@
 package tests
 
 import (
-	"sync"
 	"testing"
 	"time"
 
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
-
-type fakeContainerStateUpdater struct {
-	MockResourceManagerCallback
-	sentUpdate *si.UpdateContainerSchedulingStateRequest
-	sync.RWMutex
-}
-
-func (f *fakeContainerStateUpdater) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
-	f.Lock()
-	defer f.Unlock()
-	f.sentUpdate = request
-}
-
-func (f *fakeContainerStateUpdater) getContainerUpdateRequest() *si.UpdateContainerSchedulingStateRequest {
-	f.RLock()
-	defer f.RUnlock()
-	return f.sentUpdate
-}
 
 func TestContainerStateUpdater(t *testing.T) {
 	configData := `
@@ -64,12 +46,12 @@ partitions:
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
-	err := ms.Init(configData, true)
+	err := ms.Init(configData, true, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
 	// register a fake container state updater for testing
-	fk := &fakeContainerStateUpdater{}
-	plugins.RegisterSchedulerPlugin(fk)
+	csu := mock.NewContainerStateUpdater()
+	plugins.RegisterSchedulerPlugin(csu)
 
 	const leafName = "root.singleleaf"
 	const node1 = "node-1"
@@ -115,8 +97,7 @@ partitions:
 						"memory": {Value: 8},
 					},
 				},
-				MaxAllocations: 1,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
@@ -140,17 +121,16 @@ partitions:
 						"memory": {Value: 5},
 					},
 				},
-				MaxAllocations: 1,
-				ApplicationID:  appID1,
+				ApplicationID: appID1,
 			},
 		},
 		RmID: "rm:123",
 	})
 	assert.NilError(t, err)
 
-	err = common.WaitFor(100*time.Millisecond, 3000*time.Millisecond, func() bool {
-		reqSent := fk.getContainerUpdateRequest()
-		return reqSent != nil && reqSent.ApplicartionID == appID1 &&
+	err = common.WaitForCondition(100*time.Millisecond, 3000*time.Millisecond, func() bool {
+		reqSent := csu.GetContainerUpdateRequest()
+		return reqSent != nil && reqSent.ApplicationID == appID1 &&
 			reqSent.GetState() == si.UpdateContainerSchedulingStateRequest_FAILED
 	})
 	assert.NilError(t, err)

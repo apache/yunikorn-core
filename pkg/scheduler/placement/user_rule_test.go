@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 func TestUserRulePlace(t *testing.T) {
@@ -43,87 +44,46 @@ partitions:
 	assert.NilError(t, err, "setting up the queue config failed")
 
 	tags := make(map[string]string)
-	user := security.UserGroup{
-		User:   "testchild",
-		Groups: []string{},
-	}
-	appInfo := newApplication("app1", "default", "ignored", user, tags, nil, "")
 
-	// user queue that exists directly under the root
-	conf := configs.PlacementRule{
-		Name: "user",
-	}
-	var ur rule
-	ur, err = newRule(conf)
-	if err != nil || ur == nil {
-		t.Errorf("user rule create failed, err %v", err)
-	}
-	var queue string
-	queue, err = ur.placeApplication(appInfo, queueFunc)
-	if queue != "root.testchild" || err != nil {
-		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
-	}
-	// trying to place in a parent queue should fail on queue create not in the rule
-	user = security.UserGroup{
-		User:   "testparent",
-		Groups: []string{},
-	}
-	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
-	if queue != "root.testparent" || err != nil {
-		t.Errorf("user rule failed with parent queue '%s', error %v", queue, err)
+	var tests = []struct {
+		name          string
+		user          security.UserGroup
+		expectedQueue string
+		config        configs.PlacementRule
+		nilError      bool
+	}{
+		{"user queue that exists directly under the root", security.UserGroup{User: "testchild", Groups: []string{}}, "root.testchild", configs.PlacementRule{Name: "user"}, true},
+		{"trying to place in a parent queue should fail on queue create not in the rule", security.UserGroup{User: "testparent", Groups: []string{}}, "root.testparent", configs.PlacementRule{Name: "user"}, true},
+		{"user rule with dotted user should not have failed", security.UserGroup{User: "test.user", Groups: []string{}}, "root.test_dot_user", configs.PlacementRule{Name: "user"}, true},
+		{"user queue that exists directly in hierarchy", security.UserGroup{User: "testchild", Groups: []string{}}, "root.testparent.testchild", configs.PlacementRule{Name: "user", Parent: &configs.PlacementRule{Name: "fixed", Value: "testparent"}}, true},
+		{"user queue that does not exists", security.UserGroup{User: "unknown", Groups: []string{}}, "root.unknown", configs.PlacementRule{Name: "user", Create: true}, true},
+		{"user queue with oidc supported characters", security.UserGroup{User: "test.user@gmail.com", Groups: []string{}}, "root.test_dot_user@gmail_dot_com", configs.PlacementRule{Name: "user", Create: true}, true},
+		{"user queue with oidc supported characters", security.UserGroup{User: "http://domain.com/server1/testuser@cloudera.com", Groups: []string{}}, "root.http://domain_dot_com/server1/testuser@cloudera_dot_com", configs.PlacementRule{Name: "user", Create: true}, true},
+		{"invalid queue name", security.UserGroup{User: "invalid!us>er", Groups: []string{}}, "root.http://domain_dot_com/server1/testuser@cloudera_dot_com", configs.PlacementRule{Name: "user", Create: true}, false},
+		{"deny filter type should got empty queue", security.UserGroup{User: "unknown", Groups: []string{}}, "", configs.PlacementRule{Name: "user", Filter: configs.Filter{Type: filterDeny}}, true},
 	}
 
-	user = security.UserGroup{
-		User:   "test.user",
-		Groups: []string{},
-	}
-	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	queue, err = ur.placeApplication(appInfo, queueFunc)
-	if queue == "" || err != nil {
-		t.Errorf("user rule with dotted user should not have failed '%s', error %v", queue, err)
-	}
-
-	// user queue that exists directly in hierarchy
-	conf = configs.PlacementRule{
-		Name: "user",
-		Parent: &configs.PlacementRule{
-			Name:  "fixed",
-			Value: "testparent",
-		},
-	}
-	user = security.UserGroup{
-		User:   "testchild",
-		Groups: []string{},
-	}
-	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-	ur, err = newRule(conf)
-	if err != nil || ur == nil {
-		t.Errorf("user rule create failed with queue name, err %v", err)
-	}
-	queue, err = ur.placeApplication(appInfo, queueFunc)
-	if queue != "root.testparent.testchild" || err != nil {
-		t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
-	}
-
-	// user queue that does not exists
-	user = security.UserGroup{
-		User:   "unknown",
-		Groups: []string{},
-	}
-	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
-
-	conf = configs.PlacementRule{
-		Name:   "user",
-		Create: true,
-	}
-	ur, err = newRule(conf)
-	if err != nil || ur == nil {
-		t.Errorf("user rule create failed with queue name, err %v", err)
-	}
-	queue, err = ur.placeApplication(appInfo, queueFunc)
-	if queue != "root.unknown" || err != nil {
-		t.Errorf("user rule placed in to be created queue with create false '%s', err %v", queue, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var ur rule
+			ur, err = newRule(tt.config)
+			if err != nil || ur == nil {
+				t.Errorf("user rule create failed, err %v", err)
+			}
+			appInfo := newApplication("app1", "default", "ignored", tt.user, tags, nil, "")
+			var queue string
+			if tt.nilError {
+				queue, err = ur.placeApplication(appInfo, queueFunc)
+				if queue != tt.expectedQueue || err != nil {
+					t.Errorf("user rule failed to place queue in correct queue '%s', err %v", queue, err)
+				}
+			} else {
+				_, err = ur.placeApplication(appInfo, queueFunc)
+				if err == nil {
+					t.Errorf("user rule should have failed to place queue, err %v", err)
+				}
+			}
+		})
 	}
 }
 
@@ -199,6 +159,16 @@ func TestUserRuleParent(t *testing.T) {
 		t.Errorf("user rule with non existing parent queue should create '%s', error %v", queue, err)
 	}
 
+	user1 := security.UserGroup{
+		User:   "test!child",
+		Groups: []string{},
+	}
+	appInfo1 := newApplication("app1", "default", "unknown", user1, tags, nil, "")
+	_, err = ur.placeApplication(appInfo1, queueFunc)
+	if err == nil {
+		t.Errorf("user rule with non existing parent queue and invalid child queue should have failed, error %v", err)
+	}
+
 	// trying to place in a child using a parent which is defined as a leaf
 	conf = configs.PlacementRule{
 		Name:   "user",
@@ -217,5 +187,79 @@ func TestUserRuleParent(t *testing.T) {
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// failed parent rule
+	conf = configs.PlacementRule{
+		Name:   "user",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "testchild",
+			Parent: &configs.PlacementRule{
+				Name:  "fixed",
+				Value: "testchild",
+			},
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// parent name not has prefix
+	conf = configs.PlacementRule{
+		Name:   "user",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:  "fixed",
+			Value: "root",
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("user rule create failed, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "root.root.testchild" || err != nil {
+		t.Errorf("user rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+}
+
+func Test_userRule_ruleDAO(t *testing.T) {
+	tests := []struct {
+		name string
+		conf configs.PlacementRule
+		want *dao.RuleDAO
+	}{
+		{
+			"base",
+			configs.PlacementRule{Name: "user"},
+			&dao.RuleDAO{Name: "user", Parameters: map[string]string{"create": "false"}},
+		},
+		{
+			"parent",
+			configs.PlacementRule{Name: "user", Create: true, Parent: &configs.PlacementRule{Name: "test", Create: true}},
+			&dao.RuleDAO{Name: "user", Parameters: map[string]string{"create": "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{"create": "true"}}},
+		},
+		{
+			"filter",
+			configs.PlacementRule{Name: "user", Create: true, Filter: configs.Filter{Type: filterDeny, Users: []string{"user"}}},
+			&dao.RuleDAO{Name: "user", Parameters: map[string]string{"create": "true"}, Filter: &dao.FilterDAO{Type: filterDeny, UserList: []string{"user"}}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ur, err := newRule(tt.conf)
+			assert.NilError(t, err, "setting up the rule failed")
+			ruleDAO := ur.ruleDAO()
+			assert.DeepEqual(t, tt.want, ruleDAO)
+		})
 	}
 }

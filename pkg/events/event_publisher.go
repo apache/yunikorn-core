@@ -19,7 +19,6 @@
 package events
 
 import (
-	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -31,56 +30,46 @@ import (
 // stores the push event internal
 var defaultPushEventInterval = 2 * time.Second
 
-type EventPublisher interface {
-	StartService()
-	Stop()
-}
-
-type shimPublisher struct {
-	store             EventStore
+type EventPublisher struct {
+	store             *EventStore
 	pushEventInterval time.Duration
-	stop              atomic.Value
+	stop              chan struct{}
 }
 
-func CreateShimPublisher(store EventStore) EventPublisher {
-	return createShimPublisherInternal(store)
-}
-
-func createShimPublisherInternal(store EventStore) *shimPublisher {
-	return createShimPublisherWithParameters(store, defaultPushEventInterval)
-}
-
-func createShimPublisherWithParameters(store EventStore, pushEventInterval time.Duration) *shimPublisher {
-	publisher := &shimPublisher{
+func CreateShimPublisher(store *EventStore) *EventPublisher {
+	publisher := &EventPublisher{
 		store:             store,
-		pushEventInterval: pushEventInterval,
+		pushEventInterval: defaultPushEventInterval,
+		stop:              make(chan struct{}),
 	}
-	publisher.stop.Store(false)
 	return publisher
 }
 
-func (sp *shimPublisher) StartService() {
+func (sp *EventPublisher) StartService() {
+	log.Log(log.Events).Info("Starting shim event publisher")
 	go func() {
 		for {
-			if sp.stop.Load().(bool) {
-				break
-			}
-			messages := sp.store.CollectEvents()
-			if len(messages) > 0 {
-				if eventPlugin := plugins.GetResourceManagerCallbackPlugin(); eventPlugin != nil {
-					log.Logger().Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
-					eventPlugin.SendEvent(messages)
+			select {
+			case <-sp.stop:
+				return
+			case <-time.After(sp.pushEventInterval):
+				messages := sp.store.CollectEvents()
+				if len(messages) > 0 {
+					if eventPlugin := plugins.GetResourceManagerCallbackPlugin(); eventPlugin != nil {
+						log.Log(log.Events).Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
+						eventPlugin.SendEvent(messages)
+					}
 				}
 			}
-			time.Sleep(sp.pushEventInterval)
 		}
 	}()
 }
 
-func (sp *shimPublisher) Stop() {
-	sp.stop.Store(true)
+func (sp *EventPublisher) Stop() {
+	log.Log(log.Events).Info("Stopping shim event publisher")
+	close(sp.stop)
 }
 
-func (sp *shimPublisher) getEventStore() EventStore {
+func (sp *EventPublisher) getEventStore() *EventStore {
 	return sp.store
 }

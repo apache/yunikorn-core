@@ -19,16 +19,19 @@
 package placement
 
 import (
+	"reflect"
+	"regexp"
 	"testing"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 func TestNewFilterLists(t *testing.T) {
 	// test simple no user or group: allow
 	conf := configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 
 	filter := newFilter(conf)
 	if !filter.allow {
@@ -46,7 +49,7 @@ func TestNewFilterLists(t *testing.T) {
 
 	// test simple no user or group: deny
 	conf = configs.Filter{}
-	conf.Type = "deny"
+	conf.Type = filterDeny
 
 	filter = newFilter(conf)
 	if filter.allow {
@@ -64,7 +67,7 @@ func TestNewFilterLists(t *testing.T) {
 
 	// test simple empty lists
 	conf = configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 	conf.Users = []string{}
 	conf.Groups = []string{}
 
@@ -85,8 +88,8 @@ func TestNewFilterLists(t *testing.T) {
 	// test simple single user or group
 	conf = configs.Filter{}
 	conf.Type = ""
-	conf.Users = []string{"user1"}
-	conf.Groups = []string{"group1"}
+	conf.Users = []string{"user1_a_#_b_c-d-/-e:f_@_gmail.com"}
+	conf.Groups = []string{"group1_a_b_c-d-e:f_gmail.com"}
 
 	filter = newFilter(conf)
 	if !filter.allow {
@@ -124,7 +127,7 @@ func TestNewFilterLists(t *testing.T) {
 func TestNewFilterExpressions(t *testing.T) {
 	// test expression
 	conf := configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 	conf.Users = []string{"user*"}
 	conf.Groups = []string{"group[1-9]"}
 
@@ -140,6 +143,17 @@ func TestNewFilterExpressions(t *testing.T) {
 	}
 	if filter.empty {
 		t.Error("filter create did not set empty flag correctly")
+	}
+
+	// test invalid regexp format
+	conf.Users = []string{"user[a-z"}
+	conf.Groups = []string{"group[a-z"}
+	filter = newFilter(conf)
+	if filter.userExp != nil {
+		t.Error("The userExp should be nil for an invalid regexp format.")
+	}
+	if filter.groupExp != nil {
+		t.Error("The groupExp should be nil for an invalid regexp format.")
 	}
 }
 
@@ -177,6 +191,43 @@ func TestNewFilterExceptions(t *testing.T) {
 	}
 	if filter.groupExp != nil || len(filter.groupList) != 1 {
 		t.Error("filter create did not set group filter correctly regexp not in first entry")
+	}
+
+	// test single invalid user or group
+	conf = configs.Filter{}
+	conf.Type = ""
+	conf.Users = []string{"user!1"}
+	conf.Groups = []string{"grou#p1"}
+
+	filter = newFilter(conf)
+	if !filter.allow {
+		t.Error("filter create did not set allow flag correctly from empty string")
+	}
+	if filter.userExp != nil || len(filter.userList) != 0 {
+		t.Error("filter create cannot set user filter correctly single invalid entry not regexp")
+	}
+	if filter.groupExp != nil || len(filter.groupList) != 0 {
+		t.Error("filter create cannot not set group filter correctly single invalid entry not regexp")
+	}
+	if filter.empty {
+		t.Error("filter create did not set empty flag correctly")
+	}
+
+	// test multiple invalid user or group
+	conf = configs.Filter{}
+	conf.Type = ""
+	conf.Users = []string{"use!r1", "user2"}
+	conf.Groups = []string{"gro!up1", "gro#up2"}
+
+	filter = newFilter(conf)
+	if !filter.allow {
+		t.Error("filter create did not set allow flag correctly from empty string")
+	}
+	if filter.userExp != nil || len(filter.userList) != 1 {
+		t.Error("filter create cannot set user filter correctly invalid multiple entry not regexp")
+	}
+	if filter.groupExp != nil || len(filter.groupList) != 0 {
+		t.Error("filter create cannot set group filter correctly invalid multiple entry not regexp")
 	}
 }
 
@@ -271,7 +322,7 @@ func TestAllowUser(t *testing.T) {
 	}
 	// test deny user list
 	conf := configs.Filter{}
-	conf.Type = "deny"
+	conf.Type = filterDeny
 	conf.Users = []string{"user1"}
 
 	filter := newFilter(conf)
@@ -286,7 +337,7 @@ func TestAllowUser(t *testing.T) {
 
 	// test allow user list
 	conf = configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 	conf.Users = []string{"user1"}
 
 	filter = newFilter(conf)
@@ -301,7 +352,7 @@ func TestAllowUser(t *testing.T) {
 
 	// test deny user exp
 	conf = configs.Filter{}
-	conf.Type = "deny"
+	conf.Type = filterDeny
 	conf.Users = []string{"user[0-9]"}
 
 	filter = newFilter(conf)
@@ -316,7 +367,7 @@ func TestAllowUser(t *testing.T) {
 
 	// test allow user exp
 	conf = configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 	conf.Users = []string{"user[0-9]"}
 
 	filter = newFilter(conf)
@@ -340,7 +391,7 @@ func TestAllowGroup(t *testing.T) {
 
 	// test deny group list
 	conf := configs.Filter{}
-	conf.Type = "deny"
+	conf.Type = filterDeny
 	conf.Groups = []string{"group1"}
 
 	filter := newFilter(conf)
@@ -355,7 +406,7 @@ func TestAllowGroup(t *testing.T) {
 
 	// test allow group list
 	conf = configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 	conf.Groups = []string{"group1"}
 
 	filter = newFilter(conf)
@@ -370,7 +421,7 @@ func TestAllowGroup(t *testing.T) {
 
 	// test deny group exp
 	conf = configs.Filter{}
-	conf.Type = "deny"
+	conf.Type = filterDeny
 	conf.Groups = []string{"group[0-9]"}
 
 	filter = newFilter(conf)
@@ -385,7 +436,7 @@ func TestAllowGroup(t *testing.T) {
 
 	// test allow group exp
 	conf = configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 	conf.Groups = []string{"group[0-9]"}
 
 	filter = newFilter(conf)
@@ -409,7 +460,7 @@ func TestAllowSecondaryGroup(t *testing.T) {
 
 	// test deny group list
 	conf := configs.Filter{}
-	conf.Type = "deny"
+	conf.Type = filterDeny
 	conf.Groups = []string{"group2"}
 
 	filter := newFilter(conf)
@@ -420,7 +471,7 @@ func TestAllowSecondaryGroup(t *testing.T) {
 
 	// test allow group list
 	conf = configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 	conf.Groups = []string{"group1", "group2"}
 
 	filter = newFilter(conf)
@@ -431,7 +482,7 @@ func TestAllowSecondaryGroup(t *testing.T) {
 
 	// test deny group exp
 	conf = configs.Filter{}
-	conf.Type = "deny"
+	conf.Type = filterDeny
 	conf.Groups = []string{"group[0-9]"}
 
 	filter = newFilter(conf)
@@ -442,7 +493,7 @@ func TestAllowSecondaryGroup(t *testing.T) {
 
 	// test allow group exp
 	conf = configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 	conf.Groups = []string{"group[0-9]"}
 
 	filter = newFilter(conf)
@@ -469,7 +520,7 @@ func TestAllowNoLists(t *testing.T) {
 	}
 	// test default allow behaviour (no filter)
 	conf = configs.Filter{}
-	conf.Type = "allow"
+	conf.Type = filterAllow
 
 	filter = newFilter(conf)
 	if !filter.allowUser(userObj) {
@@ -477,10 +528,36 @@ func TestAllowNoLists(t *testing.T) {
 	}
 	// test default deny behaviour (no filter)
 	conf = configs.Filter{}
-	conf.Type = "deny"
+	conf.Type = filterDeny
 
 	filter = newFilter(conf)
 	if filter.allowUser(userObj) {
 		t.Error("deny filter type only did not deny user")
+	}
+}
+
+func TestFilter_filterDAO(t *testing.T) {
+	// filters are tested also from each rule in different combinations
+	// this does the outliers and cases that should not happen
+	reg := regexp.MustCompile("^.*$")
+	tests := []struct {
+		name   string
+		filter Filter
+		want   *dao.FilterDAO
+	}{
+		{"empty", Filter{empty: true}, nil},
+		{"empty", Filter{}, &dao.FilterDAO{Type: filterDeny}},
+		{
+			"everything",
+			Filter{allow: true, userList: map[string]bool{"user": true}, groupList: map[string]bool{"group": true}, userExp: reg, groupExp: reg},
+			&dao.FilterDAO{Type: filterAllow, UserList: []string{"user"}, GroupList: []string{"group"}, UserExp: "^.*$", GroupExp: "^.*$"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.filter.filterDAO(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("filterDAO() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

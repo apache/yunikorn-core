@@ -22,12 +22,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
 	"gotest.tools/v3/assert"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 )
 
 var emptySum = ""
@@ -44,7 +45,7 @@ partitions:
       - name: root
         submitacl: '*'
         properties:
-          application.sort.policy: stateaware
+          application.sort.policy: fifo
           sample: value2
 `
 
@@ -614,8 +615,28 @@ partitions:
   - name: default
     queues:
       - name: root
+  - name: "partition-0"
+    queues:
+      - name: root
+`
+	dataEnabled := `
+partitions:
+  - name: default
+    queues:
+      - name: root
     preemption:
       enabled: true
+  - name: "partition-0"
+    queues:
+      - name: root
+`
+	dataDisabled := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+    preemption:
+      enabled: false
   - name: "partition-0"
     queues:
       - name: root
@@ -623,14 +644,15 @@ partitions:
 	// validate the config and check after the update
 	conf, err := CreateConfig(data)
 	assert.NilError(t, err, "should expect no error")
+	assert.Assert(t, conf.Partitions[0].Preemption.Enabled == nil, "default should be nil")
 
-	if !conf.Partitions[0].Preemption.Enabled {
-		t.Error("default partition's preemption should be enabled.")
-	}
+	conf, err = CreateConfig(dataEnabled)
+	assert.NilError(t, err, "should expect no error")
+	assert.Assert(t, *conf.Partitions[0].Preemption.Enabled, "preemption should be enabled")
 
-	if conf.Partitions[1].Preemption.Enabled {
-		t.Error("partition-0's preemption should NOT be enabled by default")
-	}
+	conf, err = CreateConfig(dataDisabled)
+	assert.NilError(t, err, "should expect no error")
+	assert.Assert(t, !*conf.Partitions[0].Preemption.Enabled, "preemption should be disabled")
 }
 
 func TestParseRule(t *testing.T) {
@@ -697,7 +719,7 @@ partitions:
 	if rule.Parent.Create {
 		t.Errorf("Create flag is not set correctly expected 'false' got 'true'")
 	}
-	if len(rule.Parent.Filter.Users) != 1 && len(rule.Parent.Filter.Groups) != 0 {
+	if len(rule.Parent.Filter.Users) != 1 || len(rule.Parent.Filter.Groups) != 0 {
 		t.Errorf("Failed rule or group filter parsing length should have been 1 and 0, got: %v, %v", rule.Filter.Users, rule.Filter.Groups)
 	}
 
@@ -732,9 +754,12 @@ partitions:
   - name: default
     queues:
       - name: root
+        queues:
+          - name: default
+            parent: false
     placementrules:
       - name: fixed
-        value: root
+        value: root.default
       - name: tag
         value: Just Any value
 `
@@ -744,7 +769,7 @@ partitions:
 	if len(conf.Partitions[0].PlacementRules) != 2 {
 		t.Errorf("incorrect number of rules returned expected 2 got: %d", len(conf.Partitions[0].PlacementRules))
 	}
-	if conf.Partitions[0].PlacementRules[0].Value != "default" &&
+	if conf.Partitions[0].PlacementRules[0].Value != "root.default" ||
 		conf.Partitions[0].PlacementRules[1].Value != "Just Any value" {
 		t.Errorf("incorrect values set inside the rules: %v", conf.Partitions[0].PlacementRules)
 	}
@@ -883,45 +908,50 @@ partitions:
 	conf, err := CreateConfig(data)
 	assert.NilError(t, err, "partition user parsing should not have failed")
 	// gone through validation: 1 top level queues
-	if len(conf.Partitions[0].Queues) != 1 {
-		t.Errorf("failed to load queue %v", conf)
+	if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[0].Queues[0].Limits) != 3 {
+		t.Errorf("partition limits not correctly applied to root queue %v", conf)
 	}
 	if len(conf.Partitions[0].Limits) != 3 {
-		t.Errorf("partition users linked not correctly loaded  %v", conf)
+		t.Errorf("partition users linked not correctly loaded %v", conf)
 	}
 
 	// limit 1 check
 	limit := conf.Partitions[0].Limits[0]
-	if len(limit.Users) != 1 && limit.Users[0] != "user1" && len(limit.Groups) != 0 {
+	if len(limit.Users) != 1 || limit.Users[0] != "user1" || len(limit.Groups) != 0 {
 		t.Errorf("failed to load max apps %v", limit)
 	}
 	if len(limit.Groups) != 0 {
 		t.Errorf("group list should be empty and is not: %v", limit)
 	}
-	if limit.MaxApplications != 10 && (len(limit.MaxResources) != 2 && limit.MaxResources["memory"] != "10000") {
+	if limit.MaxApplications != 5 || len(limit.MaxResources) != 2 ||
+		limit.MaxResources["memory"] != "10000" || limit.MaxResources["vcore"] != "10" {
 		t.Errorf("failed to load max resources %v", limit)
 	}
 
 	// limit 2 check
 	limit = conf.Partitions[0].Limits[1]
-	if len(limit.Users) != 1 && limit.Users[0] != "user2" &&
-		len(limit.Groups) != 1 && limit.Groups[0] != "prod" {
+	if len(limit.Users) != 1 || limit.Users[0] != "user2" ||
+		len(limit.Groups) != 1 || limit.Groups[0] != "prod" {
 		t.Errorf("user and group list have incorrect entries (limit 2): %v", limit)
 	}
-	if limit.MaxApplications != 5 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+	if limit.MaxApplications != 10 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (limit 2): %v", limit)
 	}
 
 	// limit 3 check
 	limit = conf.Partitions[0].Limits[2]
-	if len(limit.Groups) != 2 && limit.Groups[0] != "dev" && limit.Groups[1] != "test" {
+	if len(limit.Groups) != 2 || limit.Groups[0] != "dev" || limit.Groups[1] != "test" {
 		t.Errorf("failed to load groups from config (limit 3): %v", limit)
 	}
 	if len(limit.Users) != 0 {
 		t.Errorf("user list should be empty and is not (limit 3): %v", limit)
 	}
-	if limit.MaxApplications != 20 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+	if limit.MaxApplications != 20 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (limit 3): %v", limit)
+	}
+
+	if !reflect.DeepEqual(conf.Partitions[0].Limits, conf.Partitions[0].Queues[0].Limits) {
+		t.Errorf("partition limits and root queue limits are not equivalent : %v", conf)
 	}
 }
 
@@ -969,28 +999,29 @@ partitions:
 
 	// limit 1 check
 	limit := conf.Partitions[0].Queues[0].Limits[0]
-	if len(limit.Users) != 1 && limit.Users[0] != "user1" && len(limit.Groups) != 0 {
+	if len(limit.Users) != 1 || limit.Users[0] != "user1" || len(limit.Groups) != 0 {
 		t.Errorf("user and group list have incorrect entries: %v", limit)
 	}
-	if limit.MaxApplications != 5 && (len(limit.MaxResources) != 2 && limit.MaxResources["memory"] != "10000") {
+	if limit.MaxApplications != 5 || len(limit.MaxResources) != 2 ||
+		limit.MaxResources["memory"] != "10000" || limit.MaxResources["vcore"] != "10" {
 		t.Errorf("loaded resource limits incorrectly: %v", limit)
 	}
 
 	// limit 2 check
 	limit = conf.Partitions[0].Queues[0].Limits[1]
-	if len(limit.Users) != 1 && limit.Users[0] != "user2" && limit.Groups[0] != "prod" {
+	if len(limit.Users) != 1 || limit.Users[0] != "user2" || limit.Groups[0] != "prod" {
 		t.Errorf("user and group list have incorrect entries (limit 2): %v", limit)
 	}
-	if limit.MaxApplications != 10 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+	if limit.MaxApplications != 10 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (limit 2): %v", limit)
 	}
 
 	// sub queue limit check
 	limit = conf.Partitions[0].Queues[0].Queues[0].Limits[0]
-	if len(limit.Users) != 1 && limit.Users[0] != "subuser" && len(limit.Groups) != 0 {
+	if len(limit.Users) != 1 || limit.Users[0] != "subuser" || len(limit.Groups) != 0 {
 		t.Errorf("user and group list have incorrect entries (sub queue): %v", limit)
 	}
-	if limit.MaxApplications != 1 && (limit.MaxResources != nil || len(limit.MaxResources) != 0) {
+	if limit.MaxApplications != 1 || limit.MaxResources != nil || len(limit.MaxResources) != 0 {
 		t.Errorf("loaded resource limits incorrectly (sub queue): %v", limit)
 	}
 }
@@ -1034,7 +1065,7 @@ partitions:
 	_, err := CreateConfig(data)
 	assert.ErrorContains(t, err, "invalid MaxApplications settings for limit")
 
-	// Make sure limit max apps not set, but queue limit set, will fail.
+	// Make sure limit max apps not set, but queue limit set. will not fail.
 	data = `
 partitions:
   - name: default
@@ -1068,7 +1099,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "MaxApplications is 0 in limit name")
+	assert.NilError(t, err, "No error should be thrown even when queue maxapps is set but not for user or group")
 
 	// Make sure limit max apps set, but queue limit not set, will not fail.
 	data = `
@@ -1215,8 +1246,8 @@ partitions:
 	conf, err := CreateConfig(data)
 	assert.NilError(t, err, "config parsing should not have failed")
 	// gone through validation: 1 top level queues
-	if len(conf.Partitions[0].Queues) != 1 && len(conf.Partitions[0].Queues[0].Limits) != 0 {
-		t.Errorf("failed to load queues from config: %v", conf)
+	if len(conf.Partitions[0].Queues) != 1 || len(conf.Partitions[0].Queues[0].Limits) != 5 {
+		t.Errorf("partition limits not correctly applied to root queue: %v", conf)
 	}
 	if len(conf.Partitions[0].Limits) != 5 {
 		t.Errorf("failed to load partition limits from config: %v", conf)
@@ -1224,26 +1255,36 @@ partitions:
 
 	// user with dot check
 	limit := conf.Partitions[0].Limits[0]
-	if len(limit.Users) != 1 && limit.Users[0] != "user.lastname" {
+	if len(limit.Users) != 1 || limit.Users[0] != "user.lastname" {
 		t.Errorf("failed to load 'dot' user from config: %v", limit)
 	}
 
 	// user with @ check
 	limit = conf.Partitions[0].Limits[1]
-	if len(limit.Users) != 1 && limit.Users[0] != "user@domain" {
+	if len(limit.Users) != 1 || limit.Users[0] != "user@domain" {
 		t.Errorf("failed to load '@' user from config: %v", limit)
 	}
 
 	// user wildcard
 	limit = conf.Partitions[0].Limits[2]
-	if len(limit.Users) != 0 && limit.Users[0] != "*" {
+	if len(limit.Users) != 1 || limit.Users[0] != "*" {
 		t.Errorf("failed to load wildcard user from config: %v", limit)
 	}
 
-	// group wildcard
+	// group
 	limit = conf.Partitions[0].Limits[3]
-	if len(limit.Groups) != 1 && limit.Groups[0] != "*" {
+	if len(limit.Groups) != 1 || limit.Groups[0] != "test" {
+		t.Errorf("failed to load group from config: %v", limit)
+	}
+
+	// wildcard group
+	limit = conf.Partitions[0].Limits[4]
+	if len(limit.Groups) != 1 || limit.Groups[0] != "*" {
 		t.Errorf("failed to load wildcard group from config: %v", limit)
+	}
+
+	if !reflect.DeepEqual(conf.Partitions[0].Limits, conf.Partitions[0].Queues[0].Limits) {
+		t.Errorf("partition limits and root queue limits are not equivalent : %v", conf)
 	}
 }
 
@@ -1473,7 +1514,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "duplicated user name *")
+	assert.ErrorContains(t, err, "duplicated user name '*'")
 
 	data = `
 partitions:
@@ -1508,7 +1549,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "duplicated group name *")
+	assert.ErrorContains(t, err, "duplicated group name '*'")
 
 	data = `
 partitions:
@@ -1570,7 +1611,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "duplicated user name user.lastname")
+	assert.ErrorContains(t, err, "duplicated user name 'user.lastname'")
 
 	data = `
 partitions:
@@ -1605,7 +1646,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "duplicated group name test")
+	assert.ErrorContains(t, err, "duplicated group name 'test'")
 
 	// Make sure different queues can support same username or groupname
 	data = `
@@ -1640,7 +1681,7 @@ partitions:
                 - user1
                 groups:
                 - prod
-                maxapplications: 5
+                maxapplications: 2
                 maxresources: {memory: 10000, vcore: 10}
 `
 	// validate the config and check after the update
@@ -1674,7 +1715,7 @@ partitions:
       - name: root
         submitacl: '*'
         properties:
-            application.sort.policy: stateaware
+            application.sort.policy: fifo
 `
 	testCases := []struct {
 		name          string
@@ -1684,6 +1725,7 @@ partitions:
 		{"Valid config", validConf, false},
 		{"Invalid checksum", invalidConf, true},
 		{"Mixed space", mixedSpacesConf, false},
+		{"Empty config", "", false},
 	}
 
 	for _, tc := range testCases {
@@ -1718,7 +1760,424 @@ func TestGetConfigurationString(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.DeepEqual(t, tc.expectedConfig, GetConfigurationString(tc.requestBytes))
+			assert.Equal(t, tc.expectedConfig, GetConfigurationString(tc.requestBytes))
 		})
 	}
+}
+
+func prepareUserLimitsConfig(leafQueueMaxApps uint64, leafQueueMaxResource string) string {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 50
+                maxresources: {memory: 1000, vcore: 100}
+            queues:
+              - name: leaf
+                maxapplications: 100
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 10000, vcore: 1000}
+                limits:
+                  - limit:
+                    users: 
+                    - user1
+                    maxapplications: %d
+                    maxresources: %s
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	return fmt.Sprintf(data, leafQueueMaxApps, leafQueueMaxResource)
+}
+
+func prepareUserLimitsWithTwoLevelsConfig(leafQueueMaxApps uint64, leafQueueMaxResource string, userMaxResource string) string {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            users: 
+            - user1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                %s
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    %s
+                limits:
+                  - limit:
+                    users: 
+                    - user1
+                    maxapplications: %d
+                    maxresources: %s
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	return fmt.Sprintf(data, leafQueueMaxResource, leafQueueMaxResource, leafQueueMaxApps, userMaxResource)
+}
+
+func TestUserLimitsWithHierarchicalQueue(t *testing.T) {
+	// Make sure parent queue user max apps should not less than the child queue max resource
+	// validate the config and check after the update
+	_, err := CreateConfig(prepareUserLimitsConfig(50, "{memory: 10000, vcore: 100}"))
+	assert.ErrorContains(t, err, "user user1 max resource map[memory:10000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:1000 vcore:100000]")
+
+	// Make sure parent queue user max apps should not less than the child queue max apps
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareUserLimitsConfig(90, "{memory: 1000, vcore: 100}"))
+	assert.ErrorContains(t, err, "user user1 max applications 90 of queue leaf is greater than immediate or ancestor parent max applications 50")
+
+	// (More than one level check)
+	// Make sure hierarchical queue user max resource should not less than the child queue max resource
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareUserLimitsWithTwoLevelsConfig(90, "{memory: 100000, vcore: 100}", "{memory: 90000, vcore: 100}"))
+	assert.ErrorContains(t, err, "user user1 max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
+
+	// (More than one level check)
+	// Make sure hierarchical queue user max apps should not less than the child queue max apps
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareUserLimitsWithTwoLevelsConfig(900, "{memory: 10000, vcore: 1000}", "{memory: 1000, vcore: 100}"))
+	assert.ErrorContains(t, err, "user user1 max applications 900 of queue leaf is greater than immediate or ancestor parent max applications 500")
+
+	// Special case: make sure wildcard user with hierarchical queue check
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            users: 
+            - "*"
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 100000, vcore: 1000}
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 100000, vcore: 1000}
+                limits:
+                  - limit:
+                    users: 
+                    - "*"
+                    maxapplications: 90
+                    maxresources: {memory: 90000, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "user * max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
+}
+
+func prepareGroupLimitsConfig(leafQueueMaxApps uint64, leafQueueMaxResource string) string {
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - group1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 50
+                maxresources: {memory: 1000, vcore: 100}
+            queues:
+              - name: leaf
+                maxapplications: 100
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 10000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - group1
+                    maxapplications: %d
+                    maxresources: %s
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	return fmt.Sprintf(data, leafQueueMaxApps, leafQueueMaxResource)
+}
+
+func prepareGroupLimitsWithTwoLevelsConfig(leafQueueMaxApps uint64, leafQueueMaxResources string, groupMaxResources string) string {
+	// (More than one level check)
+	// Make sure hierarchical queue user max resource should not less than the child queue max resource
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - group1
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            users:
+            - user2
+            groups:
+            - prod
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 300
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                %s
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    %s
+                limits:
+                  - limit:
+                    groups: 
+                    - group1
+                    maxapplications: %d
+                    maxresources: %s
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                groups: 
+                - group1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	return fmt.Sprintf(data, leafQueueMaxResources, leafQueueMaxResources, leafQueueMaxApps, groupMaxResources)
+}
+
+func TestGroupLimitsWithHierarchicalQueue(t *testing.T) {
+	// Make sure parent queue user max apps should not less than the child queue max resource
+	// validate the config and check after the update
+	_, err := CreateConfig(prepareGroupLimitsConfig(50, "{memory: 10000, vcore: 100}"))
+	assert.ErrorContains(t, err, "group group1 max resource map[memory:10000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:1000 vcore:100000]")
+
+	// Make sure parent queue user max apps should not less than the child queue max apps
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareGroupLimitsConfig(90, "{memory: 1000, vcore: 100}"))
+	assert.ErrorContains(t, err, "group group1 max applications 90 of queue leaf is greater than immediate or ancestor parent max applications 50")
+
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareGroupLimitsWithTwoLevelsConfig(90, "{memory: 100000, vcore: 1000}", "{memory: 90000, vcore: 100}"))
+	assert.ErrorContains(t, err, "group group1 max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
+
+	// (More than one level check)
+	// Make sure hierarchical queue user max apps should not less than the child queue max apps
+	// validate the config and check after the update
+	_, err = CreateConfig(prepareGroupLimitsWithTwoLevelsConfig(900, "{memory: 10000, vcore: 1000}", "{memory: 10000, vcore: 100}"))
+	assert.ErrorContains(t, err, "group group1 max applications 900 of queue leaf is greater than immediate or ancestor parent max applications 500")
+
+	// Special case: make sure wildcard user with hierarchical queue check
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        maxapplications: 3000
+        limits:
+          - limit:
+            groups: 
+            - test
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+          - limit:
+            groups: 
+            - "*"
+            maxresources: {memory: 10000, vcore: 10000}
+            maxapplications: 500
+        queues:
+          - name: level1
+            maxapplications: 900
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 100000, vcore: 1000}
+            queues:
+              - name: leaf
+                maxapplications: 900
+                resources:
+                  guaranteed:
+                    {memory: 1000, vcore: 10}
+                  max:
+                    {memory: 100000, vcore: 1000}
+                limits:
+                  - limit:
+                    groups: 
+                    - "test"
+                    maxapplications: 9
+                    maxresources: {memory: 900, vcore: 100}
+                  - limit:
+                    groups: 
+                    - "*"
+                    maxapplications: 90
+                    maxresources: {memory: 90000, vcore: 100}
+                  - limit:
+                    users: 
+                    - "*"
+                    maxapplications: 9
+                    maxresources: {memory: 900, vcore: 100}
+          - name: level2
+            maxapplications: 100
+            resources:
+              guaranteed:
+                {memory: 1000, vcore: 10}
+              max:
+                {memory: 10000, vcore: 1000}
+            limits:
+              - limit:
+                users: 
+                - user1
+                maxapplications: 10
+                maxresources: {memory: 1000, vcore: 100}
+`
+	// validate the config and check after the update
+	_, err = CreateConfig(data)
+	assert.ErrorContains(t, err, "group * max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
 }

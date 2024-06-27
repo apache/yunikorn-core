@@ -23,22 +23,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/btree"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const (
-	appID0  = "app-0"
-	appID1  = "app-1"
-	appID2  = "app-2"
-	aKey    = "alloc-1"
-	nodeID1 = "node-1"
+	appID0    = "app-0"
+	appID1    = "app-1"
+	appID2    = "app-2"
+	appID3    = "app-3"
+	aKey      = "alloc-1"
+	aKey2     = "alloc-2"
+	nodeID1   = "node-1"
+	nodeID2   = "node-2"
+	instType1 = "itype-1"
 )
 
 // Create the root queue, base for all testing
@@ -158,7 +164,7 @@ func newNodeRes(nodeID string, total *resources.Resource) *Node {
 }
 
 func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
-	return &Node{
+	sn := &Node{
 		NodeID:            nodeID,
 		Hostname:          "",
 		Rackname:          "",
@@ -171,7 +177,9 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		reservations:      make(map[string]*reservation),
+		nodeEvents:        newNodeEvents(events.GetEventSystem()),
 	}
+	return sn
 }
 
 func newProto(nodeID string, totalResource, occupiedResource *resources.Resource, attributes map[string]string) *si.NodeInfo {
@@ -203,46 +211,41 @@ func newProto(nodeID string, totalResource, occupiedResource *resources.Resource
 }
 
 // Create a new Allocation with a random ask key
-func newAllocation(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
+func newAllocation(appID, nodeID string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
-	return NewAllocation(uuid, nodeID, ask)
+	return NewAllocation(nodeID, ask)
 }
 
 // Create a new Allocation with a random ask key
-func newPlaceholderAlloc(appID, uuid, nodeID, queueName string, res *resources.Resource) *Allocation {
+func newPlaceholderAlloc(appID, nodeID string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
 	ask.placeholder = true
-	return NewAllocation(uuid, nodeID, ask)
+	return NewAllocation(nodeID, ask)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, 1, false, 0)
+	return newAllocationAskAll(allocKey, appID, "", res, false, 0)
 }
 
 func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, priority int32) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, 1, false, priority)
+	return newAllocationAskAll(allocKey, appID, "", res, false, priority)
 }
 
-func newAllocationAskRepeat(allocKey, appID string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, "", res, repeat, false, 0)
+func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource) *AllocationAsk {
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, taskGroup != "", 0)
 }
 
-func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, repeat int) *AllocationAsk {
-	return newAllocationAskAll(allocKey, appID, taskGroup, res, repeat, taskGroup != "", 0)
-}
-
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, repeat int, placeholder bool, priority int32) *AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, placeholder bool, priority int32) *AllocationAsk {
 	ask := &si.AllocationAsk{
-		AllocationKey:  allocKey,
-		ApplicationID:  appID,
-		PartitionName:  "default",
-		ResourceAsk:    res.ToProto(),
-		MaxAllocations: int32(repeat),
-		TaskGroupName:  taskGroup,
-		Placeholder:    placeholder,
-		Priority:       priority,
+		AllocationKey: allocKey,
+		ApplicationID: appID,
+		PartitionName: "default",
+		ResourceAsk:   res.ToProto(),
+		TaskGroupName: taskGroup,
+		Placeholder:   placeholder,
+		Priority:      priority,
 	}
 	return NewAllocationAskFromSI(ask)
 }
@@ -260,7 +263,7 @@ func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expecte
 	userResource := ugm.GetUserResources(userGroup)
 	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
 	assert.Equal(t, resources.Equals(userResource, expected), true)
-	assert.Equal(t, resources.Equals(groupResource, expected), true)
+	assert.Equal(t, resources.Equals(groupResource, nil), true)
 }
 
 func assertUserResourcesAndGroupResources(t *testing.T, userGroup security.UserGroup, expectedUserResources *resources.Resource, expectedGroupResources *resources.Resource, i int) {
@@ -269,4 +272,19 @@ func assertUserResourcesAndGroupResources(t *testing.T, userGroup security.UserG
 	groupResource := ugm.GetGroupResources(userGroup.Groups[i])
 	assert.Equal(t, resources.Equals(userResource, expectedUserResources), true)
 	assert.Equal(t, resources.Equals(groupResource, expectedGroupResources), true)
+}
+
+func getNodeIteratorFn(nodes ...*Node) func() NodeIterator {
+	tree := btree.New(7)
+	for _, node := range nodes {
+		tree.ReplaceOrInsert(nodeRef{
+			node, 1,
+		})
+	}
+
+	return func() NodeIterator {
+		return NewTreeIterator(acceptAll, func() *btree.BTree {
+			return tree
+		})
+	}
 }

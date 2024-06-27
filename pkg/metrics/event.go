@@ -20,7 +20,7 @@ package metrics
 
 import "github.com/prometheus/client_golang/prometheus"
 
-type eventMetrics struct {
+type EventMetrics struct {
 	totalEventsCreated      prometheus.Gauge
 	totalEventsChanneled    prometheus.Gauge
 	totalEventsNotChanneled prometheus.Gauge
@@ -30,8 +30,8 @@ type eventMetrics struct {
 	totalEventsCollected    prometheus.Gauge
 }
 
-func initEventMetrics() CoreEventMetrics {
-	metrics := &eventMetrics{}
+func initEventMetrics() *EventMetrics {
+	metrics := &EventMetrics{}
 
 	metrics.totalEventsCreated = prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -86,7 +86,9 @@ func initEventMetrics() CoreEventMetrics {
 	return metrics
 }
 
-func (em *eventMetrics) Reset() {
+// Reset all metrics that implement the Set functionality.
+// Should only be used in tests
+func (em *EventMetrics) Reset() {
 	em.totalEventsCollected.Set(0)
 	em.totalEventsCreated.Set(0)
 	em.totalEventsChanneled.Set(0)
@@ -96,30 +98,30 @@ func (em *eventMetrics) Reset() {
 	em.totalEventsProcessed.Set(0)
 }
 
-func (em *eventMetrics) IncEventsCreated() {
+func (em *EventMetrics) IncEventsCreated() {
 	em.totalEventsCreated.Inc()
 }
 
-func (em *eventMetrics) IncEventsChanneled() {
+func (em *EventMetrics) IncEventsChanneled() {
 	em.totalEventsChanneled.Inc()
 }
 
-func (em *eventMetrics) IncEventsNotChanneled() {
+func (em *EventMetrics) IncEventsNotChanneled() {
 	em.totalEventsNotChanneled.Inc()
 }
 
-func (em *eventMetrics) IncEventsProcessed() {
+func (em *EventMetrics) IncEventsProcessed() {
 	em.totalEventsProcessed.Inc()
 }
 
-func (em *eventMetrics) IncEventsStored() {
+func (em *EventMetrics) IncEventsStored() {
 	em.totalEventsStored.Inc()
 }
 
-func (em *eventMetrics) IncEventsNotStored() {
+func (em *EventMetrics) IncEventsNotStored() {
 	em.totalEventsNotStored.Inc()
 }
 
-func (em *eventMetrics) AddEventsCollected(collectedEvents int) {
+func (em *EventMetrics) AddEventsCollected(collectedEvents int) {
 	em.totalEventsCollected.Add(float64(collectedEvents))
 }

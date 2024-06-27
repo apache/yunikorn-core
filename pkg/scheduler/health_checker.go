@@ -20,20 +20,18 @@ package scheduler
 
 import (
 	"fmt"
-	"sync"
 	"time"
 
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
-
-const defaultPeriod = 30 * time.Second
 
 type HealthChecker struct {
 	context       *ClusterContext
@@ -44,7 +42,7 @@ type HealthChecker struct {
 	period   time.Duration
 	enabled  bool
 
-	sync.RWMutex
+	locking.RWMutex
 }
 
 func NewHealthChecker(schedulerContext *ClusterContext) *HealthChecker {
@@ -76,7 +74,7 @@ func (c *HealthChecker) readPeriod() time.Duration {
 
 	result, err := time.ParseDuration(value)
 	if err != nil {
-		log.Logger().Warn("Failed to parse configuration value",
+		log.Log(log.SchedHealth).Warn("Failed to parse configuration value",
 			zap.String("key", configs.HealthCheckInterval),
 			zap.String("value", value),
 			zap.Error(err))
@@ -112,7 +110,7 @@ func (c *HealthChecker) startInternal(runImmediately bool) {
 		c.period = period
 		c.enabled = true
 
-		log.Logger().Info("Starting periodic health checker", zap.Duration("interval", period))
+		log.Log(log.SchedHealth).Info("Starting periodic health checker", zap.Duration("interval", period))
 
 		go func() {
 			ticker := time.NewTicker(period)
@@ -131,7 +129,7 @@ func (c *HealthChecker) startInternal(runImmediately bool) {
 		c.stopChan = nil
 		c.period = 0
 		c.enabled = false
-		log.Logger().Info("Periodic health checker disabled")
+		log.Log(log.SchedHealth).Info("Periodic health checker disabled")
 	}
 }
 
@@ -142,7 +140,7 @@ func (c *HealthChecker) Stop() {
 	configs.RemoveConfigMapCallback(c.confWatcherId)
 
 	if c.stopChan != nil {
-		log.Logger().Info("Stopping periodic health checker")
+		log.Log(log.SchedHealth).Info("Stopping periodic health checker")
 		*c.stopChan <- struct{}{}
 		close(*c.stopChan)
 		c.stopChan = nil
@@ -173,11 +171,17 @@ func (c *HealthChecker) runOnce() {
 	result := GetSchedulerHealthStatus(schedulerMetrics, c.context)
 	updateSchedulerLastHealthStatus(&result, c.context)
 	if !result.Healthy {
-		log.Logger().Warn("Scheduler is not healthy",
-			zap.Any("health check values", result.HealthChecks))
+		for _, v := range result.HealthChecks {
+			if v.Succeeded {
+				continue
+			}
+			log.Log(log.SchedHealth).Warn("Scheduler is not healthy",
+				zap.String("name", v.Name),
+				zap.String("description", v.Description),
+				zap.String("message", v.DiagnosisMessage))
+		}
 	} else {
-		log.Logger().Debug("Scheduler is healthy",
-			zap.Any("health check values", result.HealthChecks))
+		log.Log(log.SchedHealth).Debug("Scheduler is healthy")
 	}
 }
 
@@ -185,7 +189,7 @@ func updateSchedulerLastHealthStatus(latest *dao.SchedulerHealthDAOInfo, schedul
 	schedulerContext.SetLastHealthCheckResult(latest)
 }
 
-func GetSchedulerHealthStatus(metrics metrics.CoreSchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
+func GetSchedulerHealthStatus(metrics *metrics.SchedulerMetrics, schedulerContext *ClusterContext) dao.SchedulerHealthDAOInfo {
 	var healthInfo []dao.HealthCheckInfo
 	healthInfo = append(healthInfo, checkSchedulingErrors(metrics))
 	healthInfo = append(healthInfo, checkFailedNodes(metrics))
@@ -210,7 +214,7 @@ func CreateCheckInfo(succeeded bool, name, description, message string) dao.Heal
 		DiagnosisMessage: message,
 	}
 }
-func checkSchedulingErrors(metrics metrics.CoreSchedulerMetrics) dao.HealthCheckInfo {
+func checkSchedulingErrors(metrics *metrics.SchedulerMetrics) dao.HealthCheckInfo {
 	schedulingErrors, err := metrics.GetSchedulingErrors()
 	if err != nil {
 		return CreateCheckInfo(false, "Scheduling errors", "Check for scheduling error entries in metrics", err.Error())
@@ -219,7 +223,7 @@ func checkSchedulingErrors(metrics metrics.CoreSchedulerMetrics) dao.HealthCheck
 	return CreateCheckInfo(schedulingErrors == 0, "Scheduling errors", "Check for scheduling error entries in metrics", diagnosisMsg)
 }
 
-func checkFailedNodes(metrics metrics.CoreSchedulerMetrics) dao.HealthCheckInfo {
+func checkFailedNodes(metrics *metrics.SchedulerMetrics) dao.HealthCheckInfo {
 	failedNodes, err := metrics.GetFailedNodes()
 	if err != nil {
 		return CreateCheckInfo(false, "Failed nodes", "Check for failed nodes entries in metrics", err.Error())
@@ -303,8 +307,8 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 		"Check for negative resources in the nodes",
 		fmt.Sprintf("Nodes with negative resources: %q", nodesWithNegResources))
 	info[2] = CreateCheckInfo(len(allocationMismatch) == 0, "Consistency of data",
-		"Check if a node's allocated resource <= total resource of the node",
-		fmt.Sprintf("Nodes with inconsistent data: %q", allocationMismatch))
+		"Check if a partition's allocated resource <= total resource of the partition",
+		fmt.Sprintf("Partitions with inconsistent data: %q", allocationMismatch))
 	info[3] = CreateCheckInfo(len(totalResourceMismatch) == 0, "Consistency of data",
 		"Check if total partition resource == sum of the node resources from the partition",
 		fmt.Sprintf("Partitions with inconsistent data: %q", totalResourceMismatch))
@@ -331,7 +335,7 @@ func checkAppAllocations(app *objects.Application, nodes objects.NodeCollection)
 	orphanAllocationsOnApp := make([]*objects.Allocation, 0)
 	for _, alloc := range app.GetAllAllocations() {
 		if node := nodes.GetNode(alloc.GetNodeID()); node != nil {
-			if node.GetAllocation(alloc.GetUUID()) == nil {
+			if node.GetAllocation(alloc.GetAllocationKey()) == nil {
 				orphanAllocationsOnApp = append(orphanAllocationsOnApp, alloc)
 			}
 		} else {

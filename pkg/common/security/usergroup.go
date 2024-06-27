@@ -22,10 +22,14 @@ import (
 	"fmt"
 	"os/user"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -39,17 +43,19 @@ const (
 // global variables
 var now time.Time            // One clock to access
 var instance *UserGroupCache // The instance of the cache
-var once sync.Once           // Make sure we can only create the cache once
+var once = &sync.Once{}      // Make sure we can only create the cache once
+var stopped atomic.Bool      // whether UserGroupCache is stopped (needed for multiple partitions)
 
 // Cache for the user entries.
 type UserGroupCache struct {
-	lock     sync.RWMutex
+	lock     locking.RWMutex
 	interval time.Duration
 	ugs      map[string]*UserGroup
 	// methods that allow mocking of the class or extending to use non OS solutions
 	lookup        func(userName string) (*user.User, error)
 	lookupGroupID func(gid string) (*user.Group, error)
 	groupIds      func(osUser *user.User) ([]string, error)
+	stop          chan struct{}
 }
 
 // The structure of the entry in the cache.
@@ -70,31 +76,37 @@ func GetUserGroupCache(resolver string) *UserGroupCache {
 	once.Do(func() {
 		switch resolver {
 		case "test":
-			log.Logger().Info("creating test user group resolver")
+			log.Log(log.Security).Info("creating test user group resolver")
 			instance = GetUserGroupCacheTest()
 		case "os":
-			log.Logger().Info("creating OS user group resolver")
+			log.Log(log.Security).Info("creating OS user group resolver")
 			instance = GetUserGroupCacheOS()
 		default:
-			log.Logger().Info("creating UserGroupCache without resolver")
+			log.Log(log.Security).Info("creating UserGroupCache without resolver")
 			instance = GetUserGroupNoResolve()
 		}
 		instance.ugs = make(map[string]*UserGroup)
-		log.Logger().Info("starting UserGroupCache cleaner",
+		log.Log(log.Security).Info("starting UserGroupCache cleaner",
 			zap.Stringer("cleanerInterval", instance.interval))
 		go instance.run()
+		stopped.Store(false)
 	})
 	return instance
 }
 
 // Run the cleanup in a separate routine
 func (c *UserGroupCache) run() {
+	log.Log(log.Security).Info("Starting user/group cache cleaner")
 	for {
-		time.Sleep(instance.interval)
-		runStart := time.Now()
-		c.cleanUpCache()
-		log.Logger().Debug("time consumed cleaning the UserGroupCache",
-			zap.Stringer("duration", time.Since(runStart)))
+		select {
+		case <-c.stop:
+			return
+		case <-time.After(c.interval):
+			runStart := time.Now()
+			c.cleanUpCache()
+			log.Log(log.Security).Debug("time consumed cleaning the UserGroupCache",
+				zap.Stringer("duration", time.Since(runStart)))
+		}
 	}
 }
 
@@ -116,21 +128,37 @@ func (c *UserGroupCache) cleanUpCache() {
 
 // reset the cached content, test use only
 func (c *UserGroupCache) resetCache() {
-	log.Logger().Debug("UserGroupCache reset")
+	log.Log(log.Security).Debug("UserGroupCache reset")
 	instance.lock.Lock()
 	defer instance.lock.Unlock()
 	c.ugs = make(map[string]*UserGroup)
 }
 
-func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation) (UserGroup, error) {
+func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (UserGroup, error) {
 	// check if we have a user to convert
 	if ugi == nil || ugi.User == "" {
-		return UserGroup{}, fmt.Errorf("empty user cannot resolve")
+		if force {
+			// app creation is forced, so we need to synthesize a user / group
+			ugi.User = common.AnonymousUser
+			ugi.Groups = []string{common.AnonymousGroup}
+		} else {
+			return UserGroup{}, fmt.Errorf("empty user cannot resolve")
+		}
 	}
 	// try to resolve the user if group info is empty otherwise we just convert
 	if len(ugi.Groups) == 0 {
-		return c.GetUserGroup(ugi.User)
+		ug, err := c.GetUserGroup(ugi.User)
+		if force && (err != nil || ug.failed) {
+			ugi.Groups = []string{common.AnonymousGroup}
+		} else {
+			return ug, err
+		}
 	}
+
+	if !configs.UserRegExp.MatchString(ugi.User) {
+		return UserGroup{}, fmt.Errorf("invalid username, it contains invalid characters")
+	}
+
 	// If groups are already present we should just convert
 	newUG := UserGroup{User: ugi.User}
 	newUG.Groups = append(newUG.Groups, ugi.Groups...)
@@ -171,7 +199,7 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 	// find the user first, then resolve the groups
 	osUser, err := c.lookup(userName)
 	if err != nil {
-		log.Logger().Error("Error resolving user: does not exist",
+		log.Log(log.Security).Error("Error resolving user: does not exist",
 			zap.String("userName", userName),
 			zap.Error(err))
 		ug.failed = true
@@ -182,7 +210,7 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 		err = ug.resolveGroups(osUser, c)
 		// log a failure and continue
 		if err != nil {
-			log.Logger().Error("Error resolving groups for user",
+			log.Log(log.Security).Error("Error resolving groups for user",
 				zap.String("userName", userName),
 				zap.Error(err))
 			ug.failed = true
@@ -196,6 +224,20 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 	defer c.lock.Unlock()
 	c.ugs[userName] = ug
 	return *ug, err
+}
+
+func (c *UserGroupCache) Stop() {
+	// make sure that in case of multiple partitions, we call Stop() only once (the instance is shared)
+	// see ClusterContext.Stop()
+	if !stopped.Load() {
+		log.Log(log.Security).Info("Stopping UserGroupCache background cleanup")
+		close(c.stop)
+		once = &sync.Once{} // re-init so that GetUserGroupCache() can create a new instance again
+		instance = nil
+		stopped.Store(true)
+		return
+	}
+	log.Log(log.Security).Info("UserGroupCache already stopped")
 }
 
 // Resolve the groups for the user if the user exists

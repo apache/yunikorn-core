@@ -23,9 +23,10 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	yunikornLog "github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
@@ -34,19 +35,22 @@ const (
 	stateLogCallDepth = 2
 )
 
-var stateDump sync.Mutex // ensures only one state dump can be handled at a time
+var stateDump locking.Mutex // ensures only one state dump can be handled at a time
 
 type AggregatedStateInfo struct {
-	Timestamp        int64
-	Partitions       []*dao.PartitionInfo
-	Applications     []*dao.ApplicationDAOInfo
-	AppHistory       []*dao.ApplicationHistoryDAOInfo
-	Nodes            []*dao.NodesDAOInfo
-	ClusterInfo      []*dao.ClusterDAOInfo
-	ContainerHistory []*dao.ContainerHistoryDAOInfo
-	Queues           []dao.PartitionQueueDAOInfo
-	RMDiagnostics    map[string]interface{}
-	LogLevel         string
+	Timestamp        int64                            `json:"timestamp,omitempty"`
+	Partitions       []*dao.PartitionInfo             `json:"partitions,omitempty"`
+	Applications     []*dao.ApplicationDAOInfo        `json:"applications,omitempty"`
+	AppHistory       []*dao.ApplicationHistoryDAOInfo `json:"appHistory,omitempty"`
+	Nodes            []*dao.NodesDAOInfo              `json:"nodes,omitempty"`
+	ClusterInfo      []*dao.ClusterDAOInfo            `json:"clusterInfo,omitempty"`
+	ContainerHistory []*dao.ContainerHistoryDAOInfo   `json:"containerHistory,omitempty"`
+	Queues           []dao.PartitionQueueDAOInfo      `json:"queues,omitempty"`
+	RMDiagnostics    map[string]interface{}           `json:"rmDiagnostics,omitempty"`
+	LogLevel         string                           `json:"logLevel,omitempty"`
+	Config           *dao.ConfigDAOInfo               `json:"config,omitempty"`
+	PlacementRules   []*dao.RuleDAOInfo               `json:"placementRules,omitempty"`
+	EventStreams     []events.EventStreamData         `json:"eventStreams,omitempty"`
 }
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {
@@ -56,18 +60,13 @@ func getFullStateDump(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handlePeriodicStateDump(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
-	yunikornLog.Logger().Warn("Periodic state dumps are no longer supported. The /ws/v1/periodicstatedump endpoint will be removed in a future release.")
-}
-
 func doStateDump(w io.Writer) error {
 	stateDump.Lock()
 	defer stateDump.Unlock()
 
 	partitionContext := schedulerContext.GetPartitionMapClone()
 	records := imHistory.GetRecords()
-	zapConfig := yunikornLog.GetConfig()
+	zapConfig := yunikornLog.GetZapConfigs()
 
 	var aggregated = AggregatedStateInfo{
 		Timestamp:        time.Now().UnixNano(),
@@ -80,6 +79,9 @@ func doStateDump(w io.Writer) error {
 		Queues:           getPartitionQueuesDAO(partitionContext),
 		RMDiagnostics:    getResourceManagerDiagnostics(),
 		LogLevel:         zapConfig.Level.Level().String(),
+		Config:           getClusterConfigDAO(),
+		PlacementRules:   getPlacementRulesDAO(partitionContext),
+		EventStreams:     events.GetEventSystem().GetEventStreams(),
 	}
 
 	var prettyJSON []byte

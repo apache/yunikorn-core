@@ -104,7 +104,10 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 
 	var queueName string
 	var err error
+	var remainingRules = len(m.rules)
+	defaultPlacementQueue := common.GetConfigurationString(configs.GetConfigMap(), configs.AMFilteringDefaultQueueName, configs.DefaultQueueName)
 	for _, checkRule := range m.rules {
+		remainingRules--
 		log.Log(log.SchedApplication).Debug("Executing rule for placing application",
 			zap.String("ruleName", checkRule.getName()),
 			zap.String("application", app.ApplicationID))
@@ -115,6 +118,18 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 				zap.Error(err))
 			app.SetQueuePath("")
 			return err
+		}
+		// if no queue found even after the last rule, try to place in the default queue
+		if remainingRules == 0 && queueName == "" {
+			log.Log(log.Config).Info("No rule matched, placing application in default queue",
+				zap.String("application", app.ApplicationID),
+				zap.String("defaultQueue", defaultPlacementQueue))
+			//get the queue object
+			queue := m.queueFn(defaultPlacementQueue)
+			if queue != nil {
+				// default queue exist
+				queueName = defaultPlacementQueue
+			}
 		}
 		// no queue name next rule
 		if queueName == "" {

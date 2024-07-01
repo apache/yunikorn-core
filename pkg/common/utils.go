@@ -230,6 +230,14 @@ func WaitForCondition(interval time.Duration, timeout time.Duration, eval func()
 	}
 }
 
+func GetConfigurationString(configs map[string]string, key string, defaultValue string) string {
+	value, ok := configs[key]
+	if !ok {
+		return defaultValue
+	}
+	return value
+}
+
 func GetConfigurationBool(configs map[string]string, key string, defaultValue bool) bool {
 	value, ok := configs[key]
 	if !ok {

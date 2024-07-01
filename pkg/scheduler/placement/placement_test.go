@@ -380,14 +380,14 @@ partitions:
 		tags   map[string]string
 		user   security.UserGroup
 	}{
-		{"empty", "", "", tags, user},
+		{"empty", "", "root.default", tags, user},
 		{"provided unqualified", def, defQ, tags, user},
 		{"provided qualified", defQ, defQ, tags, user},
-		{"provided not exist", "unknown", "", tags, user},
-		{"provided parent", "root.parent", "", tags, user},
-		{"acl deny", "root.acldeny", "", tags, deny},
+		{"provided not exist", "unknown", "root.default", tags, user},
+		{"provided parent", "root.parent", "root.default", tags, user},
+		{"acl deny", "root.acldeny", "root.default", tags, deny},
 		{"create", "unknown", "root.namespace", map[string]string{"namespace": "namespace"}, user},
-		{"deny create", "unknown", "", map[string]string{"namespace": "namespace"}, deny},
+		{"deny create", "unknown", "root.default", map[string]string{"namespace": "namespace"}, deny},
 		{"forced exist", defQ, defQ, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
 		{"forced and create", "unknown", "root.namespace", map[string]string{siCommon.AppTagCreateForce: "true", "namespace": "namespace"}, user},
 		{"forced and deny create", "unknown", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true", "namespace": "namespace"}, deny},

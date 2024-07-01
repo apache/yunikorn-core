@@ -24,6 +24,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"runtime"
 	"sort"
 	"strconv"
@@ -668,6 +669,10 @@ func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	queueName := vars.ByName("queue")
+	if _, err := url.QueryUnescape(queueName); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
@@ -737,6 +742,10 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
+	if _, err := url.QueryUnescape(queueName); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
@@ -820,6 +829,10 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
+	if _, err := url.QueryUnescape(queueName); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	application := vars.ByName("application")
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
@@ -1078,6 +1091,10 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
 		return
 	}
+	if _, err := url.QueryUnescape(user); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	userTracker := ugm.GetUserManager().GetUserTracker(user)
 	if userTracker == nil {
 		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusNotFound)
@@ -1112,6 +1129,10 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	group := vars.ByName("group")
 	if group == "" {
 		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
+		return
+	}
+	if _, err := url.QueryUnescape(group); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	groupTracker := ugm.GetUserManager().GetGroupTracker(group)

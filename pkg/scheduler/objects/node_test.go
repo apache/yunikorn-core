@@ -186,7 +186,7 @@ func TestCanAllocate(t *testing.T) {
 			sn := &Node{
 				availableResource: tt.available,
 			}
-			assert.Equal(t, sn.CanAllocate(tt.request), tt.want, "unexpected node can run result")
+			assert.Equal(t, sn.CanAllocate(tt.request), tt.want, "unexpected node can run resultType")
 		})
 	}
 }
@@ -765,7 +765,7 @@ func TestNode_FitInNode(t *testing.T) {
 			sn := &Node{
 				totalResource: tt.totalRes,
 			}
-			assert.Equal(t, sn.FitInNode(tt.resRequest), tt.want, "unexpected node fit result")
+			assert.Equal(t, sn.FitInNode(tt.resRequest), tt.want, "unexpected node fit resultType")
 		})
 	}
 }

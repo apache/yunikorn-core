@@ -319,6 +319,111 @@ func TestStrictlyGreaterThan(t *testing.T) {
 	}
 }
 
+func TestMatchAnyOnlyExisting(t *testing.T) {
+	var tests = []struct {
+		caseName string
+		left     map[string]Quantity
+		right    map[string]Quantity
+		expected bool
+	}{
+		{"nil resource should not match", nil, nil, false},
+		{"empty resource should not match", map[string]Quantity{}, map[string]Quantity{}, false},
+		{"equal positive resources should match", map[string]Quantity{"first": 1}, map[string]Quantity{"first": 1}, true},
+		{"equal positive resources with different values should match", map[string]Quantity{"first": 1}, map[string]Quantity{"first": 2}, true},
+		{"positive resource and nil resource should not match", map[string]Quantity{"first": 1}, nil, false},
+		{"nil resource and positive resource should not match", nil, map[string]Quantity{"first": 1}, false},
+		{"positive resource and empty resource should not match", map[string]Quantity{"first": 1}, map[string]Quantity{}, false},
+		{"empty resource and positive resource should not match", map[string]Quantity{}, map[string]Quantity{"first": 1}, false},
+		{"positive resource should match even though value is zero", map[string]Quantity{"zero": 0}, map[string]Quantity{"zero": 0}, true},
+		{"positive resource should match even though extra resource type is there", map[string]Quantity{"first": 10}, map[string]Quantity{"first": 10, "second": 1}, true},
+		{"positive resource should match even though extra resource type is there", map[string]Quantity{"first": 10, "second": 1}, map[string]Quantity{"first": 10}, true},
+		{"resource should not match", map[string]Quantity{"first": 10}, map[string]Quantity{"second": 10}, false},
+		{"resource should not match", map[string]Quantity{"second": 10}, map[string]Quantity{"first": 10}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var left *Resource
+			var right *Resource
+			if tt.left != nil {
+				left = NewResourceFromMap(tt.left)
+			}
+			if tt.right != nil {
+				right = NewResourceFromMap(tt.right)
+			}
+			if result := left.MatchAny(right); result != tt.expected {
+				t.Errorf("MatchAny: got %v, expected %v", result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestStrictlyGreaterThanOnlyExisting(t *testing.T) {
+	type inputs struct {
+		larger  map[string]Quantity
+		smaller map[string]Quantity
+		sameRef bool
+	}
+	type outputs struct {
+		larger  bool
+		smaller bool
+	}
+	var tests = []struct {
+		caseName string
+		input    inputs
+		expected outputs
+	}{
+		{"Nil check", inputs{nil, nil, false}, outputs{false, false}},
+		{"Positive resource and empty resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{}, false}, outputs{true, false}},
+		{"Positive resource and nil resources", inputs{map[string]Quantity{"first": 10}, nil, false}, outputs{true, false}},
+
+		{"Equal Positive resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 10}, false}, outputs{false, false}},
+		{"Different Positive resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 20}, false}, outputs{false, true}},
+		{"Different Positive resources", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}, false}, outputs{true, false}},
+
+		{"Equal Positive resources with extra resource types", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 10, "sec": 10}, false}, outputs{false, false}},
+		{"Different Positive resources with extra resource types", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 20, "sec": 10}, false}, outputs{false, true}},
+		{"Different Positive resources with extra resource types", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5, "sec": 10}, false}, outputs{true, false}},
+
+		{"Equal Positive resources but completely disjoint", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"sec": 10}, false}, outputs{true, true}},
+		{"Zero resource and empty resources", inputs{map[string]Quantity{"first": 0}, map[string]Quantity{}, false}, outputs{false, false}},
+		{"Zero resource and nil resources", inputs{map[string]Quantity{"first": 0}, nil, false}, outputs{false, false}},
+
+		{"Negative resource and empty resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{}, false}, outputs{false, false}},
+		{"Negative resource and nil resources", inputs{map[string]Quantity{"first": -10}, nil, false}, outputs{false, false}},
+		{"Negative resource and empty resources", inputs{map[string]Quantity{"first": -10, "sec": 10}, map[string]Quantity{}, false}, outputs{false, false}},
+		{"Negative resource and nil resources", inputs{map[string]Quantity{"first": -10, "sec": 10}, nil, false}, outputs{false, false}},
+
+		{"Equal Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -10}, false}, outputs{false, false}},
+		{"Different Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -20}, false}, outputs{true, false}},
+		{"Different Negative resources", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -5}, false}, outputs{false, true}},
+
+		{"Equal Negative resources with extra resource types", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -10, "sec": 10}, false}, outputs{false, false}},
+		{"Different Negative resources with extra resource types", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -20, "sec": 10}, false}, outputs{true, false}},
+		{"Different Negative resources with extra resource types", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"first": -5, "sec": 10}, false}, outputs{false, true}},
+
+		{"Equal Negative resources but completely disjoint", inputs{map[string]Quantity{"first": -10}, map[string]Quantity{"sec": -10}, false}, outputs{true, true}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var compare, base *Resource
+			if tt.input.larger != nil {
+				compare = NewResourceFromMap(tt.input.larger)
+			}
+			if tt.input.sameRef {
+				base = compare
+			} else {
+				base = NewResourceFromMap(tt.input.smaller)
+			}
+			if result := compare.StrictlyGreaterThanOnlyExisting(base); result != tt.expected.larger {
+				t.Errorf("comapre %v, base %v, got %v, expeceted %v", compare, base, result, tt.expected.larger)
+			}
+			if result := base.StrictlyGreaterThanOnlyExisting(compare); result != tt.expected.smaller {
+				t.Errorf("base %v, compare %v, got %v, expeceted %v", base, compare, result, tt.expected.smaller)
+			}
+		})
+	}
+}
+
 func TestStrictlyGreaterThanOrEquals(t *testing.T) {
 	type inputs struct {
 		larger  map[string]Quantity
@@ -439,6 +544,46 @@ func TestComponentWiseMinPermissive(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := ComponentWiseMinPermissive(tc.res1, tc.res2)
 			assert.DeepEqual(t, result, tc.expected)
+		})
+	}
+}
+
+func TestComponentWiseMinOnlyExisting(t *testing.T) {
+	testCases := []struct {
+		name     string
+		left     map[string]Quantity
+		right    map[string]Quantity
+		expected map[string]Quantity
+	}{
+		{"Min of nil resources should be nil", nil, nil, nil},
+		{"Min of empty resources should be empty resource ", map[string]Quantity{}, map[string]Quantity{}, map[string]Quantity{}},
+		{"Min of positive resource and nil resource", map[string]Quantity{"first": 5}, nil, map[string]Quantity{"first": 5}},
+		{"Min of nil resource and positive resource", nil, map[string]Quantity{"first": 5}, nil},
+		{"Min of two positive resources", map[string]Quantity{"first": 5}, map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}},
+		{"Min of two positive resources", map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}, map[string]Quantity{"first": 5}},
+		{"Min of positive resource and negative resource", map[string]Quantity{"first": 5}, map[string]Quantity{"first": -5}, map[string]Quantity{"first": -5}},
+		{"Min of positive resource and negative resource", map[string]Quantity{"first": -5}, map[string]Quantity{"first": 5}, map[string]Quantity{"first": -5}},
+		{"Min of two positive resources with extra resource types", map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5, "second": 15}, map[string]Quantity{"first": 5}},
+		{"Min of two positive resources with extra resource types", map[string]Quantity{"first": 5, "second": 15}, map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5, "second": 15}},
+		{"Min of positive resource and negative resource with extra resource types", map[string]Quantity{"first": 10}, map[string]Quantity{"first": -5, "second": 15}, map[string]Quantity{"first": -5}},
+		{"Min of positive resource and negative resource with extra resource types", map[string]Quantity{"first": -5, "second": 15}, map[string]Quantity{"first": 10}, map[string]Quantity{"first": -5, "second": 15}},
+	}
+	for _, tc := range testCases {
+		var left *Resource
+		var right *Resource
+		var expected *Resource
+		if tc.left != nil {
+			left = NewResourceFromMap(tc.left)
+		}
+		if tc.right != nil {
+			right = NewResourceFromMap(tc.right)
+		}
+		if tc.expected != nil {
+			expected = NewResourceFromMap(tc.expected)
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			result := ComponentWiseMinOnlyExisting(left, right)
+			assert.DeepEqual(t, result, expected)
 		})
 	}
 }

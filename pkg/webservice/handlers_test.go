@@ -1241,11 +1241,11 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	// test invalid queue name
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
 	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.notexists@"}}))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.notexists!"}}))
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
-	assertQueueInvalid(t, resp, "root.notexists@", "notexists@")
+	assertQueueInvalid(t, resp, "root.notexists!", "notexists!")
 
 	// test queue is not exists
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
@@ -1696,13 +1696,13 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, "HTTP request create failed")
 	req5 = req5.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "queue", Value: "root.test.test123@"},
+		httprouter.Param{Key: "queue", Value: "root.test.test123!"},
 		httprouter.Param{Key: "application", Value: "app-1"},
 	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp5 := &MockResponseWriter{}
 	getApplication(resp5, req5)
-	assertQueueInvalid(t, resp5, "root.test.test123@", "test123@")
+	assertQueueInvalid(t, resp5, "root.test.test123!", "test123!")
 
 	// test missing params name
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
@@ -1744,7 +1744,7 @@ func assertQueueInvalid(t *testing.T, resp *MockResponseWriter, invalidQueuePath
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
-	assert.Equal(t, errInfo.Message, "problem in queue query parameter parsing as queue param "+invalidQueuePath+" contains invalid queue name "+invalidQueueName+". Queue name must only have alphanumeric characters, - or _, and be no longer than 64 characters except the recovery queue root.@recovery@", jsonMessageError)
+	assert.Equal(t, errInfo.Message, common.InvalidQueueName.Error(), jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1838,10 +1838,9 @@ func TestValidateQueue(t *testing.T) {
 	err := validateQueue("root.test.test123")
 	assert.NilError(t, err, "Queue path is correct but still throwing error.")
 
-	invalidQueuePath := "root.test.test123@"
-	invalidQueueName := "test123@"
+	invalidQueuePath := "root.test.test123!"
 	err1 := validateQueue(invalidQueuePath)
-	assert.Error(t, err1, "problem in queue query parameter parsing as queue param "+invalidQueuePath+" contains invalid queue name "+invalidQueueName+". Queue name must only have alphanumeric characters, - or _, and be no longer than 64 characters except the recovery queue root.@recovery@")
+	assert.Error(t, err1, common.InvalidQueueName.Error())
 
 	err2 := validateQueue("root")
 	assert.NilError(t, err2, "Queue path is correct but still throwing error.")

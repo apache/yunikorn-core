@@ -115,3 +115,15 @@ func TestReplaceDot(t *testing.T) {
 		t.Errorf("replace start or end dots failed, name: %s, ", name)
 	}
 }
+
+func TestBasicRule(t *testing.T) {
+	rule := &basicRule{}
+	if name := rule.getName(); name != "unnamed rule" {
+		t.Errorf("expected %s, got %s", "unnamed rule", name)
+	}
+
+	dao := rule.ruleDAO()
+	if dao.Name != "unnamed rule" {
+		t.Errorf("expected %s, got %s", "unnamed rule", dao.Name)
+	}
+}

@@ -68,6 +68,12 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 	if fr.queue == "" {
 		return fmt.Errorf("a fixed queue rule must have a queue name set")
 	}
+	parts := strings.Split(fr.queue, configs.DOT)
+	for _, part := range parts {
+		if err := configs.IsQueueNameValid(part); err != nil {
+			return err
+		}
+	}
 	fr.create = conf.Create
 	fr.filter = newFilter(conf.Filter)
 	// if we have a fully qualified queue name already we should not have a parent
@@ -92,7 +98,7 @@ func (fr *fixedRule) placeApplication(app *objects.Application, queueFn func(str
 		return "", nil
 	}
 	queueName := fr.queue
-	// if the fixed queue is already fully qualified skip the parent check
+	// not fully qualified queue, run the parent rule if set
 	if !fr.qualified {
 		var parentName string
 		var err error

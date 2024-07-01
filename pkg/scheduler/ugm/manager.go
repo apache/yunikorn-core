@@ -105,6 +105,9 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 		zap.String("application", applicationID),
 		zap.String("group", appGroup),
 		zap.Stringer("resource", usage))
+	if appGroup == common.Empty {
+		return
+	}
 	groupTracker := m.GetGroupTracker(appGroup)
 	if groupTracker == nil {
 		log.Log(log.SchedUGM).Error("group tracker should be available in groupTrackers map",

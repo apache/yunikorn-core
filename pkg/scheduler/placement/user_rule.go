@@ -75,6 +75,10 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 			zap.Any("user", app.GetUser()))
 		return "", nil
 	}
+	childQueueName := replaceDot(userName)
+	if err := configs.IsQueueNameValid(childQueueName); err != nil {
+		return "", err
+	}
 	var parentName string
 	var err error
 	// run the parent rule if set
@@ -102,7 +106,7 @@ func (ur *userRule) placeApplication(app *objects.Application, queueFn func(stri
 	if parentName == "" {
 		parentName = configs.RootQueue
 	}
-	queueName := parentName + configs.DOT + replaceDot(userName)
+	queueName := parentName + configs.DOT + childQueueName
 	// Log the result before we check the create flag
 	log.Log(log.SchedApplication).Debug("User rule intermediate result",
 		zap.String("application", app.ApplicationID),

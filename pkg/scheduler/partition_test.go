@@ -904,7 +904,7 @@ func TestAddApp(t *testing.T) {
 }
 
 func TestAddAppForced(t *testing.T) {
-	partition, err := newBasePartition()
+	partition, err := newBasePartitionNoRootDefault()
 	assert.NilError(t, err, "partition create failed")
 
 	// add a new app to an invalid queue
@@ -1481,9 +1481,9 @@ func TestReAddQueues(t *testing.T) {
 }
 
 func TestGetApplication(t *testing.T) {
-	partition, err := newBasePartition()
+	partition, err := newBasePartitionNoRootDefault()
 	assert.NilError(t, err, "partition create failed")
-	app := newApplication(appID1, "default", defQueue)
+	app := newApplication(appID1, "default", "root.custom")
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "no error expected while adding the application")
 	assert.Equal(t, partition.GetApplication(appID1), app, "partition failed to add app incorrect app returned")
@@ -1495,6 +1495,12 @@ func TestGetApplication(t *testing.T) {
 	if partition.GetApplication(appID2) != nil {
 		t.Fatal("partition added app incorrectly should have failed")
 	}
+
+	partition, err = newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err, "no error expected while adding the application")
+	assert.Equal(t, partition.GetApplication(appID2), app2, "partition failed to add app incorrect app returned")
 }
 
 func TestGetQueue(t *testing.T) {

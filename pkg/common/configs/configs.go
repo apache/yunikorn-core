@@ -27,8 +27,9 @@ import (
 
 const (
 	// prefixes
-	PrefixEvent  = "event."
-	PrefixHealth = "health."
+	PrefixEvent               = "event."
+	PrefixHealth              = "health."
+	PrefixAdmissionController = "admissionController."
 
 	HealthCheckInterval = PrefixHealth + "checkInterval"
 
@@ -40,6 +41,10 @@ const (
 	CMMaxEventStreamsPerHost  = PrefixEvent + "maxStreamsPerHost"
 	CMRESTResponseSize        = PrefixEvent + "RESTResponseSize"
 
+	//admission controller
+	PrefixAMFiltering           = PrefixAdmissionController + "filtering."
+	AMFilteringDefaultQueueName = PrefixAMFiltering + "defaultQueue"
+
 	// defaults
 	DefaultHealthCheckInterval     = 30 * time.Second
 	DefaultEventTrackingEnabled    = true
@@ -48,6 +53,7 @@ const (
 	DefaultMaxStreams              = uint64(100)
 	DefaultMaxStreamsPerHost       = uint64(15)
 	DefaultRESTResponseSize        = uint64(10000)
+	DefaultQueueName               = "root.default"
 )
 
 var ConfigContext *SchedulerConfigContext

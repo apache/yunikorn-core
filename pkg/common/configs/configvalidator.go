@@ -794,6 +794,7 @@ func Validate(newConfig *SchedulerConfig) error {
 		if err = checkLimitMaxApplications(partition.Queues[0], make(map[string]map[string]uint64), make(map[string]map[string]uint64), common.Empty); err != nil {
 			return err
 		}
+
 		// write back the partition to keep changes
 		newConfig.Partitions[i] = partition
 	}

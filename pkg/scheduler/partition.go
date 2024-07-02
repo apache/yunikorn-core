@@ -1245,7 +1245,7 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 //nolint:funlen
 func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
 	released := make([]*objects.Allocation, 0)
-	allocationKey := release.GetAllocationKey() // 获取 allocationKey，而不是 UUID
+	allocationKey := release.GetAllocationKey()
 	if allocationKey == "" {
 		log.Log(log.SchedPartition).Info("remove all allocations",
 			zap.String("appID", app.ApplicationID))

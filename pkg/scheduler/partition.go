@@ -1245,23 +1245,23 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 //nolint:funlen
 func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
 	released := make([]*objects.Allocation, 0)
-	uuid := release.GetUUID()
-	if uuid == "" {
-		log.Logger().Info("remove all allocations",
+	allocationKey := release.GetAllocationKey() // 获取 allocationKey，而不是 UUID
+	if allocationKey == "" {
+		log.Log(log.SchedPartition).Info("remove all allocations",
 			zap.String("appID", app.ApplicationID))
 		released = append(released, app.RemoveAllAllocations()...)
 	} else {
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			log.Logger().Info("replacing placeholder allocation",
+			log.Log(log.SchedPartition).Info("replacing placeholder allocation",
 				zap.String("appID", app.ApplicationID),
-				zap.String("allocationId", uuid))
-			if alloc := app.ReplaceAllocation(uuid); alloc != nil {
+				zap.String("allocationKey", allocationKey))
+			if alloc := app.ReplaceAllocation(allocationKey); alloc != nil {
 				released = append(released, alloc)
 			}
 		} else {
-			log.Logger().Info("removing allocation from application",
+			log.Log(log.SchedPartition).Info("removing allocation from application",
 				zap.String("appID", app.ApplicationID),
-				zap.String("allocationId", uuid),
+				zap.String("allocationKey", allocationKey),
 				zap.Stringer("terminationType", release.TerminationType))
 			if alloc := app.RemoveAllocation(allocationKey, release.TerminationType); alloc != nil {
 				released = append(released, alloc)
@@ -1276,13 +1276,13 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		return nil, nil
 	}
 	appID := release.ApplicationID
-	uuid := release.GetUUID()
+	allocationKey := release.GetAllocationKey()
 	app := pc.getApplication(appID)
 	// no app nothing to do everything should already be clean
 	if app == nil {
-		log.Logger().Info("Application not found while releasing allocation",
+		log.Log(log.SchedPartition).Info("Application not found while releasing allocation",
 			zap.String("appID", appID),
-			zap.String("allocationId", uuid),
+			zap.String("allocationId", allocationKey),
 			zap.Stringer("terminationType", release.TerminationType))
 		return nil, nil
 	}
@@ -1355,6 +1355,9 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			totalPreempting.AddTo(alloc.GetAllocatedResource())
 		}
 	}
+
+	queue := app.GetQueue()
+
 	if resources.StrictlyGreaterThanZero(total) {
 		if err := queue.DecAllocatedResource(total); err != nil {
 			log.Log(log.SchedPartition).Warn("failed to release resources from queue",

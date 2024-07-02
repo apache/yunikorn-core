@@ -3301,6 +3301,8 @@ func TestPreemptedPlaceholderSkip(t *testing.T) {
 }
 
 // simple direct replace with one node
+//
+//nolint:funlen
 func TestTryPlaceholderAllocate(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()

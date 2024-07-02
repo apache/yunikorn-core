@@ -157,6 +157,8 @@ partitions:
 }
 
 // Test basic interactions from rm proxy to cache and to scheduler.
+//
+//nolint:funlen
 func TestBasicScheduler(t *testing.T) {
 	// Register RM
 	// Start all tests
@@ -794,6 +796,7 @@ partitions:
 	ms.mockRM.waitForAcceptedApplication(t, "app-added-2", 1000)
 }
 
+//nolint:funlen
 func TestSchedulingOverMaxCapacity(t *testing.T) {
 	var parameters = []struct {
 		name       string

@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+//nolint:funlen
 func benchmarkScheduling(b *testing.B, numNodes, numPods int) {
 	log.UpdateLoggingConfig(map[string]string{"log.level": "WARN"})
 	defer log.UpdateLoggingConfig(nil)

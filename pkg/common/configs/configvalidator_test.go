@@ -29,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
+//nolint:funlen
 func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 	negativeResourceMap := map[string]string{"memory": "-50", "vcores": "33"}
 	resourceMapWithSyntaxError := map[string]string{"memory": "ten", "vcores": ""}

@@ -29,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -56,7 +57,7 @@ type Node struct {
 
 	reservations map[string]*reservation // a map of reservations
 	listeners    []NodeListener          // a list of node listeners
-	nodeEvents   *nodeEvents
+	nodeEvents   *schedEvt.NodeEvents
 
 	locking.RWMutex
 }
@@ -77,7 +78,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 		schedulable:       true,
 		listeners:         make([]NodeListener, 0),
 	}
-	sn.nodeEvents = newNodeEvents(events.GetEventSystem())
+	sn.nodeEvents = schedEvt.NewNodeEvents(events.GetEventSystem())
 	// initialise available resources
 	var err error
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
@@ -165,7 +166,7 @@ func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource
 	delta := resources.Sub(newCapacity, sn.totalResource)
 	sn.totalResource = newCapacity
 	sn.refreshAvailableResource()
-	sn.nodeEvents.sendNodeCapacityChangedEvent(sn.NodeID, sn.totalResource.Clone())
+	sn.nodeEvents.SendNodeCapacityChangedEvent(sn.NodeID, sn.totalResource.Clone())
 	return delta
 }
 
@@ -184,7 +185,7 @@ func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
 		return
 	}
 	sn.occupiedResource = occupiedResource
-	sn.nodeEvents.sendNodeOccupiedResourceChangedEvent(sn.NodeID, sn.occupiedResource.Clone())
+	sn.nodeEvents.SendNodeOccupiedResourceChangedEvent(sn.NodeID, sn.occupiedResource.Clone())
 	sn.refreshAvailableResource()
 }
 
@@ -234,7 +235,7 @@ func (sn *Node) SetSchedulable(schedulable bool) {
 	sn.Lock()
 	defer sn.Unlock()
 	sn.schedulable = schedulable
-	sn.nodeEvents.sendNodeSchedulableChangedEvent(sn.NodeID, sn.schedulable)
+	sn.nodeEvents.SendNodeSchedulableChangedEvent(sn.NodeID, sn.schedulable)
 }
 
 // Can this node be used in scheduling.
@@ -304,7 +305,7 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 		delete(sn.allocations, allocationKey)
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
-		sn.nodeEvents.sendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.allocatedResource)
+		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.allocatedResource)
 		return alloc
 	}
 
@@ -327,7 +328,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 		sn.allocations[alloc.GetAllocationKey()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
-		sn.nodeEvents.sendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)
+		sn.nodeEvents.SendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)
 		return true
 	}
 	return false
@@ -490,7 +491,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.GetAllocatedResource().String())
 	}
 	sn.reservations[appReservation.getKey()] = appReservation
-	sn.nodeEvents.sendReservedEvent(sn.NodeID, ask.GetAllocatedResource(), ask.GetAllocationKey())
+	sn.nodeEvents.SendReservedEvent(sn.NodeID, ask.GetAllocatedResource(), ask.GetAllocationKey())
 	// reservation added successfully
 	return nil
 }
@@ -512,7 +513,7 @@ func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
 	}
 	if _, ok := sn.reservations[resKey]; ok {
 		delete(sn.reservations, resKey)
-		sn.nodeEvents.sendUnreservedEvent(sn.NodeID, ask.GetAllocatedResource(), ask.GetAllocationKey())
+		sn.nodeEvents.SendUnreservedEvent(sn.NodeID, ask.GetAllocatedResource(), ask.GetAllocationKey())
 		return 1, nil
 	}
 	// reservation was not found
@@ -589,9 +590,9 @@ func (sn *Node) getListeners() []NodeListener {
 func (sn *Node) SendNodeAddedEvent() {
 	sn.RLock()
 	defer sn.RUnlock()
-	sn.nodeEvents.sendNodeAddedEvent(sn.NodeID, sn.totalResource.Clone())
+	sn.nodeEvents.SendNodeAddedEvent(sn.NodeID, sn.totalResource.Clone())
 }
 
 func (sn *Node) SendNodeRemovedEvent() {
-	sn.nodeEvents.sendNodeRemovedEvent(sn.NodeID)
+	sn.nodeEvents.SendNodeRemovedEvent(sn.NodeID)
 }

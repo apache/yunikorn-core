@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"reflect"
 	"strings"
 	"testing"
@@ -1255,6 +1256,40 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	assertQueueNotExists(t, resp)
+
+	// test queue name with special characters escaped properly
+	queueName := url.QueryEscape("root.parent.test@t#:rt:/_ff-test")
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/"+queueName, strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: queueName},
+	}))
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	assertQueueNotExists(t, resp)
+
+	// test queue name with special characters escaped not properly, catch error at request level
+	invalidQueueName := "root.parent.test%Zt%23%3Art%3A%2F_ff-test"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/"+invalidQueueName, strings.NewReader(""))
+	assert.ErrorContains(t, err, "invalid URL escape")
+
+	// test queue name with special characters escaped not properly, catch error while un escaping queue name
+	invalidQueueName = "root.parent.test%Zt%23%3Art%3A%2F_ff-test"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.a", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: invalidQueueName},
+	}))
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func TestGetClusterInfo(t *testing.T) {
@@ -1507,6 +1542,40 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getQueueApplications(resp, req)
 	assertParamsMissing(t, resp)
+
+	// test queue name with special characters escaped properly
+	queueName := url.QueryEscape("root.parent.test@t#:rt:/_ff-test")
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/"+queueName+"/applications", strings.NewReader(""))
+	assert.NilError(t, err, "Get Queue Applications Handler request failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: queueName},
+	}))
+	resp = &MockResponseWriter{}
+	getQueueApplications(resp, req)
+	assertQueueNotExists(t, resp)
+
+	// test queue name with special characters escaped not properly, catch error at request level
+	invalidQueueName := "root.parent.test%Zt%23%3Art%3A%2F_ff-test"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/"+invalidQueueName+"/applications", strings.NewReader(""))
+	assert.ErrorContains(t, err, "invalid URL escape")
+
+	// test queue name with special characters escaped not properly, catch error while un escaping queue name
+	invalidQueueName = "root.parent.test%Zt%23%3Art%3A%2F_ff-test"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/applications", strings.NewReader(""))
+	assert.NilError(t, err, "Get Queue Applications Handler request failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: invalidQueueName},
+	}))
+	resp = &MockResponseWriter{}
+	getQueueApplications(resp, req)
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func checkLegalGetAppsRequest(t *testing.T, url string, params httprouter.Params, expected []*dao.ApplicationDAOInfo) {
@@ -1710,6 +1779,40 @@ func TestGetApplicationHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getApplication(resp, req)
 	assertParamsMissing(t, resp)
+
+	// test queue name with special characters escaped properly
+	queueName := url.QueryEscape("root.parent.test@t#:rt:/_ff-test")
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: queueName},
+	}))
+	resp = &MockResponseWriter{}
+	getQueueApplications(resp, req)
+	assertQueueNotExists(t, resp)
+
+	// test queue name with special characters escaped not properly, catch error at request level
+	invalidQueueName := "root.parent.test%Zt%23%3Art%3A%2F_ff-test"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/"+invalidQueueName+"/application/app-1", strings.NewReader(""))
+	assert.ErrorContains(t, err, "invalid URL escape")
+
+	// test queue name with special characters escaped not properly, catch error while un escaping queue name
+	invalidQueueName = "root.parent.test%Zt%23%3Art%3A%2F_ff-test"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: invalidQueueName},
+	}))
+	resp = &MockResponseWriter{}
+	getApplication(resp, req)
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {
@@ -1947,6 +2050,41 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	getUserResourceUsage(resp, req)
 	assertUserNotExists(t, resp)
 
+	// Test username with special characters escaped properly
+	validUser := url.QueryEscape("test_a-b_c@#d@do:mai/n.com")
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/"+validUser, strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: validUser},
+		httprouter.Param{Key: "group", Value: "testgroup"},
+	}))
+	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
+	resp = &MockResponseWriter{}
+	getUserResourceUsage(resp, req)
+	assertUserNotExists(t, resp)
+
+	// Test username with special characters not escaped properly, catch error at request level
+	invalidUser := "test_a-b_c%Zt@#d@do:mai/n.com"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/"+invalidUser, strings.NewReader(""))
+	assert.ErrorContains(t, err, "invalid URL escape")
+
+	// Test username with special characters not escaped properly, catch error while un escaping username
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/user/test", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: invalidUser},
+		httprouter.Param{Key: "group", Value: "testgroup"},
+	}))
+	assert.NilError(t, err, "Get User Resource Usage Handler request failed")
+	resp = &MockResponseWriter{}
+	getUserResourceUsage(resp, req)
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
 	// Test existed group query
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/", strings.NewReader(""))
 	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
@@ -1992,6 +2130,40 @@ func TestSpecificUserAndGroupResourceUsage(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getGroupResourceUsage(resp, req)
 	assertParamsMissing(t, resp)
+
+	// Test group name with special characters escaped properly
+	validGroup := url.QueryEscape("test_a-b_c@#d@do:mai/n.com")
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/"+validGroup, strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: "testuser"},
+		httprouter.Param{Key: "group", Value: validGroup},
+	}))
+	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
+	resp = &MockResponseWriter{}
+	getGroupResourceUsage(resp, req)
+	assertGroupNotExists(t, resp)
+
+	// Test group name with special characters not escaped properly, catch error at request level
+	invalidGroup := "test_a-b_c%Zt@#d@do:mai/n.com"
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/"+invalidGroup, strings.NewReader(""))
+	assert.ErrorContains(t, err, "invalid URL escape")
+
+	// Test group name with special characters not escaped properly, catch error while un escaping group name
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/usage/group/test", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "user", Value: "testuser"},
+		httprouter.Param{Key: "group", Value: invalidGroup},
+	}))
+	assert.NilError(t, err, "Get Group Resource Usage Handler request failed")
+	resp = &MockResponseWriter{}
+	getGroupResourceUsage(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func TestUsersAndGroupsResourceUsage(t *testing.T) {

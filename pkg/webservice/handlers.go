@@ -669,16 +669,17 @@ func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	queueName := vars.ByName("queue")
-	if _, err := url.QueryUnescape(queueName); err != nil {
+	escapedQueueName, err := url.QueryUnescape(queueName)
+	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	queueErr := validateQueue(queueName)
+	queueErr := validateQueue(escapedQueueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
 	}
-	queue := partitionContext.GetQueue(queueName)
+	queue := partitionContext.GetQueue(escapedQueueName)
 	if queue == nil {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
@@ -742,11 +743,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
-	if _, err := url.QueryUnescape(queueName); err != nil {
+	escapedQueueName, err := url.QueryUnescape(queueName)
+	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	queueErr := validateQueue(queueName)
+	queueErr := validateQueue(escapedQueueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
@@ -756,7 +758,7 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	queue := partitionContext.GetQueue(queueName)
+	queue := partitionContext.GetQueue(escapedQueueName)
 	if queue == nil {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
@@ -829,7 +831,8 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
-	if _, err := url.QueryUnescape(queueName); err != nil {
+	escapedQueueName, err := url.QueryUnescape(queueName)
+	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -840,15 +843,15 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var app *objects.Application
-	if len(queueName) == 0 {
+	if len(escapedQueueName) == 0 {
 		app = partitionContext.GetApplication(application)
 	} else {
-		queueErr := validateQueue(queueName)
+		queueErr := validateQueue(escapedQueueName)
 		if queueErr != nil {
 			buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 			return
 		}
-		queue := partitionContext.GetQueue(queueName)
+		queue := partitionContext.GetQueue(escapedQueueName)
 		if queue == nil {
 			buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 			return
@@ -1091,11 +1094,12 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
 		return
 	}
-	if _, err := url.QueryUnescape(user); err != nil {
+	escapedUser, err := url.QueryUnescape(user)
+	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	userTracker := ugm.GetUserManager().GetUserTracker(user)
+	userTracker := ugm.GetUserManager().GetUserTracker(escapedUser)
 	if userTracker == nil {
 		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusNotFound)
 		return
@@ -1131,11 +1135,12 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
 		return
 	}
-	if _, err := url.QueryUnescape(group); err != nil {
+	escapedGroupName, err := url.QueryUnescape(group)
+	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	groupTracker := ugm.GetUserManager().GetGroupTracker(group)
+	groupTracker := ugm.GetUserManager().GetGroupTracker(escapedGroupName)
 	if groupTracker == nil {
 		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusNotFound)
 		return

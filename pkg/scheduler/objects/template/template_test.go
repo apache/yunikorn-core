@@ -27,6 +27,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 func getResourceConf() map[string]string {
@@ -60,6 +61,20 @@ func checkMembers(t *testing.T, template *Template, maxApplications uint64, prop
 	assert.DeepEqual(t, template.GetProperties(), properties)
 	assert.DeepEqual(t, template.GetMaxResource(), maxResource)
 	assert.DeepEqual(t, template.GetGuaranteedResource(), guaranteedResource)
+
+	assert.DeepEqual(t, template.GetTemplateInfo(), &dao.TemplateInfo{
+		MaxApplications:    template.GetMaxApplications(),
+		Properties:         template.GetProperties(),
+		MaxResource:        template.maxResource.DAOMap(),
+		GuaranteedResource: template.guaranteedResource.DAOMap(),
+	})
+}
+
+func checkNilTemplate(t *testing.T, template *Template) {
+	assert.Assert(t, template == nil)
+	assert.Assert(t, template.GetMaxResource() == nil)
+	assert.Assert(t, template.GetGuaranteedResource() == nil)
+	assert.Assert(t, template.GetTemplateInfo() == nil)
 }
 
 func TestNewTemplate(t *testing.T) {
@@ -95,7 +110,7 @@ func TestFromConf(t *testing.T) {
 	checkMembers(t, template, maxApplications, properties, maxResource, guaranteedResource)
 
 	// case 1: empty map produces nil template
-	empty0, err := FromConf(&configs.ChildTemplate{
+	template, err = FromConf(&configs.ChildTemplate{
 		Properties: make(map[string]string),
 		Resources: configs.Resources{
 			Max:        make(map[string]string),
@@ -103,11 +118,11 @@ func TestFromConf(t *testing.T) {
 		},
 	})
 	assert.NilError(t, err)
-	assert.Assert(t, empty0 == nil)
+	checkNilTemplate(t, template)
 
-	empty1, err := FromConf(nil)
+	template, err = FromConf(nil)
 	assert.NilError(t, err)
-	assert.Assert(t, empty1 == nil)
+	checkNilTemplate(t, template)
 
 	// case 2: empty key-value produces nil template
 	emptyProps := make(map[string]string)
@@ -134,4 +149,26 @@ func TestFromConf(t *testing.T) {
 	})
 	assert.NilError(t, err)
 	assert.Assert(t, validTemplate != nil)
+
+	// case 4: invalid max resource
+	template, err = FromConf(&configs.ChildTemplate{
+		Properties: make(map[string]string),
+		Resources: configs.Resources{
+			Max:        map[string]string{"memory": "500m"},
+			Guaranteed: make(map[string]string),
+		},
+	})
+	assert.Assert(t, err != nil)
+	checkNilTemplate(t, template)
+
+	// case 5: invalid guaranteed resource
+	template, err = FromConf(&configs.ChildTemplate{
+		Properties: make(map[string]string),
+		Resources: configs.Resources{
+			Max:        make(map[string]string),
+			Guaranteed: map[string]string{"memory": "500m"},
+		},
+	})
+	assert.Assert(t, err != nil)
+	checkNilTemplate(t, template)
 }

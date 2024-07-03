@@ -1239,10 +1239,6 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 	return mapResult
 }
 
-// removeAllocation removes the referenced allocation(s) from the applications and nodes
-// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-//
-//nolint:funlen
 func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
 	released := make([]*objects.Allocation, 0)
 	allocationKey := release.GetAllocationKey()
@@ -1271,6 +1267,10 @@ func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app 
 	return released
 }
 
+// removeAllocation removes the referenced allocation(s) from the applications and nodes
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
+//
+//nolint:funlen
 func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
 	if release == nil {
 		return nil, nil

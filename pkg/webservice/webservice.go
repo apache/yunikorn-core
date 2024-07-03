@@ -65,7 +65,11 @@ func loggingHandler(inner http.Handler, name string) http.HandlerFunc {
 // TODO we need the port to be configurable
 func (m *WebService) StartWebApp() {
 	router := newRouter()
-	m.httpServer = &http.Server{Addr: ":9080", Handler: router}
+	m.httpServer = &http.Server{
+		Addr:              ":9080",
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	log.Log(log.REST).Info("web-app started", zap.Int("port", 9080))
 	go func() {

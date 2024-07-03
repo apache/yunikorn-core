@@ -35,6 +35,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/handler"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -2241,7 +2242,7 @@ func TestRequestDoesNotFitQueueEvents(t *testing.T) {
 	ask := newAllocationAsk("alloc-0", "app-1", res)
 	app := newApplication(appID1, "default", "root.default")
 	eventSystem := mock.NewEventSystem()
-	ask.askEvents = newAskEvents(eventSystem)
+	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
@@ -2312,7 +2313,7 @@ func TestRequestDoesNotFitUserQuotaQueueEvents(t *testing.T) {
 	ask := newAllocationAsk("alloc-0", "app-1", res)
 	app := newApplication(appID1, "default", "root")
 	eventSystem := mock.NewEventSystem()
-	ask.askEvents = newAskEvents(eventSystem)
+	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
@@ -2613,7 +2614,7 @@ func TestUpdateRunnableStatus(t *testing.T) {
 	assert.Assert(t, app.runnableInQueue)
 	assert.Assert(t, app.runnableByUserLimit)
 	eventSystem := mock.NewEventSystem()
-	app.appEvents = newApplicationEvents(eventSystem)
+	app.appEvents = schedEvt.NewApplicationEvents(eventSystem)
 
 	// App runnable - no events
 	app.updateRunnableStatus(true, true)
@@ -2741,5 +2742,5 @@ func (sa *Application) disableStateChangeEvents() {
 func (sa *Application) resetAppEvents() {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.appEvents = newApplicationEvents(events.GetEventSystem())
+	sa.appEvents = schedEvt.NewApplicationEvents(events.GetEventSystem())
 }

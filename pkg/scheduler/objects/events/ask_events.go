@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package objects
+package events
 
 import (
 	"fmt"
@@ -28,13 +28,13 @@ import (
 	"github.com/apache/yunikorn-core/pkg/events"
 )
 
-// Ask-specific events. These events are of REQUEST type, so they are eventually sent to the respective pods in K8s.
-type askEvents struct {
+// AskEvents Ask-specific events. These events are of REQUEST type, so they are eventually sent to the respective pods in K8s.
+type AskEvents struct {
 	eventSystem events.EventSystem
 	limiter     *rate.Limiter
 }
 
-func (ae *askEvents) sendRequestExceedsQueueHeadroom(allocKey, appID string, headroom, allocatedResource *resources.Resource, queuePath string) {
+func (ae *AskEvents) SendRequestExceedsQueueHeadroom(allocKey, appID string, headroom, allocatedResource *resources.Resource, queuePath string) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -43,7 +43,7 @@ func (ae *askEvents) sendRequestExceedsQueueHeadroom(allocKey, appID string, hea
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *askEvents) sendRequestFitsInQueue(allocKey, appID, queuePath string, allocatedResource *resources.Resource) {
+func (ae *AskEvents) SendRequestFitsInQueue(allocKey, appID, queuePath string, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -52,7 +52,7 @@ func (ae *askEvents) sendRequestFitsInQueue(allocKey, appID, queuePath string, a
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *askEvents) sendRequestExceedsUserQuota(allocKey, appID string, headroom, allocatedResource *resources.Resource) {
+func (ae *AskEvents) SendRequestExceedsUserQuota(allocKey, appID string, headroom, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -61,7 +61,7 @@ func (ae *askEvents) sendRequestExceedsUserQuota(allocKey, appID string, headroo
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *askEvents) sendRequestFitsInUserQuota(allocKey, appID string, allocatedResource *resources.Resource) {
+func (ae *AskEvents) SendRequestFitsInUserQuota(allocKey, appID string, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -70,7 +70,7 @@ func (ae *askEvents) sendRequestFitsInUserQuota(allocKey, appID string, allocate
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *askEvents) sendPredicateFailed(allocKey, appID, predicateMsg string, allocatedResource *resources.Resource) {
+func (ae *AskEvents) SendPredicateFailed(allocKey, appID, predicateMsg string, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() || !ae.limiter.Allow() {
 		return
 	}
@@ -79,12 +79,12 @@ func (ae *askEvents) sendPredicateFailed(allocKey, appID, predicateMsg string, a
 	ae.eventSystem.AddEvent(event)
 }
 
-func newAskEvents(evt events.EventSystem) *askEvents {
+func NewAskEvents(evt events.EventSystem) *AskEvents {
 	return newAskEventsWithRate(evt, 15*time.Second, 1)
 }
 
-func newAskEventsWithRate(evt events.EventSystem, interval time.Duration, burst int) *askEvents {
-	return &askEvents{
+func newAskEventsWithRate(evt events.EventSystem, interval time.Duration, burst int) *AskEvents {
+	return &AskEvents{
 		eventSystem: evt,
 		limiter:     rate.NewLimiter(rate.Every(interval), burst),
 	}

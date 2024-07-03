@@ -39,6 +39,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -117,7 +118,7 @@ type Application struct {
 	rmEventHandler        handler.EventHandler
 	rmID                  string
 	terminatedCallback    func(appID string)
-	appEvents             *applicationEvents
+	appEvents             *schedEvt.ApplicationEvents
 	sendStateChangeEvents bool // whether to send state-change events or not (simplifies testing)
 
 	locking.RWMutex
@@ -187,8 +188,8 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.user = ugi
 	app.rmEventHandler = eventHandler
 	app.rmID = rmID
-	app.appEvents = newApplicationEvents(events.GetEventSystem())
-	app.appEvents.sendNewApplicationEvent(app.ApplicationID)
+	app.appEvents = schedEvt.NewApplicationEvents(events.GetEventSystem())
+	app.appEvents.SendNewApplicationEvent(app.ApplicationID)
 	return app
 }
 
@@ -553,7 +554,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
 		for _, ask := range sa.requests {
-			sa.appEvents.sendRemoveAskEvent(ask, detail)
+			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.allocatedResource, detail)
 		}
 		sa.requests = make(map[string]*AllocationAsk)
 		sa.sortedRequests = sortedRequests{}
@@ -582,7 +583,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 			}
 			delete(sa.requests, allocKey)
 			sa.sortedRequests.remove(ask)
-			sa.appEvents.sendRemoveAskEvent(ask, detail)
+			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.allocatedResource, detail)
 			if priority := ask.GetPriority(); priority >= sa.askMaxPriority {
 				sa.updateAskMaxPriority()
 			}
@@ -655,7 +656,7 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))
 	sa.sortedRequests.insert(ask)
-	sa.appEvents.sendNewAskEvent(ask)
+	sa.appEvents.SendNewAskEvent(sa.ApplicationID, ask.allocationKey, ask.allocatedResource)
 
 	return nil
 }
@@ -1145,7 +1146,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				// release the placeholder and tell the RM
 				ph.SetReleased(true)
 				sa.notifyRMAllocationReleased([]*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
-				sa.appEvents.sendPlaceholderLargerEvent(ph, request)
+				sa.appEvents.SendPlaceholderLargerEvent(ph.taskGroupName, sa.ApplicationID, ph.allocationKey, request.allocatedResource, ph.allocatedResource)
 				continue
 			}
 			// placeholder is the same or larger continue processing and difference is handled when the placeholder
@@ -1667,7 +1668,7 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		sa.allocatedResource = resources.Add(sa.allocatedResource, alloc.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
-	sa.appEvents.sendNewAllocationEvent(alloc)
+	sa.appEvents.SendNewAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.allocatedResource)
 	sa.allocations[alloc.GetAllocationKey()] = alloc
 }
 
@@ -1822,7 +1823,7 @@ func (sa *Application) removeAllocationInternal(allocationKey string, releaseTyp
 		}
 	}
 	delete(sa.allocations, allocationKey)
-	sa.appEvents.sendRemoveAllocationEvent(alloc, releaseType)
+	sa.appEvents.SendRemoveAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.allocatedResource, releaseType)
 	return alloc
 }
 
@@ -1853,7 +1854,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 		allocationsToRelease = append(allocationsToRelease, alloc)
 		// Aggregate the resources used by this alloc to the application's user resource tracker
 		sa.trackCompletedResource(alloc)
-		sa.appEvents.sendRemoveAllocationEvent(alloc, si.TerminationType_STOPPED_BY_RM)
+		sa.appEvents.SendRemoveAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.allocatedResource, si.TerminationType_STOPPED_BY_RM)
 	}
 
 	// if an app doesn't have any allocations and the user doesn't have other applications,
@@ -2098,12 +2099,12 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 			log.Log(log.SchedApplication).Info("Application is now runnable in queue",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("queue", sa.queuePath))
-			sa.appEvents.sendAppRunnableInQueueEvent(sa.ApplicationID)
+			sa.appEvents.SendAppRunnableInQueueEvent(sa.ApplicationID)
 		} else {
 			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the queue limit",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("queue", sa.queuePath))
-			sa.appEvents.sendAppNotRunnableInQueueEvent(sa.ApplicationID)
+			sa.appEvents.SendAppNotRunnableInQueueEvent(sa.ApplicationID)
 		}
 	}
 	sa.runnableInQueue = runnableInQueue
@@ -2115,14 +2116,14 @@ func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit
 				zap.String("queue", sa.queuePath),
 				zap.String("user", sa.user.User),
 				zap.Strings("groups", sa.user.Groups))
-			sa.appEvents.sendAppRunnableQuotaEvent(sa.ApplicationID)
+			sa.appEvents.SendAppRunnableQuotaEvent(sa.ApplicationID)
 		} else {
 			log.Log(log.SchedApplication).Info("Maximum number of running applications reached the user/group limit",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("queue", sa.queuePath),
 				zap.String("user", sa.user.User),
 				zap.Strings("groups", sa.user.Groups))
-			sa.appEvents.sendAppNotRunnableQuotaEvent(sa.ApplicationID)
+			sa.appEvents.SendAppNotRunnableQuotaEvent(sa.ApplicationID)
 		}
 	}
 	sa.runnableByUserLimit = runnableByUserLimit

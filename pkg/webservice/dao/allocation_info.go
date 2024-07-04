@@ -32,4 +32,5 @@ type AllocationDAOInfo struct {
 	PlaceholderUsed  bool              `json:"placeholderUsed,omitempty"`
 	TaskGroupName    string            `json:"taskGroupName,omitempty"`
 	Preempted        bool              `json:"preempted,omitempty"`
+	Originator       bool              `json:"originator,omitempty"`
 }

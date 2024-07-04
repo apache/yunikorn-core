@@ -238,7 +238,7 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, alloc.IsPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, alloc.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 	assert.Equal(t, alloc.GetAsk().GetCreateTime(), time.Unix(past, 0)) //nolint:staticcheck
-	assert.Assert(t, alloc.GetAsk().IsOriginator(), "ask should have been an originator")
+	assert.Assert(t, alloc.IsOriginator(), "ask should have been an originator")
 	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptSelf(), "ask should not have allow-preempt-self set")
 	assert.Assert(t, alloc.GetAsk().IsAllowPreemptOther(), "ask should have allow-preempt-other set")
 
@@ -251,7 +251,7 @@ func TestNewAllocFromSI(t *testing.T) {
 	endTime := time.Now().Unix()
 	assert.Assert(t, alloc.GetAsk().GetCreateTime().Unix() >= startTime, "alloc create time is too early")
 	assert.Assert(t, alloc.GetAsk().GetCreateTime().Unix() <= endTime, "alloc create time is too late")
-	assert.Assert(t, !alloc.GetAsk().IsOriginator(), "ask should not have been an originator")
+	assert.Assert(t, !alloc.IsOriginator(), "ask should not have been an originator")
 	assert.Assert(t, alloc.GetAsk().IsAllowPreemptSelf(), "ask should have allow-preempt-self set")
 	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptOther(), "ask should not have allow-preempt-other set")
 

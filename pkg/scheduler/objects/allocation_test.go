@@ -174,10 +174,10 @@ func TestSIFromAlloc(t *testing.T) {
 		},
 	}
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := NewAllocation("node-1", ask)
 	ask.originator = true
 	ask.allowPreemptSelf = false
 	ask.allowPreemptOther = true
+	alloc := NewAllocation("node-1", ask)
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
@@ -190,7 +190,7 @@ func TestSIFromAlloc(t *testing.T) {
 	assert.Check(t, !allocSI.PreemptionPolicy.AllowPreemptSelf, "allowPreemptSelf flag should not be set")
 	assert.Check(t, allocSI.PreemptionPolicy.AllowPreemptOther, "aloowPreemptOther flag should be set")
 
-	alloc.ask.originator = false
+	alloc.originator = false
 	alloc.ask.allowPreemptSelf = true
 	alloc.ask.allowPreemptOther = false
 	allocSI = alloc.NewSIFromAllocation()

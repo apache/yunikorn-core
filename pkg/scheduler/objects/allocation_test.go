@@ -174,10 +174,10 @@ func TestSIFromAlloc(t *testing.T) {
 		},
 	}
 	ask := newAllocationAsk("ask-1", "app-1", res)
-	alloc := NewAllocation("node-1", ask)
 	ask.originator = true
 	ask.allowPreemptSelf = false
 	ask.allowPreemptOther = true
+	alloc := NewAllocation("node-1", ask)
 	if alloc == nil {
 		t.Fatal("NewAllocation create failed while it should not")
 	}
@@ -190,7 +190,7 @@ func TestSIFromAlloc(t *testing.T) {
 	assert.Check(t, !allocSI.PreemptionPolicy.AllowPreemptSelf, "allowPreemptSelf flag should not be set")
 	assert.Check(t, allocSI.PreemptionPolicy.AllowPreemptOther, "aloowPreemptOther flag should be set")
 
-	alloc.ask.originator = false
+	alloc.originator = false
 	alloc.ask.allowPreemptSelf = true
 	alloc.ask.allowPreemptOther = false
 	allocSI = alloc.NewSIFromAllocation()
@@ -235,10 +235,12 @@ func TestNewAllocFromSI(t *testing.T) {
 	allocSI.TaskGroupName = "testgroup"
 	alloc = NewAllocationFromSI(allocSI)
 	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
-	assert.Assert(t, alloc.IsPlaceholder(), "ask should have been a placeholder")
+	assert.Assert(t, alloc.GetAsk().IsPlaceholder(), "ask should have been a placeholder")
+	assert.Assert(t, alloc.IsPlaceholder(), "allocation should have been a placeholder")
 	assert.Equal(t, alloc.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
 	assert.Equal(t, alloc.GetAsk().GetCreateTime(), time.Unix(past, 0)) //nolint:staticcheck
 	assert.Assert(t, alloc.GetAsk().IsOriginator(), "ask should have been an originator")
+	assert.Assert(t, alloc.IsOriginator(), "allocation should have been an originator")
 	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptSelf(), "ask should not have allow-preempt-self set")
 	assert.Assert(t, alloc.GetAsk().IsAllowPreemptOther(), "ask should have allow-preempt-other set")
 
@@ -252,6 +254,7 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, alloc.GetAsk().GetCreateTime().Unix() >= startTime, "alloc create time is too early")
 	assert.Assert(t, alloc.GetAsk().GetCreateTime().Unix() <= endTime, "alloc create time is too late")
 	assert.Assert(t, !alloc.GetAsk().IsOriginator(), "ask should not have been an originator")
+	assert.Assert(t, !alloc.IsOriginator(), "allocation should not have been an originator")
 	assert.Assert(t, alloc.GetAsk().IsAllowPreemptSelf(), "ask should have allow-preempt-self set")
 	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptOther(), "ask should not have allow-preempt-other set")
 

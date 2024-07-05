@@ -683,7 +683,7 @@ func (pcr *predicateCheckResult) getSolutionScore(allocationsByNode map[string][
 	}
 	for i := 0; i <= pcr.index; i++ {
 		allocation := allocations[i]
-		if allocation.GetAsk().IsOriginator() {
+		if allocation.IsOriginator() {
 			score |= scoreOriginator
 		}
 		if !allocation.GetAsk().IsAllowPreemptSelf() {
@@ -878,7 +878,7 @@ func compareAllocationLess(left *Allocation, right *Allocation) bool {
 // application originators.
 func scoreAllocation(allocation *Allocation) uint64 {
 	var score uint64 = 0
-	if allocation.GetAsk().IsOriginator() {
+	if allocation.IsOriginator() {
 		score |= scoreOriginator
 	}
 	if !allocation.GetAsk().IsAllowPreemptSelf() {

@@ -244,6 +244,7 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 		NodeID:           alloc.GetNodeID(),
 		ApplicationID:    alloc.GetApplicationID(),
 		Preempted:        alloc.IsPreempted(),
+		Originator:       alloc.IsOriginator(),
 	}
 	return allocDAO
 }

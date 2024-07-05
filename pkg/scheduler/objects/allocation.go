@@ -73,6 +73,7 @@ type Allocation struct {
 	applicationID     string
 	taskGroupName     string // task group this allocation belongs to
 	placeholder       bool   // is this a placeholder allocation
+	originator        bool   // is this an originator allocation
 	nodeID            string
 	priority          int32
 	tags              map[string]string
@@ -104,6 +105,7 @@ func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
 		allocatedResource: ask.GetAllocatedResource().Clone(),
 		taskGroupName:     ask.GetTaskGroup(),
 		placeholder:       ask.IsPlaceholder(),
+		originator:        ask.IsOriginator(),
 	}
 }
 
@@ -197,7 +199,7 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		ResourcePerAlloc: a.GetAllocatedResource().ToProto(), // needed in tests for restore
 		TaskGroupName:    a.GetTaskGroup(),
 		Placeholder:      a.IsPlaceholder(),
-		Originator:       a.GetAsk().IsOriginator(),
+		Originator:       a.IsOriginator(),
 		PreemptionPolicy: &si.PreemptionPolicy{
 			AllowPreemptSelf:  a.GetAsk().IsAllowPreemptSelf(),
 			AllowPreemptOther: a.GetAsk().IsAllowPreemptOther(),
@@ -283,6 +285,11 @@ func (a *Allocation) SetPlaceholderCreateTime(placeholderCreateTime time.Time) {
 // IsPlaceholder returns whether the allocation is a placeholder
 func (a *Allocation) IsPlaceholder() bool {
 	return a.placeholder
+}
+
+// IsOriginator returns whether the allocation is an originator
+func (a *Allocation) IsOriginator() bool {
+	return a.originator
 }
 
 // GetNodeID gets the node this allocation is assigned to

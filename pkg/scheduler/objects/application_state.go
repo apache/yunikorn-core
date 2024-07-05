@@ -90,7 +90,6 @@ func (as applicationState) String() string {
 	return [...]string{"New", "Accepted", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming"}[as]
 }
 
-//nolint:funlen
 func eventDesc() fsm.Events {
 	return fsm.Events{
 		{

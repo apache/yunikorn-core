@@ -208,6 +208,8 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 // calculateVictimsByNode takes a list of potential victims for a node and builds a list ready for the RM to process.
 // Result is a list of allocations and the starting index to check for the initial preemption list.
 // If the resultType is nil, the node should not be considered for preemption.
+//
+//nolint:funlen
 func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, potentialVictims []*Allocation) (int, []*Allocation) {
 	nodeCurrentAvailable := nodeAvailable.Clone()
 	allocationsByQueueSnap := p.duplicateQueueSnapshots()

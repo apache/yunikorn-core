@@ -1239,14 +1239,17 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 	return mapResult
 }
 
+// temp store for allocations manipulated
 func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
 	released := make([]*objects.Allocation, 0)
+	// when allocationKey is not specified, remove all allocations from the app
 	allocationKey := release.GetAllocationKey()
 	if allocationKey == "" {
 		log.Log(log.SchedPartition).Info("remove all allocations",
 			zap.String("appID", app.ApplicationID))
 		released = append(released, app.RemoveAllAllocations()...)
 	} else {
+		// if we have an allocationKey the termination type is important
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
 			log.Log(log.SchedPartition).Info("replacing placeholder allocation",
 				zap.String("appID", app.ApplicationID),
@@ -1285,7 +1288,12 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		return nil, nil
 	}
 
-	// Generate released allocations
+	// Processing a removal while in the Completing state could race with the state change.
+	// The race occurs between removing the allocation and updating the queue after node processing.
+	// If the state change removes the queue link before we get to updating the queue after the node we
+	// leave the resources as allocated on the queue. The queue cannot be removed yet at this point as
+	// there are still allocations left. So retrieve the queue early to sidestep the race.
+	// temp store for allocations manipulated
 	released := pc.generateReleased(release, app)
 	var confirmed *objects.Allocation
 

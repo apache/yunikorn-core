@@ -96,43 +96,35 @@ func eventDesc() fsm.Events {
 			Name: RejectApplication.String(),
 			Src:  []string{New.String()},
 			Dst:  Rejected.String(),
-		},
-		{
+		}, {
 			Name: RunApplication.String(),
 			Src:  []string{New.String(), Resuming.String()},
 			Dst:  Accepted.String(),
-		},
-		{
+		}, {
 			Name: RunApplication.String(),
 			Src:  []string{Accepted.String(), Running.String(), Completing.String()},
 			Dst:  Running.String(),
-		},
-		{
+		}, {
 			Name: CompleteApplication.String(),
 			Src:  []string{Accepted.String(), Running.String()},
 			Dst:  Completing.String(),
-		},
-		{
+		}, {
 			Name: CompleteApplication.String(),
 			Src:  []string{Completing.String()},
 			Dst:  Completed.String(),
-		},
-		{
+		}, {
 			Name: FailApplication.String(),
 			Src:  []string{New.String(), Accepted.String(), Running.String()},
 			Dst:  Failing.String(),
-		},
-		{
+		}, {
 			Name: FailApplication.String(),
 			Src:  []string{Failing.String()},
 			Dst:  Failed.String(),
-		},
-		{
+		}, {
 			Name: ResumeApplication.String(),
 			Src:  []string{New.String(), Accepted.String()},
 			Dst:  Resuming.String(),
-		},
-		{
+		}, {
 			Name: ExpireApplication.String(),
 			Src:  []string{Completed.String(), Failed.String(), Rejected.String()},
 			Dst:  Expired.String(),
@@ -141,6 +133,11 @@ func eventDesc() fsm.Events {
 }
 
 func callbacks() fsm.Callbacks {
+	// The state machine is tightly tied to the Application object.
+	//
+	// The first argument must always be an Application and if there is a second,
+	// that must be a string. If this precondition is not met, a runtime panic
+	// will occur.
 	return fsm.Callbacks{
 		"enter_state": func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck

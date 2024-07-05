@@ -1288,11 +1288,6 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		return nil, nil
 	}
 
-	// Processing a removal while in the Completing state could race with the state change.
-	// The race occurs between removing the allocation and updating the queue after node processing.
-	// If the state change removes the queue link before we get to updating the queue after the node we
-	// leave the resources as allocated on the queue. The queue cannot be removed yet at this point as
-	// there are still allocations left. So retrieve the queue early to sidestep the race.
 	// temp store for allocations manipulated
 	released := pc.generateReleased(release, app)
 	var confirmed *objects.Allocation
@@ -1362,6 +1357,11 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		}
 	}
 
+	// Processing a removal while in the Completing state could race with the state change.
+	// The race occurs between removing the allocation and updating the queue after node processing.
+	// If the state change removes the queue link before we get to updating the queue after the node we
+	// leave the resources as allocated on the queue. The queue cannot be removed yet at this point as
+	// there are still allocations left. So retrieve the queue early to sidestep the race.
 	queue := app.GetQueue()
 
 	if resources.StrictlyGreaterThanZero(total) {

@@ -458,6 +458,8 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 
 // test scheduler recovery when shim doesn't report existing application
 // but only include existing allocations of this app.
+//
+//nolint:funlen
 func TestSchedulerRecoveryWithoutAppInfo(t *testing.T) {
 	// Register RM
 	ms := &mockScheduler{}
@@ -716,6 +718,8 @@ func TestAppRecoveryAlone(t *testing.T) {
 // new allocations. But during the recovery, when we recover existing
 // allocations on node, we need to ensure the placement rule is still
 // enforced.
+//
+//nolint:funlen
 func TestAppRecoveryPlacement(t *testing.T) {
 	// Register RM
 	configData := `

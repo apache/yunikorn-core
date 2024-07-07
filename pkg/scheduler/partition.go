@@ -1239,6 +1239,36 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 	return mapResult
 }
 
+func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
+	released := make([]*objects.Allocation, 0)
+	// when allocationKey is not specified, remove all allocations from the app
+	allocationKey := release.GetAllocationKey()
+	if allocationKey == "" {
+		log.Log(log.SchedPartition).Info("remove all allocations",
+			zap.String("appID", app.ApplicationID))
+		released = append(released, app.RemoveAllAllocations()...)
+	} else {
+		// if we have an allocationKey the termination type is important
+		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
+			log.Log(log.SchedPartition).Info("replacing placeholder allocation",
+				zap.String("appID", app.ApplicationID),
+				zap.String("allocationKey", allocationKey))
+			if alloc := app.ReplaceAllocation(allocationKey); alloc != nil {
+				released = append(released, alloc)
+			}
+		} else {
+			log.Log(log.SchedPartition).Info("removing allocation from application",
+				zap.String("appID", app.ApplicationID),
+				zap.String("allocationKey", allocationKey),
+				zap.Stringer("terminationType", release.TerminationType))
+			if alloc := app.RemoveAllocation(allocationKey, release.TerminationType); alloc != nil {
+				released = append(released, alloc)
+			}
+		}
+	}
+	return released
+}
+
 // removeAllocation removes the referenced allocation(s) from the applications and nodes
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
@@ -1252,43 +1282,14 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	if app == nil {
 		log.Log(log.SchedPartition).Info("Application not found while releasing allocation",
 			zap.String("appID", appID),
-			zap.String("allocationKey", allocationKey),
+			zap.String("allocationId", allocationKey),
 			zap.Stringer("terminationType", release.TerminationType))
 		return nil, nil
 	}
-	// Processing a removal while in the Completing state could race with the state change.
-	// The race occurs between removing the allocation and updating the queue after node processing.
-	// If the state change removes the queue link before we get to updating the queue after the node we
-	// leave the resources as allocated on the queue. The queue cannot be removed yet at this point as
-	// there are still allocations left. So retrieve the queue early to sidestep the race.
-	queue := app.GetQueue()
+
 	// temp store for allocations manipulated
-	released := make([]*objects.Allocation, 0)
+	released := pc.generateReleased(release, app)
 	var confirmed *objects.Allocation
-	// when allocationKey is not specified, remove all allocations from the app
-	if allocationKey == "" {
-		log.Log(log.SchedPartition).Info("remove all allocations",
-			zap.String("appID", appID))
-		released = append(released, app.RemoveAllAllocations()...)
-	} else {
-		// if we have an allocationKey the termination type is important
-		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			log.Log(log.SchedPartition).Info("replacing placeholder allocation",
-				zap.String("appID", appID),
-				zap.String("allocationKey", allocationKey))
-			if alloc := app.ReplaceAllocation(allocationKey); alloc != nil {
-				released = append(released, alloc)
-			}
-		} else {
-			log.Log(log.SchedPartition).Info("removing allocation from application",
-				zap.String("appID", appID),
-				zap.String("allocationKey", allocationKey),
-				zap.Stringer("terminationType", release.TerminationType))
-			if alloc := app.RemoveAllocation(allocationKey, release.TerminationType); alloc != nil {
-				released = append(released, alloc)
-			}
-		}
-	}
 
 	// all releases are collected: placeholder count needs updating for all placeholder releases
 	// regardless of what happens later
@@ -1354,6 +1355,14 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			totalPreempting.AddTo(alloc.GetAllocatedResource())
 		}
 	}
+
+	// Processing a removal while in the Completing state could race with the state change.
+	// The race occurs between removing the allocation and updating the queue after node processing.
+	// If the state change removes the queue link before we get to updating the queue after the node we
+	// leave the resources as allocated on the queue. The queue cannot be removed yet at this point as
+	// there are still allocations left. So retrieve the queue early to sidestep the race.
+	queue := app.GetQueue()
+
 	if resources.StrictlyGreaterThanZero(total) {
 		if err := queue.DecAllocatedResource(total); err != nil {
 			log.Log(log.SchedPartition).Warn("failed to release resources from queue",

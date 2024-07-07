@@ -3301,6 +3301,8 @@ func TestPreemptedPlaceholderSkip(t *testing.T) {
 }
 
 // simple direct replace with one node
+//
+//nolint:funlen
 func TestTryPlaceholderAllocate(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
@@ -3845,6 +3847,7 @@ func TestNewQueueEvents(t *testing.T) {
 	assert.Equal(t, "root.test", records[2].ObjectID)
 }
 
+//nolint:funlen
 func TestUserHeadroom(t *testing.T) {
 	setupUGM()
 	partition, err := newConfiguredPartition()

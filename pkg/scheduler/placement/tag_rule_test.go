@@ -60,6 +60,7 @@ func TestTagRule(t *testing.T) {
 	}
 }
 
+//nolint:funlen
 func TestTagRulePlace(t *testing.T) {
 	// Create the structure for the test
 	data := `
@@ -196,6 +197,7 @@ partitions:
 	}
 }
 
+//nolint:funlen
 func TestTagRuleParent(t *testing.T) {
 	err := initQueueStructure([]byte(confParentChild))
 	assert.NilError(t, err, "setting up the queue config failed")

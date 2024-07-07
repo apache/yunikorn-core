@@ -132,12 +132,12 @@ func eventDesc() fsm.Events {
 	}
 }
 
+// The state machine is tightly tied to the Application object.
+//
+// The first argument must always be an Application and if there is a second,
+// that must be a string. If this precondition is not met, a runtime panic
+// will occur.
 func callbacks() fsm.Callbacks {
-	// The state machine is tightly tied to the Application object.
-	//
-	// The first argument must always be an Application and if there is a second,
-	// that must be a string. If this precondition is not met, a runtime panic
-	// will occur.
 	return fsm.Callbacks{
 		"enter_state": func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck

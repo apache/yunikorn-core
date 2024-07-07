@@ -1239,7 +1239,6 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 	return mapResult
 }
 
-// temp store for allocations manipulated
 func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
 	released := make([]*objects.Allocation, 0)
 	// when allocationKey is not specified, remove all allocations from the app

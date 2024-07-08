@@ -775,6 +775,155 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *test
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
+// TestTryPreemption_VictimsUnavailable_InsufficientResource Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption might be considered because of node resource constraint.
+// Guaranteed resource set on both victim queue path and preemptor queue path.
+// Ask (Preemptor) resource type matches with resource type of the victim. Guaranteed also set on specific resource type. 2 Victims are available, but total resource usage is lesser than ask requirement.
+// Setup:
+// Nodes are Node1. Node is full, doesn't enough space to accommodate the ask.
+// root.parent.parent1.child1. Guaranteed set on root.parent.parent1 vcores: 10, and on root.parent.parent1.child1 vcores: 1. 2 Allocations (belongs to two diff apps) are running. Each Allocation usage is vcores:1. Total usage is vcores:2
+// root.parent.parent2.child2. Guaranteed set on root.parent.parent2 vcores: 10, and on root.parent.parent2.child2 vcores: 1. Ask of vcores: 1 is waiting for resources.
+// root.parent.parent2.child3. No usage, no guaranteed set.
+// No preemption should occur as root.parent.parent1 is under its guaranteed resources.
+func TestTryPreemption_VictimsUnavailable_InsufficientResource(t *testing.T) {
+	t.SkipNow()
+	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 2})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(nil)
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "20"}, nil)
+	assert.NilError(t, err)
+	parentQ1, err := createManagedQueueGuaranteed(parentQ, "parent1", true, nil, map[string]string{"vcores": "10"})
+	assert.NilError(t, err)
+	parentQ2, err := createManagedQueueGuaranteed(parentQ, "parent2", true, nil, map[string]string{"vcores": "10"})
+	assert.NilError(t, err)
+
+	childQ1, err := createManagedQueueGuaranteed(parentQ1, "child1", false, nil, map[string]string{"vcores": "1"})
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ2, "child2", false, nil, map[string]string{"vcores": "1"})
+	assert.NilError(t, err)
+	_, err = createManagedQueueGuaranteed(parentQ2, "child3", false, nil, nil)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.parent1.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
+	ask1.createTime = time.Now().Add(-2 * time.Minute)
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	alloc1 := NewAllocation(nodeID1, ask1)
+	app1.AddAllocation(alloc1)
+	assert.Check(t, node.AddAllocation(alloc1), "node alloc1 failed")
+	assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
+
+	app2 := newApplication(appID2, "default", "root.parent.parent1.child1")
+	app2.SetQueue(childQ2)
+	childQ1.applications[appID2] = app2
+	ask2 := newAllocationAsk("alloc2", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
+	ask2.createTime = time.Now().Add(-1 * time.Minute)
+	assert.NilError(t, app2.AddAllocationAsk(ask2))
+	alloc2 := NewAllocation(nodeID1, ask2)
+	app2.AddAllocation(alloc2)
+	assert.Check(t, node.AddAllocation(alloc2), "node alloc2 failed")
+	assert.NilError(t, childQ1.IncAllocatedResource(ask2.GetAllocatedResource(), false))
+
+	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
+	app3.SetQueue(childQ2)
+	childQ2.applications[appID3] = app3
+	ask3 := newAllocationAsk("alloc3", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
+	assert.NilError(t, app3.AddAllocationAsk(ask3))
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 2})
+	preemptor := NewPreemptor(app3, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	// register predicate handler
+	preemptions := []mock.Preemption{mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0)}
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result == nil, "unexpected result")
+	assert.Equal(t, ok, false, "no victims found")
+	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
+	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+}
+
+// TestTryPreemption_OnNode_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// Guaranteed set only on preemptor queue path, but not on the victim queue path.
+// Ask (Preemptor) resource type matches with the victim's resource type. Needs to be preempted because matching resource type has been configured as guaranteed.
+// Setup:
+// Nodes are Node1. Node is full, doesn't enough space to accommodate the ask.
+// root.parent.parent1.child1. Guaranteed set on root.parent.parent1, vcores: 10. 2 Allocations (belongs to two diff apps) are running. Each Allocation usage is vcores:1. Total usage is vcores:2.
+// root.parent.parent1.child2. Guaranteed set on root.parent.parent1, vcores: 10, and on root.parent.parent1.child2 vcores: 1. Ask of vcores: 1 is waiting for resources.
+// root.parent.parent2.child3. No usage, no guaranteed set
+// 1 Allocation on root.parent.parent1.child1 should be preempted to free up resources for ask arrived in root.parent.parent1.child2.
+func TestTryPreemption_OnNode_GuaranteedSetOnPreemptorSide(t *testing.T) {
+	t.SkipNow()
+	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 2})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(nil)
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "20"}, nil)
+	assert.NilError(t, err)
+	parentQ1, err := createManagedQueueGuaranteed(parentQ, "parent1", true, nil, map[string]string{"vcores": "10"})
+	assert.NilError(t, err)
+	parentQ2, err := createManagedQueueGuaranteed(parentQ, "parent2", true, nil, nil)
+	assert.NilError(t, err)
+
+	childQ1, err := createManagedQueueGuaranteed(parentQ1, "child1", false, nil, nil)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ1, "child2", false, nil, map[string]string{"vcores": "1"})
+	assert.NilError(t, err)
+	_, err = createManagedQueueGuaranteed(parentQ2, "child3", false, nil, nil)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.parent1.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
+	ask1.createTime = time.Now().Add(-2 * time.Minute)
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	alloc1 := NewAllocation(nodeID1, ask1)
+	app1.AddAllocation(alloc1)
+	assert.Check(t, node.AddAllocation(alloc1), "node alloc1 failed")
+	assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
+
+	app2 := newApplication(appID2, "default", "root.parent.parent1.child1")
+	app2.SetQueue(childQ2)
+	childQ1.applications[appID2] = app2
+	ask2 := newAllocationAsk("alloc2", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
+	ask2.createTime = time.Now().Add(-1 * time.Minute)
+	assert.NilError(t, app2.AddAllocationAsk(ask2))
+	alloc2 := NewAllocation(nodeID1, ask2)
+	app2.AddAllocation(alloc2)
+	assert.Check(t, node.AddAllocation(alloc2), "node alloc2 failed")
+	assert.NilError(t, childQ1.IncAllocatedResource(ask2.GetAllocatedResource(), false))
+
+	app3 := newApplication(appID3, "default", "root.parent.parent1.child2")
+	app3.SetQueue(childQ2)
+	childQ2.applications[appID3] = app3
+	ask3 := newAllocationAsk("alloc3", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
+	assert.NilError(t, app3.AddAllocationAsk(ask3))
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 2})
+	preemptor := NewPreemptor(app3, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	// register predicate handler
+	preemptions := []mock.Preemption{mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0)}
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result != nil, "no result")
+	assert.Assert(t, ok, "no victims found")
+	assert.Equal(t, "alloc3", result.Ask.GetAllocationKey(), "wrong alloc")
+	assert.Equal(t, nodeID1, result.NodeID, "wrong node")
+	assert.Equal(t, nodeID1, alloc2.nodeID, "wrong node")
+	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
+	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+}
+
 // TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed set only on preemptor queue path, but not on the victim queue path.
 // Ask (Preemptor) resource type matches with one of the victim's resource types.  Still, needs to be preempted because matching resource type has been configured as guaranteed.

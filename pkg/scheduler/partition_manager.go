@@ -138,8 +138,6 @@ func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 // - applications
 // - nodes
 // last action is to remove the cluster links
-//
-//nolint:errcheck
 func (manager *partitionManager) remove() {
 	log.Log(log.SchedPartition).Info("marking all queues for removal",
 		zap.String("partitionName", manager.pc.Name))
@@ -151,7 +149,12 @@ func (manager *partitionManager) remove() {
 		zap.Int("numOfApps", len(apps)),
 		zap.String("partitionName", manager.pc.Name))
 	for i := range apps {
-		_ = apps[i].FailApplication("PartitionRemoved")
+		err := apps[i].FailApplication("PartitionRemoved")
+		if err != nil {
+			log.Log(log.SchedPartition).Error("Failed to fail application",
+				zap.String("appID", apps[i].ApplicationID),
+				zap.Error(err))
+		}
 		appID := apps[i].ApplicationID
 		_ = manager.pc.removeApplication(appID)
 	}

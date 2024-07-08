@@ -340,12 +340,14 @@ func TestValidateConf(t *testing.T) {
 	}
 	for _, test := range confTests {
 		// No err check: new request always returns correctly
-		//nolint: errcheck
-		req, _ := http.NewRequest("POST", "", strings.NewReader(test.content))
+		req, err := http.NewRequest("POST", "", strings.NewReader(test.content))
+		if err != nil {
+			t.Fatalf("failed to create new request: %v", err)
+		}
 		resp := &MockResponseWriter{}
 		validateConf(resp, req)
 		var vcr dao.ValidateConfResponse
-		err := json.Unmarshal(resp.outputBytes, &vcr)
+		err = json.Unmarshal(resp.outputBytes, &vcr)
 		assert.NilError(t, err, unmarshalError)
 		assert.Equal(t, vcr.Allowed, test.expectedResponse.Allowed, "allowed flag incorrect")
 		assert.Equal(t, vcr.Reason, test.expectedResponse.Reason, "response text not as expected")

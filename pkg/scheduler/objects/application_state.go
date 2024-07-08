@@ -138,7 +138,11 @@ func NewAppState() *fsm.FSM {
 			// that must be a string. If this precondition is not met, a runtime panic
 			// will occur.
 			"enter_state": func(_ context.Context, event *fsm.Event) {
-				app := event.Args[0].(*Application) //nolint:errcheck
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+					return
+				}
 				log.Log(log.SchedFSM).Info("Application state transition",
 					zap.String("appID", app.ApplicationID),
 					zap.String("source", event.Src),
@@ -147,7 +151,11 @@ func NewAppState() *fsm.FSM {
 
 				eventInfo := ""
 				if len(event.Args) == 2 {
-					eventInfo = event.Args[1].(string) //nolint:errcheck
+					eventInfo, ok = event.Args[1].(string)
+					if !ok {
+						log.Log(log.SchedFSM).Error("Failed to cast event.Args[1] to string")
+						return
+					}
 					app.OnStateChange(event, eventInfo)
 				} else {
 					app.OnStateChange(event, "")
@@ -163,21 +171,38 @@ func NewAppState() *fsm.FSM {
 				}
 			},
 			"leave_state": func(_ context.Context, event *fsm.Event) {
-				event.Args[0].(*Application).clearStateTimer() //nolint:errcheck
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+					return
+				}
+				app.clearStateTimer()
 			},
 			fmt.Sprintf("enter_%s", Completing.String()): func(_ context.Context, event *fsm.Event) {
-				app := event.Args[0].(*Application) //nolint:errcheck
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+					return
+				}
 				app.setStateTimer(completingTimeout, app.stateMachine.Current(), CompleteApplication)
 			},
 			fmt.Sprintf("leave_%s", New.String()): func(_ context.Context, event *fsm.Event) {
 				if event.Dst != Rejected.String() {
-					app := event.Args[0].(*Application) //nolint:errcheck
+					app, ok := event.Args[0].(*Application)
+					if !ok {
+						log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+						return
+					}
 					metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsAccepted()
 					metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
 				}
 			},
 			fmt.Sprintf("enter_%s", Rejected.String()): func(_ context.Context, event *fsm.Event) {
-				app := event.Args[0].(*Application) //nolint:errcheck
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+					return
+				}
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRejected()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
@@ -185,12 +210,20 @@ func NewAppState() *fsm.FSM {
 				app.cleanupTrackedResource()
 				// No rejected message when use app.HandleApplicationEvent(RejectApplication)
 				if len(event.Args) == 2 {
-					app.rejectedMessage = event.Args[1].(string) //nolint:errcheck
+					app.rejectedMessage, ok = event.Args[1].(string)
+					if !ok {
+						log.Log(log.SchedFSM).Error("Failed to cast event.Args[1] to string")
+						return
+					}
 				}
 			},
 			fmt.Sprintf("enter_%s", Running.String()): func(_ context.Context, event *fsm.Event) {
 				if event.Src != Running.String() {
-					app := event.Args[0].(*Application) //nolint:errcheck
+					app, ok := event.Args[0].(*Application)
+					if !ok {
+						log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+						return
+					}
 					app.startTime = time.Now()
 					app.queue.incRunningApps(app.ApplicationID)
 					metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRunning()
@@ -199,14 +232,22 @@ func NewAppState() *fsm.FSM {
 			},
 			fmt.Sprintf("leave_%s", Running.String()): func(_ context.Context, event *fsm.Event) {
 				if event.Dst != Running.String() {
-					app := event.Args[0].(*Application) //nolint:errcheck
+					app, ok := event.Args[0].(*Application)
+					if !ok {
+						log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+						return
+					}
 					app.queue.decRunningApps()
 					metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 					metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()
 				}
 			},
 			fmt.Sprintf("enter_%s", Completed.String()): func(_ context.Context, event *fsm.Event) {
-				app := event.Args[0].(*Application) //nolint:errcheck
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+					return
+				}
 				metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsCompleted()
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
@@ -215,12 +256,20 @@ func NewAppState() *fsm.FSM {
 				app.cleanupAsks()
 			},
 			fmt.Sprintf("enter_%s", Failing.String()): func(_ context.Context, event *fsm.Event) {
-				app := event.Args[0].(*Application) //nolint:errcheck
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+					return
+				}
 				metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsFailed()
 				metrics.GetSchedulerMetrics().IncTotalApplicationsFailed()
 			},
 			fmt.Sprintf("enter_%s", Failed.String()): func(_ context.Context, event *fsm.Event) {
-				app := event.Args[0].(*Application) //nolint:errcheck
+				app, ok := event.Args[0].(*Application)
+				if !ok {
+					log.Log(log.SchedFSM).Error("Failed to cast event.Args[0] to *Application")
+					return
+				}
 				app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 				app.executeTerminatedCallback()
 				app.cleanupAsks()

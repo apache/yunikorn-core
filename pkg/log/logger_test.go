@@ -243,7 +243,9 @@ func TestParentLogger(t *testing.T) {
 
 func resetTestLogger() {
 	// flush log
-	logger.Sync() //nolint:errcheck
+	if err := logger.Sync(); err != nil {
+		fmt.Printf("Error syncing logger: %s", err.Error())
+	}
 
 	// init default logger
 	initLogger()

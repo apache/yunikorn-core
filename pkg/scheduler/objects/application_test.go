@@ -33,6 +33,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/handler"
+	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
@@ -254,7 +255,11 @@ func TestAppAllocReservation(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	// Create event system after new application to avoid new application event.
 	events.Init()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
+	if !ok {
+		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		return
+	}
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
@@ -378,7 +383,11 @@ func TestAddAllocAsk(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	// Create event system after new application to avoid new application event.
 	events.Init()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
+	if !ok {
+		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		return
+	}
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
@@ -2011,7 +2020,11 @@ func TestAskEvents(t *testing.T) {
 	app := newApplication(appID1, "default", "root.default")
 	// Create event system after new application to avoid new app event.
 	events.Init()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
+	if !ok {
+		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		return
+	}
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
@@ -2077,7 +2090,11 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	app := newApplication(appID1, "default", "root.default")
 	// Create event system after new application to avoid new app event.
 	events.Init()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
+	if !ok {
+		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		return
+	}
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
@@ -2196,7 +2213,11 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	app := newApplication(appID1, "default", "root.default")
 	// Create event system after new application to avoid new application event.
 	events.Init()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
+	if !ok {
+		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		return
+	}
 	eventSystem.StartServiceWithPublisher(false)
 	app.disableStateChangeEvents()
 	app.resetAppEvents()

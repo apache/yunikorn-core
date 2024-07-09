@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
@@ -3815,7 +3816,11 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 
 func TestNewQueueEvents(t *testing.T) {
 	events.Init()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
+	if !ok {
+		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		return
+	}
 	eventSystem.StartServiceWithPublisher(false)
 
 	partition, err := newBasePartition()

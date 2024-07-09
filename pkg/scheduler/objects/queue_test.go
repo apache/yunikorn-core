@@ -36,6 +36,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
@@ -2455,7 +2456,11 @@ func TestQueue_setAllocatingAccepted(t *testing.T) {
 
 func TestQueueEvents(t *testing.T) {
 	events.Init()
-	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
+	if !ok {
+		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		return
+	}
 	eventSystem.StartServiceWithPublisher(false)
 	queue, err := createRootQueue(nil)
 	queue.Name = "testQueue"

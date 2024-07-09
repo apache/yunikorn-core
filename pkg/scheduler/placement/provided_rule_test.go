@@ -28,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
+//nolint:funlen
 func TestProvidedRulePlace(t *testing.T) {
 	// Create the structure for the test
 	data := `
@@ -155,6 +156,7 @@ partitions:
 	}
 }
 
+//nolint:funlen
 func TestProvidedRuleParent(t *testing.T) {
 	err := initQueueStructure([]byte(confParentChild))
 	assert.NilError(t, err, "setting up the queue config failed")

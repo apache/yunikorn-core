@@ -31,7 +31,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
-	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
@@ -3820,7 +3819,7 @@ func TestNewQueueEvents(t *testing.T) {
 	events.Init()
 	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
 	if !ok {
-		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		t.Fatalf("Failed to cast GetEventSystem() to *EventSystemImpl")
 		return
 	}
 	eventSystem.StartServiceWithPublisher(false)

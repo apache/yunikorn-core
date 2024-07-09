@@ -27,7 +27,6 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/events"
-	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -215,7 +214,7 @@ func TestAppStateTransitionEvents(t *testing.T) {
 	events.Init()
 	eventSystem, ok := events.GetEventSystem().(*events.EventSystemImpl)
 	if !ok {
-		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		t.Fatalf("Failed to cast GetEventSystem() to *EventSystemImpl")
 		return
 	}
 	eventSystem.StartServiceWithPublisher(false)

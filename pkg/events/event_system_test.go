@@ -27,7 +27,6 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
-	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -52,7 +51,7 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 	Init()
 	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
 	if !ok {
-		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		t.Fatalf("Failed to cast GetEventSystem() to *EventSystemImpl")
 		return
 	}
 	// don't run publisher, because it can collect the event while we're waiting
@@ -89,7 +88,7 @@ func TestGetEvents(t *testing.T) {
 	Init()
 	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
 	if !ok {
-		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		t.Fatalf("Failed to cast GetEventSystem() to *EventSystemImpl")
 		return
 	}
 	eventSystem.StartServiceWithPublisher(false)
@@ -125,7 +124,7 @@ func TestConfigUpdate(t *testing.T) {
 	Init()
 	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
 	if !ok {
-		log.Log(log.SchedFSM).Error("Failed to cast GetEventSystem() to *EventSystemImpl")
+		t.Fatalf("Failed to cast GetEventSystem() to *EventSystemImpl")
 		return
 	}
 	eventSystem.StartService()

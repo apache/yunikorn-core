@@ -124,6 +124,7 @@ partitions:
 	}
 }
 
+//nolint:funlen
 func TestFixedRuleParent(t *testing.T) {
 	err := initQueueStructure([]byte(confParentChild))
 	assert.NilError(t, err, "setting up the queue config failed")

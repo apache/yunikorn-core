@@ -379,6 +379,8 @@ func TestAllocateDeallocate(t *testing.T) {
 }
 
 // test pending calculation and ask addition
+//
+//nolint:funlen
 func TestAddAllocAsk(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	// Create event system after new application to avoid new application event.

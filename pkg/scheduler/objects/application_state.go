@@ -90,46 +90,44 @@ func (as applicationState) String() string {
 	return [...]string{"New", "Accepted", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming"}[as]
 }
 
-func NewAppState() *fsm.FSM {
-	return fsm.NewFSM(
-		New.String(), fsm.Events{
-			{
-				Name: RejectApplication.String(),
-				Src:  []string{New.String()},
-				Dst:  Rejected.String(),
-			}, {
-				Name: RunApplication.String(),
-				Src:  []string{New.String(), Resuming.String()},
-				Dst:  Accepted.String(),
-			}, {
-				Name: RunApplication.String(),
-				Src:  []string{Accepted.String(), Running.String(), Completing.String()},
-				Dst:  Running.String(),
-			}, {
-				Name: CompleteApplication.String(),
-				Src:  []string{Accepted.String(), Running.String()},
-				Dst:  Completing.String(),
-			}, {
-				Name: CompleteApplication.String(),
-				Src:  []string{Completing.String()},
-				Dst:  Completed.String(),
-			}, {
-				Name: FailApplication.String(),
-				Src:  []string{New.String(), Accepted.String(), Running.String()},
-				Dst:  Failing.String(),
-			}, {
-				Name: FailApplication.String(),
-				Src:  []string{Failing.String()},
-				Dst:  Failed.String(),
-			}, {
-				Name: ResumeApplication.String(),
-				Src:  []string{New.String(), Accepted.String()},
-				Dst:  Resuming.String(),
-			}, {
-				Name: ExpireApplication.String(),
-				Src:  []string{Completed.String(), Failed.String(), Rejected.String()},
-				Dst:  Expired.String(),
-			},
+func eventDesc() fsm.Events {
+	return fsm.Events{
+		{
+			Name: RejectApplication.String(),
+			Src:  []string{New.String()},
+			Dst:  Rejected.String(),
+		}, {
+			Name: RunApplication.String(),
+			Src:  []string{New.String(), Resuming.String()},
+			Dst:  Accepted.String(),
+		}, {
+			Name: RunApplication.String(),
+			Src:  []string{Accepted.String(), Running.String(), Completing.String()},
+			Dst:  Running.String(),
+		}, {
+			Name: CompleteApplication.String(),
+			Src:  []string{Accepted.String(), Running.String()},
+			Dst:  Completing.String(),
+		}, {
+			Name: CompleteApplication.String(),
+			Src:  []string{Completing.String()},
+			Dst:  Completed.String(),
+		}, {
+			Name: FailApplication.String(),
+			Src:  []string{New.String(), Accepted.String(), Running.String()},
+			Dst:  Failing.String(),
+		}, {
+			Name: FailApplication.String(),
+			Src:  []string{Failing.String()},
+			Dst:  Failed.String(),
+		}, {
+			Name: ResumeApplication.String(),
+			Src:  []string{New.String(), Accepted.String()},
+			Dst:  Resuming.String(),
+		}, {
+			Name: ExpireApplication.String(),
+			Src:  []string{Completed.String(), Failed.String(), Rejected.String()},
+			Dst:  Expired.String(),
 		},
 		fsm.Callbacks{
 			// The state machine is tightly tied to the Application object.
@@ -275,5 +273,15 @@ func NewAppState() *fsm.FSM {
 				app.cleanupAsks()
 			},
 		},
-	)
+		fmt.Sprintf("enter_%s", Failed.String()): func(_ context.Context, event *fsm.Event) {
+			app := event.Args[0].(*Application) //nolint:errcheck
+			app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
+			app.executeTerminatedCallback()
+			app.cleanupAsks()
+		},
+	}
+}
+
+func NewAppState() *fsm.FSM {
+	return fsm.NewFSM(New.String(), eventDesc(), callbacks())
 }

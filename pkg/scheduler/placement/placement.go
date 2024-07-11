@@ -24,6 +24,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
@@ -115,7 +116,9 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	var queueName string
 	var aclCheck bool
 	var err error
+	var remainingRules = len(m.rules)
 	for _, checkRule := range m.rules {
+		remainingRules--
 		log.Log(log.Config).Debug("Executing rule for placing application",
 			zap.String("ruleName", checkRule.getName()),
 			zap.String("application", app.ApplicationID))
@@ -126,6 +129,18 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 				zap.Error(err))
 			app.SetQueuePath("")
 			return err
+		}
+		// if no queue found even after the last rule, try to place in the default queue
+		if remainingRules == 0 && queueName == "" {
+			log.Log(log.Config).Info("No rule matched, placing application in default queue",
+				zap.String("application", app.ApplicationID),
+				zap.String("defaultQueue", common.DefaultPlacementQueue))
+			// get the queue object
+			queue := m.queueFn(common.DefaultPlacementQueue)
+			if queue != nil {
+				// default queue exist
+				queueName = common.DefaultPlacementQueue
+			}
 		}
 		// queueName returned make sure ACL allows access and create the queueName if not exist
 		if queueName != "" {

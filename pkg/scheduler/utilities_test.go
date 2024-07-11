@@ -55,6 +55,63 @@ const (
 	maxapplications = "maxapplications"
 )
 
+func newBasePartitionNoRootDefault() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "custom",
+						Parent: false,
+						Queues: nil,
+						Limits: []configs.Limit{
+							{
+								Limit: "custom queue limit",
+								Users: []string{
+									"testuser",
+								},
+								Groups: []string{
+									"testgroup",
+								},
+								MaxResources: map[string]string{
+									"memory": "5",
+									"vcores": "5",
+								},
+								MaxApplications: 8,
+							},
+						},
+					},
+				},
+				Limits: []configs.Limit{
+					{
+						Limit: "root queue limit",
+						Users: []string{
+							"testuser",
+						},
+						Groups: []string{
+							"testgroup",
+						},
+						MaxResources: map[string]string{
+							"memory": "10",
+							"vcores": "10",
+						},
+						MaxApplications: 10,
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Limits:         nil,
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
+
 func newBasePartition() (*PartitionContext, error) {
 	conf := configs.PartitionConfig{
 		Name: "test",

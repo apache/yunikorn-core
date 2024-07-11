@@ -35,7 +35,6 @@ import (
 
 // need to change for testing
 var defaultEventChannelSize = 100000
-var defaultRingBufferSize uint64 = 100000
 
 var once sync.Once
 var ev EventSystem

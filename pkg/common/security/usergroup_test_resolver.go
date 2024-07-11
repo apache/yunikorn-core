@@ -41,7 +41,8 @@ func GetUserGroupCacheTest() *UserGroupCache {
 // test function only
 func lookup(userName string) (*user.User, error) {
 	// 1st test user: all OK
-	if userName == "testuser1" {
+	const Testuser1 = "testuser1"
+	if userName == Testuser1 {
 		return &user.User{
 			Uid:      "1000",
 			Gid:      "1000",
@@ -49,7 +50,8 @@ func lookup(userName string) (*user.User, error) {
 		}, nil
 	}
 	// 2nd test user: primary group does not resolve
-	if userName == "testuser2" {
+	const Testuser2 = "testuser2"
+	if userName == Testuser2 {
 		return &user.User{
 			Uid:      "100",
 			Gid:      "100",
@@ -85,7 +87,8 @@ func lookupGroupID(gid string) (*user.Group, error) {
 
 // test function only
 func groupIds(osUser *user.User) ([]string, error) {
-	if osUser.Username == "testuser1" {
+	const Testuser1 = "testuser1"
+	if osUser.Username == Testuser1 {
 		return []string{"1001"}, nil
 	}
 	if osUser.Username == "testuser2" {

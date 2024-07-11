@@ -55,7 +55,8 @@ func TestGetUserGroup(t *testing.T) {
 		t.Errorf("Cache not updated should have 1 entry %d", len(testCache.ugs))
 	}
 	// check returned info: primary and secondary groups etc
-	if ug.User != "testuser1" || len(ug.Groups) != 2 || ug.resolved == 0 || ug.failed {
+	const Testuser1 = "testuser1"
+	if ug.User != Testuser1 || len(ug.Groups) != 2 || ug.resolved == 0 || ug.failed {
 		t.Errorf("User 'testuser1' not resolved correctly: %v", ug)
 	}
 	cachedUG := testCache.ugs["testuser1"]

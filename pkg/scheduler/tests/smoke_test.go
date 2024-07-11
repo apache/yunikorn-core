@@ -168,7 +168,7 @@ func TestBasicScheduler(t *testing.T) {
 	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.singleleaf"
+	const leafName = "root.singleleaf"
 	// Check queues of cache and scheduler.
 	part := ms.scheduler.GetClusterContext().GetPartition(partition)
 	assert.Assert(t, part.GetTotalPartitionResource() == nil, "partition info max resource nil")
@@ -639,7 +639,7 @@ partitions:
 	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.leaf"
+	const leafName = "root.leaf"
 	app1ID := appID1
 	app2ID := appID2
 

@@ -117,6 +117,7 @@ func TestPreemptCheckTime(t *testing.T) {
 }
 
 func TestPlaceHolder(t *testing.T) {
+	const testGroupName = "testgroup"
 	siAsk := &si.AllocationAsk{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
@@ -125,6 +126,7 @@ func TestPlaceHolder(t *testing.T) {
 	ask := NewAllocationAskFromSI(siAsk)
 	assert.Assert(t, !ask.IsPlaceholder(), "standard ask should not be a placeholder")
 	assert.Equal(t, ask.GetTaskGroup(), "", "standard ask should not have a TaskGroupName")
+
 	siAsk = &si.AllocationAsk{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
@@ -135,11 +137,12 @@ func TestPlaceHolder(t *testing.T) {
 	ask = NewAllocationAskFromSI(siAsk)
 	var nilAsk *AllocationAsk
 	assert.Equal(t, ask, nilAsk, "placeholder ask created without a TaskGroupName")
-	siAsk.TaskGroupName = "testgroup"
+
+	siAsk.TaskGroupName = testGroupName
 	ask = NewAllocationAskFromSI(siAsk)
 	assert.Assert(t, ask != nilAsk, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, ask.IsPlaceholder(), "ask should have been a placeholder")
-	assert.Equal(t, ask.GetTaskGroup(), "testgroup", "TaskGroupName not set as expected")
+	assert.Equal(t, ask.GetTaskGroup(), testGroupName, "TaskGroupName not set as expected")
 }
 
 func TestGetRequiredNode(t *testing.T) {

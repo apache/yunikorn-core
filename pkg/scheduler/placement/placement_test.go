@@ -193,7 +193,8 @@ func TestManagerBuildRule(t *testing.T) {
 		t.Errorf("test rule build should not have failed and created 2 top level rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
 		parent := ruleObjs[0].getParent()
-		if parent == nil || parent.getName() != "test" {
+		const Test = "test"
+		if parent == nil || parent.getName() != Test {
 			t.Error("test rule build should have created 2 rules: parent not found")
 		}
 	}
@@ -260,7 +261,8 @@ partitions:
 	// user rule existing queue, acl allowed
 	err = man.PlaceApplication(app)
 	queueName := app.GetQueuePath()
-	if err != nil || queueName != "root.testparent.testchild" {
+	const TestQueueName = "root.testparent.testchild"
+	if err != nil || queueName != TestQueueName {
 		t.Errorf("leaf exist: app should have been placed in user queue, queue: '%s', error: %v", queueName, err)
 	}
 	user = security.UserGroup{

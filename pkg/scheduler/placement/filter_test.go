@@ -321,12 +321,13 @@ func TestAllowUser(t *testing.T) {
 		Groups: nil,
 	}
 	// test deny user list
+	const testUser1 = "user1"
 	conf := configs.Filter{}
 	conf.Type = filterDeny
-	conf.Users = []string{"user1"}
+	conf.Users = []string{testUser1}
 
 	filter := newFilter(conf)
-	userObj.User = "user1"
+	userObj.User = testUser1
 	if filter.allowUser(userObj) {
 		t.Error("deny filter did not deny user 'user1' while in list")
 	}
@@ -338,10 +339,10 @@ func TestAllowUser(t *testing.T) {
 	// test allow user list
 	conf = configs.Filter{}
 	conf.Type = filterAllow
-	conf.Users = []string{"user1"}
+	conf.Users = []string{testUser1}
 
 	filter = newFilter(conf)
-	userObj.User = "user1"
+	userObj.User = testUser1
 	if !filter.allowUser(userObj) {
 		t.Error("allow filter did not allow user 'user1' while in list")
 	}

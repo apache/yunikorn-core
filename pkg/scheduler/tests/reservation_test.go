@@ -95,7 +95,7 @@ func TestBasicReservation(t *testing.T) {
 	nodes := createNodes(t, ms, 2, 50000000, 50000)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
-	queueName := "root.leaf-1"
+	const queueName = "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 
@@ -171,7 +171,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
 	// add the first scheduling app
-	leaf1Name := "root.leaf-1"
+	const leaf1Name = "root.leaf-1"
 	err = ms.addApp(appID1, leaf1Name, "default")
 	assert.NilError(t, err, "adding app 1 to scheduler failed")
 
@@ -274,7 +274,7 @@ func TestRemoveReservedNode(t *testing.T) {
 	nodes := createNodes(t, ms, 2, 50000000, 50000)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
-	queueName := "root.leaf-1"
+	const queueName = "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 

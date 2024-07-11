@@ -666,19 +666,19 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	partition := setup(t, configDefault, 1)
 
 	// create test application
-	appID := "app1"
+	const appID = "app1"
 	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
-	node1ID := "node-1"
+	const node1ID = "node-1"
 	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
-	node2ID := "node-2"
+	const node2ID = "node-2"
 	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}).ToProto()
 	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes2})
-	node3ID := "node-3"
+	const node3ID = "node-3"
 	nodeCPU := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1000}).ToProto()
 	node3 := objects.NewNode(&si.NodeInfo{NodeID: node3ID, SchedulableResource: nodeCPU})
 
@@ -753,8 +753,8 @@ func TestGetNodeUtilisation(t *testing.T) {
 	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 0), "unexpected number of nodes returned should be 0")
 
 	// create test nodes
-	node1ID := "node-1"
-	node2ID := "node-2"
+	const node1ID = "node-1"
+	const node2ID = "node-2"
 	node1 := addNode(t, partition, node1ID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	node2 := addNode(t, partition, node2ID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5}))
 
@@ -840,9 +840,9 @@ func TestGetPartitionNodesUtilJSON(t *testing.T) {
 	// setup
 	partition := setup(t, configDefault, 1)
 	appID := "app1"
-	node1ID := "node-1"
-	node2ID := "node-2"
-	node3ID := "node-3"
+	const node1ID = "node-1"
+	const node2ID = "node-2"
+	const node3ID = "node-3"
 
 	// create test nodes
 	node1 := addNode(t, partition, node1ID, resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}))
@@ -2655,9 +2655,9 @@ func TestCheckHealthStatus(t *testing.T) {
 }
 
 func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
-	schedulerContext := &scheduler.ClusterContext{}
-	schedulerContext.SetLastHealthCheckResult(expected)
-	NewWebApp(schedulerContext, nil)
+	testSchedulerContext := &scheduler.ClusterContext{}
+	testSchedulerContext.SetLastHealthCheckResult(expected)
+	NewWebApp(testSchedulerContext, nil)
 
 	req, err := http.NewRequest("GET", "/ws/v1/scheduler/healthcheck", strings.NewReader(""))
 	assert.NilError(t, err, "Error while creating the healthcheck request")

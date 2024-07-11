@@ -62,7 +62,7 @@ func TestFixedRule(t *testing.T) {
 
 func TestFixedRulePlace(t *testing.T) {
 	// Create the structure for the test
-	data := `
+	const data = `
 partitions:
   - name: default
     queues:

@@ -119,7 +119,8 @@ partitions:
 	// unqualified queue with parent rule that exists directly in hierarchy
 	appInfo = newApplication("app1", "default", "testchild", user, tags, nil, "")
 	queue, err = pr.placeApplication(appInfo, queueFunc)
-	if queue != "root.testparent.testchild" || err != nil {
+	const TestQueueName = "root.testparent.testchild"
+	if queue != TestQueueName || err != nil {
 		t.Errorf("provided rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
 

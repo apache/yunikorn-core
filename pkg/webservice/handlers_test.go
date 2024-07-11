@@ -1099,9 +1099,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assert.NilError(t, err)
 
 	var req *http.Request
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
+	req, err = createRequest(t, "/ws/v1/partition/default/queues", map[string]string{"partition": partitionNameWithoutClusterID})
 	assert.NilError(t, err, "Get Queues for PartitionQueues Handler request failed")
 	resp := &MockResponseWriter{}
 	var partitionQueuesDao dao.PartitionQueueDAOInfo
@@ -1122,9 +1120,7 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	assertPartitionQueueDaoInfo(t, child, "root.a.a1", "", maxResource.DAOMap(), guaranteedResource.DAOMap(), true, true, "root.a", nil)
 
 	// test partition not exists
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
+	req, err = createRequest(t, "/ws/v1/partition/default/queues", map[string]string{"partition": "notexists"})
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueues(resp, req)
@@ -1170,10 +1166,8 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 
 	// test specific queue
 	var partitionQueueDao1 dao.PartitionQueueDAOInfo
-	req, err := http.NewRequest("GET", partitionQueuesHandler+queueA, strings.NewReader(""))
+	req, err := createRequest(t, partitionQueuesHandler+queueA, map[string]string{"partition": "default", "queue": "root.a"})
 	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
-	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionQueueDao1)
@@ -1185,10 +1179,8 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 
 	// test hierarchy queue
 	var partitionQueueDao2 dao.PartitionQueueDAOInfo
-	req, err = http.NewRequest("GET", partitionQueuesHandler+"root.a?subtree", strings.NewReader(""))
+	req, err = createRequest(t, partitionQueuesHandler+"root.a?subtree", map[string]string{"partition": "default", "queue": "root.a"})
 	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.a"}}))
-	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionQueueDao2)
@@ -1200,10 +1192,8 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	assert.Equal(t, partitionQueueDao2.ChildNames[0], "root.a.a1")
 
 	// test partition not exists
-	req, err = http.NewRequest("GET", partitionQueuesHandler+queueA, strings.NewReader(""))
+	req, err = createRequest(t, partitionQueuesHandler+queueA, map[string]string{"partition": "notexists"})
 	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
-	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	assertPartitionNotExists(t, resp)
@@ -1216,31 +1206,23 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	assertParamsMissing(t, resp)
 
 	// test invalid queue name
-	req, err = http.NewRequest("GET", partitionQueuesHandler+queueA, strings.NewReader(""))
+	req, err = createRequest(t, partitionQueuesHandler+queueA, map[string]string{"partition": "default", "queue": "root.notexists!"})
 	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "root.notexists!"}}))
-	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	assertQueueInvalid(t, resp, "root.notexists!", "notexists!")
 
 	// test queue is not exists
-	req, err = http.NewRequest("GET", partitionQueuesHandler+queueA, strings.NewReader(""))
+	req, err = createRequest(t, partitionQueuesHandler+queueA, map[string]string{"partition": "default", "queue": "notexists"})
 	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "queue", Value: "notexists"}}))
-	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	assertQueueNotExists(t, resp)
 
 	// test queue name with special characters escaped properly
 	queueName := url.QueryEscape("root.parent.test@t#:rt:/_ff-test")
-	req, err = http.NewRequest("GET", partitionQueuesHandler+queueName, strings.NewReader(""))
+	req, err = createRequest(t, partitionQueuesHandler+queueName, map[string]string{"partition": partitionNameWithoutClusterID, "queue": queueName})
 	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "queue", Value: queueName},
-	}))
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	assertQueueNotExists(t, resp)
@@ -1250,12 +1232,8 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid URL escape")
 
 	// test queue name with special characters escaped not properly, catch error while un escaping queue name
-	req, err = http.NewRequest("GET", partitionQueuesHandler+queueA, strings.NewReader(""))
+	req, err = createRequest(t, partitionQueuesHandler+queueA, map[string]string{"partition": partitionNameWithoutClusterID, "queue": invalidQueueName})
 	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "queue", Value: invalidQueueName},
-	}))
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	var errInfo dao.YAPIError
@@ -1325,9 +1303,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	NewWebApp(schedulerContext, nil)
 
 	var req *http.Request
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
+	req, err = createRequest(t, "/ws/v1/partition/default/nodes", map[string]string{"partition": partitionNameWithoutClusterID})
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp := &MockResponseWriter{}
 	var partitionNodesDao []*dao.NodeDAOInfo
@@ -1356,9 +1332,7 @@ func TestGetPartitionNodes(t *testing.T) {
 		}
 	}
 
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
+	req, err = createRequest(t, "/ws/v1/partition/default/nodes", map[string]string{"partition": "notexists"})
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
 	resp1 := &MockResponseWriter{}
 	getPartitionNodes(resp1, req)
@@ -1372,17 +1346,13 @@ func TestGetPartitionNodes(t *testing.T) {
 	assertParamsMissing(t, resp)
 
 	// Test specific node
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node/node-1", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "node", Value: "node-1"}}))
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"node": "node-1"})
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
 
 	// Test node id is missing
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node/node-1", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "default"}, httprouter.Param{Key: "node", Value: ""}}))
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"partition": "default", "node": ""})
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
@@ -2684,9 +2654,8 @@ func TestGetPartitionRuleHandler(t *testing.T) {
 	NewWebApp(schedulerContext, nil)
 
 	// test partition not exists
-	req, err := http.NewRequest("GET", "/ws/v1/partition/default/placementrules", strings.NewReader(""))
+	req, err := createRequest(t, "/ws/v1/partition/default/placementrules", map[string]string{"partition": "notexists"})
 	assert.NilError(t, err, httpRequestError)
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: "notexists"}}))
 	resp := &MockResponseWriter{}
 	getPartitionRules(resp, req)
 	assertPartitionNotExists(t, resp)
@@ -2699,9 +2668,8 @@ func TestGetPartitionRuleHandler(t *testing.T) {
 	assertParamsMissing(t, resp)
 
 	// default config without rules defined
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/placementrules", strings.NewReader(""))
+	req, err = createRequest(t, "/ws/v1/partition/default/placementrules", map[string]string{"partition": partitionNameWithoutClusterID})
 	assert.NilError(t, err, httpRequestError)
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	var partitionRules []*dao.RuleDAO
 	resp = &MockResponseWriter{}
 	getPartitionRules(resp, req)
@@ -2715,9 +2683,8 @@ func TestGetPartitionRuleHandler(t *testing.T) {
 	// change the config: 3 rules, expect recovery also
 	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(placementRuleConfig))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
-	req, err = http.NewRequest("GET", "/ws/v1/partition/default/placementrules", strings.NewReader(""))
+	req, err = createRequest(t, "/ws/v1/partition/default/placementrules", map[string]string{"partition": partitionNameWithoutClusterID})
 	assert.NilError(t, err, httpRequestError)
-	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID}}))
 	resp = &MockResponseWriter{}
 	getPartitionRules(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionRules)

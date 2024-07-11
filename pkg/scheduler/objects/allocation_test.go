@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -71,6 +72,7 @@ func TestNewAlloc(t *testing.T) {
 	ask.createTime = time.Unix(past, 0)
 	alloc = NewAllocation("node-1", ask)
 	assert.Equal(t, alloc.GetCreateTime(), ask.GetCreateTime(), "createTime was not copied from the ask")
+	assert.Assert(t, reflect.DeepEqual(ask.tags, ask.GetTagsClone()))
 }
 
 func TestNewAllocatedAllocationResult(t *testing.T) {
@@ -144,6 +146,10 @@ func TestAllocationResultString(t *testing.T) {
 	// validate nil ask
 	result.Ask = nil
 	assert.Equal(t, result.String(), "resultType=Allocated, nodeID=node-1, reservedNodeID=node-2, allocationKey=", "wrong content")
+
+	// validate nil result
+	result = nil
+	assert.Equal(t, result.String(), "nil allocation result", "wrong content")
 }
 
 func TestSIFromNilAlloc(t *testing.T) {
@@ -243,6 +249,7 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, alloc.IsOriginator(), "allocation should have been an originator")
 	assert.Assert(t, !alloc.GetAsk().IsAllowPreemptSelf(), "ask should not have allow-preempt-self set")
 	assert.Assert(t, alloc.GetAsk().IsAllowPreemptOther(), "ask should have allow-preempt-other set")
+	assert.Assert(t, reflect.DeepEqual(alloc.tags, alloc.GetTagsClone()))
 
 	allocSI.Originator = false
 	allocSI.PreemptionPolicy.AllowPreemptSelf = true

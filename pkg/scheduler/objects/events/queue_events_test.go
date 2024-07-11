@@ -141,6 +141,19 @@ func TestTypeChangedEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_TYPE, event.EventChangeDetail)
 	assert.Equal(t, 0, len(event.Resource.Resources))
+
+	eventSystem = mock.NewEventSystem()
+	nq = NewQueueEvents(eventSystem)
+	nq.SendTypeChangedEvent(testQueuePath, true)
+	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
+	event = eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_QUEUE, event.Type)
+	assert.Equal(t, testQueuePath, event.ObjectID)
+	assert.Equal(t, common.Empty, event.ReferenceID)
+	assert.Equal(t, "leaf queue: true", event.Message)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_TYPE, event.EventChangeDetail)
+	assert.Equal(t, 0, len(event.Resource.Resources))
 }
 
 func TestSendMaxResourceChangedEvent(t *testing.T) {

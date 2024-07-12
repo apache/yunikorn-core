@@ -61,17 +61,7 @@ func TestFixedRule(t *testing.T) {
 }
 
 func TestFixedRulePlace(t *testing.T) {
-	// Create the structure for the test
-	const data = `
-partitions:
-  - name: default
-    queues:
-      - name: testqueue
-      - name: testparent
-        queues:
-          - name: testchild
-`
-	err := initQueueStructure([]byte(data))
+	err := initQueueStructure([]byte(confTestQueue))
 	assert.NilError(t, err, "setting up the queue config failed")
 
 	user := security.UserGroup{

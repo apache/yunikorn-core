@@ -193,7 +193,9 @@ func TestManagerBuildRule(t *testing.T) {
 		t.Errorf("test rule build should not have failed and created 2 top level rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
 		parent := ruleObjs[0].getParent()
-		const Test = "test"
+		const (
+			Test = "test"
+		)
 		if parent == nil || parent.getName() != Test {
 			t.Error("test rule build should have created 2 rules: parent not found")
 		}

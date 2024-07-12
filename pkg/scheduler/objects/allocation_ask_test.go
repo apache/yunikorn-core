@@ -117,7 +117,9 @@ func TestPreemptCheckTime(t *testing.T) {
 }
 
 func TestPlaceHolder(t *testing.T) {
-	const testGroupName = "testgroup"
+	const (
+		testGroupName = "testgroup"
+	)
 	siAsk := &si.AllocationAsk{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",

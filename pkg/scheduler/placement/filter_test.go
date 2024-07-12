@@ -321,7 +321,9 @@ func TestAllowUser(t *testing.T) {
 		Groups: nil,
 	}
 	// test deny user list
-	const testUser1 = "user1"
+	const (
+		testUser1 = "user1"
+	)
 	conf := configs.Filter{}
 	conf.Type = filterDeny
 	conf.Users = []string{testUser1}

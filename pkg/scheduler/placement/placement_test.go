@@ -168,9 +168,13 @@ func TestManagerUpdate(t *testing.T) {
 }
 
 func TestManagerBuildRule(t *testing.T) {
+	const (
+		Test = "test"
+		User = "user"
+	)
 	// basic with 1 rule
 	rules := []configs.PlacementRule{
-		{Name: "test"},
+		{Name: Test},
 	}
 	ruleObjs, err := buildRules(rules)
 	if err != nil {
@@ -182,9 +186,9 @@ func TestManagerBuildRule(t *testing.T) {
 
 	// rule with a parent rule should only be 1 rule in the list
 	rules = []configs.PlacementRule{
-		{Name: "test",
+		{Name: Test,
 			Parent: &configs.PlacementRule{
-				Name: "test",
+				Name: Test,
 			},
 		},
 	}
@@ -193,9 +197,6 @@ func TestManagerBuildRule(t *testing.T) {
 		t.Errorf("test rule build should not have failed and created 2 top level rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
 		parent := ruleObjs[0].getParent()
-		const (
-			Test = "test"
-		)
 		if parent == nil || parent.getName() != Test {
 			t.Error("test rule build should have created 2 rules: parent not found")
 		}
@@ -203,13 +204,13 @@ func TestManagerBuildRule(t *testing.T) {
 
 	// two rules in order: cannot use the same rule names as we can not check them
 	rules = []configs.PlacementRule{
-		{Name: "user"},
-		{Name: "test"},
+		{Name: User},
+		{Name: Test},
 	}
 	ruleObjs, err = buildRules(rules)
 	if err != nil || len(ruleObjs) != 3 {
 		t.Errorf("rule build should not have failed and created 3 rules, err: %v, rules: %v", err, ruleObjs)
-	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" || ruleObjs[2].getName() != "recovery" {
+	} else if ruleObjs[0].getName() != User || ruleObjs[1].getName() != Test || ruleObjs[2].getName() != "recovery" {
 		t.Errorf("rule build order is not preserved: %v", ruleObjs)
 	}
 }
@@ -330,6 +331,7 @@ partitions:
 	}
 }
 
+//nolint:funlen
 func TestForcePlaceApp(t *testing.T) {
 	const (
 		def  = "default"

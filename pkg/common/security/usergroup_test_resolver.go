@@ -25,6 +25,12 @@ import (
 	"time"
 )
 
+const (
+	Testuser1 = "testuser1"
+	Testuser2 = "testuser2"
+	Testuser3 = "testuser3"
+)
+
 // Get the cache with a test resolver
 // cleaner runs every second
 func GetUserGroupCacheTest() *UserGroupCache {
@@ -41,10 +47,6 @@ func GetUserGroupCacheTest() *UserGroupCache {
 // test function only
 func lookup(userName string) (*user.User, error) {
 	// 1st test user: all OK
-	const (
-		Testuser1 = "testuser1"
-		Testuser2 = "testuser2"
-	)
 	if userName == Testuser1 {
 		return &user.User{
 			Uid:      "1000",
@@ -60,7 +62,7 @@ func lookup(userName string) (*user.User, error) {
 			Username: "testuser2",
 		}, nil
 	}
-	if userName == "testuser3" {
+	if userName == Testuser3 {
 		return &user.User{
 			Uid:      "1001",
 			Gid:      "1001",
@@ -89,15 +91,14 @@ func lookupGroupID(gid string) (*user.Group, error) {
 
 // test function only
 func groupIds(osUser *user.User) ([]string, error) {
-	const Testuser1 = "testuser1"
 	if osUser.Username == Testuser1 {
 		return []string{"1001"}, nil
 	}
-	if osUser.Username == "testuser2" {
+	if osUser.Username == Testuser2 {
 		return []string{"1001", "1002"}, nil
 	}
 	// group list might return primary group ID also
-	if osUser.Username == "testuser3" {
+	if osUser.Username == Testuser3 {
 		return []string{"1002", "1001", "1003", "1004"}, nil
 	}
 	return nil, fmt.Errorf("lookup failed for user: %s", osUser.Username)

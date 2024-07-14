@@ -77,24 +77,12 @@ partitions:
     preemption:
       enabled: false
 `
+	queueName = "root.leaf-1"
 )
 
 // simple reservation one app one queue
 // multiple nodes and multiple repeats for the same ask get reserved
 func TestBasicReservation(t *testing.T) {
-	const (
-		queueName  = "root.leaf-1"
-		appID1     = "app-1"
-		nodeMemory = 50000000
-		nodeVCore  = 50000
-		reqMemory  = 20000000
-		reqVCore   = 20000
-		numNodes   = 2
-		numReqs    = 6
-		totalMem   = reqMemory * numReqs
-		allocMem   = reqMemory * 4
-		pendingMem = reqMemory * 2
-	)
 	ms := &mockScheduler{}
 	defer ms.Stop()
 
@@ -105,8 +93,8 @@ func TestBasicReservation(t *testing.T) {
 	objects.SetReservationDelay(10 * time.Nanosecond)
 	defer objects.SetReservationDelay(2 * time.Second)
 
-	nodes := createNodes(t, ms, numNodes, nodeMemory, nodeVCore)
-	ms.mockRM.waitForMinAcceptedNodes(t, numNodes, 1000)
+	nodes := createNodes(t, ms, 2, 50000000, 50000)
+	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
@@ -115,13 +103,13 @@ func TestBasicReservation(t *testing.T) {
 	// Get scheduling app
 	app := ms.getApplication(appID1)
 
-	res := &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: reqMemory}, "vcore": {Value: reqVCore}}}
-	err = ms.addAppRequest(appID1, "alloc-1", res, numReqs)
+	res := &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 20000000}, "vcore": {Value: 20000}}}
+	err = ms.addAppRequest(appID1, "alloc-1", res, 6)
 	assert.NilError(t, err, "adding requests to app failed")
 
 	leafQueue := ms.getQueue(queueName)
-	waitForPendingQueueResource(t, leafQueue, totalMem, 1000)
-	waitForPendingAppResource(t, app, totalMem, 1000)
+	waitForPendingQueueResource(t, leafQueue, 120000000, 1000)
+	waitForPendingAppResource(t, app, 120000000, 1000)
 
 	// Allocate for app
 	ms.scheduler.MultiStepSchedule(8)
@@ -129,12 +117,12 @@ func TestBasicReservation(t *testing.T) {
 
 	// Verify that all 4 requests are satisfied
 	mem := int(app.GetAllocatedResource().Resources[common.Memory])
-	assert.Equal(t, allocMem, mem, "allocated resource after alloc not correct")
-	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, nodes, allocMem, 1000)
+	assert.Equal(t, 80000000, mem, "allocated resource after alloc not correct")
+	waitForAllocatedNodeResource(t, ms.scheduler.GetClusterContext(), ms.partitionName, nodes, 80000000, 1000)
 
 	// check the pending resources (2 * 20 still outstanding)
-	waitForPendingQueueResource(t, leafQueue, pendingMem, 1000)
-	waitForPendingAppResource(t, app, pendingMem, 1000)
+	waitForPendingQueueResource(t, leafQueue, 40000000, 1000)
+	waitForPendingAppResource(t, app, 40000000, 1000)
 	ms.scheduler.MultiStepSchedule(6)
 
 	// Allocation should not change (still 4)
@@ -183,8 +171,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
 	// add the first scheduling app
-	const leaf1Name = "root.leaf-1"
-	err = ms.addApp(appID1, leaf1Name, "default")
+	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app 1 to scheduler failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
@@ -286,7 +273,6 @@ func TestRemoveReservedNode(t *testing.T) {
 	nodes := createNodes(t, ms, 2, 50000000, 50000)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
-	const queueName = "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 
@@ -339,7 +325,6 @@ func TestAddNewNode(t *testing.T) {
 	ms.mockRM.waitForMinAcceptedNodes(t, 3, 1000)
 	ms.scheduler.GetClusterContext().GetPartition(ms.partitionName).GetNode(nodes[2]).SetSchedulable(false)
 
-	queueName := "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 
@@ -396,7 +381,6 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	nodes := createNodes(t, ms, 2, 30000000, 30000)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
-	queueName := "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)

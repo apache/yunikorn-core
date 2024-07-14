@@ -39,35 +39,37 @@ func TestGetUserGroupCache(t *testing.T) {
 }
 
 func TestGetUserGroup(t *testing.T) {
-	const TestUser1 = "testuser1"
 	testCache := GetUserGroupCache("test")
 	testCache.resetCache()
 	// test cache should be empty now
 	if len(testCache.ugs) != 0 {
 		t.Fatalf("Cache not empty: %v", testCache.ugs)
 	}
-
-	ug, err := testCache.GetUserGroup(TestUser1)
+	ugi := &si.UserGroupInformation{
+		User:   "testuser1",
+		Groups: nil,
+	}
+	ug, err := testCache.GetUserGroup(ugi.User)
 	assert.NilError(t, err, "Lookup should not have failed: testuser1")
 	if ug.failed {
-		t.Fatalf("lookup failed which should not have: %t", ug.failed)
+		t.Errorf("lookup failed which should not have: %t", ug.failed)
 	}
 	if len(testCache.ugs) != 1 {
-		t.Fatalf("Cache not updated should have 1 entry %d", len(testCache.ugs))
+		t.Errorf("Cache not updated should have 1 entry %d", len(testCache.ugs))
 	}
 	// check returned info: primary and secondary groups etc
-	if ug.User != TestUser1 || len(ug.Groups) != 2 || ug.resolved == 0 || ug.failed {
-		t.Fatalf("User 'testuser1' not resolved correctly: %v", ug)
+	if ug.User != ugi.User || len(ug.Groups) != 2 || ug.resolved == 0 || ug.failed {
+		t.Errorf("User 'testuser1' not resolved correctly: %v", ug)
 	}
-	cachedUG := testCache.ugs[TestUser1]
+	cachedUG := testCache.ugs[ugi.User]
 	if ug.resolved != cachedUG.resolved {
-		t.Fatalf("User 'testuser1' not cached correctly resolution time differs: %d got %d", ug.resolved, cachedUG.resolved)
+		t.Errorf("User 'testuser1' not cached correctly resolution time differs: %d got %d", ug.resolved, cachedUG.resolved)
 	}
 	// click over the clock: if we do not get the cached version the new time will differ from the cache update
 	cachedUG.resolved -= 5
-	ug, err = testCache.GetUserGroup(TestUser1)
+	ug, err = testCache.GetUserGroup(ugi.User)
 	if err != nil || ug.resolved != cachedUG.resolved {
-		t.Fatalf("User 'testuser1' not returned from Cache, resolution time differs: %d got %d (err = %v)", ug.resolved, cachedUG.resolved, err)
+		t.Errorf("User 'testuser1' not returned from Cache, resolution time differs: %d got %d (err = %v)", ug.resolved, cachedUG.resolved, err)
 	}
 }
 

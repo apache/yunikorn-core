@@ -1710,12 +1710,10 @@ func TestGetApplicationHandler(t *testing.T) {
 		httprouter.Param{Key: "application", Value: "app-1"},
 	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
-
 	resp6 := &MockResponseWriter{}
 	var appDetailsDao *dao.ApplicationDetailsDAOInfo
 	getApplication(resp6, req6)
 	appSummary := app.GetApplicationSummary(partitionNameWithoutClusterID)
-
 	err = json.Unmarshal(resp6.outputBytes, &appDetailsDao)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, "app-1", appDetailsDao.ApplicationDAOInfo.ApplicationID)

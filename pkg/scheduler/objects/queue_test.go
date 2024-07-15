@@ -1697,7 +1697,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 
 	// verify no victims when no allocations exist
 	snapshot := leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
-	assert.Equal(t, 3, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
+	assert.Equal(t, 5, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 
 	// add two lower-priority allocs in leaf2
@@ -2192,7 +2192,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
-	childNonLeaf, err := NewDynamicQueue("nonleaf", false, parent)
+	childNonLeaf, err := NewDynamicQueue("nonleaf_Test-a_b_#_c_#_d_/_e@dom:ain", false, parent)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
 	assert.Equal(t, len(childNonLeaf.properties), 0)
@@ -2201,6 +2201,12 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Assert(t, childNonLeaf.prioritySortEnabled)
 	assert.Equal(t, childNonLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
 	assert.Equal(t, childNonLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+
+	// case 2: invalid queue name
+	_, err = NewDynamicQueue("invalid!queue", false, parent)
+	if err == nil {
+		t.Errorf("new dynamic queue should have failed to create, err is %v", err)
+	}
 }
 
 func TestTemplateIsNotOverrideByParent(t *testing.T) {
@@ -2472,7 +2478,10 @@ func TestQueueEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_QUEUE, records[3].Type)
 	assert.Equal(t, si.EventRecord_REMOVE, records[3].EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_APP, records[3].EventChangeDetail)
-	isRemoveApplicationEvent(t, app, records[4])
+	assert.Equal(t, si.EventRecord_APP, records[4].Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, records[4].ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_REMOVE, records[4].EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[4].EventChangeDetail, "incorrect change detail, expected none")
 
 	newConf := configs.QueueConfig{
 		Parent: false,
@@ -2539,4 +2548,11 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	app.RemoveAllocation(alloc.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
 	assert.Equal(t, app.CurrentState(), Completing.String(), "app state should be completing")
 	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
+}
+
+func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
+	assert.Equal(t, si.EventRecord_APP_NEW, record.EventChangeDetail, "incorrect change detail, expected none")
 }

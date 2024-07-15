@@ -29,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
+//nolint:funlen
 func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 	negativeResourceMap := map[string]string{"memory": "-50", "vcores": "33"}
 	resourceMapWithSyntaxError := map[string]string{"memory": "ten", "vcores": ""}
@@ -2295,7 +2296,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			expectedErrorMsg: "invalid child name 'thisQueueNameIsTooLongthisQueueNameIsTooLongthisQueueNameIsTooLong', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters",
+			expectedErrorMsg: common.InvalidQueueName.Error(),
 		},
 		{
 			name: "Invalid Child Queue Name With Special Character",
@@ -2308,7 +2309,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			expectedErrorMsg: "invalid child name 'queue_Name$', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters",
+			expectedErrorMsg: common.InvalidQueueName.Error(),
 		},
 		{
 			name: "Valid Multiple Queues",
@@ -2412,5 +2413,17 @@ func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
 				tc.validateFunc(t, tc.partition)
 			}
 		})
+	}
+}
+
+func TestIsQueueNameValid(t *testing.T) {
+	assert.NilError(t, IsQueueNameValid("parent_Child_test-a_b_#_c_#_d_/_e@dom:ain"))
+	err := IsQueueNameValid("invalid!queue")
+	if err == nil {
+		t.Errorf("invalid queue name, validation should have failed. err is %v", err)
+	}
+	err = IsQueueNameValid("root.parent")
+	if err == nil {
+		t.Errorf("invalid queue name, validation should have failed. err is %v", err)
 	}
 }

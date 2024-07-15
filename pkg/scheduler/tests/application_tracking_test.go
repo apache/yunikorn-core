@@ -45,6 +45,7 @@ partitions:
           - name: singleleaf
 `
 
+//nolint:funlen
 func TestApplicationHistoryTracking(t *testing.T) {
 	// Register RM
 	ms := &mockScheduler{}

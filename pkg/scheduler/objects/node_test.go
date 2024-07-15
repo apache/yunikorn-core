@@ -28,6 +28,7 @@ import (
 	evtMock "github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -186,7 +187,7 @@ func TestCanAllocate(t *testing.T) {
 			sn := &Node{
 				availableResource: tt.available,
 			}
-			assert.Equal(t, sn.CanAllocate(tt.request), tt.want, "unexpected node can run result")
+			assert.Equal(t, sn.CanAllocate(tt.request), tt.want, "unexpected node can run resultType")
 		})
 	}
 }
@@ -664,7 +665,7 @@ func TestNodeEvents(t *testing.T) {
 		"ready": "true",
 	})
 	node := NewNode(proto)
-	node.nodeEvents = newNodeEvents(mockEvents)
+	node.nodeEvents = schedEvt.NewNodeEvents(mockEvents)
 
 	node.SendNodeAddedEvent()
 	assert.Equal(t, 1, len(mockEvents.Events))
@@ -765,7 +766,7 @@ func TestNode_FitInNode(t *testing.T) {
 			sn := &Node{
 				totalResource: tt.totalRes,
 			}
-			assert.Equal(t, sn.FitInNode(tt.resRequest), tt.want, "unexpected node fit result")
+			assert.Equal(t, sn.FitInNode(tt.resRequest), tt.want, "unexpected node fit resultType")
 		})
 	}
 }
@@ -785,7 +786,7 @@ func TestPreconditions(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAsk("test", "app001", res)
 	eventSystem := evtMock.NewEventSystem()
-	ask.askEvents = newAskEvents(eventSystem)
+	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
 	node := NewNode(proto)
 
 	// failure

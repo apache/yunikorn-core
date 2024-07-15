@@ -22,6 +22,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/apache/yunikorn-core/pkg/locking"
+
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -31,6 +33,8 @@ type PreemptionPredicatePlugin struct {
 	allocations  map[string]string
 	preemptions  []Preemption
 	errHolder    *errHolder
+
+	locking.RWMutex
 }
 
 type Preemption struct {
@@ -47,6 +51,8 @@ type errHolder struct {
 }
 
 func (m *PreemptionPredicatePlugin) Predicates(args *si.PredicatesArgs) error {
+	m.RLock()
+	defer m.RUnlock()
 	if args.Allocate {
 		nodeID, ok := m.allocations[args.AllocationKey]
 		if !ok {
@@ -69,6 +75,8 @@ func (m *PreemptionPredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 }
 
 func (m *PreemptionPredicatePlugin) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
+	m.Lock()
+	defer m.Unlock()
 	result := &si.PreemptionPredicatesResponse{
 		Success: false,
 		Index:   -1,
@@ -109,6 +117,8 @@ func (m *PreemptionPredicatePlugin) PreemptionPredicates(args *si.PreemptionPred
 // GetPredicateError returns the error set by the preemption predicate check that failed.
 // Returns a nil error on success.
 func (m *PreemptionPredicatePlugin) GetPredicateError() error {
+	m.RLock()
+	defer m.RUnlock()
 	return m.errHolder.err
 }
 

@@ -27,7 +27,9 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events/mock"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -213,16 +215,29 @@ func TestSendPredicateFailed(t *testing.T) {
 	}
 	ask := NewAllocationAskFromSI(siAsk)
 	eventSystem := mock.NewEventSystemDisabled()
-	ask.askEvents = newAskEvents(eventSystem)
+	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
 	ask.SendPredicateFailedEvent("failed")
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
-	ask.askEvents = newAskEvents(eventSystem)
+	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
 	ask.SendPredicateFailedEvent("failure")
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
 	assert.Equal(t, "Predicate failed for request 'ask-1' with message: 'failure'", event.Message)
+}
+
+func TestCreateTime(t *testing.T) {
+	siAsk := &si.AllocationAsk{
+		AllocationKey: "ask1",
+		ApplicationID: "app1",
+		PartitionName: "default",
+	}
+	siAsk.Tags = map[string]string{siCommon.CreationTime: "1622530800"}
+	ask := NewAllocationAskFromSI(siAsk)
+	assert.Equal(t, ask.GetTag(siCommon.CreationTime), "1622530800")
+	assert.Equal(t, ask.GetTag("unknown"), "")
+	assert.Equal(t, ask.GetCreateTime(), time.Unix(1622530800, 0))
 }
 
 func sortedLog(ask *AllocationAsk) []*AllocationLogEntry {

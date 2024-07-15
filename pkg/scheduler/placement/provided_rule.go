@@ -85,8 +85,21 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 	}
 	var parentName string
 	var err error
-	// if we have a fully qualified queue passed in do not run the parent rule
-	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
+
+	// fully qualified queue, do not run the parent rule
+	if strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
+		parts := strings.Split(queueName, configs.DOT)
+		for _, part := range parts {
+			if err = configs.IsQueueNameValid(part); err != nil {
+				return "", err
+			}
+		}
+	} else {
+		// not fully qualified queue
+		childQueueName := replaceDot(queueName)
+		if err = configs.IsQueueNameValid(childQueueName); err != nil {
+			return "", err
+		}
 		// run the parent rule if set
 		if pr.parent != nil {
 			parentName, err = pr.parent.placeApplication(app, queueFn)
@@ -113,7 +126,7 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 			parentName = configs.RootQueue
 		}
 		// Make it a fully qualified queue
-		queueName = parentName + configs.DOT + replaceDot(queueName)
+		queueName = parentName + configs.DOT + childQueueName
 	}
 	// Log the result before we check the create flag
 	log.Log(log.SchedApplication).Debug("Provided rule intermediate result",

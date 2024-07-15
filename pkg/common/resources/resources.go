@@ -645,6 +645,25 @@ func Equals(left, right *Resource) bool {
 	return true
 }
 
+// MatchAny returns true if at least one type in the defined resource exists in the other resource.
+// False if none of the types exist in the other resource.
+// A nil resource is treated as an empty resource (no types defined) and returns false
+// Values are not considered during the checks
+func (r *Resource) MatchAny(other *Resource) bool {
+	if r == nil || other == nil {
+		return false
+	}
+	if r == other {
+		return true
+	}
+	for k := range r.Resources {
+		if _, ok := other.Resources[k]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // Compare the resources equal returns the specific values for following cases:
 // left  right  return
 // nil   nil    true
@@ -751,6 +770,55 @@ func StrictlyGreaterThanOrEquals(larger, smaller *Resource) bool {
 	return true
 }
 
+// StrictlyGreaterThanOnlyExisting returns true if all quantities for types in the defined resource are greater than
+// the quantity for the same type in smaller.
+// Types defined in smaller that are not in the defined resource are ignored.
+// Two resources that are equal are not considered strictly larger than each other.
+func (r *Resource) StrictlyGreaterThanOnlyExisting(smaller *Resource) bool {
+	if r == nil {
+		r = Zero
+	}
+	if smaller == nil {
+		smaller = Zero
+	}
+
+	// keep track of the number of not equal values
+	notEqual := false
+
+	// Is larger and smaller completely disjoint?
+	atleastOneResourcePresent := false
+	// Is all resource in larger greater than zero?
+	isAllPositiveInLarger := true
+
+	for k, v := range r.Resources {
+		// even when smaller is empty, all resource type in larger should be greater than zero
+		if smaller.IsEmpty() && v <= 0 {
+			isAllPositiveInLarger = false
+		}
+		// when smaller is not empty
+		if val, ok := smaller.Resources[k]; ok {
+			// at least one common resource type is there
+			atleastOneResourcePresent = true
+			if val > v {
+				return false
+			}
+			if val != v {
+				notEqual = true
+			}
+		}
+	}
+
+	switch {
+	case smaller.IsEmpty() && !r.IsEmpty():
+		return isAllPositiveInLarger
+	case atleastOneResourcePresent:
+		return notEqual
+	default:
+		// larger and smaller is completely disjoint. none of the resource match.
+		return !r.IsEmpty() && !smaller.IsEmpty()
+	}
+}
+
 // Have at least one quantity > 0, and no quantities < 0
 // A nil resource is not strictly greater than zero.
 func StrictlyGreaterThanZero(larger *Resource) bool {
@@ -808,6 +876,29 @@ func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 	}
 	for k, v := range right.Resources {
 		if val, ok := left.Resources[k]; ok {
+			out.Resources[k] = min(v, val)
+		} else {
+			out.Resources[k] = v
+		}
+	}
+	return out
+}
+
+// ComponentWiseMinOnlyExisting Returns a new Resource with the smallest value for resource type
+// existing only in left but not vice versa.
+func ComponentWiseMinOnlyExisting(left, right *Resource) *Resource {
+	out := NewResource()
+	if right == nil && left == nil {
+		return nil
+	}
+	if left == nil {
+		return nil
+	}
+	if right == nil {
+		return left.Clone()
+	}
+	for k, v := range left.Resources {
+		if val, ok := right.Resources[k]; ok {
 			out.Resources[k] = min(v, val)
 		} else {
 			out.Resources[k] = v

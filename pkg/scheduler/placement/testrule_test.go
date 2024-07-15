@@ -20,6 +20,9 @@ package placement
 
 import (
 	"strings"
+	"testing"
+
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
@@ -96,4 +99,46 @@ func newApplication(appID, partition, queueName string, ugi security.UserGroup, 
 		Tags:          tags,
 	}
 	return objects.NewApplication(siApp, ugi, eventHandler, rmID)
+}
+
+func TestTestRulePlace(t *testing.T) {
+	// Create the structure for the test
+	data := `
+partitions:
+  - name: default
+    queues:
+      - name: testparent
+        queues:
+          - name: testchild
+`
+	err := initQueueStructure([]byte(data))
+	assert.NilError(t, err, "setting up the queue config failed")
+
+	tags := make(map[string]string)
+	user := security.UserGroup{
+		User:   "test",
+		Groups: []string{},
+	}
+
+	conf := configs.PlacementRule{
+		Name: "test",
+	}
+	var pr rule
+	pr, err = newRule(conf)
+	if err != nil || pr == nil {
+		t.Errorf("test rule create failed, err %v", err)
+	}
+	appInfo := newApplication("app1", "default", "testchild", user, tags, nil, "")
+	var queue string
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if queue != "testchild" || err != nil {
+		t.Errorf("test rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// invalid queueName
+	appInfo = newApplication("app1", "default", "test$child", user, tags, nil, "")
+	queue, err = pr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("invalid queueName should got empty queueName")
+	}
 }

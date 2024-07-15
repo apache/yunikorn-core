@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -39,6 +40,7 @@ const (
 	appID0    = "app-0"
 	appID1    = "app-1"
 	appID2    = "app-2"
+	appID3    = "app-3"
 	aKey      = "alloc-1"
 	aKey2     = "alloc-2"
 	nodeID1   = "node-1"
@@ -176,7 +178,7 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		reservations:      make(map[string]*reservation),
-		nodeEvents:        newNodeEvents(events.GetEventSystem()),
+		nodeEvents:        schedEvt.NewNodeEvents(events.GetEventSystem()),
 	}
 	return sn
 }

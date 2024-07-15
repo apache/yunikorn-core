@@ -330,12 +330,15 @@ partitions:
 //nolint:funlen
 func TestForcePlaceApp(t *testing.T) {
 	const (
-		def  = "default"
-		defQ = "root.default"
+		provided       = "provided"
+		providedQ      = "root.provided"
+		defQ           = "root.default"
+		customDefaultQ = "root.custom"
 	)
 
 	// Create the structure for the test
 	// specifically no acl to allow on root
+	// root.default - undefined
 	data := `
 partitions:
   - name: default
@@ -343,7 +346,7 @@ partitions:
       - name: root
         submitacl: "any-user"
         queues:
-          - name: default
+          - name: provided
             submitacl: "*"
           - name: acldeny
             submitacl: " "
@@ -383,14 +386,14 @@ partitions:
 		user   security.UserGroup
 	}{
 		{"empty", "", "", tags, user},
-		{"provided unqualified", def, defQ, tags, user},
-		{"provided qualified", defQ, defQ, tags, user},
+		{"provided unqualified", provided, providedQ, tags, user},
+		{"provided qualified", providedQ, providedQ, tags, user},
 		{"provided not exist", "unknown", "", tags, user},
 		{"provided parent", "root.parent", "", tags, user},
 		{"acl deny", "root.acldeny", "", tags, deny},
 		{"create", "unknown", "root.namespace", map[string]string{"namespace": "namespace"}, user},
 		{"deny create", "unknown", "", map[string]string{"namespace": "namespace"}, deny},
-		{"forced exist", defQ, defQ, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
+		{"forced exist", providedQ, providedQ, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
 		{"forced and create", "unknown", "root.namespace", map[string]string{siCommon.AppTagCreateForce: "true", "namespace": "namespace"}, user},
 		{"forced and deny create", "unknown", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true", "namespace": "namespace"}, deny},
 		{"forced parent", "root.parent", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
@@ -402,6 +405,133 @@ partitions:
 		t.Run(tt.name, func(t *testing.T) {
 			app := newApplication("app1", "default", tt.queue, tt.user, tt.tags, nil, "")
 			err = man.PlaceApplication(app)
+			if tt.placed == "" {
+				assert.Assert(t, errors.Is(err, RejectedError), "unexpected error or no error returned")
+			} else {
+				assert.NilError(t, err, "unexpected placement failure")
+				assert.Equal(t, tt.placed, app.GetQueuePath(), "incorrect queue set")
+			}
+		})
+	}
+
+	// Update Queue structure
+	// root.default - defined
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "any-user"
+        queues:
+          - name: default
+            submitacl: "*"
+          - name: provided
+            submitacl: "*"
+          - name: acldeny
+            submitacl: " "
+          - name: parent
+            parent: true
+            submitacl: "*"
+`
+	err = initQueueStructure([]byte(data))
+	assert.NilError(t, err, "setting up the queue config failed")
+
+	tests = []struct {
+		name   string
+		queue  string
+		placed string
+		tags   map[string]string
+		user   security.UserGroup
+	}{
+		{"empty | defaulQ defined", "", defQ, tags, user},
+		{"provided unqualified | defaulQ defined", provided, providedQ, tags, user},
+		{"provided qualified | defaulQ defined", defQ, defQ, tags, user},
+		{"provided not exist | defaulQ defined", "unknown", defQ, tags, user},
+		{"provided parent | defaulQ defined", "root.parent", defQ, tags, user},
+		{"acl deny | defaulQ defined", "root.acldeny", defQ, tags, deny},
+		{"create | defaulQ defined", "unknown", "root.namespace", map[string]string{"namespace": "namespace"}, user},
+		{"deny create | defaulQ defined", "unknown", defQ, map[string]string{"namespace": "namespace"}, deny},
+		{"forced exist | defaulQ defined", defQ, defQ, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
+		{"forced and create | defaulQ defined", "unknown", "root.namespace", map[string]string{siCommon.AppTagCreateForce: "true", "namespace": "namespace"}, user},
+		{"forced and deny create | defaulQ defined", "unknown", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true", "namespace": "namespace"}, deny},
+		{"forced parent | defaulQ defined", "root.parent", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
+		{"forced acl deny | defaulQ defined", "root.acldeny", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true"}, deny},
+		{"forced not exist | defaulQ defined", "unknown", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
+		{"forced not exist acl deny | defaulQ defined", "unknown", common.RecoveryQueueFull, map[string]string{siCommon.AppTagCreateForce: "true"}, deny},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := newApplication("app1", "default", tt.queue, tt.user, tt.tags, nil, "")
+			err = man.PlaceApplication(app)
+			if tt.placed == "" {
+				assert.Assert(t, errors.Is(err, RejectedError), "unexpected error or no error returned")
+			} else {
+				assert.NilError(t, err, "unexpected placement failure")
+				assert.Equal(t, tt.placed, app.GetQueuePath(), "incorrect queue set")
+			}
+		})
+	}
+
+	// initialize queues with no root.default
+	// Add fixed placement rule to define custom default queue
+	data = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "any-user"
+        queues:
+          - name: custom
+            submitacl: "*"
+          - name: provided
+            submitacl: "*"
+          - name: acldeny
+            submitacl: " "
+          - name: parent
+            parent: true
+            submitacl: "*"
+`
+	err = initQueueStructure([]byte(data))
+	assert.NilError(t, err, "setting up the queue config failed")
+
+	// update the manager
+	rules = []configs.PlacementRule{
+		{Name: "provided",
+			Create: false},
+		{Name: "tag",
+			Value:  "namespace",
+			Create: true},
+		{Name: "fixed",
+			Value:  "root.custom",
+			Create: true},
+	}
+	man1 := NewPlacementManager(rules, queueFunc)
+	if man1 == nil {
+		t.Fatal("placement manager create failed")
+	}
+
+	tests = []struct {
+		name   string
+		queue  string
+		placed string
+		tags   map[string]string
+		user   security.UserGroup
+	}{
+		{"empty | custom defaulQ", "", customDefaultQ, tags, user},
+		{"provided unqualified | custom defaulQ", provided, providedQ, tags, user},
+		{"provided qualified | custom defaulQ", providedQ, providedQ, tags, user},
+		{"provided not exist | custom defaulQ", "unknown", customDefaultQ, tags, user},
+		{"provided parent | custom defaulQ", "root.parent", customDefaultQ, tags, user},
+		{"acl deny | custom defaulQ", "root.acldeny", customDefaultQ, tags, deny},
+		{"create | custom defaulQ", "unknown", "root.namespace", map[string]string{"namespace": "namespace"}, user},
+		{"deny create | custom defaulQ", "unknown", customDefaultQ, map[string]string{"namespace": "namespace"}, deny},
+		{"forced exist | custom defaulQ", providedQ, providedQ, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
+		{"forced and create | custom defaulQ", "unknown", "root.namespace", map[string]string{siCommon.AppTagCreateForce: "true", "namespace": "namespace"}, user},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := newApplication("app1", "default", tt.queue, tt.user, tt.tags, nil, "")
+			err = man1.PlaceApplication(app)
 			if tt.placed == "" {
 				assert.Assert(t, errors.Is(err, RejectedError), "unexpected error or no error returned")
 			} else {

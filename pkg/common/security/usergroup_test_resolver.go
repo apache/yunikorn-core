@@ -69,6 +69,27 @@ func lookup(userName string) (*user.User, error) {
 			Username: "testuser3",
 		}, nil
 	}
+	if userName == "testuser4" {
+		return &user.User{
+			Uid:      "901",
+			Gid:      "901",
+			Username: "testuser4",
+		}, nil
+	}
+	if userName == "testuser5" {
+		return &user.User{
+			Uid:      "1001",
+			Gid:      "1001",
+			Username: "testuser5",
+		}, nil
+	}
+	if userName == "invalid-gid-user" {
+		return &user.User{
+			Uid:      "1001",
+			Gid:      "1_001",
+			Username: "invalid-gid-user",
+		}, nil
+	}
 	// all other users fail
 	return nil, fmt.Errorf("lookup failed for user: %s", userName)
 }
@@ -100,6 +121,10 @@ func groupIds(osUser *user.User) ([]string, error) {
 	// group list might return primary group ID also
 	if osUser.Username == Testuser3 {
 		return []string{"1002", "1001", "1003", "1004"}, nil
+	}
+
+	if osUser.Username == "testuser4" {
+		return []string{"901", "902"}, nil
 	}
 	return nil, fmt.Errorf("lookup failed for user: %s", osUser.Username)
 }

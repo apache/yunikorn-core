@@ -1787,6 +1787,15 @@ func assertGroupNotExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
+func assertInvalidGroupName(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, InvalidGroupName, jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
 func assertGroupNameMissing(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
@@ -1989,7 +1998,7 @@ func TestSpecificGroupResourceUsage(t *testing.T) {
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getGroupResourceUsage(resp, req)
-	assertGroupNotExists(t, resp)
+	assertInvalidGroupName(t, resp)
 
 	// Test group name with special characters not escaped properly, catch error at request level
 	invalidGroup := "test_a-b_c%Zt@#d@do:mai/n.com"
@@ -2007,6 +2016,14 @@ func TestSpecificGroupResourceUsage(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
+	// Test invalid group name according to GroupRegExp
+	invalidGroupName := "invalid_group@name"
+	req, err = createRequest(t, "/ws/v1/partition/default/usage/group", map[string]string{"user": "testuser", "group": invalidGroupName})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getGroupResourceUsage(resp, req)
+	assertInvalidGroupName(t, resp)
 }
 
 func TestUsersAndGroupsResourceUsage(t *testing.T) {

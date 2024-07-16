@@ -1143,7 +1143,7 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !configs.GroupRegExp.MatchString(unescapedGroupName) {
-		buildJSONErrorResponse(w, InvalidGroupName, http.StatusNotFound)
+		buildJSONErrorResponse(w, InvalidGroupName, http.StatusBadRequest)
 		return
 	}
 	groupTracker := ugm.GetUserManager().GetGroupTracker(unescapedGroupName)

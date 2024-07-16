@@ -260,10 +260,8 @@ partitions:
 	// user rule existing queue, acl allowed
 	err = man.PlaceApplication(app)
 	queueName := app.GetQueuePath()
-	const TestQueueName = "root.testparent.testchild"
-	if err != nil || queueName != TestQueueName {
-		t.Errorf("leaf exist: app should have been placed in user queue, queue: '%s', error: %v", queueName, err)
-	}
+	assert.NilError(t, err)
+	assert.Equal(t, "root.testparent.testchild", queueName)
 	user = security.UserGroup{
 		User:   "other-user",
 		Groups: []string{},

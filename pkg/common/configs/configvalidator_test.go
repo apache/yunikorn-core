@@ -2008,7 +2008,6 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 
 	for _, testCase := range testCases {
 		config := testCase.config
-
 		t.Run(testCase.name, func(t *testing.T) {
 			err := checkLimits(testCase.config.Limits, testCase.config.Name, &config)
 			if testCase.errMsg != "" {

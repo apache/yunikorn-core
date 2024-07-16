@@ -41,13 +41,13 @@ partitions:
       - name: root
         submitacl: "*"
         queues:
-          - name: singleleaf
+          - name: leaf
             resources:
               max:
                 memory: 150M
                 vcore: 20
 `
-	leafName = "root.singleleaf"
+	leafName = "root.leaf"
 )
 
 // Test scheduler reconfiguration

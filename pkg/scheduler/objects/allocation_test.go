@@ -238,20 +238,7 @@ func TestNewAllocFromSI(t *testing.T) {
 	var nilAlloc *Allocation
 	alloc := NewAllocationFromSI(allocSI)
 	assert.Equal(t, alloc, nilAlloc, "placeholder allocation created without a TaskGroupName")
-	allocSI = &si.Allocation{
-		AllocationKey:    "ask-1",
-		NodeID:           "node-1",
-		ApplicationID:    "app-1",
-		ResourcePerAlloc: res.ToProto(),
-		TaskGroupName:    "testgroup",
-		Placeholder:      true,
-		AllocationTags:   tags,
-		Originator:       true,
-		PreemptionPolicy: &si.PreemptionPolicy{
-			AllowPreemptSelf:  false,
-			AllowPreemptOther: true,
-		},
-	}
+	allocSI.TaskGroupName = "TestNewAllocFromSI"
 	alloc = NewAllocationFromSI(allocSI)
 	assert.Assert(t, alloc != nilAlloc, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, alloc.GetAsk().IsPlaceholder(), "ask should have been a placeholder")

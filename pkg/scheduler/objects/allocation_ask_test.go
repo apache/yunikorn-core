@@ -138,13 +138,7 @@ func TestPlaceHolder(t *testing.T) {
 	var nilAsk *AllocationAsk
 	assert.Equal(t, ask, nilAsk, "placeholder ask created without a TaskGroupName")
 
-	siAsk = &si.AllocationAsk{
-		AllocationKey: "ask1",
-		ApplicationID: "app1",
-		PartitionName: "default",
-		TaskGroupName: "testgroup",
-		Placeholder:   true,
-	}
+	siAsk.TaskGroupName = "TestPlaceHolder"
 	ask = NewAllocationAskFromSI(siAsk)
 	assert.Assert(t, ask != nilAsk, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, ask.IsPlaceholder(), "ask should have been a placeholder")

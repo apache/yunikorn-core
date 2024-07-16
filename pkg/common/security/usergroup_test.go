@@ -183,16 +183,20 @@ func TestGetUserGroupFail(t *testing.T) {
 	}
 
 	// resolve a non existing user
-	ug, err = testCache.GetUserGroup("unknown")
+	ugi := &si.UserGroupInformation{
+		User:   "unknown",
+		Groups: nil,
+	}
+	ug, err = testCache.GetUserGroup(ugi.User)
 	if err == nil {
 		t.Error("Lookup should have failed: unknown user")
 	}
 	// ug is partially filled and failed flag is set
-	if ug.User != "unknown" || len(ug.Groups) != 0 || !ug.failed {
+	if ug.User != ugi.User || len(ug.Groups) != 0 || !ug.failed {
 		t.Errorf("UserGroup is not empty: %v", ug)
 	}
 
-	ug, err = testCache.GetUserGroup("unknown")
+	ug, err = testCache.GetUserGroup(ugi.User)
 	if err == nil {
 		t.Error("Lookup should have failed: unknown user")
 	}

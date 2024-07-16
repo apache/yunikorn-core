@@ -72,12 +72,13 @@ func (r *basicRule) getParent() rule {
 	return r.parent
 }
 
+const unnamedRuleName = "unnamed rule"
+
 // getName returns the name if not overwritten by the rule.
 // Marked as nolint as rules should override this.
 //
 //nolint:unused
 func (r *basicRule) getName() string {
-	const unnamedRuleName = "unnamed rule"
 	return unnamedRuleName
 }
 

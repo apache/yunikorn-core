@@ -1102,7 +1102,7 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !configs.UserRegExp.MatchString(unescapedUser) {
-		buildJSONErrorResponse(w, InvalidUserName, http.StatusNotFound)
+		buildJSONErrorResponse(w, InvalidUserName, http.StatusBadRequest)
 		return
 	}
 	userTracker := ugm.GetUserManager().GetUserTracker(unescapedUser)

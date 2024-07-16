@@ -1978,12 +1978,12 @@ func TestSpecificUserResourceUsage(t *testing.T) {
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
-	assert.Equal(t, http.StatusNotFound, resp.statusCode)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode)
 	var invalidUserError dao.YAPIError
 	err = json.Unmarshal(resp.outputBytes, &invalidUserError)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, InvalidUserName, invalidUserError.Message)
-	assert.Equal(t, http.StatusNotFound, invalidUserError.StatusCode)
+	assert.Equal(t, http.StatusBadRequest, invalidUserError.StatusCode)
 }
 
 func TestSpecificGroupResourceUsage(t *testing.T) {

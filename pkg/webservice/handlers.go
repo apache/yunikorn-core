@@ -56,6 +56,7 @@ const (
 	PartitionDoesNotExists   = "Partition not found"
 	MissingParamsName        = "Missing parameters"
 	QueueDoesNotExists       = "Queue not found"
+	InvalidGroupName         = "Invalid group name"
 	UserDoesNotExists        = "User not found"
 	GroupDoesNotExists       = "Group not found"
 	UserNameMissing          = "User name is missing"
@@ -1139,6 +1140,10 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	unescapedGroupName, err := url.QueryUnescape(group)
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !configs.GroupRegExp.MatchString(unescapedGroupName) {
+		buildJSONErrorResponse(w, InvalidGroupName, http.StatusNotFound)
 		return
 	}
 	groupTracker := ugm.GetUserManager().GetGroupTracker(unescapedGroupName)

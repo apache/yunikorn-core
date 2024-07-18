@@ -88,9 +88,7 @@ func TestGetUserGroup(t *testing.T) {
 	testCache := GetUserGroupCache("test")
 	testCache.resetCache()
 	// test cache should be empty now
-	if len(testCache.ugs) != 0 {
-		t.Fatalf("Cache not empty: %v", testCache.ugs)
-	}
+	assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
 	ugi := &si.UserGroupInformation{
 		User:   "testuser1",
 		Groups: nil,

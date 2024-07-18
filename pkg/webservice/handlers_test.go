@@ -834,15 +834,11 @@ func TestGetPartitionNodesUtilJSON(t *testing.T) {
 	// setup
 	partition := setup(t, configDefault, 1)
 	appID := "app1"
-	const (
-		node1ID = "node-1"
-		node2ID = "node-2"
-		node3ID = "node-3"
-	)
+
 	// create test nodes
-	node1 := addNode(t, partition, node1ID, resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}))
-	node2 := addNode(t, partition, node2ID, resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}))
-	addNode(t, partition, node3ID, resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1000}))
+	node1 := addNode(t, partition, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}))
+	node2 := addNode(t, partition, "node-2", resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}))
+	node3 := addNode(t, partition, "node-3", resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1000}))
 
 	// create test allocations
 	addAllocatedResource(t, node1, "alloc-1", appID, map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
@@ -858,22 +854,22 @@ func TestGetPartitionNodesUtilJSON(t *testing.T) {
 	memoryNodesUtil := getNodesUtilByType(t, result.NodesUtilList, siCommon.Memory)
 	assert.Equal(t, memoryNodesUtil.NodesUtil[2].NumOfNodes, int64(1))
 	assert.Equal(t, memoryNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
-	assert.Equal(t, memoryNodesUtil.NodesUtil[2].NodeNames[0], node2ID)
-	assert.Equal(t, memoryNodesUtil.NodesUtil[4].NodeNames[0], node1ID)
+	assert.Equal(t, memoryNodesUtil.NodesUtil[2].NodeNames[0], node2.NodeID)
+	assert.Equal(t, memoryNodesUtil.NodesUtil[4].NodeNames[0], node1.NodeID)
 
 	// three nodes advertise cpu: must show up in the list
 	cpuNodesUtil := getNodesUtilByType(t, result.NodesUtilList, siCommon.CPU)
 	assert.Equal(t, cpuNodesUtil.NodesUtil[0].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtil.NodesUtil[0].NodeNames[0], node3ID)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[0].NodeNames[0], node3.NodeID)
 	assert.Equal(t, cpuNodesUtil.NodesUtil[2].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtil.NodesUtil[2].NodeNames[0], node1ID)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[2].NodeNames[0], node1.NodeID)
 	assert.Equal(t, cpuNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtil.NodesUtil[4].NodeNames[0], node2ID)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[4].NodeNames[0], node2.NodeID)
 
 	// one node advertise GPU: must show up in the list
 	gpuNodesUtil := getNodesUtilByType(t, result.NodesUtilList, "GPU")
 	assert.Equal(t, gpuNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
-	assert.Equal(t, gpuNodesUtil.NodesUtil[4].NodeNames[0], node2ID)
+	assert.Equal(t, gpuNodesUtil.NodesUtil[4].NodeNames[0], node2.NodeID)
 }
 
 func TestGetNodeUtilisations(t *testing.T) {

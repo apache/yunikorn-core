@@ -640,9 +640,6 @@ partitions:
 	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	const (
-		leafName = "root.leaf"
-	)
 	app1ID := appID1
 	app2ID := appID2
 

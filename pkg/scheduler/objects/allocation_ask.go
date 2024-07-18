@@ -87,7 +87,6 @@ func NewAllocationAsk(allocationKey string, applicationID string, allocatedResou
 }
 
 func NewAllocationAskFromSI(ask *si.AllocationAsk) *AllocationAsk {
-
 	var createTime time.Time
 	siCreationTime, err := strconv.ParseInt(ask.Tags[siCommon.CreationTime], 10, 64)
 	if err != nil {

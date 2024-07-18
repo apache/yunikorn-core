@@ -33,19 +33,22 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const configDataSmokeTest = `
+const (
+	configDataSmokeTest = `
 partitions:
   - name: default
     queues:
       - name: root
         submitacl: "*"
         queues:
-          - name: singleleaf
+          - name: leaf
             resources:
               max:
                 memory: 150M
                 vcore: 20
 `
+	leafName = "root.leaf"
+)
 
 // Test scheduler reconfiguration
 func TestConfigScheduler(t *testing.T) {
@@ -168,7 +171,6 @@ func TestBasicScheduler(t *testing.T) {
 	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.singleleaf"
 	// Check queues of cache and scheduler.
 	part := ms.scheduler.GetClusterContext().GetPartition(partition)
 	assert.Assert(t, part.GetTotalPartitionResource() == nil, "partition info max resource nil")
@@ -417,7 +419,6 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	err := ms.Init(configDataSmokeTest, true, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.singleleaf"
 	appID := appID1
 
 	// Register a node, and add apps
@@ -639,7 +640,6 @@ partitions:
 	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.leaf"
 	app1ID := appID1
 	app2ID := appID2
 
@@ -1293,7 +1293,6 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.singleleaf"
 	part := ms.scheduler.GetClusterContext().GetPartition(partition)
 	root := part.GetQueue("root")
 	leaf := part.GetQueue(leafName)

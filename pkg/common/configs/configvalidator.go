@@ -664,7 +664,8 @@ func checkQueues(queue *QueueConfig, level int) error {
 	}
 
 	// recurse into the depth if this level passed
-	for _, child := range queue.Queues {
+	for _, q := range queue.Queues {
+		child := q
 		err = checkQueues(&child, level+1)
 		if err != nil {
 			return err

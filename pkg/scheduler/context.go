@@ -555,7 +555,6 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 	// Update metrics with removed applications
 	if len(request.Remove) > 0 {
 		metrics.GetSchedulerMetrics().SubTotalApplicationsRunning(len(request.Remove))
-		// ToDO: need to improve this once we have state in YuniKorn for apps.
 		metrics.GetSchedulerMetrics().AddTotalApplicationsCompleted(len(request.Remove))
 		for _, app := range request.Remove {
 			partition := cc.GetPartition(app.PartitionName)

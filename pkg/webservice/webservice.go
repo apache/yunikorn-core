@@ -62,7 +62,6 @@ func loggingHandler(inner http.Handler, name string) http.HandlerFunc {
 }
 
 // StartWebApp starts the web app on the default port.
-// TODO we need the port to be configurable
 func (m *WebService) StartWebApp() {
 	router := newRouter()
 	m.httpServer = &http.Server{

@@ -118,12 +118,12 @@ func TestReplaceDot(t *testing.T) {
 
 func TestBasicRule(t *testing.T) {
 	rule := &basicRule{}
-	if name := rule.getName(); name != "unnamed rule" {
+	if name := rule.getName(); name != unnamedRuleName {
 		t.Errorf("expected %s, got %s", "unnamed rule", name)
 	}
 
 	dao := rule.ruleDAO()
-	if dao.Name != "unnamed rule" {
+	if dao.Name != unnamedRuleName {
 		t.Errorf("expected %s, got %s", "unnamed rule", dao.Name)
 	}
 }

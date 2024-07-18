@@ -193,7 +193,7 @@ func TestManagerBuildRule(t *testing.T) {
 		t.Errorf("test rule build should not have failed and created 2 top level rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
 		parent := ruleObjs[0].getParent()
-		if parent == nil || parent.getName() != "test" {
+		if parent == nil || parent.getName() != rules[0].Name {
 			t.Error("test rule build should have created 2 rules: parent not found")
 		}
 	}
@@ -206,7 +206,7 @@ func TestManagerBuildRule(t *testing.T) {
 	ruleObjs, err = buildRules(rules)
 	if err != nil || len(ruleObjs) != 3 {
 		t.Errorf("rule build should not have failed and created 3 rules, err: %v, rules: %v", err, ruleObjs)
-	} else if ruleObjs[0].getName() != "user" || ruleObjs[1].getName() != "test" || ruleObjs[2].getName() != "recovery" {
+	} else if ruleObjs[0].getName() != rules[0].Name || ruleObjs[1].getName() != rules[1].Name || ruleObjs[2].getName() != "recovery" {
 		t.Errorf("rule build order is not preserved: %v", ruleObjs)
 	}
 }
@@ -260,9 +260,8 @@ partitions:
 	// user rule existing queue, acl allowed
 	err = man.PlaceApplication(app)
 	queueName := app.GetQueuePath()
-	if err != nil || queueName != "root.testparent.testchild" {
-		t.Errorf("leaf exist: app should have been placed in user queue, queue: '%s', error: %v", queueName, err)
-	}
+	assert.NilError(t, err)
+	assert.Equal(t, "root.testparent.testchild", queueName)
 	user = security.UserGroup{
 		User:   "other-user",
 		Groups: []string{},
@@ -326,6 +325,7 @@ partitions:
 	}
 }
 
+//nolint:funlen
 func TestForcePlaceApp(t *testing.T) {
 	const (
 		provided       = "provided"

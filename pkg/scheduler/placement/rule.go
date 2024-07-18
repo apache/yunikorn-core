@@ -72,12 +72,14 @@ func (r *basicRule) getParent() rule {
 	return r.parent
 }
 
+const unnamedRuleName = "unnamed rule"
+
 // getName returns the name if not overwritten by the rule.
 // Marked as nolint as rules should override this.
 //
 //nolint:unused
 func (r *basicRule) getName() string {
-	return "unnamed rule"
+	return unnamedRuleName
 }
 
 // ruleDAO returns the RuleDAO object if not overwritten by the rule.

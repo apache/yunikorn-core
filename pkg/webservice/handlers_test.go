@@ -1941,6 +1941,19 @@ func TestSpecificUserResourceUsage(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
+	// Test invalid user name that does not match UserRegExp
+	invalidUserName := "1InvalidUser"
+	req, err = createRequest(t, "/ws/v1/partition/default/usage/user/", map[string]string{"user": invalidUserName, "group": "testgroup"})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getUserResourceUsage(resp, req)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode)
+	var invalidUserError dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &invalidUserError)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, InvalidUserName, invalidUserError.Message)
+	assert.Equal(t, http.StatusBadRequest, invalidUserError.StatusCode)
 }
 
 func TestSpecificGroupResourceUsage(t *testing.T) {

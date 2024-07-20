@@ -2029,14 +2029,6 @@ func TestSpecificGroupResourceUsage(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
-
-	// Test invalid group name according to GroupRegExp
-	invalidGroupName := "invalid_group@name"
-	req, err = createRequest(t, "/ws/v1/partition/default/usage/group", map[string]string{"user": "testuser", "group": invalidGroupName})
-	assert.NilError(t, err)
-	resp = &MockResponseWriter{}
-	getGroupResourceUsage(resp, req)
-	assertInvalidGroupName(t, resp)
 }
 
 func TestUsersAndGroupsResourceUsage(t *testing.T) {

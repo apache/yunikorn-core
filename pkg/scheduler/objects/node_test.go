@@ -104,7 +104,7 @@ func TestCheckConditions(t *testing.T) {
 	// Check if we can allocate on scheduling node (no plugins)
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAsk("test", "app001", res)
-	if !node.preAllocateConditions(ask) {
+	if node.preAllocateConditions(ask) != nil {
 		t.Error("node with scheduling set to true no plugins should allow allocation")
 	}
 }
@@ -770,10 +770,7 @@ func TestNode_FitInNode(t *testing.T) {
 }
 
 func TestPreconditions(t *testing.T) {
-	current := plugins.GetResourceManagerCallbackPlugin()
-	defer func() {
-		plugins.RegisterSchedulerPlugin(current)
-	}()
+	defer plugins.UnregisterSchedulerPlugins()
 
 	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(true, map[string]int{}))
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
@@ -783,21 +780,17 @@ func TestPreconditions(t *testing.T) {
 	})
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	ask := newAllocationAsk("test", "app001", res)
-	eventSystem := evtMock.NewEventSystem()
-	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
 	node := NewNode(proto)
 
 	// failure
-	node.preConditions(ask, true)
-	assert.Equal(t, 1, len(eventSystem.Events))
-	assert.Equal(t, "Predicate failed for request 'test' with message: 'fake predicate plugin failed'", eventSystem.Events[0].Message)
+	err := node.preConditions(ask, true)
+	assert.ErrorContains(t, err, "fake predicate plugin failed")
 	assert.Equal(t, 1, len(ask.allocLog))
 	assert.Equal(t, "fake predicate plugin failed", ask.allocLog["fake predicate plugin failed"].Message)
 
 	// pass
-	eventSystem.Reset()
 	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(false, map[string]int{}))
-	node.preConditions(ask, true)
-	assert.Equal(t, 0, len(eventSystem.Events))
+	err = node.preConditions(ask, true)
+	assert.NilError(t, err)
 	assert.Equal(t, 1, len(ask.allocLog))
 }

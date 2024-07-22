@@ -272,8 +272,8 @@ func (aa *AllocationAsk) LogAllocationFailure(message string, allocate bool) {
 	entry.Count++
 }
 
-func (aa *AllocationAsk) SendPredicateFailedEvent(message string) {
-	aa.askEvents.SendPredicateFailed(aa.allocationKey, aa.applicationID, message, aa.GetAllocatedResource())
+func (aa *AllocationAsk) SendPredicatesFailedEvent(predicateErrors map[string]int) {
+	aa.askEvents.SendPredicatesFailed(aa.allocationKey, aa.applicationID, predicateErrors, aa.GetAllocatedResource())
 }
 
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met

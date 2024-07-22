@@ -20,6 +20,8 @@ package events
 
 import (
 	"fmt"
+	"sort"
+	"strconv"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -70,11 +72,24 @@ func (ae *AskEvents) SendRequestFitsInUserQuota(allocKey, appID string, allocate
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *AskEvents) SendPredicateFailed(allocKey, appID, predicateMsg string, allocatedResource *resources.Resource) {
+func (ae *AskEvents) SendPredicatesFailed(allocKey, appID string, predicateErrors map[string]int, allocatedResource *resources.Resource) {
 	if !ae.eventSystem.IsEventTrackingEnabled() || !ae.limiter.Allow() {
 		return
 	}
-	message := fmt.Sprintf("Predicate failed for request '%s' with message: '%s'", allocKey, predicateMsg)
+
+	messages := make([]string, 0, len(predicateErrors))
+	for k := range predicateErrors {
+		messages = append(messages, k)
+	}
+	sort.Strings(messages) // make sure we always have the same string regardless of iteration order
+
+	var failures string
+	for _, m := range messages {
+		times := strconv.Itoa(predicateErrors[m])
+		failures = failures + m + " (" + times + "x); " // example: "node(s) had taints that the pod didn't tolerate (5x);"
+	}
+
+	message := fmt.Sprintf("Unschedulable request '%s': %s", allocKey, failures)
 	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
 	ae.eventSystem.AddEvent(event)
 }

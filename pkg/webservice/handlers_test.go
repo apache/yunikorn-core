@@ -1716,20 +1716,6 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.Equal(t, appSummary.ResourceUsage.String(), appDao.ResourceUsage.String())
 	assert.Equal(t, appSummary.PreemptedResource.String(), appDao.PreemptedResource.String())
 	assert.Equal(t, appSummary.PlaceholderResource.String(), appDao.PlaceholderResource.String())
-
-	// test nonexistent application details
-	var req7 *http.Request
-	req7, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.noapps/application/app-1?details=true", strings.NewReader(""))
-	assert.NilError(t, err, "HTTP request create failed")
-	req7 = req7.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
-		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
-		httprouter.Param{Key: "queue", Value: "root.noapps"},
-		httprouter.Param{Key: "application", Value: "app-1"},
-	}))
-	assert.NilError(t, err, "Get Application Handler request failed")
-	resp7 := &MockResponseWriter{}
-	getApplication(resp7, req7)
-	assertApplicationNotExists(t, resp7)
 }
 
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {

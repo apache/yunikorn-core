@@ -1544,25 +1544,29 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	defaultPartition.AddRejectedApplication(app3, rejectedMessage)
 
 	// test get active app
-	expectedActiveDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app1), getApplicationDAO(app2)}
+	sum1 := app1.GetApplicationSummary(defaultPartition.RmID)
+	sum2 := app2.GetApplicationSummary(defaultPartition.RmID)
+	expectedActiveDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app1, sum1), getApplicationDAO(app2, sum2)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Active"}}, expectedActiveDao)
 
 	// test get active app with running state
-	expectedRunningDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app2)}
+	expectedRunningDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app2, sum2)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active?status=Running", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Active"}}, expectedRunningDao)
 
 	// test get completed app
-	expectedCompletedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app3)}
+	sum3 := app3.GetApplicationSummary(defaultPartition.RmID)
+	expectedCompletedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app3, sum3)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Completed", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Completed"}}, expectedCompletedDao)
 
 	// test get rejected app
-	expectedRejectedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app4)}
+	sum4 := app4.GetApplicationSummary(defaultPartition.RmID)
+	expectedRejectedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app4, sum4)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Rejected", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Rejected"}}, expectedRejectedDao)
@@ -1693,7 +1697,7 @@ func TestGetApplicationHandler(t *testing.T) {
 
 	// test additional application details
 	var req6 *http.Request
-	req6, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1?details=true", strings.NewReader(""))
+	req6, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
 	assert.NilError(t, err, "HTTP request create failed")
 	req6 = req6.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
@@ -1702,16 +1706,16 @@ func TestGetApplicationHandler(t *testing.T) {
 	}))
 	assert.NilError(t, err, "Get Application Handler request failed")
 	resp6 := &MockResponseWriter{}
-	var appDetailsDao *dao.ApplicationDetailsDAOInfo
+	var appDao *dao.ApplicationDAOInfo
 	getApplication(resp6, req6)
 	appSummary := app.GetApplicationSummary(partitionNameWithoutClusterID)
-	err = json.Unmarshal(resp6.outputBytes, &appDetailsDao)
+	err = json.Unmarshal(resp6.outputBytes, &appDao)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, "app-1", appDetailsDao.ApplicationDAOInfo.ApplicationID)
-	assert.Equal(t, app.StartTime().UnixMilli(), appDetailsDao.StartTime)
-	assert.Equal(t, appSummary.ResourceUsage.String(), appDetailsDao.ResourceUsage.String())
-	assert.Equal(t, appSummary.PreemptedResource.String(), appDetailsDao.PreemptedResource.String())
-	assert.Equal(t, appSummary.PlaceholderResource.String(), appDetailsDao.PlaceholderResource.String())
+	assert.Equal(t, "app-1", appDao.ApplicationID)
+	assert.Equal(t, app.StartTime().UnixMilli(), appDao.StartTime)
+	assert.Equal(t, appSummary.ResourceUsage.String(), appDao.ResourceUsage.String())
+	assert.Equal(t, appSummary.PreemptedResource.String(), appDao.PreemptedResource.String())
+	assert.Equal(t, appSummary.PlaceholderResource.String(), appDao.PlaceholderResource.String())
 
 	// test nonexistent application details
 	var req7 *http.Request

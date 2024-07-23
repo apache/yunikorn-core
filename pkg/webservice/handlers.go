@@ -57,6 +57,7 @@ const (
 	MissingParamsName        = "Missing parameters"
 	QueueDoesNotExists       = "Queue not found"
 	InvalidUserName          = "Invalid user name"
+	InvalidGroupName         = "Invalid group name"
 	UserDoesNotExists        = "User not found"
 	GroupDoesNotExists       = "Group not found"
 	UserNameMissing          = "User name is missing"
@@ -1144,6 +1145,10 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 	unescapedGroupName, err := url.QueryUnescape(group)
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !configs.GroupRegExp.MatchString(unescapedGroupName) {
+		buildJSONErrorResponse(w, InvalidGroupName, http.StatusBadRequest)
 		return
 	}
 	groupTracker := ugm.GetUserManager().GetGroupTracker(unescapedGroupName)

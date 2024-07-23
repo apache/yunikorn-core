@@ -41,18 +41,7 @@ func TestRecoveryRuleInitialise(t *testing.T) {
 
 func TestRecoveryRulePlace(t *testing.T) {
 	rr := &recoveryRule{}
-
-	// Create the structure for the test
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: testqueue
-      - name: testparent
-        queues:
-          - name: testchild
-`
-	err := initQueueStructure([]byte(data))
+	err := initQueueStructure([]byte(confTestQueue))
 	assert.NilError(t, err, "setting up the queue config failed")
 
 	// verify that non-forced app is not recovered

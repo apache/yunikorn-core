@@ -123,7 +123,6 @@ func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 					zap.String("queue", queue.QueuePath))
 			}
 		} else {
-			// TODO time out waiting for draining and removal
 			log.Log(log.SchedPartition).Debug("skip removing the queue",
 				zap.String("reason", "there are existing assigned apps or leaf queues"),
 				zap.String("queue", queue.QueuePath),

@@ -1445,7 +1445,6 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 			return false
 		}
 		// nothing allocated should we look at a reservation?
-		// TODO make this smarter a hardcoded delay is not the right thing
 		askAge := time.Since(ask.GetCreateTime())
 		if allowReserve && askAge > reservationDelay {
 			log.Log(log.SchedApplication).Debug("app reservation check",

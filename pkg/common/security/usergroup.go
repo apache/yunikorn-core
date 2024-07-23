@@ -71,7 +71,6 @@ type UserGroup struct {
 // * NO resolver: default, no user or group resolution just return the info (k8s use case)
 // * OS resolver: uses the OS libraries to resolve user and group memberships
 // * Test resolver: fake resolution for testing
-// TODO need to make this fully configurable and look at reflection etc
 func GetUserGroupCache(resolver string) *UserGroupCache {
 	once.Do(func() {
 		switch resolver {

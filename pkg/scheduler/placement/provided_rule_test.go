@@ -119,9 +119,8 @@ partitions:
 	// unqualified queue with parent rule that exists directly in hierarchy
 	appInfo = newApplication("app1", "default", "testchild", user, tags, nil, "")
 	queue, err = pr.placeApplication(appInfo, queueFunc)
-	if queue != "root.testparent.testchild" || err != nil {
-		t.Errorf("provided rule failed to place queue in correct queue '%s', err %v", queue, err)
-	}
+	assert.NilError(t, err)
+	assert.Equal(t, "root.testparent.testchild", queue)
 
 	// qualified queue with parent rule (parent rule ignored)
 	appInfo = newApplication("app1", "default", "root.testparent", user, tags, nil, "")

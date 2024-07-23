@@ -43,6 +43,17 @@ partitions:
 `
 const nameParentChild = "root.testparentnew.testchild"
 
+// Create the structure for the test
+const confTestQueue = `
+partitions:
+  - name: default
+    queues:
+      - name: testqueue
+      - name: testparent
+        queues:
+          - name: testchild
+`
+
 var root *objects.Queue
 
 // Mocked up function to mimic the partition getQueue function

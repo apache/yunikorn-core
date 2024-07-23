@@ -666,31 +666,27 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	partition := setup(t, configDefault, 1)
 
 	// create test application
-	appID := "app1"
-	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{})
+	app := newApplication("app1", partition.Name, queueName, rmID, security.UserGroup{})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
 
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
-	node1ID := "node-1"
-	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, SchedulableResource: nodeRes})
-	node2ID := "node-2"
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: "node-1", SchedulableResource: nodeRes})
 	nodeRes2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}).ToProto()
-	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, SchedulableResource: nodeRes2})
-	node3ID := "node-3"
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: "node-2", SchedulableResource: nodeRes2})
 	nodeCPU := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1000}).ToProto()
-	node3 := objects.NewNode(&si.NodeInfo{NodeID: node3ID, SchedulableResource: nodeCPU})
+	node3 := objects.NewNode(&si.NodeInfo{NodeID: "node-3", SchedulableResource: nodeCPU})
 
 	// create test allocations
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 500, "GPU": 5})
-	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
-	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
-	allocs := []*objects.Allocation{objects.NewAllocation(node1ID, ask1)}
+	ask1 := objects.NewAllocationAsk("alloc-1", app.ApplicationID, resAlloc1)
+	ask2 := objects.NewAllocationAsk("alloc-2", app.ApplicationID, resAlloc2)
+	allocs := []*objects.Allocation{objects.NewAllocation(node1.NodeID, ask1)}
 	err = partition.AddNode(node1, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
-	allocs = []*objects.Allocation{objects.NewAllocation(node2ID, ask2)}
+	allocs = []*objects.Allocation{objects.NewAllocation(node2.NodeID, ask2)}
 	err = partition.AddNode(node2, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
 	err = partition.AddNode(node3, nil)
@@ -702,26 +698,26 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	assert.Equal(t, result.ResourceType, siCommon.Memory)
 	assert.Equal(t, subResult[2].NumOfNodes, int64(1))
 	assert.Equal(t, subResult[4].NumOfNodes, int64(1))
-	assert.Equal(t, subResult[2].NodeNames[0], node2ID)
-	assert.Equal(t, subResult[4].NodeNames[0], node1ID)
+	assert.Equal(t, subResult[2].NodeNames[0], node2.NodeID)
+	assert.Equal(t, subResult[4].NodeNames[0], node1.NodeID)
 
 	// three nodes advertise cpu: must show up in the list
 	result = getNodesUtilJSON(partition, siCommon.CPU)
 	subResult = result.NodesUtil
 	assert.Equal(t, result.ResourceType, siCommon.CPU)
 	assert.Equal(t, subResult[0].NumOfNodes, int64(1))
-	assert.Equal(t, subResult[0].NodeNames[0], node3ID)
+	assert.Equal(t, subResult[0].NodeNames[0], node3.NodeID)
 	assert.Equal(t, subResult[2].NumOfNodes, int64(1))
-	assert.Equal(t, subResult[2].NodeNames[0], node1ID)
+	assert.Equal(t, subResult[2].NodeNames[0], node1.NodeID)
 	assert.Equal(t, subResult[4].NumOfNodes, int64(1))
-	assert.Equal(t, subResult[4].NodeNames[0], node2ID)
+	assert.Equal(t, subResult[4].NodeNames[0], node2.NodeID)
 
 	// one node advertise GPU: must show up in the list
 	result = getNodesUtilJSON(partition, "GPU")
 	subResult = result.NodesUtil
 	assert.Equal(t, result.ResourceType, "GPU")
 	assert.Equal(t, subResult[4].NumOfNodes, int64(1))
-	assert.Equal(t, subResult[4].NodeNames[0], node2ID)
+	assert.Equal(t, subResult[4].NodeNames[0], node2.NodeID)
 
 	result = getNodesUtilJSON(partition, "non-exist")
 	subResult = result.NodesUtil
@@ -753,10 +749,8 @@ func TestGetNodeUtilisation(t *testing.T) {
 	assert.Assert(t, confirmNodeCount(utilisation.NodesUtil, 0), "unexpected number of nodes returned should be 0")
 
 	// create test nodes
-	node1ID := "node-1"
-	node2ID := "node-2"
-	node1 := addNode(t, partition, node1ID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	node2 := addNode(t, partition, node2ID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5}))
+	node1 := addNode(t, partition, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
+	node2 := addNode(t, partition, "node-2", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5}))
 
 	// get nodes utilization
 	resp = &MockResponseWriter{}
@@ -770,7 +764,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 
 	resAlloc := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	ask := objects.NewAllocationAsk("alloc-1", "app", resAlloc)
-	alloc := objects.NewAllocation(node1ID, ask)
+	alloc := objects.NewAllocation(node1.NodeID, ask)
 	assert.Assert(t, node1.AddAllocation(alloc), "unexpected failure adding allocation to node")
 	rootQ := partition.GetQueue("root")
 	err = rootQ.IncAllocatedResource(resAlloc, false)
@@ -788,7 +782,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	// make second type dominant by using all
 	resAlloc = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
 	ask = objects.NewAllocationAsk("alloc-2", "app", resAlloc)
-	alloc = objects.NewAllocation(node2ID, ask)
+	alloc = objects.NewAllocation(node2.NodeID, ask)
 	assert.Assert(t, node2.AddAllocation(alloc), "unexpected failure adding allocation to node")
 	err = rootQ.IncAllocatedResource(resAlloc, false)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
@@ -840,14 +834,11 @@ func TestGetPartitionNodesUtilJSON(t *testing.T) {
 	// setup
 	partition := setup(t, configDefault, 1)
 	appID := "app1"
-	node1ID := "node-1"
-	node2ID := "node-2"
-	node3ID := "node-3"
 
 	// create test nodes
-	node1 := addNode(t, partition, node1ID, resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}))
-	node2 := addNode(t, partition, node2ID, resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}))
-	addNode(t, partition, node3ID, resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1000}))
+	node1 := addNode(t, partition, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}))
+	node2 := addNode(t, partition, "node-2", resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000, "GPU": 10}))
+	node3 := addNode(t, partition, "node-3", resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1000}))
 
 	// create test allocations
 	addAllocatedResource(t, node1, "alloc-1", appID, map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
@@ -863,22 +854,22 @@ func TestGetPartitionNodesUtilJSON(t *testing.T) {
 	memoryNodesUtil := getNodesUtilByType(t, result.NodesUtilList, siCommon.Memory)
 	assert.Equal(t, memoryNodesUtil.NodesUtil[2].NumOfNodes, int64(1))
 	assert.Equal(t, memoryNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
-	assert.Equal(t, memoryNodesUtil.NodesUtil[2].NodeNames[0], node2ID)
-	assert.Equal(t, memoryNodesUtil.NodesUtil[4].NodeNames[0], node1ID)
+	assert.Equal(t, memoryNodesUtil.NodesUtil[2].NodeNames[0], node2.NodeID)
+	assert.Equal(t, memoryNodesUtil.NodesUtil[4].NodeNames[0], node1.NodeID)
 
 	// three nodes advertise cpu: must show up in the list
 	cpuNodesUtil := getNodesUtilByType(t, result.NodesUtilList, siCommon.CPU)
 	assert.Equal(t, cpuNodesUtil.NodesUtil[0].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtil.NodesUtil[0].NodeNames[0], node3ID)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[0].NodeNames[0], node3.NodeID)
 	assert.Equal(t, cpuNodesUtil.NodesUtil[2].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtil.NodesUtil[2].NodeNames[0], node1ID)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[2].NodeNames[0], node1.NodeID)
 	assert.Equal(t, cpuNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
-	assert.Equal(t, cpuNodesUtil.NodesUtil[4].NodeNames[0], node2ID)
+	assert.Equal(t, cpuNodesUtil.NodesUtil[4].NodeNames[0], node2.NodeID)
 
 	// one node advertise GPU: must show up in the list
 	gpuNodesUtil := getNodesUtilByType(t, result.NodesUtilList, "GPU")
 	assert.Equal(t, gpuNodesUtil.NodesUtil[4].NumOfNodes, int64(1))
-	assert.Equal(t, gpuNodesUtil.NodesUtil[4].NodeNames[0], node2ID)
+	assert.Equal(t, gpuNodesUtil.NodesUtil[4].NodeNames[0], node2.NodeID)
 }
 
 func TestGetNodeUtilisations(t *testing.T) {
@@ -1823,6 +1814,15 @@ func assertGroupNotExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
+func assertInvalidGroupName(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Equal(t, errInfo.Message, InvalidGroupName, jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
 func assertGroupNameMissing(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
@@ -1977,6 +1977,19 @@ func TestSpecificUserResourceUsage(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
+	// Test invalid user name that does not match UserRegExp
+	invalidUserName := "1InvalidUser"
+	req, err = createRequest(t, "/ws/v1/partition/default/usage/user/", map[string]string{"user": invalidUserName, "group": "testgroup"})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getUserResourceUsage(resp, req)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode)
+	var invalidUserError dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &invalidUserError)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, InvalidUserName, invalidUserError.Message)
+	assert.Equal(t, http.StatusBadRequest, invalidUserError.StatusCode)
 }
 
 func TestSpecificGroupResourceUsage(t *testing.T) {
@@ -2025,7 +2038,7 @@ func TestSpecificGroupResourceUsage(t *testing.T) {
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getGroupResourceUsage(resp, req)
-	assertGroupNotExists(t, resp)
+	assertInvalidGroupName(t, resp)
 
 	// Test group name with special characters not escaped properly, catch error at request level
 	invalidGroup := "test_a-b_c%Zt@#d@do:mai/n.com"
@@ -2661,9 +2674,9 @@ func TestCheckHealthStatus(t *testing.T) {
 }
 
 func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
-	schedulerContext := &scheduler.ClusterContext{}
-	schedulerContext.SetLastHealthCheckResult(expected)
-	NewWebApp(schedulerContext, nil)
+	testSchedulerContext := &scheduler.ClusterContext{}
+	testSchedulerContext.SetLastHealthCheckResult(expected)
+	NewWebApp(testSchedulerContext, nil)
 
 	req, err := http.NewRequest("GET", "/ws/v1/scheduler/healthcheck", strings.NewReader(""))
 	assert.NilError(t, err, "Error while creating the healthcheck request")

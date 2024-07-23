@@ -107,8 +107,6 @@ func TestCheckConditions(t *testing.T) {
 	if !node.preAllocateConditions(ask) {
 		t.Error("node with scheduling set to true no plugins should allow allocation")
 	}
-
-	// TODO add mock for plugin to extend tests
 }
 
 func TestPreAllocateCheck(t *testing.T) {

@@ -325,14 +325,12 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		if isRecoveryQueue {
 			queue, err = pc.createRecoveryQueue()
 			if err != nil {
-				outter_err := fmt.Errorf("failed to create recovery queue %s for application %s", common.RecoveryQueueFull, appID)
-				return errors.Join(outter_err, err)
+				return errors.Join(fmt.Errorf("failed to create recovery queue %s for application %s", common.RecoveryQueueFull, appID), err)
 			}
 		} else {
 			queue, err = pc.createQueue(queueName, app.GetUser())
 			if err != nil {
-				outter_err := fmt.Errorf("failed to create rule based queue %s for application %s", queueName, appID)
-				return errors.Join(outter_err, err)
+				return errors.Join(fmt.Errorf("failed to create rule based queue %s for application %s", queueName, appID), err)
 			}
 		}
 	}

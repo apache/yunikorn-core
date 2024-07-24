@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -324,12 +325,14 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		if isRecoveryQueue {
 			queue, err = pc.createRecoveryQueue()
 			if err != nil {
-				return fmt.Errorf(strings.Join([]string{"failed to create recovery queue", queueName, "for application", appID, ":", err.Error()}, " "))
+				outter_err := fmt.Errorf("failed to create recovery queue %s for application %s", common.RecoveryQueueFull, appID)
+				return errors.Join(outter_err, err)
 			}
 		} else {
 			queue, err = pc.createQueue(queueName, app.GetUser())
 			if err != nil {
-				return fmt.Errorf(strings.Join([]string{"failed to create rule based queue", queueName, "for application", appID, ":", err.Error()}, " "))
+				outter_err := fmt.Errorf("failed to create rule based queue %s for application %s", queueName, appID)
+				return errors.Join(outter_err, err)
 			}
 		}
 	}

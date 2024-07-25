@@ -610,7 +610,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 	err := partition.AddNode(sn, existingAllocations)
 	sn.SendNodeAddedEvent()
 	if err != nil {
-		wrapped := fmt.Errorf("failure while adding new node, node rejected with error: %w", err)
+		wrapped := errors.Join(errors.New("failure while adding new node, node rejected with error: ", err)
 		log.Log(log.SchedContext).Error("Failed to add node to partition (rejected)",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("partitionName", sn.Partition),

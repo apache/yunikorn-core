@@ -1714,9 +1714,9 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, "app-1", appDao.ApplicationID)
 	assert.Equal(t, app.StartTime().UnixMilli(), appDao.StartTime)
-	assert.Equal(t, appSummary.ResourceUsage.String(), appDao.ResourceUsage.String())
-	assert.Equal(t, appSummary.PreemptedResource.String(), appDao.PreemptedResource.String())
-	assert.Equal(t, appSummary.PlaceholderResource.String(), appDao.PlaceholderResource.String())
+	assert.Assert(t, resources.EqualsTracked(appSummary.ResourceUsage, appDao.ResourceUsage))
+	assert.Assert(t, resources.EqualsTracked(appSummary.PreemptedResource, appDao.PreemptedResource))
+	assert.Assert(t, resources.EqualsTracked(appSummary.PlaceholderResource, appDao.PlaceholderResource))
 }
 
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {

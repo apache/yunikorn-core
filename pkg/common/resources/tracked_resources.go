@@ -103,3 +103,46 @@ func (tr *TrackedResource) AggregateTrackedResource(instType string,
 	}
 	tr.TrackedResourceMap[instType] = aggregatedResourceTime
 }
+
+func EqualsTracked(left, right *TrackedResource) bool {
+	if left == right {
+		return true
+	}
+
+	if left == nil || right == nil {
+		return false
+	}
+
+	equals := true
+	for k, v := range left.TrackedResourceMap {
+		inner, ok := right.TrackedResourceMap[k]
+		if !ok {
+			return false
+		}
+
+		equals = equals && equalsMapContents(v, inner)
+	}
+
+	return equals
+}
+
+// basically the same as Equals()
+func equalsMapContents(left, right map[string]int64) bool {
+	if left == nil || right == nil { // probably this is not needed
+		return false
+	}
+
+	for k, v := range left {
+		if right[k] != v {
+			return false
+		}
+	}
+
+	for k, v := range right {
+		if left[k] != v {
+			return false
+		}
+	}
+
+	return true
+}

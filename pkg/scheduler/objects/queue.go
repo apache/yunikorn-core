@@ -125,7 +125,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 
 	// update the properties
 	if err := sq.applyConf(conf); err != nil {
-		return nil, fmt.Errorf("configured queue creation failed: %w", err)
+		return nil, errors.Join(errors.New("configured queue creation failed: ", err)
 	}
 
 	// add to the parent, we might have an overall lock already
@@ -137,7 +137,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 		err := parent.addChildQueue(sq)
 		if err != nil {
-			return nil, fmt.Errorf("configured queue creation failed: %w", err)
+			return nil, errors.Join(errors.New("configured queue creation failed: ", err)
 		}
 	} else {
 		sq.UpdateQueueProperties()
@@ -199,7 +199,7 @@ func newDynamicQueueInternal(name string, leaf bool, parent *Queue) (*Queue, err
 	// still need to make sure we lock the parent so we do not interfere with scheduling
 	err := parent.addChildQueue(sq)
 	if err != nil {
-		return nil, fmt.Errorf("dynamic queue creation failed: %w", err)
+		return nil, errors.Join(errors.New("dynamic queue creation failed: ", err)
 	}
 
 	sq.UpdateQueueProperties()

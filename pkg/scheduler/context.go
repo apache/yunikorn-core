@@ -19,10 +19,10 @@
 package scheduler
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
-	"errors"
 
 	"go.uber.org/zap"
 
@@ -611,7 +611,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 	err := partition.AddNode(sn, existingAllocations)
 	sn.SendNodeAddedEvent()
 	if err != nil {
-		wrapped := errors.Join(errors.New("failure while adding new node, node rejected with error: ", err)
+		wrapped := errors.Join(errors.New("failure while adding new node, node rejected with error: "), err)
 		log.Log(log.SchedContext).Error("Failed to add node to partition (rejected)",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("partitionName", sn.Partition),

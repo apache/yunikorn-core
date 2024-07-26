@@ -339,7 +339,7 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 				zap.String("queue path", queuePath),
 				zap.Any("limit max resources", limit.MaxResources),
 				zap.Error(err))
-			return errors.Join(fmt.Errorf("problem in using the max resources settings for queuepath: %s. reason: ", queuePath), err)
+			return errors.Join(fmt.Errorf("problem in using the max resources settings for queuepath: %s, reason: ", queuePath), err)
 		}
 		limitConfig := &LimitConfig{maxResources: maxResource, maxApplications: limit.MaxApplications}
 		for _, user := range limit.Users {

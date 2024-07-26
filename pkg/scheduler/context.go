@@ -144,9 +144,9 @@ func (cc *ClusterContext) schedule() bool {
 			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 			if result.ResultType == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, []*objects.Allocation{result.Allocation.GetRelease()}, si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+result.Ask.GetAllocationKey())
+				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, []*objects.Allocation{result.Request.GetRelease()}, si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+result.Request.GetAllocationKey())
 			} else {
-				cc.notifyRMNewAllocation(psc.RmID, result.Allocation)
+				cc.notifyRMNewAllocation(psc.RmID, result.Request)
 			}
 			activity = true
 		}

@@ -24,9 +24,9 @@ import "sort"
 //
 // In the overwhelming majority of the cases, new asks are added to the end of the list. Therefore we don't need to
 // use advanced data structures to maintain the sorted invariant of the slice.
-type sortedRequests []*AllocationAsk
+type sortedRequests []*Allocation
 
-func (s *sortedRequests) insert(ask *AllocationAsk) {
+func (s *sortedRequests) insert(ask *Allocation) {
 	size := len(*s)
 
 	if size > 0 && ask.LessThan((*s)[size-1]) {
@@ -41,7 +41,7 @@ func (s *sortedRequests) insert(ask *AllocationAsk) {
 	s.insertAt(idx, ask)
 }
 
-func (s *sortedRequests) insertAt(index int, ask *AllocationAsk) {
+func (s *sortedRequests) insertAt(index int, ask *Allocation) {
 	*s = append(*s, nil)
 	if index < len(*s) {
 		copy((*s)[index+1:], (*s)[index:])
@@ -49,7 +49,7 @@ func (s *sortedRequests) insertAt(index int, ask *AllocationAsk) {
 	(*s)[index] = ask
 }
 
-func (s *sortedRequests) remove(ask *AllocationAsk) {
+func (s *sortedRequests) remove(ask *Allocation) {
 	idx := sort.Search(len(*s), func(i int) bool {
 		return (*s)[i].LessThan(ask)
 	})

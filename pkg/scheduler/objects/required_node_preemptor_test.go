@@ -28,7 +28,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func createAllocationAsk(allocationKey string, app string, allowPreemption bool, isOriginator bool, priority int32, res *resources.Resource) *AllocationAsk {
+func createAllocationAsk(allocationKey string, app string, allowPreemption bool, isOriginator bool, priority int32, res *resources.Resource) *Allocation {
 	tags := map[string]string{}
 	siAsk := &si.AllocationAsk{
 		AllocationKey:    allocationKey,
@@ -50,49 +50,49 @@ func prepareAllocationAsks(node *Node) {
 	// regular pods
 	ask1 := createAllocationAsk("ask1", "app1", true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	node.AddAllocation(NewAllocation(node.NodeID, ask1))
+	node.AddAllocation(markAllocated(node.NodeID, ask1))
 
 	ask2 := createAllocationAsk("ask2", "app1", true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	ask2.createTime = createTime
-	node.AddAllocation(NewAllocation(node.NodeID, ask2))
+	node.AddAllocation(markAllocated(node.NodeID, ask2))
 
 	ask3 := createAllocationAsk("ask3", "app1", true, false, 15,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	node.AddAllocation(NewAllocation(node.NodeID, ask3))
+	node.AddAllocation(markAllocated(node.NodeID, ask3))
 
 	ask4 := createAllocationAsk("ask4", "app1", true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask4.createTime = createTime
-	node.AddAllocation(NewAllocation(node.NodeID, ask4))
+	node.AddAllocation(markAllocated(node.NodeID, ask4))
 
 	ask5 := createAllocationAsk("ask5", "app1", true, false, 5,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	node.AddAllocation(NewAllocation(node.NodeID, ask5))
+	node.AddAllocation(markAllocated(node.NodeID, ask5))
 
 	// opted out pods
 	ask6 := createAllocationAsk("ask6", "app1", false, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	node.AddAllocation(NewAllocation(node.NodeID, ask6))
+	node.AddAllocation(markAllocated(node.NodeID, ask6))
 
 	ask7 := createAllocationAsk("ask7", "app1", false, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	ask7.createTime = createTime
-	node.AddAllocation(NewAllocation(node.NodeID, ask7))
+	node.AddAllocation(markAllocated(node.NodeID, ask7))
 
 	ask8 := createAllocationAsk("ask8", "app1", false, false, 15,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	node.AddAllocation(NewAllocation(node.NodeID, ask8))
+	node.AddAllocation(markAllocated(node.NodeID, ask8))
 
 	// driver/owner pods
 	ask9 := createAllocationAsk("ask9", "app1", false, true, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask9.createTime = createTime
-	node.AddAllocation(NewAllocation(node.NodeID, ask9))
+	node.AddAllocation(markAllocated(node.NodeID, ask9))
 
 	ask10 := createAllocationAsk("ask10", "app1", true, true, 5,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	node.AddAllocation(NewAllocation(node.NodeID, ask10))
+	node.AddAllocation(markAllocated(node.NodeID, ask10))
 }
 
 // regular pods

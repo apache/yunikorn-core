@@ -1348,6 +1348,13 @@ func TestGetPartitionNodes(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
 	assertNodeIDNotExists(t, resp)
+
+	// Test node id is missing
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"partition": "default", "node": ""})
+	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionNode(resp, req)
+	assertNodeIDMissing(t, resp)
 }
 
 // addApp Add app to the given partition and assert the app count, state etc
@@ -1804,6 +1811,15 @@ func assertNodeIDNotExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, NodeDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
+}
+
+func assertNodeIDMissing(t *testing.T, resp *MockResponseWriter) {
+	var errInfo dao.YAPIError
+	err := json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	assert.Assert(t, strings.HasPrefix(errInfo.Message, ParamMissingErrorPrefix), jsonMessageError)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
 func assertAppStateNotAllow(t *testing.T, resp *MockResponseWriter) {

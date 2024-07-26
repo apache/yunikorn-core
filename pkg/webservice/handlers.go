@@ -20,6 +20,7 @@ package webservice
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -60,10 +61,9 @@ const (
 	InvalidGroupName         = "Invalid group name"
 	UserDoesNotExists        = "User not found"
 	GroupDoesNotExists       = "Group not found"
-	UserNameMissing          = "User name is missing"
-	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
+	ParamMissingErrorPrefix  = "missing parameter: "
 )
 
 var allowedActiveStatusMsg string
@@ -644,7 +644,11 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partitionName := vars.ByName("partition")
+	partitionName, err := byName(vars, "partition")
+	if err != nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
 	var partition = schedulerContext.GetPartitionWithoutClusterID(partitionName)
 	if partition != nil {
@@ -665,14 +669,17 @@ func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName("partition")
+	partition, err := byName(vars, "partition")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	queueName := vars.ByName("queue")
-	unescapedQueueName, err := url.QueryUnescape(queueName)
+	unescapedQueueName, err := byName(vars, "queue")
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
@@ -700,7 +707,11 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName("partition")
+	partition, err := byName(vars, "partition")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
 		nodesDao := getNodesDAO(partitionContext.GetNodes())
@@ -719,10 +730,19 @@ func getPartitionNode(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName("partition")
+	partition, err := byName(vars, "partition")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext != nil {
-		nodeID := vars.ByName("node")
+		nodeID, err := byName(vars, "node")
+		if err != nil {
+			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
 		node := partitionContext.GetNode(nodeID)
 		if node == nil {
 			buildJSONErrorResponse(w, NodeDoesNotExists, http.StatusNotFound)
@@ -744,9 +764,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName("partition")
-	queueName := vars.ByName("queue")
-	unescapedQueueName, err := url.QueryUnescape(queueName)
+	partition, err := byName(vars, "partition")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	unescapedQueueName, err := byName(vars, "queue")
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
@@ -784,8 +807,17 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName("partition")
-	appState := strings.ToLower(vars.ByName("state"))
+	partition, err := byName(vars, "partition")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	state, err := byName(vars, "state")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	appState := strings.ToLower(state)
 
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
@@ -832,14 +864,22 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName("partition")
-	queueName := vars.ByName("queue")
-	unescapedQueueName, err := url.QueryUnescape(queueName)
+	partition, err := byName(vars, "partition")
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	application := vars.ByName("application")
+	unescapedQueueName, err := byName(vars, "queue")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	application, err := byName(vars, "application")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
@@ -878,7 +918,11 @@ func getPartitionRules(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	partition := vars.ByName("partition")
+	partition, err := byName(vars, "partition")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
@@ -1092,9 +1136,9 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	user := vars.ByName("user")
-	if user == "" {
-		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
+	user, err := byName(vars, "user")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	unescapedUser, err := url.QueryUnescape(user)
@@ -1137,9 +1181,9 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	group := vars.ByName("group")
-	if group == "" {
-		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
+	group, err := byName(vars, "group")
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	unescapedGroupName, err := url.QueryUnescape(group)
@@ -1299,4 +1343,18 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 			f.Flush()
 		}
 	}
+}
+
+// Helper funciton for identifying if specific param is exist
+// if not exist, return error message that includes specific param name
+func byName(vars httprouter.Params, name string) (string, error) {
+	value := vars.ByName(name)
+	if value == "" {
+		return "", errors.New(ParamMissingErrorPrefix + name)
+	}
+	unescape, err := url.QueryUnescape(value)
+	if err != nil {
+		return "", err
+	}
+	return unescape, nil
 }

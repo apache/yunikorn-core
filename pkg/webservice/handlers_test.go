@@ -1342,8 +1342,8 @@ func TestGetPartitionNodes(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
 
-	// Test node id is missing
-	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"partition": "default", "node": ""})
+	// Test node id is not a real Node Id
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"partition": "default", "node": "notARealNodeId"})
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
@@ -1669,7 +1669,7 @@ func TestGetApplicationHandler(t *testing.T) {
 
 	// test queue name with special characters escaped properly
 	queueName := url.QueryEscape("root.parent.test@t#:rt:/_ff-test")
-	req, err = createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": queueName})
+	req, err = createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": queueName, "application": "app-1"})
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getApplication(resp, req)
@@ -1680,7 +1680,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.ErrorContains(t, err, "invalid URL escape")
 
 	// test queue name with special characters escaped not properly, catch error while un escaping queue name
-	req, err = createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": invalidQueueName})
+	req, err = createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": invalidQueueName, "application": "app-1"})
 	assert.NilError(t, err)
 	resp = &MockResponseWriter{}
 	getApplication(resp, req)
@@ -1714,6 +1714,7 @@ func assertQueueNotExists(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusNotFound, resp.statusCode, errInfo.Message)
 	assert.Equal(t, http.StatusNotFound, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, QueueDoesNotExists, jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
@@ -1758,7 +1759,7 @@ func assertUserNameMissing(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
-	assert.Equal(t, errInfo.Message, UserNameMissing, jsonMessageError)
+	assert.Assert(t, strings.HasPrefix(errInfo.Message, ParamMissingErrorPrefix), jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -1792,7 +1793,7 @@ func assertGroupNameMissing(t *testing.T, resp *MockResponseWriter) {
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
-	assert.Equal(t, errInfo.Message, GroupNameMissing, jsonMessageError)
+	assert.Assert(t, strings.HasPrefix(errInfo.Message, ParamMissingErrorPrefix), jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 

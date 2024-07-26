@@ -1349,12 +1349,12 @@ func getStream(w http.ResponseWriter, r *http.Request) {
 // if not exist, return error message that includes specific param name
 func byName(vars httprouter.Params, name string) (string, error) {
 	value := vars.ByName(name)
-	if value == "" {
-		return "", errors.New(ParamMissingErrorPrefix + name)
-	}
 	unescape, err := url.QueryUnescape(value)
 	if err != nil {
 		return "", err
+	}
+	if unescape == "" {
+		return "", errors.New(ParamMissingErrorPrefix + name)
 	}
 	return unescape, nil
 }

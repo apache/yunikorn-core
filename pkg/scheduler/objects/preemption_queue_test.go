@@ -221,10 +221,10 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 
 func createQPSCache(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue) (*QueuePreemptionSnapshot, *QueuePreemptionSnapshot, *QueuePreemptionSnapshot, *QueuePreemptionSnapshot) {
 	cache := make(map[string]*QueuePreemptionSnapshot)
-	qpsRoot := rootQ.createPreemptionSnapshot(cache)
-	qpsParent := parentQ.createPreemptionSnapshot(cache)
-	qpsChild1 := childQ1.createPreemptionSnapshot(cache)
-	qpsChild2 := childQ2.createPreemptionSnapshot(cache)
+	qpsRoot := rootQ.createPreemptionSnapshot(cache, "")
+	qpsParent := parentQ.createPreemptionSnapshot(cache, "")
+	qpsChild1 := childQ1.createPreemptionSnapshot(cache, "")
+	qpsChild2 := childQ2.createPreemptionSnapshot(cache, "")
 	return qpsRoot, qpsParent, qpsChild1, qpsChild2
 }
 

@@ -545,9 +545,9 @@ func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 	return pc.nodes.GetNode(nodeID)
 }
 
-// Add the node to the partition and process the allocations that are reported by the node.
+// Add the node to the partition.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*objects.Allocation) error {
+func (pc *PartitionContext) AddNode(node *objects.Node) error {
 	if node == nil {
 		return fmt.Errorf("cannot add 'nil' node to partition %s", pc.Name)
 	}
@@ -559,26 +559,6 @@ func (pc *PartitionContext) AddNode(node *objects.Node, existingAllocations []*o
 	}
 	if err := pc.addNodeToList(node); err != nil {
 		return err
-	}
-
-	// Add allocations that exist on the node when added
-	if len(existingAllocations) > 0 {
-		for current, alloc := range existingAllocations {
-			if err := pc.addAllocation(alloc); err != nil {
-				// not expecting any inflight replacements on node recovery
-				released, _ := pc.removeNode(node.NodeID)
-				log.Log(log.SchedPartition).Info("Failed to add existing allocations, changes reversed",
-					zap.String("nodeID", node.NodeID),
-					zap.Int("existingAllocations", len(existingAllocations)),
-					zap.Int("releasedAllocations", len(released)),
-					zap.Int("processingAlloc", current),
-					zap.Stringer("allocation", alloc),
-					zap.Error(err))
-				// update failed metric, active metrics are tracked in add/remove from list
-				metrics.GetSchedulerMetrics().IncFailedNodes()
-				return err
-			}
-		}
 	}
 	return nil
 }
@@ -1143,11 +1123,11 @@ func (pc *PartitionContext) GetNodes() []*objects.Node {
 	return pc.nodes.GetNodes()
 }
 
-// Add an allocation to the partition/node/application/queue during node registration.
-// Queue max allocation is not checked as the allocation is part of a new node addition.
+// Add an already bound allocation to the partition/node/application/queue.
+// Queue max allocation is not checked as the allocation came from the RM.
 //
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) addAllocation(alloc *objects.Allocation) error {
+func (pc *PartitionContext) AddAllocation(alloc *objects.Allocation) error {
 	// cannot do anything with a nil alloc, should only happen if the shim broke things badly
 	if alloc == nil {
 		return nil

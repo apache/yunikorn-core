@@ -623,9 +623,12 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
 	alloc1 := markAllocated(nodeID, ask1)
 	alloc2 := markAllocated(nodeID, ask2)
-	allocs := []*objects.Allocation{alloc1, alloc2}
-	err = partition.AddNode(node1, allocs)
+	err = partition.AddNode(node1)
 	assert.NilError(t, err, "add node to partition should not have failed")
+	err = partition.AddAllocation(alloc1)
+	assert.NilError(t, err, "failed to add alloc1")
+	err = partition.AddAllocation(alloc2)
+	assert.NilError(t, err, "failed to add alloc2")
 
 	// set expected result
 	utilMem := &dao.ClusterUtilDAOInfo{
@@ -684,12 +687,16 @@ func TestGetNodesUtilJSON(t *testing.T) {
 	ask1 := objects.NewAllocationAsk("alloc-1", app.ApplicationID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", app.ApplicationID, resAlloc2)
 	allocs := []*objects.Allocation{markAllocated(node1.NodeID, ask1)}
-	err = partition.AddNode(node1, allocs)
+	err = partition.AddNode(node1)
 	assert.NilError(t, err, "add node to partition should not have failed")
+	err = partition.AddAllocation(allocs[0])
+	assert.NilError(t, err, "add alloc-1 should not have failed")
 	allocs = []*objects.Allocation{markAllocated(node2.NodeID, ask2)}
-	err = partition.AddNode(node2, allocs)
+	err = partition.AddNode(node2)
 	assert.NilError(t, err, "add node to partition should not have failed")
-	err = partition.AddNode(node3, nil)
+	err = partition.AddAllocation(allocs[0])
+	assert.NilError(t, err, "add alloc-2 should not have failed")
+	err = partition.AddNode(node3)
 	assert.NilError(t, err, "add node to partition should not have failed")
 
 	// two nodes advertise memory: must show up in the list
@@ -800,7 +807,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 func addNode(t *testing.T, partition *scheduler.PartitionContext, nodeId string, resource *resources.Resource) *objects.Node {
 	nodeRes := resource.ToProto()
 	node := objects.NewNode(&si.NodeInfo{NodeID: nodeId, SchedulableResource: nodeRes})
-	err := partition.AddNode(node, nil)
+	err := partition.AddNode(node)
 	assert.NilError(t, err, "adding node to partition should not fail")
 	return node
 }
@@ -1009,11 +1016,15 @@ func TestPartitions(t *testing.T) {
 	ask1 := objects.NewAllocationAsk("alloc-1", app5.ApplicationID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", app2.ApplicationID, resAlloc2)
 	allocs := []*objects.Allocation{markAllocated(node1ID, ask1)}
-	err = defaultPartition.AddNode(node1, allocs)
+	err = defaultPartition.AddNode(node1)
 	assert.NilError(t, err, "add node to partition should not have failed")
+	err = defaultPartition.AddAllocation(allocs[0])
+	assert.NilError(t, err, "add alloc-1 should not have failed")
 	allocs = []*objects.Allocation{markAllocated(node2ID, ask2)}
-	err = defaultPartition.AddNode(node2, allocs)
+	err = defaultPartition.AddNode(node2)
 	assert.NilError(t, err, "add node to partition should not have failed")
+	err = defaultPartition.AddAllocation(allocs[0])
+	assert.NilError(t, err, "add alloc-2 should not have failed")
 
 	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
 	assert.NilError(t, err, "App Handler request failed")
@@ -1285,11 +1296,16 @@ func TestGetPartitionNodes(t *testing.T) {
 	ask1 := objects.NewAllocationAsk("alloc-1", appID, resAlloc1)
 	ask2 := objects.NewAllocationAsk("alloc-2", appID, resAlloc2)
 	allocs := []*objects.Allocation{markAllocated(node1ID, ask1)}
-	err = partition.AddNode(node1, allocs)
+	err = partition.AddNode(node1)
 	assert.NilError(t, err, "add node to partition should not have failed")
+	err = partition.AddAllocation(allocs[0])
+	assert.NilError(t, err, "add alloc-1 should not have failed")
+
 	allocs = []*objects.Allocation{markAllocated(node2ID, ask2)}
-	err = partition.AddNode(node2, allocs)
+	err = partition.AddNode(node2)
 	assert.NilError(t, err, "add node to partition should not have failed")
+	err = partition.AddAllocation(allocs[0])
+	assert.NilError(t, err, "add alloc-2 should not have failed")
 
 	NewWebApp(schedulerContext, nil)
 

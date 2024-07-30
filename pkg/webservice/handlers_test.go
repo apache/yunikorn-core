@@ -1544,25 +1544,29 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	defaultPartition.AddRejectedApplication(app3, rejectedMessage)
 
 	// test get active app
-	expectedActiveDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app1), getApplicationDAO(app2)}
+	sum1 := app1.GetApplicationSummary(defaultPartition.RmID)
+	sum2 := app2.GetApplicationSummary(defaultPartition.RmID)
+	expectedActiveDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app1, sum1), getApplicationDAO(app2, sum2)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Active"}}, expectedActiveDao)
 
 	// test get active app with running state
-	expectedRunningDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app2)}
+	expectedRunningDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app2, sum2)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active?status=Running", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Active"}}, expectedRunningDao)
 
 	// test get completed app
-	expectedCompletedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app3)}
+	sum3 := app3.GetApplicationSummary(defaultPartition.RmID)
+	expectedCompletedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app3, sum3)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Completed", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Completed"}}, expectedCompletedDao)
 
 	// test get rejected app
-	expectedRejectedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app4)}
+	sum4 := app4.GetApplicationSummary(defaultPartition.RmID)
+	expectedRejectedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app4, sum4)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Rejected", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Rejected"}}, expectedRejectedDao)
@@ -1586,6 +1590,7 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", nil, assertParamsMissing)
 }
 
+//nolint:funlen
 func TestGetApplicationHandler(t *testing.T) {
 	part := setup(t, configDefault, 1)
 
@@ -1690,6 +1695,28 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+
+	// test additional application details
+	var req6 *http.Request
+	req6, err = http.NewRequest("GET", "/ws/v1/partition/default/queue/root.default/application/app-1", strings.NewReader(""))
+	assert.NilError(t, err, "HTTP request create failed")
+	req6 = req6.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "queue", Value: "root.default"},
+		httprouter.Param{Key: "application", Value: "app-1"},
+	}))
+	assert.NilError(t, err, "Get Application Handler request failed")
+	resp6 := &MockResponseWriter{}
+	var appDao *dao.ApplicationDAOInfo
+	getApplication(resp6, req6)
+	appSummary := app.GetApplicationSummary(partitionNameWithoutClusterID)
+	err = json.Unmarshal(resp6.outputBytes, &appDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, "app-1", appDao.ApplicationID)
+	assert.Equal(t, app.StartTime().UnixMilli(), appDao.StartTime)
+	assert.Assert(t, resources.EqualsTracked(appSummary.ResourceUsage, appDao.ResourceUsage))
+	assert.Assert(t, resources.EqualsTracked(appSummary.PreemptedResource, appDao.PreemptedResource))
+	assert.Assert(t, resources.EqualsTracked(appSummary.PlaceholderResource, appDao.PlaceholderResource))
 }
 
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {

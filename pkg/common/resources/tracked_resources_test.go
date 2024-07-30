@@ -23,6 +23,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"gotest.tools/v3/assert"
 )
 
 func CheckLenOfTrackedResource(res *TrackedResource, expected int) (bool, string) {
@@ -207,6 +209,57 @@ func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 			if !reflect.DeepEqual(original.TrackedResourceMap, expected.TrackedResourceMap) {
 				t.Errorf("trackedResources are not equal, original trackedResource after aggrigation: %v / expected: %v", original, expected)
 			}
+		})
+	}
+}
+
+func TestEqualsTracked(t *testing.T) {
+	type inputs struct {
+		base    map[string]map[string]int64
+		compare map[string]map[string]int64
+	}
+	var tests = []struct {
+		caseName string
+		input    inputs
+		expected bool
+	}{
+		{"simple cases (nil checks)", inputs{nil, nil}, true},
+		{"simple cases (nil checks)", inputs{map[string]map[string]int64{}, nil}, false},
+		{"same first and second level keys and different resource value",
+			inputs{map[string]map[string]int64{"first": {"val": 10}}, map[string]map[string]int64{"first": {"val": 0}}},
+			false,
+		},
+		{"different first-level key, same second-level key, same resource value",
+			inputs{map[string]map[string]int64{"first": {"val": 10}}, map[string]map[string]int64{"second": {"val": 10}}},
+			false},
+		{"same first-level key, different second-level key, same resource value",
+			inputs{map[string]map[string]int64{"first": {"val": 10}}, map[string]map[string]int64{"first": {"value": 10}}},
+			false},
+		{"same first-level key, second has larger sub-level map",
+			inputs{map[string]map[string]int64{"first": {"val": 10}}, map[string]map[string]int64{"first": {"val": 10, "sum": 7}}},
+			false},
+		{"same first-level key, first has larger sub-level map",
+			inputs{map[string]map[string]int64{"first": {"val": 10, "sum": 7}}, map[string]map[string]int64{"first": {"val": 10}}},
+			false},
+		{"same keys and values",
+			inputs{map[string]map[string]int64{"x": {"val": 10, "sum": 7}}, map[string]map[string]int64{"x": {"val": 10, "sum": 7}}},
+			true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var base, compare *TrackedResource
+			if tt.input.base != nil {
+				base = NewTrackedResourceFromMap(tt.input.base)
+			}
+			if tt.input.compare != nil {
+				compare = NewTrackedResourceFromMap(tt.input.compare)
+			}
+
+			result := EqualsTracked(base, compare)
+			assert.Assert(t, result == tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, base, compare)
+
+			result = EqualsTracked(compare, base)
+			assert.Assert(t, result == tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, compare, base)
 		})
 	}
 }

@@ -1122,15 +1122,15 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	}
 
 	// verify get outstanding requests for root, and child queues
-	rootTotal := make([]*AllocationAsk, 0)
+	rootTotal := make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 15)
 
-	queue1Total := make([]*AllocationAsk, 0)
+	queue1Total := make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 10)
 
-	queue2Total := make([]*AllocationAsk, 0)
+	queue2Total := make([]*Allocation, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 5)
 
@@ -1139,25 +1139,25 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	err = queue1.IncAllocatedResource(used, false)
 	assert.NilError(t, err, "failed to increment allocated resources")
 
-	queue1Total = make([]*AllocationAsk, 0)
+	queue1Total = make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 5)
 
-	queue2Total = make([]*AllocationAsk, 0)
+	queue2Total = make([]*Allocation, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 5)
 
-	rootTotal = make([]*AllocationAsk, 0)
+	rootTotal = make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 10)
 
 	// remove app2 from queue2
 	queue2.RemoveApplication(app2)
-	queue2Total = make([]*AllocationAsk, 0)
+	queue2Total = make([]*Allocation, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 0)
 
-	rootTotal = make([]*AllocationAsk, 0)
+	rootTotal = make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 5)
 }
@@ -1195,11 +1195,11 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	}
 
 	// verify get outstanding requests for root, and child queues
-	rootTotal := make([]*AllocationAsk, 0)
+	rootTotal := make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 20)
 
-	queue1Total := make([]*AllocationAsk, 0)
+	queue1Total := make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 20)
 
@@ -1208,13 +1208,13 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	err = queue1.IncAllocatedResource(used, false)
 	assert.NilError(t, err, "failed to increment allocated resources")
 
-	queue1Total = make([]*AllocationAsk, 0)
+	queue1Total = make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 20)
 	headRoom := queue1.getHeadRoom()
 	assert.Assert(t, resources.IsZero(headRoom), "headroom should have been zero")
 
-	rootTotal = make([]*AllocationAsk, 0)
+	rootTotal = make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 20)
 	headRoom = root.getHeadRoom()
@@ -1253,15 +1253,15 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	rootTotal := make([]*AllocationAsk, 0)
+	rootTotal := make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 30)
 
-	queue1Total := make([]*AllocationAsk, 0)
+	queue1Total := make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 10)
 
-	queue2Total := make([]*AllocationAsk, 0)
+	queue2Total := make([]*Allocation, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 20)
 }
@@ -1681,9 +1681,9 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parentGuar := map[string]string{siCommon.Memory: "100"}
 	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
 	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
-	alloc2 := NewAllocation(nodeID1, ask2)
+	alloc2 := markAllocated(nodeID1, ask2)
 	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
-	alloc3 := NewAllocation(nodeID1, ask3)
+	alloc3 := markAllocated(nodeID1, ask3)
 	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
 	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
@@ -1772,11 +1772,11 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parent1.allocatedResource = used
 
 	// requiring a specific node take alloc out of consideration
-	alloc2.GetAsk().SetRequiredNode(nodeID1)
+	alloc2.SetRequiredNode(nodeID1)
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 1, len(victims(snapshot)), "wrong victim count")
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
-	alloc2.GetAsk().SetRequiredNode("")
+	alloc2.SetRequiredNode("")
 
 	// placeholder which has been marked released should not be considered
 	alloc2.released = true
@@ -2537,7 +2537,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask")
 
-	alloc := NewAllocation(nodeID1, ask)
+	alloc := markAllocated(nodeID1, ask)
 	app.AddAllocation(alloc)
 	assert.Equal(t, app.CurrentState(), Running.String(), "app state should be running")
 	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")

@@ -21,6 +21,7 @@ package scheduler
 import (
 	"strconv"
 	"testing"
+	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -553,19 +554,19 @@ func newApplicationTGTagsWithPhTimeout(appID, partition, queueName string, task 
 	return objects.NewApplication(siApp, user, nil, rmID)
 }
 
-func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.AllocationAsk {
+func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.Allocation {
 	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, placeHolder)
 }
 
-func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.AllocationAsk {
+func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.Allocation {
 	return newAllocationAskAll(allocKey, appID, "", res, 1, false)
 }
 
-func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, prio int32) *objects.AllocationAsk {
+func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, prio int32) *objects.Allocation {
 	return newAllocationAskAll(allocKey, appID, "", res, prio, false)
 }
 
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.Allocation {
 	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
 		AllocationKey: allocKey,
 		ApplicationID: appID,
@@ -577,7 +578,7 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 	})
 }
 
-func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.AllocationAsk {
+func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.Allocation {
 	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
 		AllocationKey: allocKey,
 		ApplicationID: appID,
@@ -723,4 +724,10 @@ func getMaxApplications(usage *dao.ResourceUsageDAOInfo, maxApplications map[str
 		}
 	}
 	return maxApplications
+}
+
+func markAllocated(nodeID string, alloc *objects.Allocation) *objects.Allocation {
+	alloc.SetBindTime(time.Now())
+	alloc.SetNodeID(nodeID)
+	return alloc
 }

@@ -48,7 +48,7 @@ type Preemptor struct {
 	queuePath       string              // path of queue to preempt for
 	headRoom        *resources.Resource // current queue headroom
 	preemptionDelay time.Duration       // preemption delay
-	ask             *AllocationAsk      // ask to be preempted for
+	ask             *Allocation         // ask to be preempted for
 	iterator        NodeIterator        // iterator to enumerate all nodes
 	nodesTried      bool                // flag indicating that scheduling has already been tried on all nodes
 
@@ -72,7 +72,7 @@ type QueuePreemptionSnapshot struct {
 }
 
 // NewPreemptor creates a new preemptor. The preemptor itself is not thread safe, and assumes the application lock is held.
-func NewPreemptor(application *Application, headRoom *resources.Resource, preemptionDelay time.Duration, ask *AllocationAsk, iterator NodeIterator, nodesTried bool) *Preemptor {
+func NewPreemptor(application *Application, headRoom *resources.Resource, preemptionDelay time.Duration, ask *Allocation, iterator NodeIterator, nodesTried bool) *Preemptor {
 	return &Preemptor{
 		application:     application,
 		queue:           application.queue,
@@ -600,7 +600,7 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	for _, victim := range victims {
 		// Victims from any node is acceptable as long as chosen node has enough space to accommodate the ask
 		// Otherwise, preempting victims from 'n' different nodes doesn't help to achieve the goal.
-		if !fitIn && victim.nodeID != nodeID {
+		if !fitIn && victim.GetNodeID() != nodeID {
 			continue
 		}
 		// stop collecting the victims once ask resource requirement met
@@ -688,7 +688,7 @@ func (pcr *predicateCheckResult) getSolutionScore(allocationsByNode map[string][
 		if allocation.IsOriginator() {
 			score |= scoreOriginator
 		}
-		if !allocation.GetAsk().IsAllowPreemptSelf() {
+		if !allocation.IsAllowPreemptSelf() {
 			score |= scoreNoPreempt
 		}
 	}
@@ -883,7 +883,7 @@ func scoreAllocation(allocation *Allocation) uint64 {
 	if allocation.IsOriginator() {
 		score |= scoreOriginator
 	}
-	if !allocation.GetAsk().IsAllowPreemptSelf() {
+	if !allocation.IsAllowPreemptSelf() {
 		score |= scoreNoPreempt
 	}
 	return score
@@ -894,8 +894,8 @@ func scoreAllocation(allocation *Allocation) uint64 {
 func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 	for _, allocations := range allocationsByNode {
 		sort.SliceStable(allocations, func(i, j int) bool {
-			leftAsk := allocations[i].GetAsk()
-			rightAsk := allocations[j].GetAsk()
+			leftAsk := allocations[i]
+			rightAsk := allocations[j]
 
 			// sort asks which allow themselves to be preempted first
 			if leftAsk.IsAllowPreemptSelf() && !rightAsk.IsAllowPreemptSelf() {

@@ -30,17 +30,17 @@ import (
 func TestInsertRemove(t *testing.T) {
 	sorted := sortedRequests{}
 	// alloc-3 > alloc-2 > alloc-1
-	sorted.insert(&AllocationAsk{
+	sorted.insert(&Allocation{
 		createTime:    time.Unix(10, 0),
 		priority:      10,
 		allocationKey: "alloc-1",
 	})
-	sorted.insert(&AllocationAsk{
+	sorted.insert(&Allocation{
 		createTime:    time.Unix(10, 0),
 		priority:      25,
 		allocationKey: "alloc-2",
 	})
-	sorted.insert(&AllocationAsk{
+	sorted.insert(&Allocation{
 		createTime:    time.Unix(5, 0),
 		priority:      35,
 		allocationKey: "alloc-3",
@@ -92,13 +92,13 @@ func TestInsertRemove(t *testing.T) {
 	assert.Equal(t, 99, len(sorted))
 
 	// remove non-existent
-	sorted.remove(&AllocationAsk{
+	sorted.remove(&Allocation{
 		allocationKey: "non-existing",
 	})
 	assert.Equal(t, 99, len(sorted))
 }
 
-func askPresent(ask *AllocationAsk, asks []*AllocationAsk) bool {
+func askPresent(ask *Allocation, asks []*Allocation) bool {
 	for _, a := range asks {
 		if a.allocationKey == ask.allocationKey {
 			return true
@@ -107,7 +107,7 @@ func askPresent(ask *AllocationAsk, asks []*AllocationAsk) bool {
 	return false
 }
 
-func checkSorted(asks []*AllocationAsk) bool {
+func checkSorted(asks []*Allocation) bool {
 	prev := int64(math.MinInt64)
 	for _, ask := range asks {
 		if ask.createTime.UnixNano() < prev {
@@ -118,8 +118,8 @@ func checkSorted(asks []*AllocationAsk) bool {
 	return true
 }
 
-func getAllocationAsk(n int) *AllocationAsk {
-	return &AllocationAsk{
+func getAllocationAsk(n int) *Allocation {
+	return &Allocation{
 		allocationKey: "alloc-" + strconv.Itoa(n),
 		priority:      1,
 		createTime:    time.Unix(int64(n), 0),

@@ -738,7 +738,7 @@ func TestRemovePlaceholderAllocationWithNoRealAllocation(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask := newAllocationAsk(aKey, appID1, res)
 	ask.placeholder = true
-	allocInfo := NewAllocation(nodeID1, ask)
+	allocInfo := markAllocated(nodeID1, ask)
 	app.AddAllocation(allocInfo)
 	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted")
@@ -788,7 +788,7 @@ func TestStateChangeOnUpdate(t *testing.T) {
 	// app with ask should be accepted
 	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
 	// add an alloc
-	allocInfo := NewAllocation(nodeID1, ask)
+	allocInfo := markAllocated(nodeID1, ask)
 	app.AddAllocation(allocInfo)
 	// app should be running
 	assert.Assert(t, app.IsRunning(), "Application did not return running state after alloc: %s", app.CurrentState())
@@ -851,7 +851,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	// app with ask should be accepted
 	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
 	// add an alloc based on the placeholder ask
-	allocInfo := NewAllocation(nodeID1, ask)
+	allocInfo := markAllocated(nodeID1, ask)
 	app.AddAllocation(allocInfo)
 	// app should be in the same state as it was before as it is a placeholder allocation
 	assert.Assert(t, app.IsAccepted(), "Application did not return accepted state after alloc: %s", app.CurrentState())
@@ -1024,10 +1024,10 @@ func TestCompleted(t *testing.T) {
 		terminatedTimeout = 3 * 24 * time.Hour
 	}()
 	app := newApplication(appID1, "default", "root.a")
-	app.requests = map[string]*AllocationAsk{
+	app.requests = map[string]*Allocation{
 		"test": {},
 	}
-	app.sortedRequests = append(app.sortedRequests, &AllocationAsk{})
+	app.sortedRequests = append(app.sortedRequests, &Allocation{})
 	err := app.handleApplicationEventWithLocking(RunApplication)
 	assert.NilError(t, err, "no error expected new to accepted (completed test)")
 	err = app.handleApplicationEventWithLocking(CompleteApplication)
@@ -1245,7 +1245,7 @@ func TestReplaceAllocation(t *testing.T) {
 	// add the placeholder to the app
 	app.AddAllocation(ph)
 	// add PlaceholderData
-	app.addPlaceholderDataWithLocking(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph)
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
@@ -1266,7 +1266,7 @@ func TestReplaceAllocation(t *testing.T) {
 	// add the placeholder back to the app, the failure test above changed state and removed the ph
 	app.SetState(Running.String())
 	app.AddAllocation(ph)
-	app.addPlaceholderDataWithLocking(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph)
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 	assertUserGroupResource(t, getTestUserGroup(), res)
 
@@ -1287,7 +1287,7 @@ func TestReplaceAllocation(t *testing.T) {
 	app.SetState(Running.String())
 	ph.ClearRelease()
 	app.AddAllocation(ph)
-	app.addPlaceholderDataWithLocking(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph)
 	assert.Equal(t, app.placeholderData[""].Count, int64(3))
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 }
@@ -1309,14 +1309,14 @@ func TestReplaceAllocationTracking(t *testing.T) {
 	ph3.SetInstanceType(instType1)
 	app.AddAllocation(ph1)
 	assert.NilError(t, err, "could not add ask")
-	app.addPlaceholderDataWithLocking(ph1.GetAsk())
+	app.addPlaceholderDataWithLocking(ph1)
 	assert.Equal(t, true, app.HasPlaceholderAllocation())
 	app.AddAllocation(ph2)
 	assert.NilError(t, err, "could not add ask")
-	app.addPlaceholderDataWithLocking(ph2.GetAsk())
+	app.addPlaceholderDataWithLocking(ph2)
 	app.AddAllocation(ph3)
 	assert.NilError(t, err, "could not add ask")
-	app.addPlaceholderDataWithLocking(ph3.GetAsk())
+	app.addPlaceholderDataWithLocking(ph3)
 
 	ph1.SetBindTime(time.Now().Add(-10 * time.Second))
 	ph2.SetBindTime(time.Now().Add(-10 * time.Second))
@@ -1456,7 +1456,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	ph.SetReleased(true)
 	app.AddAllocation(ph)
 	// add PlaceholderData
-	app.addPlaceholderDataWithLocking(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph)
 	assert.Equal(t, len(app.placeholderData), 1)
 	assert.Equal(t, app.placeholderData[""].TaskGroupName, "")
 	assert.Equal(t, app.placeholderData[""].Count, int64(1))
@@ -1468,7 +1468,7 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	ph = newPlaceholderAlloc(appID1, nodeID1, res)
 	app.AddAllocation(ph)
-	app.addPlaceholderDataWithLocking(ph.GetAsk())
+	app.addPlaceholderDataWithLocking(ph)
 	assert.Equal(t, app.placeholderData[""].Count, int64(2))
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
@@ -1705,7 +1705,7 @@ func TestCanReplace(t *testing.T) {
 	tg1 := "available"
 	tests := []struct {
 		name string
-		ask  *AllocationAsk
+		ask  *Allocation
 		want bool
 	}{
 		{"nil", nil, false},
@@ -1731,7 +1731,7 @@ func TestCanReplace(t *testing.T) {
 	app.placeholderData[tg3].TimedOut++
 	tests = []struct {
 		name string
-		ask  *AllocationAsk
+		ask  *Allocation
 		want bool
 	}{
 		{"no TG", newAllocationAsk(aKey, appID1, res), false},
@@ -1785,7 +1785,7 @@ func TestTryAllocateFit(t *testing.T) {
 	result := app.tryAllocate(node.GetAvailableResource(), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 
 	assert.Assert(t, result != nil, "alloc expected")
-	assert.Assert(t, result.Allocation != nil, "alloc expected")
+	assert.Assert(t, result.Request != nil, "alloc expected")
 	assert.Equal(t, "node1", result.NodeID, "wrong node")
 }
 
@@ -1828,11 +1828,11 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 
 	result1 := app1.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result1 != nil, "result1 expected")
-	alloc1 := result1.Allocation
+	alloc1 := result1.Request
 	assert.Assert(t, alloc1 != nil, "alloc1 expected")
 	result2 := app1.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result2 != nil, "result2 expected")
-	alloc2 := result2.Allocation
+	alloc2 := result2.Request
 	assert.Assert(t, alloc2 != nil, "alloc2 expected")
 
 	// on first attempt, not enough time has passed
@@ -1843,7 +1843,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	// pass the time and try again
 	ask3.createTime = ask3.createTime.Add(-30 * time.Second)
 	result3 = app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
-	assert.Assert(t, result3 != nil && result3.Allocation == nil && result3.ResultType == Reserved, "alloc3 should be a reservation")
+	assert.Assert(t, result3 != nil && result3.Request != nil && result3.ResultType == Reserved, "alloc3 should be a reservation")
 	assert.Assert(t, alloc2.IsPreempted(), "alloc2 should have been preempted")
 }
 
@@ -1900,29 +1900,33 @@ func TestTryAllocatePreemptNode(t *testing.T) {
 	// consume capacity with 'unlimited' app
 	result00 := app0.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 40}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result00 != nil, "result00 expected")
-	alloc00 := result00.Allocation
+	alloc00 := result00.Request
 	assert.Assert(t, alloc00 != nil, "alloc00 expected")
+	alloc00.SetNodeID(result00.NodeID)
 	result01 := app0.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 39}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result01 != nil, "result01 expected")
-	alloc01 := result01.Allocation
+	alloc01 := result01.Request
 	assert.Assert(t, alloc01 != nil, "alloc01 expected")
+	alloc01.SetNodeID(result01.NodeID)
 
 	// consume remainder of space but not quota
 	result1 := app1.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 28}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result1 != nil, "result1 expected")
-	alloc1 := result1.Allocation
+	alloc1 := result1.Request
 	assert.Assert(t, alloc1 != nil, "alloc1 expected")
+	alloc1.SetNodeID(result1.NodeID)
 	result2 := app1.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 23}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result2 != nil, "result2 expected")
-	alloc2 := result2.Allocation
+	alloc2 := result2.Request
 	assert.Assert(t, alloc2 != nil, "alloc2 expected")
+	alloc2.SetNodeID(result2.NodeID)
 
 	// on first attempt, should see a reservation since we're after the reservation timeout
 	ask3.createTime = ask3.createTime.Add(-10 * time.Second)
 	result3 := app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result3 != nil, "result3 expected")
-	alloc3 := result3.Allocation
-	assert.Assert(t, alloc3 == nil, "alloc3 not expected")
+	alloc3 := result3.Request
+	assert.Assert(t, alloc3 != nil, "alloc3 not expected")
 	assert.Equal(t, "node1", result3.NodeID, "wrong node assignment")
 	assert.Equal(t, Reserved, result3.ResultType, "expected reservation")
 	assert.Assert(t, !alloc2.IsPreempted(), "alloc2 should not have been preempted")
@@ -1934,8 +1938,8 @@ func TestTryAllocatePreemptNode(t *testing.T) {
 	result3 = app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result3 != nil, "result3 expected")
 	assert.Equal(t, Reserved, result3.ResultType, "expected reservation")
-	alloc3 = result3.Allocation
-	assert.Assert(t, alloc3 == nil, "alloc3 not expected")
+	alloc3 = result3.Request
+	assert.Assert(t, alloc3 != nil, "alloc3 expected")
 	assert.Assert(t, alloc1.IsPreempted(), "alloc1 should have been preempted")
 }
 
@@ -2406,7 +2410,7 @@ func TestAllocationFailures(t *testing.T) {
 }
 
 func TestGetOutstandingRequests(t *testing.T) {
-	// Create a sample Resource and AllocationAsk
+	// Create a sample Resource and Allocation
 	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	res, err := resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create resource with error")
@@ -2438,7 +2442,7 @@ func TestGetOutstandingRequests(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue headroom resource with error")
 	userHeadroom, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcores": "5"})
 	assert.NilError(t, err, "failed to create user headroom resource with error")
-	total1 := []*AllocationAsk{}
+	total1 := []*Allocation{}
 	app.getOutstandingRequests(queueHeadroom, userHeadroom, &total1)
 	assert.Equal(t, 0, len(total1), "expected one outstanding request for TestCase 1")
 
@@ -2447,7 +2451,7 @@ func TestGetOutstandingRequests(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue headroom resource with error")
 	userHeadroom2, err := resources.NewResourceFromConf(map[string]string{"memory": "250", "vcores": "25"})
 	assert.NilError(t, err, "failed to create user headroom resource with error")
-	total2 := []*AllocationAsk{}
+	total2 := []*Allocation{}
 	app.getOutstandingRequests(queueHeadroom2, userHeadroom2, &total2)
 	assert.Equal(t, 2, len(total2), "expected two outstanding requests for TestCase 2")
 
@@ -2456,7 +2460,7 @@ func TestGetOutstandingRequests(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue headroom resource with error")
 	userHeadroom3, err := resources.NewResourceFromConf(map[string]string{"memory": "250", "vcores": "25"})
 	assert.NilError(t, err, "failed to create user headroom resource with error")
-	total3 := []*AllocationAsk{}
+	total3 := []*Allocation{}
 	app.getOutstandingRequests(queueHeadroom3, userHeadroom3, &total3)
 	assert.Equal(t, 0, len(total3), "expected one outstanding request for TestCase 3")
 
@@ -2465,7 +2469,7 @@ func TestGetOutstandingRequests(t *testing.T) {
 	assert.NilError(t, err, "failed to create queue headroom resource with error")
 	userHeadroom4, err := resources.NewResourceFromConf(map[string]string{"memory": "80", "vcores": "8"})
 	assert.NilError(t, err, "failed to create user headroom resource with error")
-	total4 := []*AllocationAsk{}
+	total4 := []*Allocation{}
 	app.getOutstandingRequests(queueHeadroom4, userHeadroom4, &total4)
 	assert.Equal(t, 0, len(total4), "expected no outstanding requests for TestCase 4")
 }
@@ -2490,7 +2494,7 @@ func TestGetOutstandingRequests_NoSchedulingAttempt(t *testing.T) {
 	sr.insert(allocationAsk4)
 	app.sortedRequests = sr
 
-	var total []*AllocationAsk
+	var total []*Allocation
 	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
 	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
 	app.getOutstandingRequests(headroom, userHeadroom, &total)
@@ -2529,7 +2533,7 @@ func TestGetOutstandingRequests_RequestTriggeredPreemptionHasRequiredNode(t *tes
 	sr.insert(allocationAsk4)
 	app.sortedRequests = sr
 
-	var total []*AllocationAsk
+	var total []*Allocation
 	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
 	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
 	app.getOutstandingRequests(headroom, userHeadroom, &total)
@@ -2562,7 +2566,7 @@ func TestGetOutstandingRequests_AskReplaceable(t *testing.T) {
 	app.addPlaceholderDataWithLocking(allocationAsk1)
 	app.addPlaceholderDataWithLocking(allocationAsk2)
 
-	var total []*AllocationAsk
+	var total []*Allocation
 	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
 	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
 	app.getOutstandingRequests(headroom, userHeadroom, &total)
@@ -2709,7 +2713,7 @@ func testGetResourceFromTag(t *testing.T, tagName string, tags map[string]string
 	assert.Assert(t, res == nil, "unexpected resource")
 }
 
-func (sa *Application) addPlaceholderDataWithLocking(ask *AllocationAsk) {
+func (sa *Application) addPlaceholderDataWithLocking(ask *Allocation) {
 	sa.Lock()
 	defer sa.Unlock()
 	sa.addPlaceholderData(ask)

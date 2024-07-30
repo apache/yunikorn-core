@@ -367,12 +367,12 @@ func (sn *Node) CanAllocate(res *resources.Resource) bool {
 }
 
 // Checking pre-conditions in the shim for an allocation.
-func (sn *Node) preAllocateConditions(ask *AllocationAsk) bool {
+func (sn *Node) preAllocateConditions(ask *Allocation) bool {
 	return sn.preConditions(ask, true)
 }
 
 // Checking pre-conditions in the shim for a reservation.
-func (sn *Node) preReserveConditions(ask *AllocationAsk) bool {
+func (sn *Node) preReserveConditions(ask *Allocation) bool {
 	return sn.preConditions(ask, false)
 }
 
@@ -382,7 +382,7 @@ func (sn *Node) preReserveConditions(ask *AllocationAsk) bool {
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
+func (sn *Node) preConditions(ask *Allocation, allocate bool) bool {
 	// Check the predicates plugin (k8shim)
 	allocationKey := ask.GetAllocationKey()
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
@@ -464,7 +464,7 @@ func (sn *Node) isReservedForApp(key string) bool {
 // Reserve the node for this application and ask combination, if not reserved yet.
 // The reservation is checked against the node resources.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
-func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
+func (sn *Node) Reserve(app *Application, ask *Allocation) error {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
@@ -499,7 +499,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 // unReserve the node for this application and ask combination
 // If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
 // The error is set if the reservation key cannot be generated.
-func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
+func (sn *Node) unReserve(app *Application, ask *Allocation) (int, error) {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()

@@ -229,7 +229,7 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 	if alloc.IsPlaceholderUsed() {
 		requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
 	} else {
-		requestTime = alloc.GetAsk().GetCreateTime().UnixNano()
+		requestTime = alloc.GetCreateTime().UnixNano()
 	}
 	allocTime := alloc.GetCreateTime().UnixNano()
 	allocDAO := &dao.AllocationDAOInfo{
@@ -341,7 +341,7 @@ func getAllocationLogsDAO(logEntries []*objects.AllocationLogEntry) []*dao.Alloc
 	return logsDAO
 }
 
-func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
+func getAllocationAskDAO(ask *objects.Allocation) *dao.AllocationAskDAOInfo {
 	return &dao.AllocationAskDAOInfo{
 		AllocationKey:       ask.GetAllocationKey(),
 		AllocationTags:      ask.GetTagsClone(),
@@ -360,7 +360,7 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 	}
 }
 
-func getAllocationAsksDAO(asks []*objects.AllocationAsk) []*dao.AllocationAskDAOInfo {
+func getAllocationAsksDAO(asks []*objects.Allocation) []*dao.AllocationAskDAOInfo {
 	asksDAO := make([]*dao.AllocationAskDAOInfo, 0, len(asks))
 	for _, ask := range asks {
 		if !ask.IsAllocated() {

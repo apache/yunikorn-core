@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -143,9 +144,9 @@ func (cc *ClusterContext) schedule() bool {
 			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 			if result.ResultType == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, []*objects.Allocation{result.Allocation.GetRelease()}, si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+result.Ask.GetAllocationKey())
+				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, []*objects.Allocation{result.Request.GetRelease()}, si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+result.Request.GetAllocationKey())
 			} else {
-				cc.notifyRMNewAllocation(psc.RmID, result.Allocation)
+				cc.notifyRMNewAllocation(psc.RmID, result.Request)
 			}
 			activity = true
 		}
@@ -610,7 +611,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 	err := partition.AddNode(sn, existingAllocations)
 	sn.SendNodeAddedEvent()
 	if err != nil {
-		wrapped := fmt.Errorf("failure while adding new node, node rejected with error: %w", err)
+		wrapped := errors.Join(errors.New("failure while adding new node, node rejected with error: "), err)
 		log.Log(log.SchedContext).Error("Failed to add node to partition (rejected)",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("partitionName", sn.Partition),

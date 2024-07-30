@@ -33,13 +33,13 @@ type reservation struct {
 	// the reservations cannot be removed and scheduling might be impacted.
 	app  *Application
 	node *Node
-	ask  *AllocationAsk
+	ask  *Allocation
 }
 
 // The reservation inside the scheduler. A reservation object is never mutated and does not use locking.
 // The key depends on where the reservation was made (node or app).
 // appBased must be true for a reservation for an app and false for a reservation on a node
-func newReservation(node *Node, app *Application, ask *AllocationAsk, appBased bool) *reservation {
+func newReservation(node *Node, app *Application, ask *Allocation, appBased bool) *reservation {
 	if ask == nil || app == nil || node == nil {
 		log.Log(log.SchedReservation).Warn("Illegal reservation requested: one input is nil",
 			zap.Stringer("node", node),
@@ -61,7 +61,7 @@ func newReservation(node *Node, app *Application, ask *AllocationAsk, appBased b
 	return res
 }
 
-func reservationKey(node *Node, app *Application, ask *AllocationAsk) string {
+func reservationKey(node *Node, app *Application, ask *Allocation) string {
 	if ask == nil || (app == nil && node == nil) || (app != nil && node != nil) {
 		log.Log(log.SchedReservation).Warn("Illegal reservation key requested",
 			zap.Any("node", node),
@@ -103,7 +103,7 @@ func (r *reservation) String() string {
 
 // GetObjects returns the objects that created the reservation.
 // None of the returned values will be nil unless the reservation itself is nil
-func (r *reservation) GetObjects() (*Node, *Application, *AllocationAsk) {
+func (r *reservation) GetObjects() (*Node, *Application, *Allocation) {
 	if r != nil {
 		return r.node, r.app, r.ask
 	}

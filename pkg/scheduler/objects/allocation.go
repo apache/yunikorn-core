@@ -25,123 +25,121 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type AllocationResultType int
-
-const (
-	None AllocationResultType = iota
-	Allocated
-	AllocatedReserved
-	Reserved
-	Unreserved
-	Replaced
-)
-
-func (art AllocationResultType) String() string {
-	return [...]string{"None", "Allocated", "AllocatedReserved", "Reserved", "Unreserved", "Replaced"}[art]
-}
-
-type AllocationResult struct {
-	ResultType     AllocationResultType
-	NodeID         string
-	ReservedNodeID string
-	Ask            *AllocationAsk
-	Allocation     *Allocation
-}
-
-func (ar *AllocationResult) String() string {
-	if ar == nil {
-		return "nil allocation result"
-	}
-	allocationKey := ""
-	if ar.Ask != nil {
-		allocationKey = ar.Ask.GetAllocationKey()
-	}
-	return fmt.Sprintf("resultType=%s, nodeID=%s, reservedNodeID=%s, allocationKey=%s", ar.ResultType.String(), ar.NodeID, ar.ReservedNodeID, allocationKey)
-}
-
 type Allocation struct {
 	// Read-only fields
-	ask               *AllocationAsk
 	allocationKey     string
 	applicationID     string
-	taskGroupName     string // task group this allocation belongs to
-	placeholder       bool   // is this a placeholder allocation
-	originator        bool   // is this an originator allocation
-	nodeID            string
+	taskGroupName     string    // task group this allocation belongs to
+	placeholder       bool      // is this a placeholder allocation
+	createTime        time.Time // the time this allocation was created (used in reservations)
 	priority          int32
+	requiredNode      string
+	allowPreemptSelf  bool
+	allowPreemptOther bool
+	originator        bool
 	tags              map[string]string
 	allocatedResource *resources.Resource
-	createTime        time.Time // the time this allocation was created
+	resKeyWithoutNode string // the reservation key without node
 
 	// Mutable fields which need protection
-	placeholderUsed       bool
-	bindTime              time.Time // the time this allocation was bound to a node
-	placeholderCreateTime time.Time
-	released              bool
-	release               *Allocation
-	preempted             bool
-	instType              string
+	allocated           bool
+	allocLog            map[string]*AllocationLogEntry
+	preemptionTriggered bool
+	preemptCheckTime    time.Time
+	schedulingAttempted bool              // whether scheduler core has tried to schedule this allocation
+	scaleUpTriggered    bool              // whether this aloocation has triggered autoscaling or not
+	resKeyPerNode       map[string]string // reservation key for a given node
+
+	askEvents            *schedEvt.AskEvents
+	userQuotaCheckFailed bool
+	headroomCheckFailed  bool
+
+	// Fields used once an allocation is bound
+	nodeID                string      // the node this allocation is bound to
+	bindTime              time.Time   // the time this allocation was bound to a node
+	placeholderUsed       bool        // whether a placeholder was used for this allocation
+	placeholderCreateTime time.Time   // the time the placeholder was created, if any
+	released              bool        // whether this allocation has been released (for placeholders)
+	release               *Allocation // placeholder to be released for this allocation
+	preempted             bool        // whether this allocation has been marked for preemption
+	instType              string      // the instance type of the node at the time this allocation was bound
 
 	locking.RWMutex
 }
 
-func NewAllocation(nodeID string, ask *AllocationAsk) *Allocation {
+type AllocationLogEntry struct {
+	Message        string
+	LastOccurrence time.Time
+	Count          int32
+}
+
+// NewAllocationAsk creates an Allocation which is not yet satisfied.
+// Visible by tests
+func NewAllocationAsk(allocationKey string, applicationID string, allocatedResource *resources.Resource) *Allocation {
 	return &Allocation{
-		ask:               ask,
-		allocationKey:     ask.GetAllocationKey(),
-		applicationID:     ask.GetApplicationID(),
-		createTime:        ask.GetCreateTime(),
-		bindTime:          time.Now(),
-		nodeID:            nodeID,
-		tags:              ask.GetTagsClone(),
-		priority:          ask.GetPriority(),
-		allocatedResource: ask.GetAllocatedResource().Clone(),
-		taskGroupName:     ask.GetTaskGroup(),
-		placeholder:       ask.IsPlaceholder(),
-		originator:        ask.IsOriginator(),
+		allocationKey:     allocationKey,
+		applicationID:     applicationID,
+		allocatedResource: allocatedResource,
+		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
+		resKeyWithoutNode: reservationKeyWithoutNode(applicationID, allocationKey),
+		askEvents:         schedEvt.NewAskEvents(events.GetEventSystem()),
 	}
 }
 
-// newAllocatedAllocationResult creates a new allocation result for a new allocation.
-func newAllocatedAllocationResult(nodeID string, ask *AllocationAsk, alloc *Allocation) *AllocationResult {
-	return newAllocationResultInternal(Allocated, nodeID, ask, alloc)
-}
-
-// newReservedAllocationResult creates a new allocation result for reserving a node.
-func newReservedAllocationResult(nodeID string, ask *AllocationAsk) *AllocationResult {
-	return newAllocationResultInternal(Reserved, nodeID, ask, nil)
-}
-
-// newUnreservedAllocationResult creates a new allocation result for unreserving a node.
-func newUnreservedAllocationResult(nodeID string, ask *AllocationAsk) *AllocationResult {
-	return newAllocationResultInternal(Unreserved, nodeID, ask, nil)
-}
-
-// newReplacedAllocationResult create a new allocation result for replaced allocations.
-func newReplacedAllocationResult(nodeID string, ask *AllocationAsk, alloc *Allocation) *AllocationResult {
-	return newAllocationResultInternal(Replaced, nodeID, ask, alloc)
-}
-
-// newAllocationResultInternal creates a new allocation result. It should not be called directly.
-func newAllocationResultInternal(resultType AllocationResultType, nodeID string, ask *AllocationAsk, alloc *Allocation) *AllocationResult {
-	return &AllocationResult{
-		ResultType: resultType,
-		NodeID:     nodeID,
-		Ask:        ask,
-		Allocation: alloc,
+// NewAllocationAskFromSI creates an Allocation which is not yet satisfied, populating it from an SI AllocationAsk.
+// If the incoming ask is invalid, nil is returned.
+func NewAllocationAskFromSI(ask *si.AllocationAsk) *Allocation {
+	var createTime time.Time
+	siCreationTime, err := strconv.ParseInt(ask.Tags[siCommon.CreationTime], 10, 64)
+	if err != nil {
+		log.Log(log.SchedAllocation).Debug("CreationTime is not set on the Allocation object or invalid",
+			zap.String("creationTime", ask.Tags[siCommon.CreationTime]))
+		createTime = time.Now()
+	} else {
+		createTime = time.Unix(siCreationTime, 0)
 	}
+
+	a := &Allocation{
+		allocationKey:     ask.AllocationKey,
+		applicationID:     ask.ApplicationID,
+		allocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
+		tags:              CloneAllocationTags(ask.Tags),
+		createTime:        createTime,
+		priority:          ask.Priority,
+		placeholder:       ask.Placeholder,
+		taskGroupName:     ask.TaskGroupName,
+		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
+		allowPreemptSelf:  common.IsAllowPreemptSelf(ask.PreemptionPolicy),
+		allowPreemptOther: common.IsAllowPreemptOther(ask.PreemptionPolicy),
+		originator:        ask.Originator,
+		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
+		resKeyWithoutNode: reservationKeyWithoutNode(ask.ApplicationID, ask.AllocationKey),
+		askEvents:         schedEvt.NewAskEvents(events.GetEventSystem()),
+	}
+	// this is a safety check placeholder and task group name must be set as a combo
+	// order is important as task group can be set without placeholder but not the other way around
+	if a.placeholder && a.taskGroupName == "" {
+		log.Log(log.SchedAllocation).Debug("ask cannot be a placeholder without a TaskGroupName",
+			zap.Stringer("SI ask", ask))
+		return nil
+	}
+	return a
 }
 
-// Create a new Allocation from a node recovered allocation.
-// Also creates an AllocationAsk to maintain backward compatible behaviour
-// This returns a nil Allocation on nil input or errors
+// NewAllocatoinFromSI Create a new Allocation which has already been placed on a node, populating it with info from
+// the SI Allocation object. If the input object is invalid, nil is returned.
 func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	if alloc == nil {
 		return nil
@@ -164,30 +162,32 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		createTime = time.Unix(siCreationTime, 0)
 	}
 
-	ask := &AllocationAsk{
+	return &Allocation{
 		allocationKey:     alloc.AllocationKey,
 		applicationID:     alloc.ApplicationID,
 		allocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
 		tags:              CloneAllocationTags(alloc.AllocationTags),
-		priority:          alloc.Priority,
-		allocated:         true,
-		taskGroupName:     alloc.TaskGroupName,
-		placeholder:       alloc.Placeholder,
 		createTime:        createTime,
-		allocLog:          make(map[string]*AllocationLogEntry),
-		originator:        alloc.Originator,
+		priority:          alloc.Priority,
+		placeholder:       alloc.Placeholder,
+		taskGroupName:     alloc.TaskGroupName,
+		requiredNode:      common.GetRequiredNodeFromTag(alloc.AllocationTags),
 		allowPreemptSelf:  alloc.PreemptionPolicy.GetAllowPreemptSelf(),
 		allowPreemptOther: alloc.PreemptionPolicy.GetAllowPreemptOther(),
+		originator:        alloc.Originator,
+		allocLog:          make(map[string]*AllocationLogEntry),
+		resKeyPerNode:     make(map[string]string),
+		resKeyWithoutNode: reservationKeyWithoutNode(alloc.ApplicationID, alloc.AllocationKey),
+		askEvents:         schedEvt.NewAskEvents(events.GetEventSystem()),
+		allocated:         true,
+		bindTime:          time.Now(),
+		nodeID:            alloc.NodeID,
 	}
-	newAlloc := NewAllocation(alloc.NodeID, ask)
-	newAlloc.allocationKey = alloc.AllocationKey
-	return newAlloc
 }
 
-// Convert the Allocation into a SI object. This is a limited set of values that gets copied into the SI.
-// We only use this to communicate *back* to the RM. All other fields are considered incoming fields from
-// the RM into the core.
-// The limited set of fields link the Allocation to an Application, Node and AllocationAsk.
+// NewSIFromAllocation converts the Allocation into a SI object. This is a limited set of values that gets copied into
+// the SI. This is only used to communicate *back* to the RM. All other fields are considered incoming fields from
+// the RM into the core. The limited set of fields link the Allocation to an Application and Node.
 func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 	if a == nil {
 		return nil
@@ -201,8 +201,8 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 		Placeholder:      a.IsPlaceholder(),
 		Originator:       a.IsOriginator(),
 		PreemptionPolicy: &si.PreemptionPolicy{
-			AllowPreemptSelf:  a.GetAsk().IsAllowPreemptSelf(),
-			AllowPreemptOther: a.GetAsk().IsAllowPreemptOther(),
+			AllowPreemptSelf:  a.IsAllowPreemptSelf(),
+			AllowPreemptOther: a.IsAllowPreemptOther(),
 		},
 	}
 }
@@ -211,152 +211,155 @@ func (a *Allocation) String() string {
 	if a == nil {
 		return "nil allocation"
 	}
-	a.RLock()
-	defer a.RUnlock()
-	return fmt.Sprintf("applicationID=%s, allocationKey=%s, Node=%s", a.applicationID, a.allocationKey, a.nodeID)
+	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, Allocated %t", a.allocationKey, a.applicationID, a.allocatedResource, a.IsAllocated())
 }
 
-// GetAsk returns the ask associated with this allocation
-func (a *Allocation) GetAsk() *AllocationAsk {
-	return a.ask
-}
-
-// GetAllocationKey returns the allocation key of this allocation
+// GetAllocationKey returns the allocation key for this allocation.
 func (a *Allocation) GetAllocationKey() string {
 	return a.allocationKey
 }
 
-// GetApplicationID returns the application ID for this allocation
+// GetApplicationID returns the application ID for this allocation.
 func (a *Allocation) GetApplicationID() string {
 	return a.applicationID
 }
 
-// GetTaskGroup returns the task group name for this allocation
+// GetTaskGroup returns the task group name for this allocation.
 func (a *Allocation) GetTaskGroup() string {
 	return a.taskGroupName
 }
 
-// GetCreateTime returns the time this allocation was created
+// GetCreateTime returns the time this allocation was created.
 func (a *Allocation) GetCreateTime() time.Time {
 	return a.createTime
 }
 
-// GetBindTime returns the time this allocation was created
+// GetBindTime returns the time this allocation was bound.
 func (a *Allocation) GetBindTime() time.Time {
 	a.RLock()
 	defer a.RUnlock()
 	return a.bindTime
 }
 
+// SetBindTime sets the time this allocation was bound.
 func (a *Allocation) SetBindTime(bindTime time.Time) {
 	a.Lock()
 	defer a.Unlock()
 	a.bindTime = bindTime
 }
 
-// IsPlaceholderUsed returns whether this alloc is replacing a placeholder
+// IsPlaceholderUsed returns whether this allocation is replacing a placeholder.
 func (a *Allocation) IsPlaceholderUsed() bool {
 	a.RLock()
 	defer a.RUnlock()
 	return a.placeholderUsed
 }
 
-// SetPlaceholderUsed sets whether this alloc is replacing a placeholder
+// SetPlaceholderUsed sets whether this allocation is replacing a placeholder.
 func (a *Allocation) SetPlaceholderUsed(placeholderUsed bool) {
 	a.Lock()
 	defer a.Unlock()
 	a.placeholderUsed = placeholderUsed
 }
 
-// GetPlaceholderCreateTime returns the placeholder's create time for this alloc, if applicable
+// GetPlaceholderCreateTime returns the placeholder's create time for this allocation, if applicable.
 func (a *Allocation) GetPlaceholderCreateTime() time.Time {
 	a.RLock()
 	defer a.RUnlock()
 	return a.placeholderCreateTime
 }
 
-// SetPlaceholderCreateTime updates the placeholder's creation time
+// SetPlaceholderCreateTime updates the placeholder's creation time.
 func (a *Allocation) SetPlaceholderCreateTime(placeholderCreateTime time.Time) {
 	a.Lock()
 	defer a.Unlock()
 	a.placeholderCreateTime = placeholderCreateTime
 }
 
-// IsPlaceholder returns whether the allocation is a placeholder
+// IsPlaceholder returns whether this allocation represents a placeholder.
 func (a *Allocation) IsPlaceholder() bool {
 	return a.placeholder
 }
 
-// IsOriginator returns whether the allocation is an originator
+// IsOriginator returns whether this alloocation is the originator for the application.
 func (a *Allocation) IsOriginator() bool {
 	return a.originator
 }
 
-// GetNodeID gets the node this allocation is assigned to
+// GetNodeID gets the node this allocation is assigned to.
 func (a *Allocation) GetNodeID() string {
+	a.RLock()
+	defer a.RUnlock()
 	return a.nodeID
 }
 
-// SetInstanceType sets node instance type for this allocation
+// SetNodeID sets the node this allocation is assigned to.
+func (a *Allocation) SetNodeID(nodeID string) {
+	a.Lock()
+	defer a.Unlock()
+	a.nodeID = nodeID
+}
+
+// SetInstanceType sets node instance type for this allocation.
 func (a *Allocation) SetInstanceType(instType string) {
 	a.Lock()
 	defer a.Unlock()
 	a.instType = instType
 }
 
-// GetInstanceType return the type of the instance used by this allocation
+// GetInstanceType return the type of the instance used by this allocation.
 func (a *Allocation) GetInstanceType() string {
 	a.RLock()
 	defer a.RUnlock()
 	return a.instType
 }
 
-// GetPriority returns the priority of this allocation
+// GetPriority returns the priority of this allocation.
 func (a *Allocation) GetPriority() int32 {
 	return a.priority
 }
 
-// IsReleased returns the release status of the allocation
+// IsReleased returns the release status of the allocation.
 func (a *Allocation) IsReleased() bool {
 	a.RLock()
 	defer a.RUnlock()
 	return a.released
 }
 
-// SetReleased updates the release status of the allocation
+// SetReleased updates the release status of the allocation.
 func (a *Allocation) SetReleased(released bool) {
 	a.Lock()
 	defer a.Unlock()
 	a.released = released
 }
 
-// GetTagsClone returns the copy of the tags for this allocation
+// GetTagsClone returns the copy of the tags for this allocation.
 func (a *Allocation) GetTagsClone() map[string]string {
 	return CloneAllocationTags(a.tags)
 }
 
-// GetRelease returns the associated release for this allocation
+// GetRelease returns the associated release for this allocation.
 func (a *Allocation) GetRelease() *Allocation {
 	a.RLock()
 	defer a.RUnlock()
 	return a.release
 }
 
-// SetRelease sets the release for this allocation
+// SetRelease sets the release for this allocation.
 func (a *Allocation) SetRelease(release *Allocation) {
 	a.Lock()
 	defer a.Unlock()
 	a.release = release
 }
 
-// ClearRelease removes all releases from this allocation
+// ClearRelease removes any release from this allocation.
 func (a *Allocation) ClearRelease() {
 	a.Lock()
 	defer a.Unlock()
 	a.release = nil
 }
 
-// HasRelease determines if this allocation has an associated release
+// HasRelease determines if this allocation has an associated release.
 func (a *Allocation) HasRelease() bool {
 	a.RLock()
 	defer a.RUnlock()
@@ -382,11 +385,228 @@ func (a *Allocation) IsPreempted() bool {
 	return a.preempted
 }
 
-// CloneAllocationTags clones a tag map for safe copying
+// CloneAllocationTags clones a tag map for safe copying.
 func CloneAllocationTags(tags map[string]string) map[string]string {
 	result := make(map[string]string)
 	for k, v := range tags {
 		result[k] = v
 	}
 	return result
+}
+
+// allocate marks this request as allocated and returns true if successful. A request may not be allocated multiple times.
+func (a *Allocation) allocate() bool {
+	a.Lock()
+	defer a.Unlock()
+
+	if a.allocated {
+		return false
+	}
+	a.allocated = true
+	return true
+}
+
+// deallocate marks this request as pending and returns true if successful. A request may not be deallocated multiple times.
+func (a *Allocation) deallocate() bool {
+	a.Lock()
+	defer a.Unlock()
+
+	if !a.allocated {
+		return false
+	}
+	a.allocated = false
+	return true
+}
+
+// IsAllocated determines if this request has been allocated yet.
+func (a *Allocation) IsAllocated() bool {
+	a.RLock()
+	defer a.RUnlock()
+	return a.allocated
+}
+
+// GetPreemptCheckTime returns the time this allocation was last evaluated for preemption.
+func (a *Allocation) GetPreemptCheckTime() time.Time {
+	a.RLock()
+	defer a.RUnlock()
+	return a.preemptCheckTime
+}
+
+// UpdatePreemptCheckTime is used to mark when this allocation is evaluated for preemption.
+func (a *Allocation) UpdatePreemptCheckTime() {
+	a.Lock()
+	defer a.Unlock()
+	a.preemptCheckTime = time.Now()
+}
+
+// GetRequiredNode gets the node (if any) required by this allocation.
+func (a *Allocation) GetRequiredNode() string {
+	return a.requiredNode
+}
+
+// SetRequiredNode sets the required node (used only by testing so lock is not taken)
+func (a *Allocation) SetRequiredNode(node string) {
+	a.requiredNode = node
+}
+
+// IsAllowPreemptSelf returns whether preemption is allowed for this allocation.
+func (a *Allocation) IsAllowPreemptSelf() bool {
+	return a.allowPreemptSelf
+}
+
+// IsAllowPreemptOther returns whether this allocation is allowed to preempt others.
+func (a *Allocation) IsAllowPreemptOther() bool {
+	return a.allowPreemptOther
+}
+
+// GetTag returns the value of a named tag or an empty string if not present.
+func (a *Allocation) GetTag(tagName string) string {
+	result, ok := a.tags[tagName]
+	if !ok {
+		return ""
+	}
+	return result
+}
+
+// LogAllocationFailure keeps track of preconditions not being met for an allocation.
+func (a *Allocation) LogAllocationFailure(message string, allocate bool) {
+	// for now, don't log reservations
+	if !allocate {
+		return
+	}
+
+	a.Lock()
+	defer a.Unlock()
+
+	entry, ok := a.allocLog[message]
+	if !ok {
+		entry = &AllocationLogEntry{
+			Message: message,
+		}
+		a.allocLog[message] = entry
+	}
+	entry.LastOccurrence = time.Now()
+	entry.Count++
+}
+
+// SendPredicateFailedEvent updates the event system with the reason for a predicate failure.
+func (a *Allocation) SendPredicateFailedEvent(message string) {
+	a.askEvents.SendPredicateFailed(a.allocationKey, a.applicationID, message, a.GetAllocatedResource())
+}
+
+// GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met.
+func (a *Allocation) GetAllocationLog() []*AllocationLogEntry {
+	a.RLock()
+	defer a.RUnlock()
+
+	res := make([]*AllocationLogEntry, len(a.allocLog))
+	i := 0
+	for _, entry := range a.allocLog {
+		res[i] = &AllocationLogEntry{
+			Message:        entry.Message,
+			LastOccurrence: entry.LastOccurrence,
+			Count:          entry.Count,
+		}
+		i++
+	}
+	return res
+}
+
+// MarkTriggeredPreemption marks the current allocation because it triggered preemption during scheduling.
+func (a *Allocation) MarkTriggeredPreemption() {
+	a.Lock()
+	defer a.Unlock()
+	a.preemptionTriggered = true
+}
+
+// HasTriggeredPreemption returns whether this allocation has triggered preemption.
+func (a *Allocation) HasTriggeredPreemption() bool {
+	a.RLock()
+	defer a.RUnlock()
+	return a.preemptionTriggered
+}
+
+// LessThan compares two allocations by priority and then creation time.
+func (a *Allocation) LessThan(other *Allocation) bool {
+	if a.priority == other.priority {
+		return a.createTime.After(other.createTime) || a.createTime.Equal(other.createTime)
+	}
+
+	return a.priority < other.priority
+}
+
+// SetSchedulingAttempted marks whether scheduling has been attempted at least once for this allocation.
+func (a *Allocation) SetSchedulingAttempted(attempted bool) {
+	a.Lock()
+	defer a.Unlock()
+	a.schedulingAttempted = attempted
+}
+
+// IsSchedulingAttempted determines whether scheduling has been attempted at least once for this allocation.
+func (a *Allocation) IsSchedulingAttempted() bool {
+	a.RLock()
+	defer a.RUnlock()
+	return a.schedulingAttempted
+}
+
+// SetScaleUpTriggered marks this allocation as having triggered the autoscaler.
+func (a *Allocation) SetScaleUpTriggered(triggered bool) {
+	a.Lock()
+	defer a.Unlock()
+	a.scaleUpTriggered = triggered
+}
+
+// HasTriggeredScaleUp determines if this allocation has triggered auto-scaling.
+func (a *Allocation) HasTriggeredScaleUp() bool {
+	a.RLock()
+	defer a.RUnlock()
+	return a.scaleUpTriggered
+}
+
+func (a *Allocation) setReservationKeyForNode(node, resKey string) {
+	a.Lock()
+	defer a.Unlock()
+	a.resKeyPerNode[node] = resKey
+}
+
+func (a *Allocation) getReservationKeyForNode(node string) string {
+	a.RLock()
+	defer a.RUnlock()
+	return a.resKeyPerNode[node]
+}
+
+func (a *Allocation) setHeadroomCheckFailed(headroom *resources.Resource, queue string) {
+	a.Lock()
+	defer a.Unlock()
+	if !a.headroomCheckFailed {
+		a.headroomCheckFailed = true
+		a.askEvents.SendRequestExceedsQueueHeadroom(a.allocationKey, a.applicationID, headroom, a.allocatedResource, queue)
+	}
+}
+
+func (a *Allocation) setHeadroomCheckPassed(queue string) {
+	a.Lock()
+	defer a.Unlock()
+	if a.headroomCheckFailed {
+		a.headroomCheckFailed = false
+		a.askEvents.SendRequestFitsInQueue(a.allocationKey, a.applicationID, queue, a.allocatedResource)
+	}
+}
+
+func (a *Allocation) setUserQuotaCheckFailed(available *resources.Resource) {
+	a.Lock()
+	defer a.Unlock()
+	if !a.userQuotaCheckFailed {
+		a.userQuotaCheckFailed = true
+		a.askEvents.SendRequestExceedsUserQuota(a.allocationKey, a.applicationID, available, a.allocatedResource)
+	}
+}
+
+func (a *Allocation) setUserQuotaCheckPassed() {
+	a.Lock()
+	defer a.Unlock()
+	if a.userQuotaCheckFailed {
+		a.userQuotaCheckFailed = false
+		a.askEvents.SendRequestFitsInUserQuota(a.allocationKey, a.applicationID, a.allocatedResource)
+	}
 }

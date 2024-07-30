@@ -28,7 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/events"
 )
 
-// AskEvents Ask-specific events. These events are of REQUEST type, so they are eventually sent to the respective pods in K8s.
+// AskEvents Request-specific events. These events are of REQUEST type, so they are eventually sent to the respective pods in K8s.
 type AskEvents struct {
 	eventSystem events.EventSystem
 	limiter     *rate.Limiter

@@ -205,7 +205,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 
 	// add orphan allocation to a node
 	node := schedulerContext.partitions[partName].nodes.GetNode("node")
-	alloc := objects.NewAllocation("node", newAllocationAsk("key", "appID", resources.NewResource()))
+	alloc := markAllocated("node", newAllocationAsk("key", "appID", resources.NewResource()))
 	node.AddAllocation(alloc)
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")

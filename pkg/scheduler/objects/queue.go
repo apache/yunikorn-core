@@ -125,7 +125,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 
 	// update the properties
 	if err := sq.applyConf(conf); err != nil {
-		return nil, fmt.Errorf("configured queue creation failed: %w", err)
+		return nil, errors.Join(errors.New("configured queue creation failed: "), err)
 	}
 
 	// add to the parent, we might have an overall lock already
@@ -137,7 +137,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 		err := parent.addChildQueue(sq)
 		if err != nil {
-			return nil, fmt.Errorf("configured queue creation failed: %w", err)
+			return nil, errors.Join(errors.New("configured queue creation failed: "), err)
 		}
 	} else {
 		sq.UpdateQueueProperties()
@@ -199,7 +199,7 @@ func newDynamicQueueInternal(name string, leaf bool, parent *Queue) (*Queue, err
 	// still need to make sure we lock the parent so we do not interfere with scheduling
 	err := parent.addChildQueue(sq)
 	if err != nil {
-		return nil, fmt.Errorf("dynamic queue creation failed: %w", err)
+		return nil, errors.Join(errors.New("dynamic queue creation failed: "), err)
 	}
 
 	sq.UpdateQueueProperties()
@@ -1346,7 +1346,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("resultType", result.ResultType),
-					zap.Stringer("allocation", result.Allocation))
+					zap.Stringer("allocation", result.Request))
 				// if the app is still in Accepted state we're allocating placeholders.
 				// we want to count these apps as running
 				if app.IsAccepted() {
@@ -1383,7 +1383,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("resultType", result.ResultType),
-					zap.Stringer("allocation", result.Allocation))
+					zap.Stringer("allocation", result.Request))
 				return result
 			}
 		}
@@ -1400,7 +1400,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 }
 
 // GetQueueOutstandingRequests builds a slice of pending allocation asks that fits into the queue's headroom.
-func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
+func (sq *Queue) GetQueueOutstandingRequests(total *[]*Allocation) {
 	if sq.IsLeafQueue() {
 		headRoom := sq.getMaxHeadRoom()
 		// while calculating outstanding requests, we calculate all the requests that can fit into the queue's headroom,
@@ -1453,7 +1453,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *AllocationRe
 						zap.String("queueName", sq.QueuePath),
 						zap.String("appID", appID),
 						zap.Stringer("resultType", result.ResultType),
-						zap.Stringer("allocation", result.Allocation),
+						zap.Stringer("allocation", result.Request),
 						zap.String("appStatus", app.CurrentState()))
 					// if the app is still in Accepted state we're allocating placeholders.
 					// we want to count these apps as running
@@ -1699,7 +1699,7 @@ func (sq *Queue) SetMaxRunningApps(max int) {
 // queuePath is the fully-qualified path of the queue where ask resides
 // ask is the ask we are attempting to preempt for
 // return is a map of potential victims keyed by queue path
-func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *AllocationAsk) map[string]*QueuePreemptionSnapshot {
+func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation) map[string]*QueuePreemptionSnapshot {
 	results := make(map[string]*QueuePreemptionSnapshot)
 	priorityMap := make(map[string]int64)
 
@@ -1751,7 +1751,7 @@ func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnaps
 	return snapshot
 }
 
-func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreemptionSnapshot, queuePath string, ask *AllocationAsk, priorityMap map[string]int64, askPriority int64, fenced bool) {
+func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreemptionSnapshot, queuePath string, ask *Allocation, priorityMap map[string]int64, askPriority int64, fenced bool) {
 	if sq == nil {
 		return
 	}
@@ -1785,7 +1785,7 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 				}
 
 				// skip tasks which require a specific node
-				if alloc.GetAsk().GetRequiredNode() != "" {
+				if alloc.GetRequiredNode() != "" {
 					continue
 				}
 

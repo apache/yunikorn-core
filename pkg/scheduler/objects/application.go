@@ -84,13 +84,13 @@ type Application struct {
 
 	// Private mutable fields need protection
 	queuePath         string
-	queue             *Queue                    // queue the application is running in
-	pending           *resources.Resource       // pending resources from asks for the app
-	reservations      map[string]*reservation   // a map of reservations
-	requests          map[string]*AllocationAsk // a map of asks
-	sortedRequests    sortedRequests            // list of requests pre-sorted
-	user              security.UserGroup        // owner of the application
-	allocatedResource *resources.Resource       // total allocated resources
+	queue             *Queue                  // queue the application is running in
+	pending           *resources.Resource     // pending resources from asks for the app
+	reservations      map[string]*reservation // a map of reservations
+	requests          map[string]*Allocation  // a map of allocations, pending or satisfied
+	sortedRequests    sortedRequests          // list of requests pre-sorted
+	user              security.UserGroup      // owner of the application
+	allocatedResource *resources.Resource     // total allocated resources
 
 	usedResource        *resources.TrackedResource // keep track of resource usage of the application
 	preemptedResource   *resources.TrackedResource // keep track of preempted resource usage of the application
@@ -98,7 +98,7 @@ type Application struct {
 
 	maxAllocatedResource *resources.Resource         // max allocated resources
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
-	allocations          map[string]*Allocation      // list of all allocations
+	allocations          map[string]*Allocation      // list of all satisfied allocations
 	placeholderAsk       *resources.Resource         // total placeholder request for the app (all task groups)
 	stateMachine         *fsm.FSM                    // application state machine
 	stateTimer           *time.Timer                 // timer for state time
@@ -161,7 +161,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		placeholderResource:   resources.NewTrackedResource(),
 		maxAllocatedResource:  resources.NewResource(),
 		allocatedPlaceholder:  resources.NewResource(),
-		requests:              make(map[string]*AllocationAsk),
+		requests:              make(map[string]*Allocation),
 		reservations:          make(map[string]*reservation),
 		allocations:           make(map[string]*Allocation),
 		stateMachine:          NewAppState(),
@@ -476,7 +476,7 @@ func (sa *Application) GetReservations() []string {
 }
 
 // Return the allocation ask for the key, nil if not found
-func (sa *Application) GetAllocationAsk(allocationKey string) *AllocationAsk {
+func (sa *Application) GetAllocationAsk(allocationKey string) *Allocation {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.requests[allocationKey]
@@ -556,7 +556,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 		for _, ask := range sa.requests {
 			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.allocatedResource, detail)
 		}
-		sa.requests = make(map[string]*AllocationAsk)
+		sa.requests = make(map[string]*Allocation)
 		sa.sortedRequests = sortedRequests{}
 		sa.askMaxPriority = configs.MinPriority
 		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
@@ -615,7 +615,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 
 // Add an allocation ask to this application
 // If the ask already exist update the existing info
-func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
+func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	sa.Lock()
 	defer sa.Unlock()
 	if ask == nil {
@@ -661,17 +661,16 @@ func (sa *Application) AddAllocationAsk(ask *AllocationAsk) error {
 	return nil
 }
 
-// Add the ask when a node allocation is recovered. Maintaining the rule that an Allocation always has a
-// link to an AllocationAsk.
+// Add the ask when a node allocation is recovered.
 // Safeguarded against a nil but the recovery generates the ask and should never be nil.
-func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
+func (sa *Application) RecoverAllocationAsk(alloc *Allocation) {
 	sa.Lock()
 	defer sa.Unlock()
-	if ask == nil {
+	if alloc == nil {
 		return
 	}
 
-	sa.addAllocationAskInternal(ask)
+	sa.addAllocationAskInternal(alloc)
 
 	// progress the application from New to Accepted.
 	if sa.IsNew() {
@@ -682,7 +681,7 @@ func (sa *Application) RecoverAllocationAsk(ask *AllocationAsk) {
 	}
 }
 
-func (sa *Application) addAllocationAskInternal(ask *AllocationAsk) {
+func (sa *Application) addAllocationAskInternal(ask *Allocation) {
 	sa.requests[ask.GetAllocationKey()] = ask
 
 	// update app priority
@@ -716,7 +715,7 @@ func (sa *Application) DeallocateAsk(allocKey string) (*resources.Resource, erro
 	return nil, fmt.Errorf("failed to locate ask with key %s", allocKey)
 }
 
-func (sa *Application) allocateAsk(ask *AllocationAsk) (*resources.Resource, error) {
+func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error) {
 	if !ask.allocate() {
 		return nil, fmt.Errorf("unable to allocate previously allocated ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
 	}
@@ -734,7 +733,7 @@ func (sa *Application) allocateAsk(ask *AllocationAsk) (*resources.Resource, err
 	return delta, nil
 }
 
-func (sa *Application) deallocateAsk(ask *AllocationAsk) (*resources.Resource, error) {
+func (sa *Application) deallocateAsk(ask *Allocation) (*resources.Resource, error) {
 	if !ask.deallocate() {
 		return nil, fmt.Errorf("unable to deallocate pending ask %s on app %s", ask.GetAllocationKey(), sa.ApplicationID)
 	}
@@ -782,7 +781,7 @@ func (sa *Application) IsReservedOnNode(nodeID string) bool {
 // Reserve the application for this node and ask combination.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
 // If the node and ask combination was already reserved for the application this is a noop and returns true.
-func (sa *Application) Reserve(node *Node, ask *AllocationAsk) error {
+func (sa *Application) Reserve(node *Node, ask *Allocation) error {
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.reserveInternal(node, ask)
@@ -790,7 +789,7 @@ func (sa *Application) Reserve(node *Node, ask *AllocationAsk) error {
 
 // Unlocked version for Reserve that really does the work.
 // Must only be called while holding the application lock.
-func (sa *Application) reserveInternal(node *Node, ask *AllocationAsk) error {
+func (sa *Application) reserveInternal(node *Node, ask *Allocation) error {
 	// create the reservation (includes nil checks)
 	nodeReservation := newReservation(node, sa, ask, true)
 	if nodeReservation == nil {
@@ -830,7 +829,7 @@ func (sa *Application) reserveInternal(node *Node, ask *AllocationAsk) error {
 // This first removes the reservation from the node.
 // If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
 // The error is set if the reservation key cannot be removed from the app or node.
-func (sa *Application) UnReserve(node *Node, ask *AllocationAsk) (int, error) {
+func (sa *Application) UnReserve(node *Node, ask *Allocation) (int, error) {
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.unReserveInternal(node, ask)
@@ -838,7 +837,7 @@ func (sa *Application) UnReserve(node *Node, ask *AllocationAsk) (int, error) {
 
 // Unlocked version for UnReserve that really does the work.
 // Must only be called while holding the application lock.
-func (sa *Application) unReserveInternal(node *Node, ask *AllocationAsk) (int, error) {
+func (sa *Application) unReserveInternal(node *Node, ask *Allocation) (int, error) {
 	resKey := reservationKey(node, nil, ask)
 	if resKey == "" {
 		log.Log(log.SchedApplication).Debug("unreserve reservation key create failed unexpectedly",
@@ -894,7 +893,7 @@ func (sa *Application) GetAskReservations(allocKey string) []string {
 
 // Check if the allocation has already been reserved. An ask can never reserve more than one node.
 // No locking must be called while holding the lock
-func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
+func (sa *Application) canAskReserve(ask *Allocation) bool {
 	allocKey := ask.GetAllocationKey()
 	if ask.IsAllocated() {
 		log.Log(log.SchedApplication).Debug("ask already allocated, no reservation allowed",
@@ -909,7 +908,7 @@ func (sa *Application) canAskReserve(ask *AllocationAsk) bool {
 	return true
 }
 
-func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*AllocationAsk) {
+func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*Allocation) {
 	sa.RLock()
 	defer sa.RUnlock()
 	if sa.sortedRequests == nil {
@@ -934,7 +933,7 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 
 // canReplace returns true if there is a placeholder for the task group available for the request.
 // False for all other cases. Placeholder replacements are handled separately from normal allocations.
-func (sa *Application) canReplace(request *AllocationAsk) bool {
+func (sa *Application) canReplace(request *Allocation) bool {
 	// a placeholder or a request without task group can never replace a placeholder
 	if request == nil || request.IsPlaceholder() || request.GetTaskGroup() == "" {
 		return false
@@ -1117,7 +1116,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	}
 	// keep the first fits for later
 	var phFit *Allocation
-	var reqFit *AllocationAsk
+	var reqFit *Allocation
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
 		// skip placeholders they follow standard allocation
@@ -1160,22 +1159,23 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one at this point
 			if node != nil && node.preReserveConditions(request) == nil {
-				alloc := NewAllocation(node.NodeID, request)
-				// double link to make it easier to find
-				// alloc (the real one) releases points to the placeholder in the releases list
-				alloc.SetRelease(ph)
-				// placeholder point to the real one in the releases list
-				ph.SetRelease(alloc)
-
-				result := newReplacedAllocationResult(node.NodeID, request, alloc)
-				// mark placeholder as released
-				ph.SetReleased(true)
 				_, err := sa.allocateAsk(request)
 				if err != nil {
 					log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
 						zap.Error(err))
 				}
-				return result
+				// double link to make it easier to find
+				// alloc (the real one) releases points to the placeholder in the releases list
+				request.SetRelease(ph)
+				// placeholder point to the real one in the releases list
+				ph.SetRelease(request)
+				// mark placeholder as released
+				ph.SetReleased(true)
+				// bind node here so it will be handled properly upon replacement
+				request.SetBindTime(time.Now())
+				request.SetNodeID(node.NodeID)
+				request.SetInstanceType(node.GetInstanceType())
+				return newReplacedAllocationResult(node.NodeID, request)
 			}
 		}
 	}
@@ -1202,19 +1202,9 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if err := node.preAllocateConditions(reqFit); err != nil {
 				return true
 			}
-			// allocation worked: on a non placeholder node update resultType and return
-			alloc := NewAllocation(node.NodeID, reqFit)
-			// double link to make it easier to find
-			// alloc (the real one) releases points to the placeholder in the releases list
-			alloc.SetRelease(phFit)
-			// placeholder point to the real one in the releases list
-			phFit.SetRelease(alloc)
-			result := newReplacedAllocationResult(node.NodeID, reqFit, alloc)
-			// mark placeholder as released
-			phFit.SetReleased(true)
 			// update just the node to make sure we keep its spot
 			// no queue update as we're releasing the placeholder and are just temp over the size
-			if !node.AddAllocation(alloc) {
+			if !node.AddAllocation(reqFit) {
 				log.Log(log.SchedApplication).Debug("Node update failed unexpectedly",
 					zap.String("applicationID", sa.ApplicationID),
 					zap.Stringer("ask", reqFit),
@@ -1225,7 +1215,23 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if err != nil {
 				log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
 					zap.Error(err))
+				// unwind node allocation
+				_ = node.RemoveAllocation(reqFit.GetAllocationKey())
+				return false
 			}
+			// allocation worked: on a non placeholder node update resultType and return
+			// double link to make it easier to find
+			// alloc (the real one) releases points to the placeholder in the releases list
+			reqFit.SetRelease(phFit)
+			// placeholder point to the real one in the releases list
+			phFit.SetRelease(reqFit)
+			// mark placeholder as released
+			phFit.SetReleased(true)
+			// bind node here so it will be handled properly upon replacement
+			reqFit.SetBindTime(time.Now())
+			reqFit.SetNodeID(node.NodeID)
+			reqFit.SetInstanceType(node.GetInstanceType())
+			result := newReplacedAllocationResult(node.NodeID, reqFit)
 
 			allocResult = result
 			return false
@@ -1236,7 +1242,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 }
 
 // check ask against both user headRoom and queue headRoom
-func (sa *Application) checkHeadRooms(ask *AllocationAsk, userHeadroom *resources.Resource, headRoom *resources.Resource) bool {
+func (sa *Application) checkHeadRooms(ask *Allocation, userHeadroom *resources.Resource, headRoom *resources.Resource) bool {
 	// check if this fits in the users' headroom first, if that fits check the queues' headroom
 	return userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) && headRoom.FitInMaxUndef(ask.GetAllocatedResource())
 }
@@ -1253,10 +1259,10 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		ask := sa.requests[reserve.askKey]
 		// sanity check and cleanup if needed
 		if ask == nil || ask.IsAllocated() {
-			var unreserveAsk *AllocationAsk
+			var unreserveAsk *Allocation
 			// if the ask was not found we need to construct one to unreserve
 			if ask == nil {
-				unreserveAsk = &AllocationAsk{
+				unreserveAsk = &Allocation{
 					allocationKey: reserve.askKey,
 					applicationID: sa.ApplicationID,
 					allocLog:      make(map[string]*AllocationLogEntry),
@@ -1312,7 +1318,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	return nil
 }
 
-func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDelay time.Duration, ask *AllocationAsk, iterator NodeIterator, nodesTried bool) (*AllocationResult, bool) {
+func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDelay time.Duration, ask *Allocation, iterator NodeIterator, nodesTried bool) (*AllocationResult, bool) {
 	preemptor := NewPreemptor(sa, headRoom, preemptionDelay, ask, iterator, nodesTried)
 
 	// validate prerequisites for preemption of an ask and mark ask for preemption if successful
@@ -1328,7 +1334,7 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 	return preemptor.TryPreemption()
 }
 
-func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *AllocationAsk) bool {
+func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allocation) bool {
 	log.Log(log.SchedApplication).Info("Triggering preemption process for daemon set ask",
 		zap.String("ds allocation key", ask.GetAllocationKey()))
 
@@ -1362,7 +1368,7 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 
 // Try all the nodes for a reserved request that have not been tried yet.
 // This should never result in a reservation as the ask is already reserved
-func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterator, reservedNode string) *AllocationResult {
+func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator, reservedNode string) *AllocationResult {
 	var allocResult *AllocationResult
 	iterator.ForEachNode(func(node *Node) bool {
 		if !node.IsSchedulable() {
@@ -1393,7 +1399,7 @@ func (sa *Application) tryNodesNoReserve(ask *AllocationAsk, iterator NodeIterat
 
 // Try all the nodes for a request. The resultType is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *AllocationResult {
+func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *AllocationResult {
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
 	// check if the ask is reserved or not
@@ -1500,7 +1506,7 @@ func (sa *Application) tryNodes(ask *AllocationAsk, iterator NodeIterator) *Allo
 }
 
 // Try allocating on one specific node
-func (sa *Application) tryNode(node *Node, ask *AllocationAsk) (*AllocationResult, error) {
+func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, error) {
 	toAllocate := ask.GetAllocatedResource()
 	// create the key for the reservation
 	if !node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask)) {
@@ -1513,13 +1519,12 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) (*AllocationResul
 	}
 
 	// everything OK really allocate
-	alloc := NewAllocation(node.NodeID, ask)
-	if node.AddAllocation(alloc) {
-		if err := sa.queue.IncAllocatedResource(alloc.GetAllocatedResource(), false); err != nil {
+	if node.AddAllocation(ask) {
+		if err := sa.queue.IncAllocatedResource(ask.GetAllocatedResource(), false); err != nil {
 			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
-			node.RemoveAllocation(alloc.GetAllocationKey())
+			node.RemoveAllocation(ask.GetAllocationKey())
 			return nil, nil
 		}
 		// mark this ask as allocated
@@ -1529,8 +1534,8 @@ func (sa *Application) tryNode(node *Node, ask *AllocationAsk) (*AllocationResul
 				zap.Error(err))
 		}
 		// all is OK, last update for the app
-		result := newAllocatedAllocationResult(node.NodeID, ask, alloc)
-		sa.addAllocationInternal(result.ResultType, alloc)
+		result := newAllocatedAllocationResult(node.NodeID, ask)
+		sa.addAllocationInternal(result.ResultType, ask)
 		return result, nil
 	}
 	return nil, nil
@@ -1615,14 +1620,14 @@ func (sa *Application) getPlaceholderAllocations() []*Allocation {
 }
 
 // GetAllRequests returns a copy of all requests of the application
-func (sa *Application) GetAllRequests() []*AllocationAsk {
+func (sa *Application) GetAllRequests() []*Allocation {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.getAllRequestsInternal()
 }
 
-func (sa *Application) getAllRequestsInternal() []*AllocationAsk {
-	var requests []*AllocationAsk
+func (sa *Application) getAllRequestsInternal() []*Allocation {
+	var requests []*Allocation
 	for _, req := range sa.requests {
 		requests = append(requests, req)
 	}
@@ -1981,7 +1986,7 @@ func (sa *Application) notifyRMAllocationReleased(released []*Allocation, termin
 // notifyRMAllocationAskReleased send an ask release event to the RM to if the event handler is configured
 // and at least one ask has been released.
 // No locking must be called while holding the lock
-func (sa *Application) notifyRMAllocationAskReleased(released []*AllocationAsk, terminationType si.TerminationType, message string) {
+func (sa *Application) notifyRMAllocationAskReleased(released []*Allocation, terminationType si.TerminationType, message string) {
 	// only generate event if needed
 	if len(released) == 0 || sa.rmEventHandler == nil {
 		return
@@ -2015,7 +2020,7 @@ func (sa *Application) GetRejectedMessage() string {
 	return sa.rejectedMessage
 }
 
-func (sa *Application) addPlaceholderData(ask *AllocationAsk) {
+func (sa *Application) addPlaceholderData(ask *Allocation) {
 	if sa.placeholderData == nil {
 		sa.placeholderData = make(map[string]*PlaceholderData)
 	}
@@ -2046,7 +2051,7 @@ func (sa *Application) GetAskMaxPriority() int32 {
 }
 
 func (sa *Application) cleanupAsks() {
-	sa.requests = make(map[string]*AllocationAsk)
+	sa.requests = make(map[string]*Allocation)
 	sa.sortedRequests = nil
 }
 

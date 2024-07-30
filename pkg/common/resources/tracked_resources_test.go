@@ -23,6 +23,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"gotest.tools/v3/assert"
 )
 
 func CheckLenOfTrackedResource(res *TrackedResource, expected int) (bool, string) {
@@ -253,12 +255,11 @@ func TestEqualsTracked(t *testing.T) {
 				compare = NewTrackedResourceFromMap(tt.input.compare)
 			}
 
-			if result := EqualsTracked(base, compare); result != tt.expected {
-				t.Errorf("Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, base, compare)
-			}
-			if result := EqualsTracked(compare, base); result != tt.expected {
-				t.Errorf("Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, compare, base)
-			}
+			result := EqualsTracked(base, compare)
+			assert.Assert(t, result == tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, base, compare)
+
+			result = EqualsTracked(compare, base)
+			assert.Assert(t, result == tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, compare, base)
 		})
 	}
 }

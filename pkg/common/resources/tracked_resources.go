@@ -113,25 +113,21 @@ func EqualsTracked(left, right *TrackedResource) bool {
 		return false
 	}
 
-	equals := true
 	for k, v := range left.TrackedResourceMap {
 		inner, ok := right.TrackedResourceMap[k]
 		if !ok {
 			return false
 		}
 
-		equals = equals && equalsMapContents(v, inner)
+		if !equalsMapContents(v, inner) {
+			return false
+		}
 	}
 
-	return equals
+	return true
 }
 
-// basically the same as Equals()
 func equalsMapContents(left, right map[string]int64) bool {
-	if left == nil || right == nil { // probably this is not needed
-		return false
-	}
-
 	for k, v := range left {
 		if right[k] != v {
 			return false

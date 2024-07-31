@@ -1924,17 +1924,18 @@ func TestRequiredNodeAllocation(t *testing.T) {
 func assertPreemptedResource(t *testing.T, appSummary *objects.ApplicationSummary, memorySeconds int64,
 	vcoresSecconds int64) {
 	detailedResource := appSummary.PreemptedResource.TrackedResourceMap["UNKNOWN"]
-	memValue, memPresent := detailedResource["memory"]
-	vcoreValue, vcorePresent := detailedResource["vcore"]
+
+	memValue, memPresent := detailedResource.Resources["memory"]
+	vcoreValue, vcorePresent := detailedResource.Resources["vcore"]
 
 	if memorySeconds != -1 {
-		assert.Equal(t, memorySeconds, memValue)
+		assert.Equal(t, memorySeconds, int64(memValue))
 	} else {
 		assert.Equal(t, memPresent, false)
 	}
 
 	if vcoresSecconds != -1 {
-		assert.Equal(t, vcoresSecconds, vcoreValue)
+		assert.Equal(t, vcoresSecconds, int64(vcoreValue))
 	} else {
 		assert.Equal(t, vcorePresent, false)
 	}
@@ -2004,7 +2005,7 @@ func TestPreemption(t *testing.T) {
 	assertPreemptedResource(t, appSummary, -1, 5000)
 
 	appSummary = app2.GetApplicationSummary("default")
-	assertPreemptedResource(t, appSummary, -1, 0)
+	assert.Assert(t, appSummary.PreemptedResource.TrackedResourceMap["UNKNOWN"] == nil)
 }
 
 // Preemption followed by a normal allocation

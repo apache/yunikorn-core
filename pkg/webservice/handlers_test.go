@@ -291,15 +291,15 @@ var (
 
 // setup To take care of setting up config, cluster, partitions etc
 func setup(t *testing.T, config string, partitionCount int) *scheduler.PartitionContext {
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, []byte(config))
+	ctx, err := scheduler.NewClusterContext(rmID, policyGroup, []byte(config))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
+	schedulerContext.Store(ctx)
 
-	assert.Equal(t, partitionCount, len(schedulerContext.GetPartitionMapClone()))
+	assert.Equal(t, partitionCount, len(schedulerContext.Load().GetPartitionMapClone()))
 
 	// Check default partition
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
-	part := schedulerContext.GetPartition(partitionName)
+	part := schedulerContext.Load().GetPartition(partitionName)
 	assert.Equal(t, 0, len(part.GetApplications()))
 	return part
 }
@@ -506,9 +506,9 @@ func TestContainerHistory(t *testing.T) {
 }
 
 func TestGetConfigYAML(t *testing.T) {
-	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, []byte(startConf))
+	ctx, err := scheduler.NewClusterContext(rmID, policyGroup, []byte(startConf))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
+	schedulerContext.Store(ctx)
 	// No err check: new request always returns correctly
 	//nolint: errcheck
 	req, _ := http.NewRequest("GET", "", nil)
@@ -524,7 +524,7 @@ func TestGetConfigYAML(t *testing.T) {
 	assert.Assert(t, len(startConfSum) > 0, "checksum boundary not found")
 
 	// change the config
-	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
+	err = schedulerContext.Load().UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 	configs.SetConfigMap(updatedExtraConf)
 
@@ -558,7 +558,7 @@ func TestGetConfigJSON(t *testing.T) {
 	assert.Equal(t, conf.Partitions[0].NodeSortPolicy.Type, "fair", "node sort policy set incorrectly, not fair (json)")
 
 	// change the config
-	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
+	err = schedulerContext.Load().UpdateRMSchedulerConfig(rmID, []byte(updatedConf))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 	configs.SetConfigMap(updatedExtraConf)
 
@@ -582,10 +582,10 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	buildInfoMap["buildDate"] = "2006-01-02T15:04:05-0700"
 	buildInfoMap["buildVersion"] = "latest"
 	buildInfoMap["isPluginVersion"] = "false"
-	schedulerContext.SetRMInfo(rmID, buildInfoMap)
+	schedulerContext.Load().SetRMInfo(rmID, buildInfoMap)
 	rmBuildInformationMaps := getRMBuildInformation(nil)
 	assert.Equal(t, 0, len(rmBuildInformationMaps))
-	rmInfo := schedulerContext.GetRMInfoMapClone()
+	rmInfo := schedulerContext.Load().GetRMInfoMapClone()
 	assert.Equal(t, 1, len(rmInfo))
 	rmBuildInformationMaps = getRMBuildInformation(rmInfo)
 	assert.Equal(t, 1, len(rmBuildInformationMaps))
@@ -596,7 +596,7 @@ func TestGetClusterUtilJSON(t *testing.T) {
 
 	// Check test partitions
 	partitionName := common.GetNormalizedPartitionName("default", rmID)
-	partition := schedulerContext.GetPartition(partitionName)
+	partition := schedulerContext.Load().GetPartition(partitionName)
 	assert.Equal(t, partitionName, partition.Name)
 	// new app to partition
 	appID := "appID-1"
@@ -886,11 +886,13 @@ func TestGetNodeUtilisations(t *testing.T) {
 	assert.Equal(t, len(partitionNodesUtilDAOInfo), 0)
 
 	// setup partitions
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, []byte(configMultiPartitions))
+	ctx, err := scheduler.NewClusterContext(rmID, policyGroup, []byte(configMultiPartitions))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
-	schedulerContext.GetPartition("default")
-	defaultPartition := schedulerContext.GetPartition(common.GetNormalizedPartitionName("default", rmID))
-	gpuPartition := schedulerContext.GetPartition(common.GetNormalizedPartitionName("gpu", rmID))
+	schedulerContext.Store(ctx)
+	assert.NilError(t, err, "Error when load clusterInfo from config")
+	schedulerContext.Load().GetPartition("default")
+	defaultPartition := schedulerContext.Load().GetPartition(common.GetNormalizedPartitionName("default", rmID))
+	gpuPartition := schedulerContext.Load().GetPartition(common.GetNormalizedPartitionName("gpu", rmID))
 
 	// add nodes to partitions
 	node1 := addNode(t, defaultPartition, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10}))
@@ -950,7 +952,7 @@ func getNodesUtilByType(t *testing.T, nodesUtilList []*dao.NodesUtilDAOInfo, res
 }
 
 func TestPartitions(t *testing.T) {
-	schedulerContext = &scheduler.ClusterContext{}
+	schedulerContext.Store(&scheduler.ClusterContext{})
 
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
@@ -994,7 +996,7 @@ func TestPartitions(t *testing.T) {
 	app6 := addAndConfirmApplicationExists(t, partitionName, defaultPartition, "app-6")
 	app6.SetState(objects.Failed.String())
 
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	// create test nodes
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 500}).ToProto()
@@ -1068,7 +1070,7 @@ func TestMetricsNotEmpty(t *testing.T) {
 func TestGetPartitionQueuesHandler(t *testing.T) {
 	setup(t, configTwoLevelQueues, 2)
 
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	tMaxResource, err := resources.NewResourceFromConf(map[string]string{"memory": "600000"})
 	assert.NilError(t, err)
@@ -1153,7 +1155,7 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	queueA := "root.a"
 	setup(t, configTwoLevelQueues, 2)
 
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	// test specific queue
 	var partitionQueueDao1 dao.PartitionQueueDAOInfo
@@ -1236,7 +1238,7 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 }
 
 func TestGetClusterInfo(t *testing.T) {
-	schedulerContext = &scheduler.ClusterContext{}
+	schedulerContext.Store(&scheduler.ClusterContext{})
 	resp := &MockResponseWriter{}
 	getClusterInfo(resp, nil)
 	var data []*dao.ClusterDAOInfo
@@ -1291,7 +1293,7 @@ func TestGetPartitionNodes(t *testing.T) {
 	err = partition.AddNode(node2, allocs)
 	assert.NilError(t, err, "add node to partition should not have failed")
 
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	var req *http.Request
 	req, err = createRequest(t, "/ws/v1/partition/default/nodes", map[string]string{"partition": partitionNameWithoutClusterID})
@@ -1401,7 +1403,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	assert.NilError(t, err, "ask should have been added to app")
 	app.SetTimedOutPlaceholder(tg, 1)
 
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	var req *http.Request
 	req, err = createRequest(t, handlerURL+defaultQueue+handlerSuffix, map[string]string{"partition": partitionNameWithoutClusterID, "queue": defaultQueue})
@@ -1525,7 +1527,7 @@ func checkIllegalGetAppsRequest(t *testing.T, url string, params httprouter.Para
 
 func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	defaultPartition := setup(t, configDefault, 1)
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	// add a new application
 	app1 := addApp(t, "app-1", defaultPartition, "root.default", false)
@@ -1606,7 +1608,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	err := app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	var req *http.Request
 	req, err = createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": "root.default", "application": "app-1"})
@@ -1875,9 +1877,9 @@ func TestFullStateDumpPath(t *testing.T) {
 	}
 	configs.SetConfigMap(configMap)
 
-	schedulerContext = prepareSchedulerContext(t)
+	prepareSchedulerContext(t)
 
-	partitionContext := schedulerContext.GetPartitionMapClone()
+	partitionContext := schedulerContext.Load().GetPartitionMapClone()
 	context := partitionContext[normalizedPartitionName]
 	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
 	err := context.AddApplication(app)
@@ -2562,14 +2564,13 @@ func getEventRecordDao(t *testing.T, req *http.Request) dao.EventRecordDAO {
 	return eventDao
 }
 
-func prepareSchedulerContext(t *testing.T) *scheduler.ClusterContext {
+func prepareSchedulerContext(t *testing.T) {
 	config := []byte(configDefault)
 	var err error
-	schedulerContext, err = scheduler.NewClusterContext(rmID, policyGroup, config)
+	ctx, err := scheduler.NewClusterContext(rmID, policyGroup, config)
+	schedulerContext.Store(ctx)
 	assert.NilError(t, err, "Error when load clusterInfo from config")
-	assert.Equal(t, 1, len(schedulerContext.GetPartitionMapClone()))
-
-	return schedulerContext
+	assert.Equal(t, 1, len(schedulerContext.Load().GetPartitionMapClone()))
 }
 
 func prepareUserAndGroupContext(t *testing.T, config string) {
@@ -2596,7 +2597,7 @@ func prepareUserAndGroupContext(t *testing.T, config string) {
 	app.AddAllocation(allocInfo)
 	assert.Assert(t, app.IsRunning(), "Application did not return running state after alloc: %s", app.CurrentState())
 
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 }
 
 func prepareEmptyUserGroupContext() {
@@ -2691,7 +2692,7 @@ func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
 func TestGetPartitionRuleHandler(t *testing.T) {
 	setup(t, configDefault, 1)
 
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	// test partition not exists
 	req, err := createRequest(t, "/ws/v1/partition/default/placementrules", map[string]string{"partition": "notexists"})
@@ -2721,7 +2722,7 @@ func TestGetPartitionRuleHandler(t *testing.T) {
 	assert.Equal(t, partitionRules[1].Name, types.Recovery)
 
 	// change the config: 3 rules, expect recovery also
-	err = schedulerContext.UpdateRMSchedulerConfig(rmID, []byte(placementRuleConfig))
+	err = schedulerContext.Load().UpdateRMSchedulerConfig(rmID, []byte(placementRuleConfig))
 	assert.NilError(t, err, "Error when updating clusterInfo from config")
 	req, err = createRequest(t, "/ws/v1/partition/default/placementrules", map[string]string{"partition": partitionNameWithoutClusterID})
 	assert.NilError(t, err, httpRequestError)

@@ -1755,7 +1755,6 @@ func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnaps
 		MaxResource:        sq.maxResource.Clone(),
 		GuaranteedResource: sq.guaranteedResource.Clone(),
 		PotentialVictims:   make([]*Allocation, 0),
-		AskQueuePath:       askQueuePath,
 		AskQueue:           cache[askQueuePath],
 	}
 	cache[sq.QueuePath] = snapshot

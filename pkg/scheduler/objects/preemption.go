@@ -69,7 +69,6 @@ type QueuePreemptionSnapshot struct {
 	MaxResource        *resources.Resource      // maximum resources for this queue
 	GuaranteedResource *resources.Resource      // guaranteed resources for this queue
 	PotentialVictims   []*Allocation            // list of allocations which could be preempted
-	AskQueuePath       string                   // fully qualified path of ask or preemptor queue
 	AskQueue           *QueuePreemptionSnapshot // snapshot of ask or preemptor queue
 }
 
@@ -762,7 +761,6 @@ func (qps *QueuePreemptionSnapshot) Duplicate(copy map[string]*QueuePreemptionSn
 		MaxResource:        qps.MaxResource.Clone(),
 		GuaranteedResource: qps.GuaranteedResource.Clone(),
 		PotentialVictims:   qps.PotentialVictims,
-		AskQueuePath:       qps.AskQueuePath,
 		AskQueue:           qps.AskQueue,
 	}
 	copy[qps.QueuePath] = snapshot

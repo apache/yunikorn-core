@@ -1117,6 +1117,13 @@ func TestGetPartitionQueuesHandler(t *testing.T) {
 	getPartitionQueues(resp, req)
 	assertPartitionNotExists(t, resp)
 
+	// test partition not exists
+	req, err = createRequest(t, "/ws/v1/partition/default/queues", map[string]string{"partition": ""})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getPartitionQueues(resp, req)
+	assertSpecificParamMissing(t, resp)
+
 	// test params name missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/queues", strings.NewReader(""))
 	assert.NilError(t, err)
@@ -1188,6 +1195,13 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionQueue(resp, req)
 	assertPartitionNotExists(t, resp)
+
+	// test partition missing
+	req, err = createRequest(t, partitionQueuesHandler+queueA, map[string]string{"partition": ""})
+	assert.NilError(t, err, "HTTP request create failed")
+	resp = &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	assertSpecificParamMissing(t, resp)
 
 	// test params name missing
 	req, err = http.NewRequest("GET", partitionQueuesHandler+queueA, strings.NewReader(""))
@@ -1336,6 +1350,13 @@ func TestGetPartitionNodes(t *testing.T) {
 	getPartitionNodes(resp, req)
 	assertParamsMissing(t, resp)
 
+	// test partition missing
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"partition": "", "node": ""})
+	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionNodes(resp, req)
+	assertSpecificParamMissing(t, resp)
+
 	// Test specific node
 	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"node": "node-1"})
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
@@ -1468,6 +1489,20 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	getQueueApplications(resp, req)
 	assertParamsMissing(t, resp)
 
+	// test missing partiion name
+	req, err = createRequest(t, handlerURL+queueName+handlerSuffix, map[string]string{"partition": "", "queue": queueName})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getQueueApplications(resp, req)
+	assertSpecificParamMissing(t, resp)
+
+	// test missing queue name
+	req, err = createRequest(t, handlerURL+queueName+handlerSuffix, map[string]string{"partition": partitionNameWithoutClusterID, "queue": ""})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getQueueApplications(resp, req)
+	assertSpecificParamMissing(t, resp)
+
 	// test queue name with special characters escaped properly
 	queueName := url.QueryEscape("root.parent.test@t#:rt:/_ff-test")
 	req, err = createRequest(t, handlerURL+queueName+handlerSuffix, map[string]string{"partition": partitionNameWithoutClusterID, "queue": queueName})
@@ -1591,6 +1626,16 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 
 	// test missing params name
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", nil, assertParamsMissing)
+
+	// test missing partition name
+	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: ""},
+		httprouter.Param{Key: "state", Value: "Active"}}, assertSpecificParamMissing)
+
+	// test missing state name
+	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
+		httprouter.Param{Key: "state", Value: ""}}, assertSpecificParamMissing)
 }
 
 func TestGetApplicationHandler(t *testing.T) {
@@ -1673,6 +1718,27 @@ func TestGetApplicationHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getApplication(resp, req)
 	assertParamsMissing(t, resp)
+
+	// test missing partition name
+	req, err = createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": "", "queue": queueName, "application": "app-1"})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getApplication(resp, req)
+	assertSpecificParamMissing(t, resp)
+
+	// test missing queue name
+	req, err = createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": "", "application": "app-1"})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getApplication(resp, req)
+	assertSpecificParamMissing(t, resp)
+
+	// test missing app name
+	req, err = createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": queueName, "application": ""})
+	assert.NilError(t, err)
+	resp = &MockResponseWriter{}
+	getApplication(resp, req)
+	assertSpecificParamMissing(t, resp)
 
 	// test queue name with special characters escaped properly
 	queueName := url.QueryEscape("root.parent.test@t#:rt:/_ff-test")
@@ -1761,7 +1827,7 @@ func assertUserNotExists(t *testing.T, resp *MockResponseWriter) {
 	assert.Equal(t, errInfo.StatusCode, http.StatusNotFound)
 }
 
-func assertUserNameMissing(t *testing.T, resp *MockResponseWriter) {
+func assertSpecificParamMissing(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
@@ -1895,7 +1961,7 @@ func TestSpecificUserResourceUsage(t *testing.T) {
 	assert.NilError(t, err)
 	resp := &MockResponseWriter{}
 	getUserResourceUsage(resp, req)
-	assertUserNameMissing(t, resp)
+	assertSpecificParamMissing(t, resp)
 
 	// Test group name is missing
 	req, err = createRequest(t, "/ws/v1/partition/default/usage/group/", map[string]string{"user": "testuser"})
@@ -2696,6 +2762,13 @@ func TestGetPartitionRuleHandler(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionRules(resp, req)
 	assertParamsMissing(t, resp)
+
+	// test partition name missing
+	req, err = createRequest(t, "/ws/v1/partition/default/placementrules", map[string]string{"partition": ""})
+	assert.NilError(t, err, httpRequestError)
+	resp = &MockResponseWriter{}
+	getPartitionRules(resp, req)
+	assertSpecificParamMissing(t, resp)
 
 	// default config without rules defined
 	req, err = createRequest(t, "/ws/v1/partition/default/placementrules", map[string]string{"partition": partitionNameWithoutClusterID})

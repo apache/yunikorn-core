@@ -646,7 +646,7 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 	}
 	partitionName, err := byName(vars, "partition")
 	if err != nil {
-		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	var partitionQueuesDAOInfo dao.PartitionQueueDAOInfo
@@ -1136,12 +1136,7 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	user, err := byName(vars, "user")
-	if err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	unescapedUser, err := url.QueryUnescape(user)
+	unescapedUser, err := byName(vars, "user")
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
@@ -1181,12 +1176,7 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
-	group, err := byName(vars, "group")
-	if err != nil {
-		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	unescapedGroupName, err := url.QueryUnescape(group)
+	unescapedGroupName, err := byName(vars, "group")
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return

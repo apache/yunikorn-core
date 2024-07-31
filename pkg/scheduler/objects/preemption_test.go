@@ -317,18 +317,17 @@ func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
 	app1.SetQueue(childQ1)
 	childQ1.applications[appID1] = app1
 
-	//var alloc1, alloc2 *Allocation
 	for i := 1; i <= 6; i++ {
 		ask1 := newAllocationAsk("alloc"+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
 		ask1.createTime = time.Now().Add(time.Duration(i*-1) * time.Minute)
 		assert.NilError(t, app1.AddAllocationAsk(ask1))
 		if i%2 == 0 {
-			alloc1 := NewAllocation(nodeID1, ask1)
+			alloc1 := markAllocated(nodeID1, ask1)
 			app1.AddAllocation(alloc1)
 			assert.Check(t, node1.AddAllocation(alloc1), "node alloc1 failed")
 			assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
 		} else {
-			alloc1 := NewAllocation(nodeID2, ask1)
+			alloc1 := markAllocated(nodeID2, ask1)
 			app1.AddAllocation(alloc1)
 			assert.Check(t, node2.AddAllocation(alloc1), "node alloc1 failed")
 			assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
@@ -353,7 +352,7 @@ func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
 	result, ok := preemptor.TryPreemption()
 	assert.Assert(t, result != nil, "no result")
 	assert.Assert(t, ok, "no victims found")
-	assert.Equal(t, "alloc7", result.Ask.GetAllocationKey(), "wrong alloc")
+	assert.Equal(t, "alloc7", result.Request.allocationKey, "wrong alloc")
 	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
 	assert.Check(t, node2.GetAllocation("alloc1").IsPreempted(), "alloc1 preempted")
 }

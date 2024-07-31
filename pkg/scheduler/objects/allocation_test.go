@@ -210,15 +210,17 @@ func TestSendPredicateFailed(t *testing.T) {
 	ask := NewAllocationAskFromSI(siAsk)
 	eventSystem := mock.NewEventSystemDisabled()
 	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
-	ask.SendPredicateFailedEvent("failed")
+	ask.SendPredicatesFailedEvent(map[string]int{})
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
 	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
-	ask.SendPredicateFailedEvent("failure")
+	ask.SendPredicatesFailedEvent(map[string]int{
+		"failure": 1,
+	})
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
-	assert.Equal(t, "Predicate failed for request 'ask-1' with message: 'failure'", event.Message)
+	assert.Equal(t, "Unschedulable request 'ask-1': failure (1x); ", event.Message)
 }
 
 func TestCreateTime(t *testing.T) {

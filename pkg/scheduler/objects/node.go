@@ -367,12 +367,12 @@ func (sn *Node) CanAllocate(res *resources.Resource) bool {
 }
 
 // Checking pre-conditions in the shim for an allocation.
-func (sn *Node) preAllocateConditions(ask *Allocation) bool {
+func (sn *Node) preAllocateConditions(ask *Allocation) error {
 	return sn.preConditions(ask, true)
 }
 
 // Checking pre-conditions in the shim for a reservation.
-func (sn *Node) preReserveConditions(ask *Allocation) bool {
+func (sn *Node) preReserveConditions(ask *Allocation) error {
 	return sn.preConditions(ask, false)
 }
 
@@ -382,7 +382,7 @@ func (sn *Node) preReserveConditions(ask *Allocation) bool {
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *Node) preConditions(ask *Allocation, allocate bool) bool {
+func (sn *Node) preConditions(ask *Allocation, allocate bool) error {
 	// Check the predicates plugin (k8shim)
 	allocationKey := ask.GetAllocationKey()
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
@@ -400,12 +400,11 @@ func (sn *Node) preConditions(ask *Allocation, allocate bool) bool {
 			// running predicates failed
 			msg := err.Error()
 			ask.LogAllocationFailure(msg, allocate)
-			ask.SendPredicateFailedEvent(msg)
-			return false
+			return err
 		}
 	}
 	// all predicate plugins passed
-	return true
+	return nil
 }
 
 // preAllocateCheck checks if the node should be considered as a possible node to allocate on.

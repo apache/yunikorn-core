@@ -388,11 +388,12 @@ func (sq *Queue) setResourcesFromConf(resource configs.Resources) error {
 		return err
 	}
 
-	sq.setResources(guaranteedResource, maxResource)
+	// todo, do we support setting maxApps for static queue?
+	sq.setResources(guaranteedResource, maxResource, "")
 	return nil
 }
 
-func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resource) {
+func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resource, maxApps string) {
 	switch {
 	case resources.StrictlyGreaterThanZero(maxResource):
 		log.Log(log.SchedQueue).Debug("setting max resources",
@@ -444,12 +445,25 @@ func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resourc
 		log.Log(log.SchedQueue).Debug("guaranteed resources setting ignored: cannot set zero guaranteed resources",
 			zap.String("queue", sq.QueuePath))
 	}
+
+	// For shim side we already make sure the max apps > 0 and valid parsing
+	maxAppsInt, err := strconv.ParseInt(maxApps, 10, 64)
+	maxAppsUint := uint64(maxAppsInt)
+	if err == nil {
+		log.Log(log.SchedQueue).Debug("setting max running apps",
+			zap.String("queue", sq.QueuePath),
+			zap.Uint64("current", sq.maxRunningApps),
+			zap.Uint64("new", maxAppsUint))
+	}
+	sq.maxRunningApps = maxAppsUint
+
+	// todo , we need max apps metrics and event change?
 }
 
-func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resource) {
+func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resource, maxApps string) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.setResources(guaranteedResource, maxResource)
+	sq.setResources(guaranteedResource, maxResource, maxApps)
 }
 
 // setTemplate sets the template on the queue based on the config.

@@ -2157,6 +2157,11 @@ func (sa *Application) GetMaxResource() *resources.Resource {
 	return sa.getResourceFromTags(siCommon.AppTagNamespaceResourceQuota)
 }
 
+// GetMaxApps returns the max apps that is set in the application tags
+func (sa *Application) GetMaxApps() string {
+	return sa.GetTag(siCommon.AppTagNamespaceResourceMaxApps)
+}
+
 func (sa *Application) getResourceFromTags(tag string) *resources.Resource {
 	value := sa.GetTag(tag)
 	if value == "" {

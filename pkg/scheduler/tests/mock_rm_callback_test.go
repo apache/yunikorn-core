@@ -174,15 +174,6 @@ func (m *mockRMCallback) waitForMinAcceptedNodes(tb testing.TB, minNumNode int, 
 	}
 }
 
-func (m *mockRMCallback) waitForRejectedNode(t *testing.T, nodeID string, timeoutMs int) {
-	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		m.RLock()
-		defer m.RUnlock()
-		return m.rejectedNodes[nodeID]
-	})
-	assert.NilError(t, err, "Failed to wait for node state to become rejected: %s, called from: %s", nodeID, caller())
-}
-
 func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs int) {
 	var allocLen int
 	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {

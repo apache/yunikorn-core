@@ -388,7 +388,7 @@ func (sq *Queue) setResourcesFromConf(resource configs.Resources) error {
 		return err
 	}
 
-	// todo, do we support setting maxApps for static queue?
+	//nolint:godox //TODO, do we support setting maxApps for static queue?
 	sq.setResources(guaranteedResource, maxResource, "")
 	return nil
 }
@@ -457,7 +457,7 @@ func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resourc
 	}
 	sq.maxRunningApps = maxAppsUint
 
-	// todo , we need max apps metrics and event change?
+	//nolint:godox //TODO, we need max apps metrics and event change?
 }
 
 func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resource, maxApps string) {

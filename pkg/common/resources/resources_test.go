@@ -622,7 +622,7 @@ func TestComponentWiseMinPermissiveWithPrecedence(t *testing.T) {
 			expected = NewResourceFromMap(tc.expected)
 		}
 		t.Run(tc.name, func(t *testing.T) {
-			result := ComponentWiseMinPermissiveWithPrecedence(left, right)
+			result := MergeIfNotPresent(left, right)
 			assert.DeepEqual(t, result, expected)
 		})
 	}

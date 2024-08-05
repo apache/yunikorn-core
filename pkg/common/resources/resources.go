@@ -918,11 +918,11 @@ func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 	return out
 }
 
-// ComponentWiseMinPermissiveWithPrecedence Returns a new Resource by giving higher precedence for resource type values present in left when
-// it is present at right as well. Resource type not present in left and present in right would be included too.
+// MergeIfNotPresent Returns a new Resource by merging resource type values present in right with left
+// only if resource type not present in left.
 // If either Resource passed in is nil the other Resource is returned
 // If a Resource type is missing from one of the Resource, it is considered empty and the quantity from the other Resource is returned
-func ComponentWiseMinPermissiveWithPrecedence(left, right *Resource) *Resource {
+func MergeIfNotPresent(left, right *Resource) *Resource {
 	if right == nil && left == nil {
 		return nil
 	}

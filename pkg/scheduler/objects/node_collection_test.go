@@ -282,6 +282,7 @@ func TestGetNodeSortingPolicy(t *testing.T) {
 	}
 }
 
+//nolint:gosec
 func TestGetFullNodeIterator(t *testing.T) {
 	nc := NewNodeCollection("test")
 	for i := 1; i <= 4; i++ {

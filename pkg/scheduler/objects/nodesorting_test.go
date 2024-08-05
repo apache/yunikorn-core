@@ -138,6 +138,7 @@ partitions:
 	assert.Equal(t, policy.resourceWeights["gpu"], 5.0, "Wrong weight for gpu")
 }
 
+//nolint:gosec
 func TestSortPolicyWeighting(t *testing.T) {
 	nc := NewNodeCollection("test")
 	weights := map[string]float64{
@@ -215,6 +216,7 @@ func TestSortPolicyWeighting(t *testing.T) {
 	assert.Equal(t, node1.NodeID, nodes[1].NodeID, "wrong second node (binpacking)")
 }
 
+//nolint:gosec
 func TestSortPolicy(t *testing.T) {
 	nc := NewNodeCollection("test")
 	bp := NewNodeSortingPolicy("binpacking", nil)

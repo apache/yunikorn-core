@@ -645,6 +645,40 @@ func Equals(left, right *Resource) bool {
 	return true
 }
 
+// DeepEquals Compare the resources equal returns the specific values for following cases:
+// left  right  return
+// nil   nil    true
+// nil   <set>  false
+// <set> nil    false
+// <set> <set>  true/false  *based on the individual resource type presence and its Quantity values
+func DeepEquals(left, right *Resource) bool {
+	if left == right {
+		return true
+	}
+	if left == nil || right == nil {
+		return false
+	}
+	for k, v := range left.Resources {
+		if val, ok := right.Resources[k]; ok {
+			if val != v {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	for k, v := range right.Resources {
+		if val, ok := left.Resources[k]; ok {
+			if val != v {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
+	return true
+}
+
 // MatchAny returns true if at least one type in the defined resource exists in the other resource.
 // False if none of the types exist in the other resource.
 // A nil resource is treated as an empty resource (no types defined) and returns false
@@ -878,6 +912,29 @@ func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 		if val, ok := left.Resources[k]; ok {
 			out.Resources[k] = min(v, val)
 		} else {
+			out.Resources[k] = v
+		}
+	}
+	return out
+}
+
+// ComponentWiseMinPermissiveWithPrecedence Returns a new Resource by giving higher precedence for resource type values present in left when
+// it is present at right as well. Resource type not present in left and present in right would be included too.
+// If either Resource passed in is nil the other Resource is returned
+// If a Resource type is missing from one of the Resource, it is considered empty and the quantity from the other Resource is returned
+func ComponentWiseMinPermissiveWithPrecedence(left, right *Resource) *Resource {
+	if right == nil && left == nil {
+		return nil
+	}
+	if left == nil {
+		return right.Clone()
+	}
+	if right == nil {
+		return left.Clone()
+	}
+	out := left
+	for k, v := range right.Resources {
+		if _, ok := left.Resources[k]; !ok {
 			out.Resources[k] = v
 		}
 	}

@@ -830,7 +830,7 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 	if qps.AskQueue != nil {
 		// In case ask queue has guaranteed set, its own values carries higher precedence over the parent or ancestor
 		if qps.AskQueue.QueuePath == qps.QueuePath && !remainingGuaranteed.IsEmpty() {
-			return remainingGuaranteed
+			return resources.ComponentWiseMinPermissiveWithPrecedence(remainingGuaranteed, parent)
 		}
 	}
 	return resources.ComponentWiseMinPermissive(remainingGuaranteed, parent)

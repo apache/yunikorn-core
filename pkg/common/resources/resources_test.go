@@ -1229,10 +1229,12 @@ func TestDeepEquals(t *testing.T) {
 		{NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), nil, false},
 		{nil, NewResource(), false},
 		{NewResource(), nil, false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0}), NewResourceFromMap(map[string]Quantity{"a": 0}), true},
 		{NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), true},
+		{NewResourceFromMap(map[string]Quantity{"a": 0}), NewResourceFromMap(map[string]Quantity{"b": 0, "c": 1}), false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), NewResourceFromMap(map[string]Quantity{"a": 1, "b": 1}), false},
 		{NewResourceFromMap(map[string]Quantity{"a": 0, "c": 1}), NewResourceFromMap(map[string]Quantity{"a": 0, "d": 3}), false},
 		{NewResourceFromMap(map[string]Quantity{"a": 0}), NewResourceFromMap(map[string]Quantity{"d": 0}), false},
-		{NewResourceFromMap(map[string]Quantity{"a": 0}), NewResourceFromMap(map[string]Quantity{"a": 0}), true},
 	}
 
 	for _, tt := range tests {

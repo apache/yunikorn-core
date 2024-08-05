@@ -615,12 +615,11 @@ func compareShares(lshares, rshares []float64) int {
 	return 0
 }
 
-// Compare the resources equal returns the specific values for following cases:
-// left  right  return
-// nil   nil    true
-// nil   <set>  false
-// <set> nil    false
-// <set> <set>  true/false  *based on the individual Quantity values
+// Equals Compare the resources based on common resource type available in both left and right Resource
+// Resource type available in left Resource but not in right Resource and vice versa is not taken into account
+// False in case anyone of the resources is nil
+// False in case resource type value differs
+// True in case when resource type values of left Resource matches with right Resource if resource type is available
 func Equals(left, right *Resource) bool {
 	if left == right {
 		return true
@@ -635,22 +634,20 @@ func Equals(left, right *Resource) bool {
 			return false
 		}
 	}
-
 	for k, v := range right.Resources {
 		if left.Resources[k] != v {
 			return false
 		}
 	}
-
 	return true
 }
 
-// DeepEquals Compare the resources equal returns the specific values for following cases:
-// left  right  return
-// nil   nil    true
-// nil   <set>  false
-// <set> nil    false
-// <set> <set>  true/false  *based on the individual resource type presence and its Quantity values
+// DeepEquals Compare the resources based on resource type existence and its values as well
+// False in case anyone of the resources is nil
+// False in case resource length differs
+// False in case resource type existed in left Resource not exist in right Resource
+// False in case resource type value differs
+// True in case when all resource type and its values of left Resource matches with right Resource
 func DeepEquals(left, right *Resource) bool {
 	if left == right {
 		return true
@@ -658,17 +655,11 @@ func DeepEquals(left, right *Resource) bool {
 	if left == nil || right == nil {
 		return false
 	}
+	if len(right.Resources) != len(left.Resources) {
+		return false
+	}
 	for k, v := range left.Resources {
 		if val, ok := right.Resources[k]; ok {
-			if val != v {
-				return false
-			}
-		} else {
-			return false
-		}
-	}
-	for k, v := range right.Resources {
-		if val, ok := left.Resources[k]; ok {
 			if val != v {
 				return false
 			}

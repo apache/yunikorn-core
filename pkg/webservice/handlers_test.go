@@ -772,7 +772,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	resAlloc := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	ask := objects.NewAllocationAsk("alloc-1", "app", resAlloc)
 	alloc := markAllocated(node1.NodeID, ask)
-	assert.Assert(t, node1.AddAllocation(alloc), "unexpected failure adding allocation to node")
+	assert.Assert(t, node1.TryAddAllocation(alloc), "unexpected failure adding allocation to node")
 	rootQ := partition.GetQueue("root")
 	err = rootQ.IncAllocatedResource(resAlloc, false)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
@@ -790,7 +790,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	resAlloc = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
 	ask = objects.NewAllocationAsk("alloc-2", "app", resAlloc)
 	alloc = markAllocated(node2.NodeID, ask)
-	assert.Assert(t, node2.AddAllocation(alloc), "unexpected failure adding allocation to node")
+	assert.Assert(t, node2.TryAddAllocation(alloc), "unexpected failure adding allocation to node")
 	err = rootQ.IncAllocatedResource(resAlloc, false)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
 	// get nodes utilization
@@ -817,7 +817,7 @@ func addAllocatedResource(t *testing.T, node *objects.Node, allocationKey string
 	resAlloc := resources.NewResourceFromMap(quantityMap)
 	ask := objects.NewAllocationAsk(allocationKey, appID, resAlloc)
 	alloc := markAllocated(node.NodeID, ask)
-	assert.Assert(t, node.AddAllocation(alloc), "unexpected failure adding allocation to node")
+	assert.Assert(t, node.TryAddAllocation(alloc), "unexpected failure adding allocation to node")
 }
 
 func confirmNodeCount(info []*dao.NodeUtilDAOInfo, count int64) bool {

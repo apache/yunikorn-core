@@ -403,20 +403,24 @@ func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trac
 // it decides the removal. It returns false the moment it sees any unexpected values for any queue in any levels.
 // Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) canBeRemoved() bool {
-	if len(qt.childQueueTrackers) > 0 {
-		for _, childQT := range qt.childQueueTrackers {
-			// quick check to avoid further traversal
+	for _, childQT := range qt.childQueueTrackers {
+		// quick check to avoid further traversal
+		if childQT.canBeRemovedInternal() {
 			if !childQT.canBeRemoved() {
 				return false
 			}
+		} else {
+			return false
 		}
-		return true // removable because all children are removable
 	}
+	// reached leaf queues, no more to traverse
+	return qt.canBeRemovedInternal()
+}
 
-	// reached a leaf queue
-	return len(qt.runningApplications) == 0 &&
-		resources.IsZero(qt.resourceUsage) &&
-		len(qt.childQueueTrackers) == 0 &&
-		qt.maxRunningApps == 0 &&
-		resources.IsZero(qt.maxResources)
+func (qt *QueueTracker) canBeRemovedInternal() bool {
+	if len(qt.runningApplications) == 0 && resources.IsZero(qt.resourceUsage) && len(qt.childQueueTrackers) == 0 &&
+		qt.maxRunningApps == 0 && resources.IsZero(qt.maxResources) {
+		return true
+	}
+	return false
 }

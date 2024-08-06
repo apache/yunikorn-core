@@ -337,12 +337,9 @@ func TestCanBeRemoved(t *testing.T) {
 	assert.Assert(t, !parentQ.canBeRemoved())
 	assert.Assert(t, !childQ.canBeRemoved())
 
-	// remove app from "child1"
-	childQ.runningApplications = make(map[string]bool)
-	childQ.resourceUsage = resources.NewResource()
+	removeQT := root.decreaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, usage1, true)
+	assert.Assert(t, removeQT)
 	assert.Assert(t, root.canBeRemoved())
-	assert.Assert(t, parentQ.canBeRemoved())
-	assert.Assert(t, childQ.canBeRemoved())
 }
 
 func TestGetResourceUsageDAOInfo(t *testing.T) {

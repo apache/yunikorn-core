@@ -63,7 +63,7 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 	eventSystem.AddEvent(&event)
 
 	// wait for events to be processed
-	err := common.WaitFor(time.Millisecond, time.Second, func() bool {
+	err := common.WaitForCondition(time.Millisecond, time.Second, func() bool {
 		return eventSystem.Store.CountStoredEvents() == 1
 	})
 	assert.NilError(t, err, "the event should have been processed")
@@ -95,7 +95,7 @@ func TestGetEvents(t *testing.T) {
 		}
 		eventSystem.AddEvent(event)
 	}
-	err := common.WaitFor(time.Millisecond, time.Second, func() bool {
+	err := common.WaitForCondition(time.Millisecond, time.Second, func() bool {
 		return eventSystem.Store.CountStoredEvents() == 10
 	})
 	assert.NilError(t, err, "the events should have been processed")
@@ -132,9 +132,12 @@ func TestConfigUpdate(t *testing.T) {
 			configs.CMEventRingBufferCapacity: strconv.FormatUint(newRingBufferCapacity, 10),
 			configs.CMEventRequestCapacity:    strconv.FormatUint(newRequestCapacity, 10),
 		})
-	err := common.WaitForCondition(func() bool {
-		return !eventSystem.IsEventTrackingEnabled()
-	}, 10*time.Millisecond, 5*time.Second)
+	err := common.WaitForCondition(10*time.Millisecond,
+		5*time.Second,
+		func() bool {
+			return !eventSystem.IsEventTrackingEnabled()
+		},
+	)
 	assert.NilError(t, err, "timed out waiting for config refresh")
 
 	assert.Equal(t, eventSystem.GetRingBufferCapacity(), newRingBufferCapacity)

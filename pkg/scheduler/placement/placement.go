@@ -30,6 +30,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // RejectedError is the standard error returned if placement has failed
@@ -52,10 +53,19 @@ func NewPlacementManager(rules []configs.PlacementRule, queueFunc func(string) *
 	return m
 }
 
-// Update the rules for an active placement manager
-// Note that this will only be called when the manager is created earlier and the config is updated.
+// GetRulesDAO returns a list of RuleDAO objects of the configured rules
+func (m *AppPlacementManager) GetRulesDAO() []*dao.RuleDAO {
+	m.RLock()
+	defer m.RUnlock()
+	info := make([]*dao.RuleDAO, len(m.rules))
+	for i, r := range m.rules {
+		info[i] = r.ruleDAO()
+	}
+	return info
+}
+
+// UpdateRules sets the rules for an active placement manager
 func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
-	log.Log(log.Config).Info("Building new rule list for placement manager")
 	if err := m.initialise(rules); err != nil {
 		log.Log(log.Config).Info("Placement manager rules not reloaded", zap.Error(err))
 		return err
@@ -63,7 +73,7 @@ func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
 	return nil
 }
 
-// Initialise the rules from a parsed config.
+// initialise the rules from a parsed config.
 func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 	log.Log(log.Config).Info("Building new rule list for placement manager")
 	// build temp list from new config
@@ -85,13 +95,18 @@ func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
 	return nil
 }
 
+// PlaceApplication executes the rules for the passed in application.
+// On success the queueName of the application is set to the queue the application wil run in.
+// On failure the queueName is set to "" and an error is returned.
 func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	m.RLock()
 	defer m.RUnlock()
 
 	var queueName string
 	var err error
+	var remainingRules = len(m.rules)
 	for _, checkRule := range m.rules {
+		remainingRules--
 		log.Log(log.SchedApplication).Debug("Executing rule for placing application",
 			zap.String("ruleName", checkRule.getName()),
 			zap.String("application", app.ApplicationID))
@@ -102,6 +117,18 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 				zap.Error(err))
 			app.SetQueuePath("")
 			return err
+		}
+		// if no queue found even after the last rule, try to place in the default queue
+		if remainingRules == 0 && queueName == "" {
+			log.Log(log.Config).Info("No rule matched, placing application in default queue",
+				zap.String("application", app.ApplicationID),
+				zap.String("defaultQueue", common.DefaultPlacementQueue))
+			// get the queue object
+			queue := m.queueFn(common.DefaultPlacementQueue)
+			if queue != nil {
+				// default queue exist
+				queueName = common.DefaultPlacementQueue
+			}
 		}
 		// no queue name next rule
 		if queueName == "" {
@@ -174,7 +201,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	return nil
 }
 
-// Build the rule set based on the config.
+// buildRules builds a new rule set based on the config.
 // If the rule set is correct and can be used the new set is returned.
 // If any error is encountered a nil array is returned and the error set
 func buildRules(rules []configs.PlacementRule) ([]rule, error) {

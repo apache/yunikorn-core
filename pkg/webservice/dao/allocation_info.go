@@ -28,9 +28,9 @@ type AllocationDAOInfo struct {
 	Priority         string            `json:"priority,omitempty"`
 	NodeID           string            `json:"nodeId,omitempty"`
 	ApplicationID    string            `json:"applicationId,omitempty"`
-	Partition        string            `json:"partition,omitempty"`
 	Placeholder      bool              `json:"placeholder,omitempty"`
 	PlaceholderUsed  bool              `json:"placeholderUsed,omitempty"`
 	TaskGroupName    string            `json:"taskGroupName,omitempty"`
 	Preempted        bool              `json:"preempted,omitempty"`
+	Originator       bool              `json:"originator,omitempty"`
 }

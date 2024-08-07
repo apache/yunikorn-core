@@ -33,19 +33,22 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const configDataSmokeTest = `
+const (
+	configDataSmokeTest = `
 partitions:
   - name: default
     queues:
       - name: root
         submitacl: "*"
         queues:
-          - name: singleleaf
+          - name: leaf
             resources:
               max:
                 memory: 150M
                 vcore: 20
 `
+	leafName = "root.leaf"
+)
 
 // Test scheduler reconfiguration
 func TestConfigScheduler(t *testing.T) {
@@ -118,7 +121,7 @@ partitions:
 	assert.NilError(t, err, "configuration reload failed")
 
 	// wait until configuration is reloaded
-	if err = common.WaitFor(time.Second, 5*time.Second, func() bool {
+	if err = common.WaitForCondition(time.Second, 5*time.Second, func() bool {
 		return configs.ConfigContext.Get("policygroup").Checksum != configChecksum
 	}); err != nil {
 		t.Errorf("timeout waiting for configuration to be reloaded: %v", err)
@@ -157,6 +160,8 @@ partitions:
 }
 
 // Test basic interactions from rm proxy to cache and to scheduler.
+//
+//nolint:funlen
 func TestBasicScheduler(t *testing.T) {
 	// Register RM
 	// Start all tests
@@ -166,7 +171,6 @@ func TestBasicScheduler(t *testing.T) {
 	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.singleleaf"
 	// Check queues of cache and scheduler.
 	part := ms.scheduler.GetClusterContext().GetPartition(partition)
 	assert.Assert(t, part.GetTotalPartitionResource() == nil, "partition info max resource nil")
@@ -415,7 +419,6 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	err := ms.Init(configDataSmokeTest, true, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.singleleaf"
 	appID := appID1
 
 	// Register a node, and add apps
@@ -637,7 +640,6 @@ partitions:
 	err := ms.Init(configData, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.leaf"
 	app1ID := appID1
 	app2ID := appID2
 
@@ -794,6 +796,7 @@ partitions:
 	ms.mockRM.waitForAcceptedApplication(t, "app-added-2", 1000)
 }
 
+//nolint:funlen
 func TestSchedulingOverMaxCapacity(t *testing.T) {
 	var parameters = []struct {
 		name       string
@@ -1015,7 +1018,7 @@ partitions:
 
 	assert.NilError(t, err, "NodeRequest 2 failed")
 
-	err = common.WaitFor(10*time.Millisecond, 10*time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, 10*time.Second, func() bool {
 		return !ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
 			ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node2ID).IsSchedulable()
 	})
@@ -1035,7 +1038,7 @@ partitions:
 
 	assert.NilError(t, err, "NodeRequest 3 failed")
 
-	err = common.WaitFor(10*time.Millisecond, 10*time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, 10*time.Second, func() bool {
 		return ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node1ID).IsSchedulable() &&
 			ms.scheduler.GetClusterContext().GetPartition(partition).GetNode(node2ID).IsSchedulable()
 	})
@@ -1290,7 +1293,6 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 	err := ms.Init(configDataSmokeTest, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed")
 
-	leafName := "root.singleleaf"
 	part := ms.scheduler.GetClusterContext().GetPartition(partition)
 	root := part.GetQueue("root")
 	leaf := part.GetQueue(leafName)
@@ -1629,10 +1631,10 @@ partitions:
 	// Check app to Completing status
 	assert.Equal(t, app01.CurrentState(), objects.Completing.String())
 	// the app changes from completing state to completed state
-	err = common.WaitFor(1*time.Millisecond, time.Millisecond*200, app.IsCompleted)
+	err = common.WaitForCondition(1*time.Millisecond, time.Millisecond*200, app.IsCompleted)
 	assert.NilError(t, err, "App should be in Completed state")
 	// partition manager should be able to clean up the dynamically created queue.
-	if err = common.WaitFor(1*time.Millisecond, time.Second*11, func() bool {
+	if err = common.WaitForCondition(1*time.Millisecond, time.Second*11, func() bool {
 		return part.GetQueue(leafName) == nil
 	}); err != nil {
 		t.Errorf("timeout waiting for queue is cleared %v", err)

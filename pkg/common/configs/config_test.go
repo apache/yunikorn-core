@@ -1288,6 +1288,7 @@ partitions:
 	}
 }
 
+//nolint:funlen
 func TestLimitsFail(t *testing.T) {
 	data := `
 partitions:
@@ -1513,7 +1514,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "duplicated user name *")
+	assert.ErrorContains(t, err, "duplicated user name '*'")
 
 	data = `
 partitions:
@@ -1548,7 +1549,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "duplicated group name *")
+	assert.ErrorContains(t, err, "duplicated group name '*'")
 
 	data = `
 partitions:
@@ -1610,7 +1611,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "duplicated user name user.lastname")
+	assert.ErrorContains(t, err, "duplicated user name 'user.lastname'")
 
 	data = `
 partitions:
@@ -1645,7 +1646,7 @@ partitions:
 `
 	// validate the config and check after the update
 	_, err = CreateConfig(data)
-	assert.ErrorContains(t, err, "duplicated group name test")
+	assert.ErrorContains(t, err, "duplicated group name 'test'")
 
 	// Make sure different queues can support same username or groupname
 	data = `

@@ -26,6 +26,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 func TestTagRule(t *testing.T) {
@@ -59,18 +60,9 @@ func TestTagRule(t *testing.T) {
 	}
 }
 
+//nolint:funlen
 func TestTagRulePlace(t *testing.T) {
-	// Create the structure for the test
-	data := `
-partitions:
-  - name: default
-    queues:
-      - name: testqueue
-      - name: testparent
-        queues:
-          - name: testchild
-`
-	err := initQueueStructure([]byte(data))
+	err := initQueueStructure([]byte(confTestQueue))
 	assert.NilError(t, err, "setting up the queue config failed")
 
 	user := security.UserGroup{
@@ -103,6 +95,14 @@ partitions:
 		t.Errorf("tag rule failed to place queue in correct queue '%s', err %v", queue, err)
 	}
 
+	// tag invalid queue
+	tags = map[string]string{"label1": "test!queue"}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	_, err = tr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("tag rule should have failed to place app, err %v", err)
+	}
+
 	// tag queue that does not exists
 	tags = map[string]string{"label1": "unknown"}
 	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
@@ -117,6 +117,14 @@ partitions:
 	queue, err = tr.placeApplication(appInfo, queueFunc)
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule did fail with qualified queue '%s', error %v", queue, err)
+	}
+
+	// tag invalid queue fully qualified
+	tags = map[string]string{"label1": "root.testparent.test!child"}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	_, err = tr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("tag rule should have failed with fully qualified invalid queue, error %v", err)
 	}
 
 	// tag queue references recovery
@@ -152,8 +160,34 @@ partitions:
 	if queue != "root.testparent.testchild" || err != nil {
 		t.Errorf("tag rule with parent queue incorrect queue '%s', error %v", queue, err)
 	}
+
+	tags = map[string]string{"label1": "testchild", "label2": "testp!arent"}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	_, err = tr.placeApplication(appInfo, queueFunc)
+	if err == nil {
+		t.Errorf("tag rule with parent queue should have failed, error %v", err)
+	}
+
+	// deny filter type should got got empty queue
+	conf = configs.PlacementRule{
+		Name:  "tag",
+		Value: "label1",
+		Filter: configs.Filter{
+			Type: filterDeny,
+		},
+	}
+	tr, err = newRule(conf)
+	if err != nil || tr == nil {
+		t.Errorf("tag rule create failed with parent rule and qualified value, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "ignored", user, tags, nil, "")
+	queue, err = tr.placeApplication(appInfo, queueFunc)
+	if queue != "" || err != nil {
+		t.Errorf("tag rule with deny filter type should got empty queue, err nil")
+	}
 }
 
+//nolint:funlen
 func TestTagRuleParent(t *testing.T) {
 	err := initQueueStructure([]byte(confParentChild))
 	assert.NilError(t, err, "setting up the queue config failed")
@@ -249,5 +283,91 @@ func TestTagRuleParent(t *testing.T) {
 	queue, err = ur.placeApplication(appInfo, queueFunc)
 	if queue != "" || err == nil {
 		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// failed parent rule
+	conf = configs.PlacementRule{
+		Name:  "tag",
+		Value: "label2",
+		Parent: &configs.PlacementRule{
+			Name:  "tag",
+			Value: "label1",
+			Parent: &configs.PlacementRule{
+				Name:  "tag",
+				Value: "label1",
+			},
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("tag rule create failed, err %v", err)
+	}
+
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "" || err == nil {
+		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+
+	// parent name not has prefix
+	conf = configs.PlacementRule{
+		Name:   "tag",
+		Value:  "label2",
+		Create: true,
+		Parent: &configs.PlacementRule{
+			Name:   "tag",
+			Value:  "label2",
+			Create: true,
+			Parent: &configs.PlacementRule{
+				Name:  "fixed",
+				Value: "root",
+			},
+		},
+	}
+	ur, err = newRule(conf)
+	if err != nil || ur == nil {
+		t.Errorf("tag rule create failed, err %v", err)
+	}
+	appInfo = newApplication("app1", "default", "unknown", user, tags, nil, "")
+	queue, err = ur.placeApplication(appInfo, queueFunc)
+	if queue != "root.root.testparentnew.testparentnew" || err != nil {
+		t.Errorf("tag rule placed app in incorrect queue '%s', err %v", queue, err)
+	}
+}
+
+func Test_tagRule_ruleDAO(t *testing.T) {
+	tests := []struct {
+		name string
+		conf configs.PlacementRule
+		want *dao.RuleDAO
+	}{
+		{
+			"base",
+			configs.PlacementRule{Name: "tag", Value: "namespace"},
+			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "namespace", "create": "false"}},
+		},
+		{
+			"mixedcase",
+			configs.PlacementRule{Name: "tag", Value: "MixedCaseTag"},
+			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "mixedcasetag", "create": "false"}},
+		},
+		{
+			"parent",
+			configs.PlacementRule{Name: "tag", Value: "one", Create: true, Parent: &configs.PlacementRule{Name: "test", Create: true}},
+			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "one", "create": "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{"create": "true"}}},
+		},
+		{
+			"filter",
+			configs.PlacementRule{Name: "tag", Value: "two", Create: true, Filter: configs.Filter{Type: filterDeny, Groups: []string{"group[0-9]"}}},
+			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "two", "create": "true"}, Filter: &dao.FilterDAO{Type: filterDeny, GroupExp: "group[0-9]"}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ur, err := newRule(tt.conf)
+			assert.NilError(t, err, "setting up the rule failed")
+			ruleDAO := ur.ruleDAO()
+			assert.DeepEqual(t, tt.want, ruleDAO)
+		})
 	}
 }

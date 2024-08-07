@@ -27,13 +27,13 @@ import (
 
 type PreemptionContext struct {
 	node        *Node
-	requiredAsk *AllocationAsk
+	requiredAsk *Allocation
 	allocations []*Allocation
 
 	locking.RWMutex
 }
 
-func NewRequiredNodePreemptor(node *Node, requiredAsk *AllocationAsk) *PreemptionContext {
+func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation) *PreemptionContext {
 	preemptor := &PreemptionContext{
 		node:        node,
 		requiredAsk: requiredAsk,
@@ -47,7 +47,7 @@ func (p *PreemptionContext) filterAllocations() {
 	defer p.Unlock()
 	for _, allocation := range p.node.GetAllAllocations() {
 		// skip daemon set pods and higher priority allocation
-		if allocation.GetAsk().GetRequiredNode() != "" || allocation.GetPriority() > p.requiredAsk.GetPriority() {
+		if allocation.GetRequiredNode() != "" || allocation.GetPriority() > p.requiredAsk.GetPriority() {
 			continue
 		}
 
@@ -59,7 +59,7 @@ func (p *PreemptionContext) filterAllocations() {
 		// atleast one of the required ask resource should match, otherwise skip
 		includeAllocation := false
 		for k := range p.requiredAsk.GetAllocatedResource().Resources {
-			if _, ok := allocation.GetAsk().GetAllocatedResource().Resources[k]; ok {
+			if _, ok := allocation.GetAllocatedResource().Resources[k]; ok {
 				includeAllocation = true
 				break
 			}
@@ -79,8 +79,8 @@ func (p *PreemptionContext) sortAllocations() {
 	p.Lock()
 	defer p.Unlock()
 	sort.SliceStable(p.allocations, func(i, j int) bool {
-		l := p.allocations[i].GetAsk()
-		r := p.allocations[j].GetAsk()
+		l := p.allocations[i]
+		r := p.allocations[j]
 
 		// sort based on the type
 		lAskType := 1         // regular pod

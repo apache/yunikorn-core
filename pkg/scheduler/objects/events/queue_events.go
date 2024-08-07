@@ -16,7 +16,7 @@
  limitations under the License.
 */
 
-package objects
+package events
 
 import (
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -25,11 +25,11 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-type queueEvents struct {
+type QueueEvents struct {
 	eventSystem events.EventSystem
 }
 
-func (q *queueEvents) sendNewQueueEvent(queuePath string, managed bool) {
+func (q *QueueEvents) SendNewQueueEvent(queuePath string, managed bool) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -42,7 +42,7 @@ func (q *queueEvents) sendNewQueueEvent(queuePath string, managed bool) {
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendNewApplicationEvent(queuePath, appID string) {
+func (q *QueueEvents) SendNewApplicationEvent(queuePath, appID string) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -51,7 +51,7 @@ func (q *queueEvents) sendNewApplicationEvent(queuePath, appID string) {
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendRemoveQueueEvent(queuePath string, managed bool) {
+func (q *QueueEvents) SendRemoveQueueEvent(queuePath string, managed bool) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -64,7 +64,7 @@ func (q *queueEvents) sendRemoveQueueEvent(queuePath string, managed bool) {
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendRemoveApplicationEvent(queuePath, appID string) {
+func (q *QueueEvents) SendRemoveApplicationEvent(queuePath, appID string) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -73,7 +73,7 @@ func (q *queueEvents) sendRemoveApplicationEvent(queuePath, appID string) {
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendMaxResourceChangedEvent(queuePath string, maxResource *resources.Resource) {
+func (q *QueueEvents) SendMaxResourceChangedEvent(queuePath string, maxResource *resources.Resource) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -82,7 +82,7 @@ func (q *queueEvents) sendMaxResourceChangedEvent(queuePath string, maxResource 
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendGuaranteedResourceChangedEvent(queuePath string, guaranteed *resources.Resource) {
+func (q *QueueEvents) SendGuaranteedResourceChangedEvent(queuePath string, guaranteed *resources.Resource) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -91,7 +91,7 @@ func (q *queueEvents) sendGuaranteedResourceChangedEvent(queuePath string, guara
 	q.eventSystem.AddEvent(event)
 }
 
-func (q *queueEvents) sendTypeChangedEvent(queuePath string, isLeaf bool) {
+func (q *QueueEvents) SendTypeChangedEvent(queuePath string, isLeaf bool) {
 	if !q.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
@@ -104,8 +104,8 @@ func (q *queueEvents) sendTypeChangedEvent(queuePath string, isLeaf bool) {
 	q.eventSystem.AddEvent(event)
 }
 
-func newQueueEvents(evt events.EventSystem) *queueEvents {
-	return &queueEvents{
+func NewQueueEvents(evt events.EventSystem) *QueueEvents {
+	return &QueueEvents{
 		eventSystem: evt,
 	}
 }

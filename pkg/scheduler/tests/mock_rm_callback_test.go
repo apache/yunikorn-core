@@ -124,7 +124,7 @@ func (m *mockRMCallback) getAllocations() map[string]*si.Allocation {
 }
 
 func (m *mockRMCallback) waitForAcceptedApplication(tb testing.TB, appID string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		return m.acceptedApplications[appID]
@@ -135,7 +135,7 @@ func (m *mockRMCallback) waitForAcceptedApplication(tb testing.TB, appID string,
 }
 
 func (m *mockRMCallback) waitForRejectedApplication(t *testing.T, appID string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		return m.rejectedApplications[appID]
@@ -144,7 +144,7 @@ func (m *mockRMCallback) waitForRejectedApplication(t *testing.T, appID string, 
 }
 
 func (m *mockRMCallback) waitForApplicationState(t *testing.T, appID, state string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		return m.appStates[appID] == state
@@ -153,7 +153,7 @@ func (m *mockRMCallback) waitForApplicationState(t *testing.T, appID, state stri
 }
 
 func (m *mockRMCallback) waitForAcceptedNode(t *testing.T, nodeID string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		return m.acceptedNodes[nodeID]
@@ -163,7 +163,7 @@ func (m *mockRMCallback) waitForAcceptedNode(t *testing.T, nodeID string, timeou
 
 func (m *mockRMCallback) waitForMinAcceptedNodes(tb testing.TB, minNumNode int, timeoutMs int) {
 	var numNodes int
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		numNodes = len(m.acceptedNodes)
@@ -174,18 +174,9 @@ func (m *mockRMCallback) waitForMinAcceptedNodes(tb testing.TB, minNumNode int, 
 	}
 }
 
-func (m *mockRMCallback) waitForRejectedNode(t *testing.T, nodeID string, timeoutMs int) {
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		m.RLock()
-		defer m.RUnlock()
-		return m.rejectedNodes[nodeID]
-	})
-	assert.NilError(t, err, "Failed to wait for node state to become rejected: %s, called from: %s", nodeID, caller())
-}
-
 func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs int) {
 	var allocLen int
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		allocLen = len(m.Allocations)
@@ -196,7 +187,7 @@ func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs 
 
 func (m *mockRMCallback) waitForMinAllocations(tb testing.TB, nAlloc int, timeoutMs int) {
 	var allocLen int
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		allocLen = len(m.Allocations)
@@ -209,7 +200,7 @@ func (m *mockRMCallback) waitForMinAllocations(tb testing.TB, nAlloc int, timeou
 
 func (m *mockRMCallback) waitForReleasedPlaceholders(t *testing.T, releases int, timeoutMs int) {
 	var releasesLen int
-	err := common.WaitFor(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		m.RLock()
 		defer m.RUnlock()
 		releasesLen = len(m.releasedPhs)

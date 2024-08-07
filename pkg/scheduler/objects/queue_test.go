@@ -1122,15 +1122,15 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	}
 
 	// verify get outstanding requests for root, and child queues
-	rootTotal := make([]*AllocationAsk, 0)
+	rootTotal := make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 15)
 
-	queue1Total := make([]*AllocationAsk, 0)
+	queue1Total := make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 10)
 
-	queue2Total := make([]*AllocationAsk, 0)
+	queue2Total := make([]*Allocation, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 5)
 
@@ -1139,25 +1139,25 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	err = queue1.IncAllocatedResource(used, false)
 	assert.NilError(t, err, "failed to increment allocated resources")
 
-	queue1Total = make([]*AllocationAsk, 0)
+	queue1Total = make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 5)
 
-	queue2Total = make([]*AllocationAsk, 0)
+	queue2Total = make([]*Allocation, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 5)
 
-	rootTotal = make([]*AllocationAsk, 0)
+	rootTotal = make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 10)
 
 	// remove app2 from queue2
 	queue2.RemoveApplication(app2)
-	queue2Total = make([]*AllocationAsk, 0)
+	queue2Total = make([]*Allocation, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 0)
 
-	rootTotal = make([]*AllocationAsk, 0)
+	rootTotal = make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 5)
 }
@@ -1195,11 +1195,11 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	}
 
 	// verify get outstanding requests for root, and child queues
-	rootTotal := make([]*AllocationAsk, 0)
+	rootTotal := make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 20)
 
-	queue1Total := make([]*AllocationAsk, 0)
+	queue1Total := make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 20)
 
@@ -1208,13 +1208,13 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	err = queue1.IncAllocatedResource(used, false)
 	assert.NilError(t, err, "failed to increment allocated resources")
 
-	queue1Total = make([]*AllocationAsk, 0)
+	queue1Total = make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 20)
 	headRoom := queue1.getHeadRoom()
 	assert.Assert(t, resources.IsZero(headRoom), "headroom should have been zero")
 
-	rootTotal = make([]*AllocationAsk, 0)
+	rootTotal = make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 20)
 	headRoom = root.getHeadRoom()
@@ -1253,15 +1253,15 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	rootTotal := make([]*AllocationAsk, 0)
+	rootTotal := make([]*Allocation, 0)
 	root.GetQueueOutstandingRequests(&rootTotal)
 	assert.Equal(t, len(rootTotal), 30)
 
-	queue1Total := make([]*AllocationAsk, 0)
+	queue1Total := make([]*Allocation, 0)
 	queue1.GetQueueOutstandingRequests(&queue1Total)
 	assert.Equal(t, len(queue1Total), 10)
 
-	queue2Total := make([]*AllocationAsk, 0)
+	queue2Total := make([]*Allocation, 0)
 	queue2.GetQueueOutstandingRequests(&queue2Total)
 	assert.Equal(t, len(queue2Total), 20)
 }
@@ -1490,7 +1490,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 
 	// test properties
 	root.properties = getProperties()
-	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo(false).Properties)
+	assert.DeepEqual(t, root.properties, root.GetPartitionQueueDAOInfo(true).Properties)
 
 	// test template
 	root.template, err = template.FromConf(&configs.ChildTemplate{
@@ -1502,23 +1502,37 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 		},
 	})
 	assert.NilError(t, err)
-	assert.Equal(t, root.template.GetMaxApplications(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.MaxApplications)
-	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.Properties)
-	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.MaxResource)
-	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).TemplateInfo.GuaranteedResource)
+	assert.Equal(t, root.template.GetMaxApplications(), root.GetPartitionQueueDAOInfo(true).TemplateInfo.MaxApplications)
+	assert.DeepEqual(t, root.template.GetProperties(), root.GetPartitionQueueDAOInfo(true).TemplateInfo.Properties)
+	assert.DeepEqual(t, root.template.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(true).TemplateInfo.MaxResource)
+	assert.DeepEqual(t, root.template.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(true).TemplateInfo.GuaranteedResource)
 
 	// test resources
 	root.maxResource = getResource(t)
 	root.guaranteedResource = getResource(t)
-	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).MaxResource)
-	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(false).GuaranteedResource)
-	assert.DeepEqual(t, root.getHeadRoom().DAOMap(), root.GetPartitionQueueDAOInfo(false).HeadRoom)
+	assert.DeepEqual(t, root.GetMaxResource().DAOMap(), root.GetPartitionQueueDAOInfo(true).MaxResource)
+	assert.DeepEqual(t, root.GetGuaranteedResource().DAOMap(), root.GetPartitionQueueDAOInfo(true).GuaranteedResource)
+	assert.DeepEqual(t, root.getHeadRoom().DAOMap(), root.GetPartitionQueueDAOInfo(true).HeadRoom)
 
 	// test allocatingAcceptedApps
 	root.allocatingAcceptedApps = getAllocatingAcceptedApps()
 	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "allocatingAcceptedApps size")
-	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
-	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).AllocatingAcceptedApps[0], appID1)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).AllocatingAcceptedApps), 1, "AllocatingAcceptedApps size")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).AllocatingAcceptedApps[0], appID1)
+
+	// Test specific queue
+	_, err = createManagedQueue(root, "leaf-queue", false, nil)
+	assert.NilError(t, err, "failed to create managed queue")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).QueueName, "root")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).Children), 0)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(false).ChildNames), 1)
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(false).ChildNames[0], "root.leaf-queue")
+	// Test hierarchy queue
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).QueueName, "root")
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).Children), 1)
+	assert.Equal(t, len(root.GetPartitionQueueDAOInfo(true).ChildNames), 1)
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).Children[0].QueueName, "root.leaf-queue")
+	assert.Equal(t, root.GetPartitionQueueDAOInfo(true).ChildNames[0], "root.leaf-queue")
 }
 
 func getAllocatingAcceptedApps() map[string]bool {
@@ -1667,9 +1681,9 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parentGuar := map[string]string{siCommon.Memory: "100"}
 	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
 	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
-	alloc2 := NewAllocation(nodeID1, ask2)
+	alloc2 := markAllocated(nodeID1, ask2)
 	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
-	alloc3 := NewAllocation(nodeID1, ask3)
+	alloc3 := markAllocated(nodeID1, ask3)
 	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
 	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
@@ -1683,7 +1697,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 
 	// verify no victims when no allocations exist
 	snapshot := leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
-	assert.Equal(t, 3, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
+	assert.Equal(t, 5, len(snapshot), "wrong snapshot count") // leaf1, parent1, root
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 
 	// add two lower-priority allocs in leaf2
@@ -1758,11 +1772,11 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parent1.allocatedResource = used
 
 	// requiring a specific node take alloc out of consideration
-	alloc2.GetAsk().SetRequiredNode(nodeID1)
+	alloc2.SetRequiredNode(nodeID1)
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 1, len(victims(snapshot)), "wrong victim count")
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
-	alloc2.GetAsk().SetRequiredNode("")
+	alloc2.SetRequiredNode("")
 
 	// placeholder which has been marked released should not be considered
 	alloc2.released = true
@@ -2178,7 +2192,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
-	childNonLeaf, err := NewDynamicQueue("nonleaf", false, parent)
+	childNonLeaf, err := NewDynamicQueue("nonleaf_Test-a_b_#_c_#_d_/_e@dom:ain", false, parent)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
 	assert.Equal(t, len(childNonLeaf.properties), 0)
@@ -2187,6 +2201,12 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Assert(t, childNonLeaf.prioritySortEnabled)
 	assert.Equal(t, childNonLeaf.priorityPolicy, policies.DefaultPriorityPolicy)
 	assert.Equal(t, childNonLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+
+	// case 2: invalid queue name
+	_, err = NewDynamicQueue("invalid!queue", false, parent)
+	if err == nil {
+		t.Errorf("new dynamic queue should have failed to create, err is %v", err)
+	}
 }
 
 func TestTemplateIsNotOverrideByParent(t *testing.T) {
@@ -2445,7 +2465,7 @@ func TestQueueEvents(t *testing.T) {
 	queue.AddApplication(app)
 	queue.RemoveApplication(app)
 	noEvents := uint64(0)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 5
 	})
@@ -2458,7 +2478,10 @@ func TestQueueEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_QUEUE, records[3].Type)
 	assert.Equal(t, si.EventRecord_REMOVE, records[3].EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_APP, records[3].EventChangeDetail)
-	isRemoveApplicationEvent(t, app, records[4])
+	assert.Equal(t, si.EventRecord_APP, records[4].Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, records[4].ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_REMOVE, records[4].EventChangeType, "incorrect change type, expected remove")
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[4].EventChangeDetail, "incorrect change detail, expected none")
 
 	newConf := configs.QueueConfig{
 		Parent: false,
@@ -2474,7 +2497,7 @@ func TestQueueEvents(t *testing.T) {
 	}
 	err = queue.ApplyConf(newConf)
 	assert.NilError(t, err)
-	err = common.WaitFor(10*time.Millisecond, time.Second, func() bool {
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3
 	})
@@ -2514,7 +2537,7 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask")
 
-	alloc := NewAllocation(nodeID1, ask)
+	alloc := markAllocated(nodeID1, ask)
 	app.AddAllocation(alloc)
 	assert.Equal(t, app.CurrentState(), Running.String(), "app state should be running")
 	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
@@ -2525,4 +2548,11 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	app.RemoveAllocation(alloc.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
 	assert.Equal(t, app.CurrentState(), Completing.String(), "app state should be completing")
 	assert.Equal(t, leaf.runningApps, uint64(0), "leaf should have 0 app running")
+}
+
+func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecord) {
+	assert.Equal(t, si.EventRecord_APP, record.Type, "incorrect event type, expect app")
+	assert.Equal(t, app.ApplicationID, record.ObjectID, "incorrect object ID, expected application ID")
+	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
+	assert.Equal(t, si.EventRecord_APP_NEW, record.EventChangeDetail, "incorrect change detail, expected none")
 }

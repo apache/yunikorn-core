@@ -29,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -56,7 +57,7 @@ type Node struct {
 
 	reservations map[string]*reservation // a map of reservations
 	listeners    []NodeListener          // a list of node listeners
-	nodeEvents   *nodeEvents
+	nodeEvents   *schedEvt.NodeEvents
 
 	locking.RWMutex
 }
@@ -77,7 +78,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 		schedulable:       true,
 		listeners:         make([]NodeListener, 0),
 	}
-	sn.nodeEvents = newNodeEvents(sn, events.GetEventSystem())
+	sn.nodeEvents = schedEvt.NewNodeEvents(events.GetEventSystem())
 	// initialise available resources
 	var err error
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
@@ -165,7 +166,7 @@ func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource
 	delta := resources.Sub(newCapacity, sn.totalResource)
 	sn.totalResource = newCapacity
 	sn.refreshAvailableResource()
-	sn.nodeEvents.sendNodeCapacityChangedEvent()
+	sn.nodeEvents.SendNodeCapacityChangedEvent(sn.NodeID, sn.totalResource.Clone())
 	return delta
 }
 
@@ -184,7 +185,7 @@ func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
 		return
 	}
 	sn.occupiedResource = occupiedResource
-	sn.nodeEvents.sendNodeOccupiedResourceChangedEvent()
+	sn.nodeEvents.SendNodeOccupiedResourceChangedEvent(sn.NodeID, sn.occupiedResource.Clone())
 	sn.refreshAvailableResource()
 }
 
@@ -234,7 +235,7 @@ func (sn *Node) SetSchedulable(schedulable bool) {
 	sn.Lock()
 	defer sn.Unlock()
 	sn.schedulable = schedulable
-	sn.nodeEvents.sendNodeSchedulableChangedEvent(sn.schedulable)
+	sn.nodeEvents.SendNodeSchedulableChangedEvent(sn.NodeID, sn.schedulable)
 }
 
 // Can this node be used in scheduling.
@@ -304,7 +305,7 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 		delete(sn.allocations, allocationKey)
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
-		sn.nodeEvents.sendAllocationRemovedEvent(alloc.allocationKey, alloc.allocatedResource)
+		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.allocatedResource)
 		return alloc
 	}
 
@@ -327,7 +328,7 @@ func (sn *Node) AddAllocation(alloc *Allocation) bool {
 		sn.allocations[alloc.GetAllocationKey()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
-		sn.nodeEvents.sendAllocationAddedEvent(alloc.allocationKey, res)
+		sn.nodeEvents.SendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)
 		return true
 	}
 	return false
@@ -366,12 +367,12 @@ func (sn *Node) CanAllocate(res *resources.Resource) bool {
 }
 
 // Checking pre-conditions in the shim for an allocation.
-func (sn *Node) preAllocateConditions(ask *AllocationAsk) bool {
+func (sn *Node) preAllocateConditions(ask *Allocation) error {
 	return sn.preConditions(ask, true)
 }
 
 // Checking pre-conditions in the shim for a reservation.
-func (sn *Node) preReserveConditions(ask *AllocationAsk) bool {
+func (sn *Node) preReserveConditions(ask *Allocation) error {
 	return sn.preConditions(ask, false)
 }
 
@@ -381,7 +382,7 @@ func (sn *Node) preReserveConditions(ask *AllocationAsk) bool {
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
+func (sn *Node) preConditions(ask *Allocation, allocate bool) error {
 	// Check the predicates plugin (k8shim)
 	allocationKey := ask.GetAllocationKey()
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
@@ -399,12 +400,11 @@ func (sn *Node) preConditions(ask *AllocationAsk, allocate bool) bool {
 			// running predicates failed
 			msg := err.Error()
 			ask.LogAllocationFailure(msg, allocate)
-			ask.SendPredicateFailedEvent(msg)
-			return false
+			return err
 		}
 	}
 	// all predicate plugins passed
-	return true
+	return nil
 }
 
 // preAllocateCheck checks if the node should be considered as a possible node to allocate on.
@@ -463,7 +463,7 @@ func (sn *Node) isReservedForApp(key string) bool {
 // Reserve the node for this application and ask combination, if not reserved yet.
 // The reservation is checked against the node resources.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
-func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
+func (sn *Node) Reserve(app *Application, ask *Allocation) error {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
@@ -490,7 +490,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.GetAllocatedResource().String())
 	}
 	sn.reservations[appReservation.getKey()] = appReservation
-	sn.nodeEvents.sendReservedEvent(ask.GetAllocatedResource(), ask.GetAllocationKey())
+	sn.nodeEvents.SendReservedEvent(sn.NodeID, ask.GetAllocatedResource(), ask.GetAllocationKey())
 	// reservation added successfully
 	return nil
 }
@@ -498,7 +498,7 @@ func (sn *Node) Reserve(app *Application, ask *AllocationAsk) error {
 // unReserve the node for this application and ask combination
 // If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
 // The error is set if the reservation key cannot be generated.
-func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
+func (sn *Node) unReserve(app *Application, ask *Allocation) (int, error) {
 	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
@@ -512,7 +512,7 @@ func (sn *Node) unReserve(app *Application, ask *AllocationAsk) (int, error) {
 	}
 	if _, ok := sn.reservations[resKey]; ok {
 		delete(sn.reservations, resKey)
-		sn.nodeEvents.sendUnreservedEvent(ask.GetAllocatedResource(), ask.GetAllocationKey())
+		sn.nodeEvents.SendUnreservedEvent(sn.NodeID, ask.GetAllocatedResource(), ask.GetAllocationKey())
 		return 1, nil
 	}
 	// reservation was not found
@@ -587,9 +587,11 @@ func (sn *Node) getListeners() []NodeListener {
 }
 
 func (sn *Node) SendNodeAddedEvent() {
-	sn.nodeEvents.sendNodeAddedEvent()
+	sn.RLock()
+	defer sn.RUnlock()
+	sn.nodeEvents.SendNodeAddedEvent(sn.NodeID, sn.totalResource.Clone())
 }
 
 func (sn *Node) SendNodeRemovedEvent() {
-	sn.nodeEvents.sendNodeRemovedEvent()
+	sn.nodeEvents.SendNodeRemovedEvent(sn.NodeID)
 }

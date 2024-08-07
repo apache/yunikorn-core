@@ -22,7 +22,7 @@ module github.com/apache/yunikorn-core
 go 1.21
 
 require (
-	github.com/apache/yunikorn-scheduler-interface v0.0.0-20240425182941-07f5695119a1
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20240731203810-92032b13d586
 	github.com/google/btree v1.1.2
 	github.com/google/go-cmp v0.6.0
 	github.com/google/uuid v1.6.0
@@ -33,6 +33,7 @@ require (
 	github.com/prometheus/common v0.45.0
 	github.com/sasha-s/go-deadlock v0.3.1
 	go.uber.org/zap v1.26.0
+	golang.org/x/exp v0.0.0-20240409090435-93d18d7e34b8
 	golang.org/x/net v0.21.0
 	golang.org/x/time v0.5.0
 	google.golang.org/grpc v1.58.3

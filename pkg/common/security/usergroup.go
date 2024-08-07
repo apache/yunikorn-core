@@ -28,6 +28,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -70,7 +71,6 @@ type UserGroup struct {
 // * NO resolver: default, no user or group resolution just return the info (k8s use case)
 // * OS resolver: uses the OS libraries to resolve user and group memberships
 // * Test resolver: fake resolution for testing
-// TODO need to make this fully configurable and look at reflection etc
 func GetUserGroupCache(resolver string) *UserGroupCache {
 	once.Do(func() {
 		switch resolver {
@@ -153,6 +153,11 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 			return ug, err
 		}
 	}
+
+	if !configs.UserRegExp.MatchString(ugi.User) {
+		return UserGroup{}, fmt.Errorf("invalid username, it contains invalid characters")
+	}
+
 	// If groups are already present we should just convert
 	newUG := UserGroup{User: ugi.User}
 	newUG.Groups = append(newUG.Groups, ugi.Groups...)

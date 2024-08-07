@@ -37,6 +37,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
@@ -86,7 +87,7 @@ type Queue struct {
 	runningApps            uint64
 	allocatingAcceptedApps map[string]bool
 	template               *template.Template
-	queueEvents            *queueEvents
+	queueEvents            *schedEvt.QueueEvents
 
 	locking.RWMutex
 }
@@ -124,7 +125,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 
 	// update the properties
 	if err := sq.applyConf(conf); err != nil {
-		return nil, fmt.Errorf("configured queue creation failed: %w", err)
+		return nil, errors.Join(errors.New("configured queue creation failed: "), err)
 	}
 
 	// add to the parent, we might have an overall lock already
@@ -136,15 +137,15 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 		err := parent.addChildQueue(sq)
 		if err != nil {
-			return nil, fmt.Errorf("configured queue creation failed: %w", err)
+			return nil, errors.Join(errors.New("configured queue creation failed: "), err)
 		}
 	} else {
 		sq.UpdateQueueProperties()
 	}
-	sq.queueEvents = newQueueEvents(events.GetEventSystem())
+	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
-	sq.queueEvents.sendNewQueueEvent(sq.QueuePath, sq.isManaged)
+	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
 
 	return sq, nil
 }
@@ -177,8 +178,11 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 		return nil, fmt.Errorf("dynamic queue can not be added without parent: %s", name)
 	}
 	// name might not be checked do it here
-	if !configs.QueueNameRegExp.MatchString(name) {
-		return nil, fmt.Errorf("invalid queue name '%s', a name must only have alphanumeric characters, - or _, and be no longer than 64 characters", name)
+	if err := configs.IsQueueNameValid(name); err != nil {
+		return nil, err
+	}
+	if name == common.RecoveryQueue {
+		return nil, fmt.Errorf("dynamic queue cannot be root.@recovery@")
 	}
 	return newDynamicQueueInternal(name, leaf, parent)
 }
@@ -195,14 +199,14 @@ func newDynamicQueueInternal(name string, leaf bool, parent *Queue) (*Queue, err
 	// still need to make sure we lock the parent so we do not interfere with scheduling
 	err := parent.addChildQueue(sq)
 	if err != nil {
-		return nil, fmt.Errorf("dynamic queue creation failed: %w", err)
+		return nil, errors.Join(errors.New("dynamic queue creation failed: "), err)
 	}
 
 	sq.UpdateQueueProperties()
-	sq.queueEvents = newQueueEvents(events.GetEventSystem())
+	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
-	sq.queueEvents.sendNewQueueEvent(sq.QueuePath, sq.isManaged)
+	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
 
 	return sq, nil
 }
@@ -345,7 +349,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 	}
 
 	if prevLeaf != sq.isLeaf && sq.queueEvents != nil {
-		sq.queueEvents.sendTypeChangedEvent(sq.QueuePath, sq.isLeaf)
+		sq.queueEvents.SendTypeChangedEvent(sq.QueuePath, sq.isLeaf)
 	}
 
 	if !sq.isLeaf {
@@ -396,7 +400,7 @@ func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resourc
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", maxResource))
 		if !resources.Equals(sq.maxResource, maxResource) && sq.queueEvents != nil {
-			sq.queueEvents.sendMaxResourceChangedEvent(sq.QueuePath, maxResource)
+			sq.queueEvents.SendMaxResourceChangedEvent(sq.QueuePath, maxResource)
 		}
 		sq.maxResource = maxResource
 		sq.updateMaxResourceMetrics()
@@ -406,7 +410,7 @@ func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resourc
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", maxResource))
 		if sq.queueEvents != nil {
-			sq.queueEvents.sendMaxResourceChangedEvent(sq.QueuePath, maxResource)
+			sq.queueEvents.SendMaxResourceChangedEvent(sq.QueuePath, maxResource)
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
@@ -422,7 +426,7 @@ func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resourc
 			zap.Stringer("current", sq.guaranteedResource),
 			zap.Stringer("new", guaranteedResource))
 		if !resources.Equals(sq.guaranteedResource, guaranteedResource) && sq.queueEvents != nil {
-			sq.queueEvents.sendGuaranteedResourceChangedEvent(sq.QueuePath, guaranteedResource)
+			sq.queueEvents.SendGuaranteedResourceChangedEvent(sq.QueuePath, guaranteedResource)
 		}
 		sq.guaranteedResource = guaranteedResource
 		sq.updateGuaranteedResourceMetrics()
@@ -432,7 +436,7 @@ func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resourc
 			zap.Stringer("current", sq.guaranteedResource),
 			zap.Stringer("new", guaranteedResource))
 		if sq.queueEvents != nil {
-			sq.queueEvents.sendGuaranteedResourceChangedEvent(sq.QueuePath, guaranteedResource)
+			sq.queueEvents.SendGuaranteedResourceChangedEvent(sq.QueuePath, guaranteedResource)
 		}
 		sq.guaranteedResource = nil
 		sq.updateGuaranteedResourceMetrics()
@@ -643,14 +647,14 @@ func (sq *Queue) CheckAdminAccess(user security.UserGroup) bool {
 }
 
 // GetPartitionQueueDAOInfo returns the queue hierarchy as an object for a REST call.
-// Exclude is true, which means that returns the specified queue object, but does not return the children of the specified queue.
-func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInfo {
+// Include is false, which means that returns the specified queue object, but does not return the children of the specified queue.
+func (sq *Queue) GetPartitionQueueDAOInfo(include bool) dao.PartitionQueueDAOInfo {
 	queueInfo := dao.PartitionQueueDAOInfo{}
 	children := sq.GetCopyOfChildren()
-	if !exclude {
+	if include {
 		queueInfo.Children = make([]dao.PartitionQueueDAOInfo, 0, len(children))
 		for _, child := range children {
-			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo(false))
+			queueInfo.Children = append(queueInfo.Children, child.GetPartitionQueueDAOInfo(true))
 		}
 	}
 	// we have held the read lock so following method should not take lock again.
@@ -659,7 +663,7 @@ func (sq *Queue) GetPartitionQueueDAOInfo(exclude bool) dao.PartitionQueueDAOInf
 	defer sq.RUnlock()
 
 	for _, child := range children {
-		queueInfo.ChildrenNames = append(queueInfo.ChildrenNames, child.QueuePath)
+		queueInfo.ChildNames = append(queueInfo.ChildNames, child.QueuePath)
 	}
 	queueInfo.QueueName = sq.QueuePath
 	queueInfo.Status = sq.stateMachine.Current()
@@ -745,7 +749,7 @@ func (sq *Queue) AddApplication(app *Application) {
 	defer sq.Unlock()
 	appID := app.ApplicationID
 	sq.applications[appID] = app
-	sq.queueEvents.sendNewApplicationEvent(sq.QueuePath, appID)
+	sq.queueEvents.SendNewApplicationEvent(sq.QueuePath, appID)
 }
 
 // RemoveApplication removes the app from the list of tracked applications. Make sure that the app
@@ -760,7 +764,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 			zap.String("applicationID", appID))
 		return
 	}
-	sq.queueEvents.sendRemoveApplicationEvent(sq.QueuePath, appID)
+	sq.queueEvents.SendRemoveApplicationEvent(sq.QueuePath, appID)
 	if appPending := app.GetPendingResource(); !resources.IsZero(appPending) {
 		sq.decPendingResource(appPending)
 	}
@@ -797,7 +801,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	delete(sq.allocatingAcceptedApps, appID)
 	priority := sq.recalculatePriority()
 	sq.Unlock()
-	app.appEvents.sendRemoveApplicationEvent()
+	app.appEvents.SendRemoveApplicationEvent(appID)
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
 
@@ -962,7 +966,7 @@ func (sq *Queue) RemoveQueue() bool {
 	log.Log(log.SchedQueue).Info("removing queue", zap.String("queue", sq.QueuePath))
 	// root is always managed and is the only queue with a nil parent: no need to guard
 	sq.parent.removeChildQueue(sq.Name)
-	sq.queueEvents.sendRemoveQueueEvent(sq.QueuePath, sq.isManaged)
+	sq.queueEvents.SendRemoveQueueEvent(sq.QueuePath, sq.isManaged)
 	return true
 }
 
@@ -989,12 +993,10 @@ func (sq *Queue) isRoot() bool {
 // Guard against going over max resources if set
 func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
 	// check this queue: failure stops checks if the allocation is not part of a node addition
-	newAllocated := resources.Add(sq.allocatedResource, alloc)
-	if !nodeReported {
-		if !sq.resourceFitsMaxRes(newAllocated) {
-			return fmt.Errorf("allocation (%v) puts queue '%s' over maximum allocation (%v), current usage (%v)",
-				alloc, sq.QueuePath, sq.maxResource, sq.allocatedResource)
-		}
+	fit, newAllocated := sq.allocatedResFits(alloc)
+	if !nodeReported && !fit {
+		return fmt.Errorf("allocation (%v) puts queue '%s' over maximum allocation (%v), current usage (%v)",
+			alloc, sq.QueuePath, sq.maxResource, sq.allocatedResource)
 	}
 	// check the parent: need to pass before updating
 	if sq.parent != nil {
@@ -1020,11 +1022,12 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	return nil
 }
 
-// small helper method to access sq.maxResource and avoid Clone() call
-func (sq *Queue) resourceFitsMaxRes(res *resources.Resource) bool {
+// small helper method to access sq.maxResource+sq.allocatedResource and avoid Clone() call
+func (sq *Queue) allocatedResFits(res *resources.Resource) (bool, *resources.Resource) {
 	sq.RLock()
 	defer sq.RUnlock()
-	return sq.maxResource.FitInMaxUndef(res)
+	newAllocated := resources.Add(sq.allocatedResource, res)
+	return sq.maxResource.FitInMaxUndef(newAllocated), newAllocated
 }
 
 // DecAllocatedResource decrement the allocated resources for this queue (recursively)
@@ -1274,7 +1277,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", max))
 		if !resources.Equals(sq.maxResource, max) && sq.queueEvents != nil {
-			sq.queueEvents.sendMaxResourceChangedEvent(sq.QueuePath, sq.maxResource)
+			sq.queueEvents.SendMaxResourceChangedEvent(sq.QueuePath, sq.maxResource)
 		}
 		sq.maxResource = max.Clone()
 		sq.updateMaxResourceMetrics()
@@ -1284,7 +1287,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", max))
 		if sq.queueEvents != nil {
-			sq.queueEvents.sendMaxResourceChangedEvent(sq.QueuePath, sq.maxResource)
+			sq.queueEvents.SendMaxResourceChangedEvent(sq.QueuePath, sq.maxResource)
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()
@@ -1322,7 +1325,7 @@ func (sq *Queue) canRunApp(appID string) bool {
 // resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() NodeIterator, getnode func(string) *Node, allowPreemption bool) *Allocation {
+func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() NodeIterator, getnode func(string) *Node, allowPreemption bool) *AllocationResult {
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
@@ -1337,26 +1340,27 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 			if app.IsAccepted() && (!runnableInQueue || !runnableByUserLimit) {
 				continue
 			}
-			alloc := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
-			if alloc != nil {
+			result := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
+			if result != nil {
 				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
-					zap.Stringer("allocation", alloc))
+					zap.Stringer("resultType", result.ResultType),
+					zap.Stringer("allocation", result.Request))
 				// if the app is still in Accepted state we're allocating placeholders.
 				// we want to count these apps as running
 				if app.IsAccepted() {
 					sq.setAllocatingAccepted(app.ApplicationID)
 				}
-				return alloc
+				return result
 			}
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryAllocate(iterator, fullIterator, getnode, allowPreemption)
-			if alloc != nil {
-				return alloc
+			result := child.TryAllocate(iterator, fullIterator, getnode, allowPreemption)
+			if result != nil {
+				return result
 			}
 		}
 	}
@@ -1369,25 +1373,26 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode func(string) *Node) *Allocation {
+func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode func(string) *Node) *AllocationResult {
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
-			alloc := app.tryPlaceholderAllocate(iterator, getnode)
-			if alloc != nil {
+			result := app.tryPlaceholderAllocate(iterator, getnode)
+			if result != nil {
 				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
-					zap.Stringer("allocation", alloc))
-				return alloc
+					zap.Stringer("resultType", result.ResultType),
+					zap.Stringer("allocation", result.Request))
+				return result
 			}
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryPlaceholderAllocate(iterator, getnode)
-			if alloc != nil {
-				return alloc
+			result := child.TryPlaceholderAllocate(iterator, getnode)
+			if result != nil {
+				return result
 			}
 		}
 	}
@@ -1395,7 +1400,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 }
 
 // GetQueueOutstandingRequests builds a slice of pending allocation asks that fits into the queue's headroom.
-func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
+func (sq *Queue) GetQueueOutstandingRequests(total *[]*Allocation) {
 	if sq.IsLeafQueue() {
 		headRoom := sq.getMaxHeadRoom()
 		// while calculating outstanding requests, we calculate all the requests that can fit into the queue's headroom,
@@ -1418,7 +1423,7 @@ func (sq *Queue) GetQueueOutstandingRequests(total *[]*AllocationAsk) {
 // the configured queue sortPolicy. Queues without pending resources are skipped.
 // Applications are currently NOT sorted and are iterated over in a random order.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
+func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *AllocationResult {
 	if sq.IsLeafQueue() {
 		// skip if it has no reservations
 		reservedCopy := sq.GetReservedApps()
@@ -1442,28 +1447,29 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *Allocation {
 				if app.IsAccepted() && (!sq.canRunApp(appID) || !ugm.GetUserManager().CanRunApp(sq.QueuePath, appID, app.user)) {
 					continue
 				}
-				alloc := app.tryReservedAllocate(headRoom, iterator)
-				if alloc != nil {
+				result := app.tryReservedAllocate(headRoom, iterator)
+				if result != nil {
 					log.Log(log.SchedQueue).Info("reservation found for allocation found on queue",
 						zap.String("queueName", sq.QueuePath),
 						zap.String("appID", appID),
-						zap.Stringer("allocation", alloc),
+						zap.Stringer("resultType", result.ResultType),
+						zap.Stringer("allocation", result.Request),
 						zap.String("appStatus", app.CurrentState()))
 					// if the app is still in Accepted state we're allocating placeholders.
 					// we want to count these apps as running
 					if app.IsAccepted() {
 						sq.setAllocatingAccepted(app.ApplicationID)
 					}
-					return alloc
+					return result
 				}
 			}
 		}
 	} else {
 		// process the child queues (filters out queues that have no pending requests)
 		for _, child := range sq.sortQueues() {
-			alloc := child.TryReservedAllocate(iterator)
-			if alloc != nil {
-				return alloc
+			result := child.TryReservedAllocate(iterator)
+			if result != nil {
+				return result
 			}
 		}
 	}
@@ -1693,7 +1699,7 @@ func (sq *Queue) SetMaxRunningApps(max int) {
 // queuePath is the fully-qualified path of the queue where ask resides
 // ask is the ask we are attempting to preempt for
 // return is a map of potential victims keyed by queue path
-func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *AllocationAsk) map[string]*QueuePreemptionSnapshot {
+func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation) map[string]*QueuePreemptionSnapshot {
 	results := make(map[string]*QueuePreemptionSnapshot)
 	priorityMap := make(map[string]int64)
 
@@ -1745,7 +1751,7 @@ func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnaps
 	return snapshot
 }
 
-func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreemptionSnapshot, queuePath string, ask *AllocationAsk, priorityMap map[string]int64, askPriority int64, fenced bool) {
+func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreemptionSnapshot, queuePath string, ask *Allocation, priorityMap map[string]int64, askPriority int64, fenced bool) {
 	if sq == nil {
 		return
 	}
@@ -1762,19 +1768,24 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 			return
 		}
 
+		victims := sq.createPreemptionSnapshot(results)
+
 		// skip this queue if we are within guaranteed limits
-		guaranteed := resources.ComponentWiseMinPermissive(sq.GetActualGuaranteedResource(), sq.GetMaxResource())
-		if guaranteed.FitInMaxUndef(sq.GetAllocatedResource()) {
+		remaining := results[sq.QueuePath].GetRemainingGuaranteedResource()
+		if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
 			return
 		}
-
-		victims := sq.createPreemptionSnapshot(results)
 
 		// walk allocations and select those that are equal or lower than current priority
 		for _, app := range sq.GetCopyOfApps() {
 			for _, alloc := range app.GetAllAllocations() {
+				// at least any one of the ask resource type should match with potential victim
+				if !ask.GetAllocatedResource().MatchAny(alloc.allocatedResource) {
+					continue
+				}
+
 				// skip tasks which require a specific node
-				if alloc.GetAsk().GetRequiredNode() != "" {
+				if alloc.GetRequiredNode() != "" {
 					continue
 				}
 
@@ -1838,7 +1849,7 @@ func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPr
 	priorityMap[sq.QueuePath] = currentPriority
 
 	// Return this queue as fence root if: 1. FencePreemptionPolicy is set 2. root queue 3. allocations in the queue reached maximum resources
-	if sq.parent == nil || sq.GetPreemptionPolicy() == policies.FencePreemptionPolicy || resources.Equals(sq.allocatedResource, sq.maxResource) {
+	if sq.parent == nil || sq.GetPreemptionPolicy() == policies.FencePreemptionPolicy || resources.Equals(sq.maxResource, sq.allocatedResource) {
 		return sq
 	}
 	return sq.parent.findPreemptionFenceRoot(priorityMap, currentPriority)

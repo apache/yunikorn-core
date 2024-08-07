@@ -32,6 +32,8 @@ import (
 // this test simulates the scenario the cluster starts up with 0 nodes
 // then we submit an app, the app tasks will be pending; then we add a
 // node to the cluster, then we see the app gets the allocation it needed.
+//
+//nolint:funlen
 func TestSchedulerWithoutNodes(t *testing.T) {
 	// Register RM
 	configData := `
@@ -169,6 +171,7 @@ partitions:
 	ms.mockRM.waitForAllocations(t, 2, 1000)
 }
 
+//nolint:funlen
 func TestAddRemoveNodes(t *testing.T) {
 	// Register RM
 	configData := `
@@ -408,15 +411,14 @@ partitions:
 
 	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 300000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.Memory, 300000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.CPU, 10000, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[common.Memory]), int64(300000000))
 	assert.Equal(t, int64(node1.GetCapacity().Resources[common.CPU]), int64(10000))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(300000000))
 	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "300M", "vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
-		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
-	}
 	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
 	}
@@ -440,11 +442,10 @@ partitions:
 	})
 	assert.NilError(t, err, "NodeRequest failed")
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default", []string{"node-1:1234"}, 100000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.Memory, 100000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.CPU, 20000, 1000)
 	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "100M", "vcore": "20"})
 	assert.NilError(t, err, "failed to create resource")
-	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
-		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
-	}
 	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
 	}
@@ -517,14 +518,14 @@ partitions:
 		RmID: "rm:123",
 	})
 	assert.NilError(t, err, "NodeRequest failed")
+
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-2:1234"}, 50000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.Memory, 150000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.CPU, 30000, 1000)
 
 	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "150M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
-	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
-		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
-	}
 
 	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())
@@ -552,12 +553,11 @@ partitions:
 
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-2:1234"}, 50000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.Memory, 150000000, 1000)
+	waitForUpdatePartitionResource(t, partitionInfo, common.CPU, 30000, 1000)
 
 	newRes, err = resources.NewResourceFromConf(map[string]string{"memory": "150M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
-	if !resources.Equals(newRes, partitionInfo.GetTotalPartitionResource()) {
-		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetTotalPartitionResource())
-	}
 
 	if !resources.Equals(newRes, partitionInfo.GetQueue("root").GetMaxResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", newRes, partitionInfo.GetQueue("root").GetMaxResource())

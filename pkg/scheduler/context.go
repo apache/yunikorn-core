@@ -19,6 +19,7 @@
 package scheduler
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -130,22 +131,22 @@ func (cc *ClusterContext) schedule() bool {
 		}
 		// try reservations first
 		schedulingStart := time.Now()
-		alloc := psc.tryReservedAllocate()
-		if alloc == nil {
+		result := psc.tryReservedAllocate()
+		if result == nil {
 			// placeholder replacement second
-			alloc = psc.tryPlaceholderAllocate()
+			result = psc.tryPlaceholderAllocate()
 			// nothing reserved that can be allocated try normal allocate
-			if alloc == nil {
-				alloc = psc.tryAllocate()
+			if result == nil {
+				result = psc.tryAllocate()
 			}
 		}
-		if alloc != nil {
+		if result != nil {
 			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
-			if alloc.GetResult() == objects.Replaced {
+			if result.ResultType == objects.Replaced {
 				// communicate the removal to the RM
-				cc.notifyRMAllocationReleased(psc.RmID, alloc.GetReleasesClone(), si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+alloc.GetAllocationKey())
+				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, []*objects.Allocation{result.Request.GetRelease()}, si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+result.Request.GetAllocationKey())
 			} else {
-				cc.notifyRMNewAllocation(psc.RmID, alloc)
+				cc.notifyRMNewAllocation(psc.RmID, result.Request)
 			}
 			activity = true
 		}
@@ -555,7 +556,6 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 	// Update metrics with removed applications
 	if len(request.Remove) > 0 {
 		metrics.GetSchedulerMetrics().SubTotalApplicationsRunning(len(request.Remove))
-		// ToDO: need to improve this once we have state in YuniKorn for apps.
 		metrics.GetSchedulerMetrics().AddTotalApplicationsCompleted(len(request.Remove))
 		for _, app := range request.Remove {
 			partition := cc.GetPartition(app.PartitionName)
@@ -564,7 +564,7 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 			}
 			allocations := partition.removeApplication(app.ApplicationID)
 			if len(allocations) > 0 {
-				cc.notifyRMAllocationReleased(partition.RmID, allocations, si.TerminationType_STOPPED_BY_RM,
+				cc.notifyRMAllocationReleased(partition.RmID, partition.Name, allocations, si.TerminationType_STOPPED_BY_RM,
 					fmt.Sprintf("Application %s Removed", app.ApplicationID))
 			}
 			log.Log(log.SchedContext).Info("Application removed from partition",
@@ -607,11 +607,10 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 		return err
 	}
 
-	existingAllocations := cc.convertAllocations(nodeInfo.ExistingAllocations)
-	err := partition.AddNode(sn, existingAllocations)
+	err := partition.AddNode(sn)
 	sn.SendNodeAddedEvent()
 	if err != nil {
-		wrapped := fmt.Errorf("failure while adding new node, node rejected with error: %w", err)
+		wrapped := errors.Join(errors.New("failure while adding new node, node rejected with error: "), err)
 		log.Log(log.SchedContext).Error("Failed to add node to partition (rejected)",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("partitionName", sn.Partition),
@@ -690,7 +689,7 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		node.SendNodeRemovedEvent()
 		// notify the shim allocations have been released from node
 		if len(released) != 0 {
-			cc.notifyRMAllocationReleased(partition.RmID, released, si.TerminationType_STOPPED_BY_RM,
+			cc.notifyRMAllocationReleased(partition.RmID, partition.Name, released, si.TerminationType_STOPPED_BY_RM,
 				fmt.Sprintf("Node %s Removed", node.NodeID))
 		}
 		for _, confirm := range confirmed {
@@ -751,7 +750,7 @@ func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
 		}
 
 		alloc := objects.NewAllocationFromSI(siAlloc)
-		if err := partition.addAllocation(alloc); err != nil {
+		if err := partition.AddAllocation(alloc); err != nil {
 			rejectedAllocs = append(rejectedAllocs, &si.RejectedAllocation{
 				AllocationKey: siAlloc.AllocationKey,
 				ApplicationID: siAlloc.ApplicationID,
@@ -845,7 +844,7 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			allocs, confirmed := partition.removeAllocation(toRelease)
 			// notify the RM of the exact released allocations
 			if len(allocs) > 0 {
-				cc.notifyRMAllocationReleased(rmID, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
+				cc.notifyRMAllocationReleased(rmID, partition.Name, allocs, si.TerminationType_STOPPED_BY_RM, "allocation remove as per RM request")
 			}
 			// notify the RM of the confirmed allocations (placeholder swap & preemption)
 			if confirmed != nil {
@@ -853,16 +852,6 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			}
 		}
 	}
-}
-
-// Convert the si allocation to a proposal to add to the node
-func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*objects.Allocation {
-	convert := make([]*objects.Allocation, len(allocations))
-	for current, allocation := range allocations {
-		convert[current] = objects.NewAllocationFromSI(allocation)
-	}
-
-	return convert
 }
 
 // Create a RM update event to notify RM of new allocations
@@ -887,7 +876,7 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
-func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
+func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, partitionName string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
 	c := make(chan *rmevent.Result)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
@@ -897,7 +886,7 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, released []*ob
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
 			ApplicationID:   alloc.GetApplicationID(),
-			PartitionName:   alloc.GetPartitionName(),
+			PartitionName:   partitionName,
 			TerminationType: terminationType,
 			Message:         message,
 			AllocationKey:   alloc.GetAllocationKey(),

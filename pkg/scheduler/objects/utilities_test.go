@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -39,11 +40,13 @@ const (
 	appID0    = "app-0"
 	appID1    = "app-1"
 	appID2    = "app-2"
+	appID3    = "app-3"
 	aKey      = "alloc-1"
 	aKey2     = "alloc-2"
 	nodeID1   = "node-1"
 	nodeID2   = "node-2"
 	instType1 = "itype-1"
+	testgroup = "testgroup"
 )
 
 // Create the root queue, base for all testing
@@ -176,8 +179,8 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		reservations:      make(map[string]*reservation),
+		nodeEvents:        schedEvt.NewNodeEvents(events.GetEventSystem()),
 	}
-	sn.nodeEvents = newNodeEvents(sn, events.GetEventSystem())
 	return sn
 }
 
@@ -213,7 +216,7 @@ func newProto(nodeID string, totalResource, occupiedResource *resources.Resource
 func newAllocation(appID, nodeID string, res *resources.Resource) *Allocation {
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
-	return NewAllocation(nodeID, ask)
+	return markAllocated(nodeID, ask)
 }
 
 // Create a new Allocation with a random ask key
@@ -221,22 +224,22 @@ func newPlaceholderAlloc(appID, nodeID string, res *resources.Resource) *Allocat
 	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
 	ask := newAllocationAsk(askKey, appID, res)
 	ask.placeholder = true
-	return NewAllocation(nodeID, ask)
+	return markAllocated(nodeID, ask)
 }
 
-func newAllocationAsk(allocKey, appID string, res *resources.Resource) *AllocationAsk {
+func newAllocationAsk(allocKey, appID string, res *resources.Resource) *Allocation {
 	return newAllocationAskAll(allocKey, appID, "", res, false, 0)
 }
 
-func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, priority int32) *AllocationAsk {
+func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, priority int32) *Allocation {
 	return newAllocationAskAll(allocKey, appID, "", res, false, priority)
 }
 
-func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource) *AllocationAsk {
+func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource) *Allocation {
 	return newAllocationAskAll(allocKey, appID, taskGroup, res, taskGroup != "", 0)
 }
 
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, placeholder bool, priority int32) *AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, placeholder bool, priority int32) *Allocation {
 	ask := &si.AllocationAsk{
 		AllocationKey: allocKey,
 		ApplicationID: appID,
@@ -286,4 +289,10 @@ func getNodeIteratorFn(nodes ...*Node) func() NodeIterator {
 			return tree
 		})
 	}
+}
+
+func markAllocated(nodeID string, alloc *Allocation) *Allocation {
+	alloc.SetBindTime(time.Now())
+	alloc.SetNodeID(nodeID)
+	return alloc
 }

@@ -18,15 +18,10 @@
 
 package common
 
-const (
-	Empty = ""
+import "errors"
 
-	Wildcard              = "*"
-	Separator             = ","
-	Space                 = " "
-	AnonymousUser         = "nobody"
-	AnonymousGroup        = "nogroup"
-	RecoveryQueue         = "@recovery@"
-	RecoveryQueueFull     = "root." + RecoveryQueue
-	DefaultPlacementQueue = "root.default"
+// Common errors
+var (
+	// InvalidQueueName returned when queue name is invalid
+	InvalidQueueName = errors.New("invalid queue name, max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed")
 )

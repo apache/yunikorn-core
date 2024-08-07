@@ -19,6 +19,7 @@
 package ugm
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -97,8 +98,30 @@ func (m *Manager) IncreaseTrackedResource(queuePath, applicationID string, usage
 	if !userTracker.hasGroupForApp(applicationID) {
 		m.ensureGroupTrackerForApp(queuePath, applicationID, user)
 	}
-
 	userTracker.increaseTrackedResource(queuePath, applicationID, usage)
+	appGroup := userTracker.getGroupForApp(applicationID)
+	log.Log(log.SchedUGM).Debug("Increasing resource usage for user",
+		zap.String("user", user.User),
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.String("group", appGroup),
+		zap.Stringer("resource", usage))
+	if appGroup == common.Empty {
+		return
+	}
+	groupTracker := m.GetGroupTracker(appGroup)
+	if groupTracker == nil {
+		log.Log(log.SchedUGM).Error("group tracker should be available in groupTrackers map",
+			zap.String("application", applicationID),
+			zap.String("group", appGroup))
+		return
+	}
+	log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
+		zap.String("group", appGroup),
+		zap.String("queue path", queuePath),
+		zap.String("application", applicationID),
+		zap.Stringer("resource", usage))
+	groupTracker.increaseTrackedResource(queuePath, applicationID, usage, userTracker.userName)
 }
 
 // DecreaseTrackedResource Decrease the resource usage for the given user group and queue path combination.
@@ -130,7 +153,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 		zap.String("user", user.User),
 		zap.String("queue path", queuePath),
 		zap.String("application", applicationID),
-		zap.String("tracked group", appGroup),
+		zap.String("group", appGroup),
 		zap.Stringer("resource", usage),
 		zap.Bool("removeApp", removeApp))
 	if userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp) {
@@ -145,8 +168,8 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 	groupTracker := m.GetGroupTracker(appGroup)
 	if groupTracker == nil {
 		log.Log(log.SchedUGM).Error("group tracker should be available in groupTrackers map",
-			zap.String("applicationID", applicationID),
-			zap.String("applicationID", appGroup))
+			zap.String("application", applicationID),
+			zap.String("group", appGroup))
 		return
 	}
 	log.Log(log.SchedUGM).Debug("Decreasing resource usage for group",
@@ -217,7 +240,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath, applicationID string, user
 		if groupTracker == nil {
 			log.Log(log.SchedUGM).Info("Group tracker doesn't exists. Creating appGroup tracker",
 				zap.String("queue path", queuePath),
-				zap.String("appGroup", appGroup))
+				zap.String("group", appGroup))
 			groupTracker = newGroupTracker(appGroup, m.events)
 			m.Lock()
 			m.groupTrackers[appGroup] = groupTracker
@@ -225,7 +248,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath, applicationID string, user
 		}
 	}
 	log.Log(log.SchedUGM).Info("Group tracker set for user application",
-		zap.String("appGroup", appGroup),
+		zap.String("group", appGroup),
 		zap.String("user", user.User),
 		zap.String("application", applicationID),
 		zap.String("queue path", queuePath))
@@ -316,7 +339,7 @@ func (m *Manager) internalProcessConfig(cur configs.QueueConfig, queuePath strin
 				zap.String("queue path", queuePath),
 				zap.Any("limit max resources", limit.MaxResources),
 				zap.Error(err))
-			return fmt.Errorf("problem in using the max resources settings for queuepath: %s. reason: %w", queuePath, err)
+			return errors.Join(fmt.Errorf("problem in using the max resources settings for queuepath: %s, reason: ", queuePath), err)
 		}
 		limitConfig := &LimitConfig{maxResources: maxResource, maxApplications: limit.MaxApplications}
 		for _, user := range limit.Users {

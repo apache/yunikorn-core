@@ -22,10 +22,17 @@ import (
 	"regexp"
 
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+)
+
+const (
+	filterAllow = "allow"
+	filterDeny  = "deny"
 )
 
 type Filter struct {
@@ -51,7 +58,7 @@ func (filter Filter) allowUser(userObj security.UserGroup) bool {
 	// if we have found the user in the list stop looking and return
 	if filteredUser {
 		log.Log(log.Config).Debug("Filter matched user getName", zap.String("user", user))
-		return filteredUser && filter.allow
+		return filter.allow
 	}
 	// not in the user list, check the groups in the list
 	// walk over the list first match is taken
@@ -59,7 +66,7 @@ func (filter Filter) allowUser(userObj security.UserGroup) bool {
 		filteredUser = filter.filterGroup(group)
 		if filteredUser {
 			log.Log(log.Config).Debug("Filter matched user group", zap.String("group", group))
-			return filteredUser && filter.allow
+			return filter.allow
 		}
 	}
 	return !filter.allow
@@ -85,6 +92,40 @@ func (filter Filter) filterGroup(group string) bool {
 	return filter.groupList[group]
 }
 
+// filterDAO returns the DAO object for the filter.
+// Returns nil if the filter is considered "empty"
+func (filter Filter) filterDAO() *dao.FilterDAO {
+	// do not render an empty filter in the DAO
+	if filter.empty {
+		return nil
+	}
+	ft := filterAllow
+	if !filter.allow {
+		ft = filterDeny
+	}
+	var userList, groupList []string
+	if len(filter.userList) != 0 {
+		userList = maps.Keys(filter.userList)
+	}
+	if len(filter.groupList) != 0 {
+		groupList = maps.Keys(filter.groupList)
+	}
+	var userExp, groupExp string
+	if filter.userExp != nil {
+		userExp = filter.userExp.String()
+	}
+	if filter.groupExp != nil {
+		groupExp = filter.groupExp.String()
+	}
+	return &dao.FilterDAO{
+		Type:      ft,
+		UserList:  userList,
+		GroupList: groupList,
+		UserExp:   userExp,
+		GroupExp:  groupExp,
+	}
+}
+
 // Create a new filter based on the checked config
 // There should be no errors as the config is syntax checked before we get to this point.
 func newFilter(conf configs.Filter) Filter {
@@ -94,7 +135,7 @@ func newFilter(conf configs.Filter) Filter {
 		empty:     true,
 	}
 	// type can only be '' , allow or deny.
-	filter.allow = conf.Type != "deny"
+	filter.allow = conf.Type != filterDeny
 
 	var err error
 	// create the user list or regexp

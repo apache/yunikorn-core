@@ -25,6 +25,12 @@ import (
 	"time"
 )
 
+const (
+	Testuser1 = "testuser1"
+	Testuser2 = "testuser2"
+	Testuser3 = "testuser3"
+)
+
 // Get the cache with a test resolver
 // cleaner runs every second
 func GetUserGroupCacheTest() *UserGroupCache {
@@ -41,7 +47,7 @@ func GetUserGroupCacheTest() *UserGroupCache {
 // test function only
 func lookup(userName string) (*user.User, error) {
 	// 1st test user: all OK
-	if userName == "testuser1" {
+	if userName == Testuser1 {
 		return &user.User{
 			Uid:      "1000",
 			Gid:      "1000",
@@ -49,18 +55,39 @@ func lookup(userName string) (*user.User, error) {
 		}, nil
 	}
 	// 2nd test user: primary group does not resolve
-	if userName == "testuser2" {
+	if userName == Testuser2 {
 		return &user.User{
 			Uid:      "100",
 			Gid:      "100",
 			Username: "testuser2",
 		}, nil
 	}
-	if userName == "testuser3" {
+	if userName == Testuser3 {
 		return &user.User{
 			Uid:      "1001",
 			Gid:      "1001",
 			Username: "testuser3",
+		}, nil
+	}
+	if userName == "testuser4" {
+		return &user.User{
+			Uid:      "901",
+			Gid:      "901",
+			Username: "testuser4",
+		}, nil
+	}
+	if userName == "testuser5" {
+		return &user.User{
+			Uid:      "1001",
+			Gid:      "1001",
+			Username: "testuser5",
+		}, nil
+	}
+	if userName == "invalid-gid-user" {
+		return &user.User{
+			Uid:      "1001",
+			Gid:      "1_001",
+			Username: "invalid-gid-user",
 		}, nil
 	}
 	// all other users fail
@@ -85,15 +112,19 @@ func lookupGroupID(gid string) (*user.Group, error) {
 
 // test function only
 func groupIds(osUser *user.User) ([]string, error) {
-	if osUser.Username == "testuser1" {
+	if osUser.Username == Testuser1 {
 		return []string{"1001"}, nil
 	}
-	if osUser.Username == "testuser2" {
+	if osUser.Username == Testuser2 {
 		return []string{"1001", "1002"}, nil
 	}
 	// group list might return primary group ID also
-	if osUser.Username == "testuser3" {
+	if osUser.Username == Testuser3 {
 		return []string{"1002", "1001", "1003", "1004"}, nil
+	}
+
+	if osUser.Username == "testuser4" {
+		return []string{"901", "902"}, nil
 	}
 	return nil, fmt.Errorf("lookup failed for user: %s", osUser.Username)
 }

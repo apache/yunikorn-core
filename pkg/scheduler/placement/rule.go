@@ -28,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // Interface that all placement rules need to implement.
@@ -48,6 +49,10 @@ type rule interface {
 	// Return the parent rule.
 	// This method is implemented in the basicRule which each rule must be based on.
 	getParent() rule
+
+	// Returns the rule in a form that can be exposed via the REST api
+	// This method is implemented in the basicRule which each rule must be based on.
+	ruleDAO() *dao.RuleDAO
 }
 
 // Basic structure that every placement rule uses.
@@ -61,55 +66,72 @@ type basicRule struct {
 	filter Filter
 }
 
-// Get the parent rule used in testing only.
+// getParent gets the parent rule used in testing only.
 // Should not be implemented in rules.
 func (r *basicRule) getParent() rule {
 	return r.parent
 }
 
-// Return the name if not overwritten by the rule.
+const unnamedRuleName = "unnamed rule"
+
+// getName returns the name if not overwritten by the rule.
 // Marked as nolint as rules should override this.
 //
 //nolint:unused
 func (r *basicRule) getName() string {
-	return "unnamed rule"
+	return unnamedRuleName
 }
 
-// Create a new rule based on the getName of the rule requested. The rule is initialised with the configuration and can
-// be used directly.
+// ruleDAO returns the RuleDAO object if not overwritten by the rule.
+// Marked as nolint as rules should override this.
+//
+//nolint:unused
+func (r *basicRule) ruleDAO() *dao.RuleDAO {
+	return &dao.RuleDAO{
+		Name: r.getName(),
+	}
+}
+
+// newRule creates a new rule based on the getName of the rule requested. The rule is initialised with the configuration
+// and can be used directly.
+// Note that the recoveryRule should not be added to the list as it is an internal rule only that should not be part of
+// the configuration.
 func newRule(conf configs.PlacementRule) (rule, error) {
 	// create the rule from the config
-	var newRule rule
+	var r rule
 	var err error
 	// create the new rule fail if the name is unknown
 	switch normalise(conf.Name) {
 	// rule that uses the user's name as the queue
 	case types.User:
-		newRule = &userRule{}
+		r = &userRule{}
 	// rule that uses a fixed queue name
 	case types.Fixed:
-		newRule = &fixedRule{}
+		r = &fixedRule{}
 	// rule that uses the queue provided on submit
 	case types.Provided:
-		newRule = &providedRule{}
+		r = &providedRule{}
 	// rule that uses a tag from the application (like namespace)
 	case types.Tag:
-		newRule = &tagRule{}
+		r = &tagRule{}
+	// recovery rule must not be specified in the config
+	case types.Recovery:
+		return nil, fmt.Errorf("recovery rule cannot be part of the config, failing placement rule config")
 	// test rule not to be used outside of testing code
 	case types.Test:
-		newRule = &testRule{}
+		r = &testRule{}
 	default:
 		return nil, fmt.Errorf("unknown rule name specified %s, failing placement rule config", conf.Name)
 	}
 
 	// initialise the rule: do not expect the rule to log errors
-	err = newRule.initialise(conf)
+	err = r.initialise(conf)
 	if err != nil {
 		log.Log(log.Config).Error("Rule init failed", zap.Error(err))
 		return nil, err
 	}
 	log.Log(log.Config).Debug("New rule created", zap.Any("ruleConf", conf))
-	return newRule, nil
+	return r, nil
 }
 
 // Normalise the rule name from the config.

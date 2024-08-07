@@ -20,6 +20,7 @@
 package locking
 
 import (
+	"fmt"
 	"os"
 	"sync"
 	"sync/atomic"
@@ -32,15 +33,21 @@ import (
 )
 
 func disableTracking() {
-	os.Unsetenv(EnvDeadlockDetectionEnabled)
-	os.Unsetenv(EnvDeadlockTimeoutSeconds)
+	_ = os.Unsetenv(EnvDeadlockDetectionEnabled)
+	_ = os.Unsetenv(EnvDeadlockTimeoutSeconds)
+	_ = os.Unsetenv(EnvDisableLockOrder)
 	testingMode.Store(false)
 	reInit()
 }
 
 func enableTracking() {
-	os.Setenv(EnvDeadlockDetectionEnabled, "true")
-	os.Setenv(EnvDeadlockTimeoutSeconds, "1")
+	enableTrackingWithOrder(true)
+}
+
+func enableTrackingWithOrder(enableOrder bool) {
+	_ = os.Setenv(EnvDeadlockDetectionEnabled, "true")
+	_ = os.Setenv(EnvDeadlockTimeoutSeconds, "1")
+	_ = os.Setenv(EnvDisableLockOrder, fmt.Sprint(!enableOrder))
 	testingMode.Store(true)
 	reInit()
 }
@@ -147,6 +154,36 @@ func BenchmarkTrackedRWMutexRead(b *testing.B) {
 
 func BenchmarkTrackedRWMutexWrite(b *testing.B) {
 	enableTracking()
+	defer disableTracking()
+	var lock RWMutex
+	for i := 0; i < b.N; i++ {
+		lock.Lock()
+		lock.Unlock()
+	}
+}
+
+func BenchmarkTrackedNoOrderMutex(b *testing.B) {
+	enableTrackingWithOrder(false)
+	defer disableTracking()
+	var lock Mutex
+	for i := 0; i < b.N; i++ {
+		lock.Lock()
+		lock.Unlock()
+	}
+}
+
+func BenchmarkTrackedNoOrderRWMutexRead(b *testing.B) {
+	enableTrackingWithOrder(false)
+	defer disableTracking()
+	var lock RWMutex
+	for i := 0; i < b.N; i++ {
+		lock.RLock()
+		lock.RUnlock()
+	}
+}
+
+func BenchmarkTrackedNoOrderRWMutexWrite(b *testing.B) {
+	enableTrackingWithOrder(false)
 	defer disableTracking()
 	var lock RWMutex
 	for i := 0; i < b.N; i++ {

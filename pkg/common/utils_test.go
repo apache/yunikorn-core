@@ -27,6 +27,8 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/google/uuid"
+
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -234,36 +236,30 @@ func TestConvertSITimestamp(t *testing.T) {
 	assert.Equal(t, result, time.Time{})
 }
 
-func TestWaitFor(t *testing.T) {
-	var tests = []struct {
-		testname   string
-		bound      int
-		ErrorExist bool
-	}{
-		{"Timeout case", 10000, true},
-		{"Fullfilling case", 10, false},
+func TestWaitForCondition(t *testing.T) {
+	target := false
+	eval := func() bool {
+		return target
 	}
-	for _, tt := range tests {
-		t.Run(tt.testname, func(t *testing.T) {
-			count := 0
-			err := WaitFor(time.Nanosecond, time.Millisecond, func() bool {
-				if count <= tt.bound {
-					count++
-					return false
-				}
-				return true
-			})
-			switch tt.ErrorExist {
-			case true:
-				if errorExist := (err != nil); !errorExist {
-					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-				}
-			case false:
-				if errorExist := (err == nil); !errorExist {
-					t.Errorf("ErrorExist: got %v, expected %v", errorExist, tt.ErrorExist)
-				}
-			}
-		})
+	tests := []struct {
+		input    bool
+		interval time.Duration
+		timeout  time.Duration
+		output   error
+	}{
+		{true, time.Duration(1) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(1) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
+		{true, time.Duration(3) * time.Second, time.Duration(2) * time.Second, nil},
+		{false, time.Duration(3) * time.Second, time.Duration(2) * time.Second, ErrorTimeout},
+	}
+	for _, test := range tests {
+		target = test.input
+		get := WaitForCondition(test.interval, test.timeout, eval)
+		if test.output == nil {
+			assert.NilError(t, get)
+		} else {
+			assert.Equal(t, get.Error(), test.output.Error())
+		}
 	}
 }
 
@@ -385,4 +381,36 @@ func TestGetConfigurationInt(t *testing.T) {
 			assert.Equal(t, tc.expectedValue, GetConfigurationInt(tc.configs, testKey, tc.defaultValue))
 		})
 	}
+}
+
+func TestZeroTimeInUnixNano(t *testing.T) {
+	// zero time
+	var nilValue *int64 = nil
+	assert.Equal(t, ZeroTimeInUnixNano(time.Time{}), nilValue)
+
+	// non-zero time
+	date := time.Date(2024, time.June, 6, 0, 0, 0, 0, time.UTC)
+	assert.Equal(t, *ZeroTimeInUnixNano(date), date.UnixNano())
+
+	// time in different timezone
+	date = time.Date(2024, time.June, 6, 0, 0, 0, 0, time.FixedZone("UTC+8", 8*60*60))
+	assert.Equal(t, *ZeroTimeInUnixNano(date), date.UnixNano())
+}
+
+func TestGetNewUUID(t *testing.T) {
+	newUUID := GetNewUUID()
+	if _, err := uuid.Parse(newUUID); err != nil {
+		t.Errorf("Generated UUID is not valid: %s", newUUID)
+	}
+}
+
+func TestIsRecoveryQueue(t *testing.T) {
+	// valid case
+	assert.Assert(t, IsRecoveryQueue("root.@recovery@"))
+	assert.Assert(t, IsRecoveryQueue("ROOT.@RECOVERY@"))
+	assert.Assert(t, IsRecoveryQueue("RoOT.@rECoVeRY@"))
+
+	// invalid case
+	assert.Assert(t, !IsRecoveryQueue("otherQueue"))
+	assert.Assert(t, !IsRecoveryQueue(""))
 }

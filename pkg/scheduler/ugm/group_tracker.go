@@ -137,13 +137,6 @@ func (gt *GroupTracker) canBeRemoved() bool {
 	return gt.queueTracker.canBeRemoved()
 }
 
-func (gt *GroupTracker) getName() string {
-	if gt == nil {
-		return common.Empty
-	}
-	return gt.groupName
-}
-
 func (gt *GroupTracker) decreaseAllTrackedResourceUsage(hierarchy []string) map[string]string {
 	if gt == nil {
 		return nil

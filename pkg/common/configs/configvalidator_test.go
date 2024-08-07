@@ -19,6 +19,7 @@
 package configs
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
+//nolint:funlen
 func TestCheckResourceConfigurationsForQueue(t *testing.T) {
 	negativeResourceMap := map[string]string{"memory": "-50", "vcores": "33"}
 	resourceMapWithSyntaxError := map[string]string{"memory": "ten", "vcores": ""}
@@ -321,6 +323,139 @@ func TestCheckQueueHierarchyForPlacement(t *testing.T) {
 	assert.Equal(t, "", queueName)
 }
 
+//nolint:funlen
+func TestCheckPlacementRule(t *testing.T) {
+	getInvalidRuleNameError := func(name string) error {
+		return fmt.Errorf("invalid rule name %s, a name must be a valid identifier", name)
+	}
+
+	tests := []struct {
+		rule     PlacementRule
+		expected error
+		message  string
+	}{
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+			},
+			expected: nil,
+			message:  "valid rule name with a-z",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "_fixed",
+				Value: "root.default.leaf",
+			},
+			expected: nil,
+			message:  "valid rule name start with underscore",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "#fixed",
+				Value: "root.default.leaf",
+			},
+			expected: getInvalidRuleNameError("#fixed"),
+			message:  "invalid rule name contain pound sign",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "1234",
+				Value: "root.default.leaf",
+			},
+			expected: getInvalidRuleNameError("1234"),
+			message:  "invalid rule name with number",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Parent: &PlacementRule{
+					Name:  "fixed",
+					Value: "root.default",
+				},
+			},
+			expected: nil,
+			message:  "valid parent's rule name with a-z",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Parent: &PlacementRule{
+					Name:  "@fixed",
+					Value: "root.default",
+				},
+			},
+			expected: getInvalidRuleNameError("@fixed"),
+			message:  "invalid parent's rule name with commercial at",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Parent: &PlacementRule{
+					Name:  "fixed",
+					Value: "root.default",
+					Parent: &PlacementRule{
+						Name:  "@fixed",
+						Value: "root",
+					},
+				},
+			},
+			expected: getInvalidRuleNameError("@fixed"),
+			message:  "invalid nested parent's rule name with commercial at",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Filter: Filter{
+					Users:  []string{"username"},
+					Groups: []string{},
+				},
+			},
+			expected: nil,
+			message:  "valid rule name and filter",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Filter: Filter{
+					Users:  []string{""},
+					Groups: []string{"ok"},
+				},
+			},
+			expected: fmt.Errorf("invalid rule filter user list"),
+			message:  "invalid rule filter user list",
+		},
+		{
+			rule: PlacementRule{
+				Name:  "fixed",
+				Value: "root.default.leaf",
+				Filter: Filter{
+					Users:  []string{"ok"},
+					Groups: []string{"groupname "},
+				},
+			},
+			expected: fmt.Errorf("invalid rule filter group list"),
+			message:  "invalid rule filter group list",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			err := checkPlacementRule(tc.rule)
+			if err == nil {
+				assert.NilError(t, tc.expected, tc.message)
+			} else {
+				assert.ErrorContains(t, err, tc.expected.Error(), tc.message)
+			}
+		})
+	}
+}
+
 func TestCheckPlacementRules(t *testing.T) {
 	conf := &PartitionConfig{
 		PlacementRules: createPlacementRules(),
@@ -608,7 +743,6 @@ func TestUserName(t *testing.T) {
 	rejectedUserNames := []string{
 		"username rejected",
 		"",
-		"rejected#",
 		"rejected!name",
 		"!rejected",
 		" rejected ",
@@ -1142,6 +1276,50 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 				},
 			},
 			errMsg: "is greater than immediate or ancestor parent maximum resource",
+		},
+		{
+			name: "overflow vcore of limit resources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{"*": {"vcore": "1000P"}},
+					map[string]map[string]string{}),
+				Queues: []QueueConfig{},
+			},
+			errMsg: "overflow",
+		},
+		{
+			name: "invalid vcore of limit resources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{"*": {"vcore": "-1"}},
+					map[string]map[string]string{}),
+				Queues: []QueueConfig{},
+			},
+			errMsg: "invalid",
+		},
+		{
+			name: "overflow quantity of limit resources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{"*": {"memory": "1000E"}},
+					map[string]map[string]string{}),
+				Queues: []QueueConfig{},
+			},
+			errMsg: "overflow",
+		},
+		{
+			name: "invalid quantity of limit resources",
+			config: QueueConfig{
+				Name: "parent",
+				Limits: createLimitMaxResources(
+					map[string]map[string]string{"*": {"memory": "500m"}},
+					map[string]map[string]string{}),
+				Queues: []QueueConfig{},
+			},
+			errMsg: "invalid",
 		},
 	}
 
@@ -1812,11 +1990,26 @@ func TestCheckLimits(t *testing.T) { //nolint:funlen
 			},
 			errMsg: "should not specify only one group limit that is using the wildcard.",
 		},
+		{
+			name: "both user list and group list in limits are empty",
+			config: QueueConfig{
+				Name:      "parent",
+				Resources: Resources{},
+				Limits: []Limit{
+					{
+						Users:  []string{},
+						Groups: []string{},
+					},
+				},
+			},
+			errMsg: "empty user and group lists defined in limit",
+		},
 	}
 
 	for _, testCase := range testCases {
+		config := testCase.config
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimits(testCase.config.Limits, testCase.config.Name, &testCase.config)
+			err := checkLimits(testCase.config.Limits, testCase.config.Name, &config)
 			if testCase.errMsg != "" {
 				assert.ErrorContains(t, err, testCase.errMsg)
 			} else {
@@ -1909,4 +2102,328 @@ func TestCheckLimitsStructure(t *testing.T) {
 	assert.NilError(t, checkLimitsStructure(partitionConfig))
 	assert.Equal(t, len(partitionConfig.Queues[0].Limits), 0)
 	assert.Equal(t, len(partitionConfig.Limits), 0)
+}
+
+func TestCheckQueuesStructure(t *testing.T) {
+	negativeResourceMap := map[string]string{"memory": "-50", "vcores": "33"}
+	testCases := []struct {
+		name             string
+		partition        *PartitionConfig
+		expectedErrorMsg string
+		validateFunc     func(t *testing.T, partition *PartitionConfig)
+	}{
+		{
+			name:             "No Queues Configured",
+			partition:        &PartitionConfig{Queues: nil},
+			expectedErrorMsg: "queue config is not set",
+		},
+		{
+			name: "Single Root Queue",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{Name: "root", Parent: true},
+				},
+			},
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue")
+				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
+				assert.Assert(t, p.Queues[0].Parent, "Root queue should be a parent")
+			},
+		},
+		{
+			name: "Single Non-Root Queue",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{Name: "non-root"},
+				},
+			},
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue in the new root")
+				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
+				assert.Assert(t, p.Queues[0].Parent, "Root queue should be a parent")
+				assert.Equal(t, 1, len(p.Queues[0].Queues), "New root queue should contain the non-root queue")
+			},
+		},
+		{
+			name: "Multiple Top-Level Queues",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{Name: "queue1"},
+					{Name: "queue2"},
+				},
+			},
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, 1, len(p.Queues), "There should be exactly one queue in the new root")
+				assert.Equal(t, "root", p.Queues[0].Name, "Root queue should be named 'root'")
+				assert.Assert(t, p.Queues[0].Parent, "Root queue should be a parent")
+				assert.Equal(t, 2, len(p.Queues[0].Queues), "New root queue should contain both top-level queues")
+			},
+		},
+		{
+			name: "Root Queue With Guaranteed Resources",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						Resources: Resources{Guaranteed: negativeResourceMap}},
+				},
+			},
+			expectedErrorMsg: "root queue must not have resource limits set",
+		},
+		{
+			name: "Root Queue With Max Resources",
+			partition: &PartitionConfig{
+				Queues: []QueueConfig{
+					{
+						Name:      "root",
+						Parent:    true,
+						Resources: Resources{Max: negativeResourceMap}},
+				},
+			},
+			expectedErrorMsg: "root queue must not have resource limits set",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkQueuesStructure(tc.partition)
+			if tc.expectedErrorMsg != "" {
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+			}
+			if tc.validateFunc != nil {
+				tc.validateFunc(t, tc.partition)
+			}
+		})
+	}
+}
+
+func TestCheckQueues(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name             string
+		queue            *QueueConfig
+		level            int
+		expectedErrorMsg string
+		validateFunc     func(t *testing.T, queue *QueueConfig)
+	}{
+		{
+			name: "Invalid ACL Format for AdminACL",
+			queue: &QueueConfig{
+				Name:      "validQueue",
+				AdminACL:  "admin group extra",
+				SubmitACL: "submit",
+				Queues:    []QueueConfig{{Name: "validSubQueue"}},
+			},
+			level:            0,
+			expectedErrorMsg: "multiple spaces found in ACL: 'admin group extra'",
+		},
+		{
+			name: "Invalid ACL Format for SubmitACL",
+			queue: &QueueConfig{
+				Name:      "validQueue",
+				AdminACL:  "admin",
+				SubmitACL: "submit group extra",
+				Queues:    []QueueConfig{{Name: "validSubQueue"}},
+			},
+			level:            0,
+			expectedErrorMsg: "multiple spaces found in ACL: 'submit group extra'",
+		},
+		{
+			name: "Duplicate Child Queue Names",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "duplicateQueue"},
+					{Name: "duplicateQueue"},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: "duplicate child name found with name 'duplicateQueue', level 0",
+		},
+		{
+			name: "Duplicate Child Queue Names at level 1",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{
+						Name:      "subqueue",
+						AdminACL:  "admin",
+						SubmitACL: "submit",
+						Queues: []QueueConfig{
+							{Name: "duplicateQueue"},
+							{Name: "duplicateQueue"},
+						},
+					},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: "duplicate child name found with name 'duplicateQueue', level 1",
+		},
+		{
+			name: "Check Limits Error With Duplicated User Name",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{
+						Name: "subqueue",
+					},
+				},
+				Limits: []Limit{
+					{
+						Limit: "user-limit",
+						Users: []string{"user1", "user2", "user1"},
+					},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: "duplicated user name 'user1', already exists",
+		},
+		{
+			name: "Invalid Child Queue Name Length",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "thisQueueNameIsTooLongthisQueueNameIsTooLongthisQueueNameIsTooLong"},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: common.InvalidQueueName.Error(),
+		},
+		{
+			name: "Invalid Child Queue Name With Special Character",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "queue_Name$"},
+				},
+			},
+			level:            0,
+			expectedErrorMsg: common.InvalidQueueName.Error(),
+		},
+		{
+			name: "Valid Multiple Queues",
+			queue: &QueueConfig{
+				Name:      "root",
+				AdminACL:  "admin",
+				SubmitACL: "submit",
+				Queues: []QueueConfig{
+					{Name: "queue_One"},
+					{Name: "queue-Two"},
+				},
+			},
+			level: 0,
+			validateFunc: func(t *testing.T, q *QueueConfig) {
+				assert.Equal(t, 2, len(q.Queues), "Expected two queues")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkQueues(tc.queue, tc.level)
+			if tc.expectedErrorMsg != "" {
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+			}
+
+			if tc.validateFunc != nil {
+				tc.validateFunc(t, tc.queue)
+			}
+		})
+	}
+}
+
+func TestCheckNodeSortingPolicy(t *testing.T) { //nolint:funlen
+	testCases := []struct {
+		name             string
+		partition        *PartitionConfig
+		expectedErrorMsg string
+		validateFunc     func(t *testing.T, partition *PartitionConfig)
+	}{
+		{
+			name: "Valid Sorting Policy with Positive Weights",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "fair",
+					ResourceWeights: map[string]float64{"memory": 1.0},
+				},
+			},
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, "fair", p.NodeSortPolicy.Type, "Expected sorting policy type to be 'fair'")
+				assert.Equal(t, 1, len(p.NodeSortPolicy.ResourceWeights), "Expected one resource weights")
+			},
+		},
+		{
+			name: "Negative Resource Weight",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "fair",
+					ResourceWeights: map[string]float64{"memory": -1.0},
+				},
+			},
+			expectedErrorMsg: "negative resource weight for memory is not allowed",
+		},
+		{
+			name: "Undefined Sorting Policy",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "undefinedPolicy",
+					ResourceWeights: map[string]float64{"memory": 1.0},
+				},
+			},
+			expectedErrorMsg: "undefined policy: undefinedPolicy",
+		},
+		{
+			name: "Valid Policy with Multiple Resources",
+			partition: &PartitionConfig{
+				NodeSortPolicy: NodeSortingPolicy{
+					Type:            "binpacking",
+					ResourceWeights: map[string]float64{"memory": 2.0, "cpu": 3.0},
+				},
+			},
+			validateFunc: func(t *testing.T, p *PartitionConfig) {
+				assert.Equal(t, "binpacking", p.NodeSortPolicy.Type, "Expected sorting policy type to be 'binpacking'")
+				assert.Equal(t, 2, len(p.NodeSortPolicy.ResourceWeights), "Expected two resource weights")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkNodeSortingPolicy(tc.partition)
+			if tc.expectedErrorMsg != "" {
+				assert.ErrorContains(t, err, tc.expectedErrorMsg, "Error message mismatch")
+			} else {
+				assert.NilError(t, err, "No error is expected")
+			}
+
+			if tc.validateFunc != nil {
+				tc.validateFunc(t, tc.partition)
+			}
+		})
+	}
+}
+
+func TestIsQueueNameValid(t *testing.T) {
+	assert.NilError(t, IsQueueNameValid("parent_Child_test-a_b_#_c_#_d_/_e@dom:ain"))
+	err := IsQueueNameValid("invalid!queue")
+	if err == nil {
+		t.Errorf("invalid queue name, validation should have failed. err is %v", err)
+	}
+	err = IsQueueNameValid("root.parent")
+	if err == nil {
+		t.Errorf("invalid queue name, validation should have failed. err is %v", err)
+	}
 }

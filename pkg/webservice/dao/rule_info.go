@@ -16,17 +16,24 @@
  limitations under the License.
 */
 
-package common
+package dao
 
-const (
-	Empty = ""
+type RuleDAOInfo struct {
+	Partition string     `json:"partition"` // no omitempty, partition name should not be empty
+	Rules     []*RuleDAO `json:"rules,omitempty"`
+}
 
-	Wildcard              = "*"
-	Separator             = ","
-	Space                 = " "
-	AnonymousUser         = "nobody"
-	AnonymousGroup        = "nogroup"
-	RecoveryQueue         = "@recovery@"
-	RecoveryQueueFull     = "root." + RecoveryQueue
-	DefaultPlacementQueue = "root.default"
-)
+type FilterDAO struct {
+	Type      string   `json:"type"` // no omitempty, type must exist
+	UserList  []string `json:"userList,omitempty"`
+	GroupList []string `json:"groupList,omitempty"`
+	UserExp   string   `json:"userExp,omitempty"`
+	GroupExp  string   `json:"groupExp,omitempty"`
+}
+
+type RuleDAO struct {
+	Name       string            `json:"name"` // no omitempty, name must exist
+	Parameters map[string]string `json:"parameters,omitempty"`
+	Filter     *FilterDAO        `json:"filter,omitempty"`
+	ParentRule *RuleDAO          `json:"parentRule,omitempty"`
+}

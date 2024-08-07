@@ -128,10 +128,7 @@ $(GOLANGCI_LINT_BIN):
 # In dev setup look at all changes on top of master
 lint: $(GOLANGCI_LINT_BIN)
 	@echo "running golangci-lint"
-	@git symbolic-ref -q HEAD && REV="origin/HEAD" || REV="HEAD^" ; \
-	headSHA=$$(git rev-parse --short=12 $${REV}) ; \
-	echo "checking against commit sha $${headSHA}" ; \
-	"${GOLANGCI_LINT_BIN}" run --new-from-rev=$${headSHA}
+	@"${GOLANGCI_LINT_BIN}" run
 
 # Check scripts
 .PHONY: check_scripts

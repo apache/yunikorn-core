@@ -21,6 +21,7 @@ package scheduler
 import (
 	"strconv"
 	"testing"
+	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -53,6 +54,63 @@ const (
 	maxresources    = "maxresources"
 	maxapplications = "maxapplications"
 )
+
+func newBasePartitionNoRootDefault() (*PartitionContext, error) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "custom",
+						Parent: false,
+						Queues: nil,
+						Limits: []configs.Limit{
+							{
+								Limit: "custom queue limit",
+								Users: []string{
+									"testuser",
+								},
+								Groups: []string{
+									"testgroup",
+								},
+								MaxResources: map[string]string{
+									"memory": "5",
+									"vcores": "5",
+								},
+								MaxApplications: 8,
+							},
+						},
+					},
+				},
+				Limits: []configs.Limit{
+					{
+						Limit: "root queue limit",
+						Users: []string{
+							"testuser",
+						},
+						Groups: []string{
+							"testgroup",
+						},
+						MaxResources: map[string]string{
+							"memory": "10",
+							"vcores": "10",
+						},
+						MaxApplications: 10,
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Limits:         nil,
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+
+	return newPartitionContext(conf, rmID, nil)
+}
 
 func newBasePartition() (*PartitionContext, error) {
 	conf := configs.PartitionConfig{
@@ -496,19 +554,19 @@ func newApplicationTGTagsWithPhTimeout(appID, partition, queueName string, task 
 	return objects.NewApplication(siApp, user, nil, rmID)
 }
 
-func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.AllocationAsk {
+func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.Allocation {
 	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, placeHolder)
 }
 
-func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.AllocationAsk {
+func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.Allocation {
 	return newAllocationAskAll(allocKey, appID, "", res, 1, false)
 }
 
-func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, prio int32) *objects.AllocationAsk {
+func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, prio int32) *objects.Allocation {
 	return newAllocationAskAll(allocKey, appID, "", res, prio, false)
 }
 
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.AllocationAsk {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.Allocation {
 	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
 		AllocationKey: allocKey,
 		ApplicationID: appID,
@@ -520,7 +578,7 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 	})
 }
 
-func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.AllocationAsk {
+func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.Allocation {
 	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
 		AllocationKey: allocKey,
 		ApplicationID: appID,
@@ -561,9 +619,9 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
-	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
+	err = partition.AddNode(newNodeMaxResource("node-1", res))
 	assert.NilError(t, err, "test node1 add failed unexpected")
-	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
+	err = partition.AddNode(newNodeMaxResource("node-2", res))
 	assert.NilError(t, err, "test node2 add failed unexpected")
 	return partition
 }
@@ -581,9 +639,9 @@ func createPreemptionQueuesNodes(t *testing.T) *PartitionContext {
 	assert.NilError(t, err, "test partition create failed with error")
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
-	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
+	err = partition.AddNode(newNodeMaxResource("node-1", res))
 	assert.NilError(t, err, "test node1 add failed unexpected")
-	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
+	err = partition.AddNode(newNodeMaxResource("node-2", res))
 	assert.NilError(t, err, "test node2 add failed unexpected")
 	return partition
 }
@@ -666,4 +724,10 @@ func getMaxApplications(usage *dao.ResourceUsageDAOInfo, maxApplications map[str
 		}
 	}
 	return maxApplications
+}
+
+func markAllocated(nodeID string, alloc *objects.Allocation) *objects.Allocation {
+	alloc.SetBindTime(time.Now())
+	alloc.SetNodeID(nodeID)
+	return alloc
 }

@@ -20,6 +20,7 @@ package placement
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // A rule to place an application based on the queue provided by the user on submission.
@@ -40,6 +42,21 @@ type providedRule struct {
 
 func (pr *providedRule) getName() string {
 	return types.Provided
+}
+
+func (pr *providedRule) ruleDAO() *dao.RuleDAO {
+	var pDAO *dao.RuleDAO
+	if pr.parent != nil {
+		pDAO = pr.parent.ruleDAO()
+	}
+	return &dao.RuleDAO{
+		Name: pr.getName(),
+		Parameters: map[string]string{
+			"create": strconv.FormatBool(pr.create),
+		},
+		ParentRule: pDAO,
+		Filter:     pr.filter.filterDAO(),
+	}
 }
 
 func (pr *providedRule) initialise(conf configs.PlacementRule) error {
@@ -68,8 +85,21 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 	}
 	var parentName string
 	var err error
-	// if we have a fully qualified queue passed in do not run the parent rule
-	if !strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
+
+	// fully qualified queue, do not run the parent rule
+	if strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
+		parts := strings.Split(queueName, configs.DOT)
+		for _, part := range parts {
+			if err = configs.IsQueueNameValid(part); err != nil {
+				return "", err
+			}
+		}
+	} else {
+		// not fully qualified queue
+		childQueueName := replaceDot(queueName)
+		if err = configs.IsQueueNameValid(childQueueName); err != nil {
+			return "", err
+		}
 		// run the parent rule if set
 		if pr.parent != nil {
 			parentName, err = pr.parent.placeApplication(app, queueFn)
@@ -96,7 +126,7 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 			parentName = configs.RootQueue
 		}
 		// Make it a fully qualified queue
-		queueName = parentName + configs.DOT + replaceDot(queueName)
+		queueName = parentName + configs.DOT + childQueueName
 	}
 	// Log the result before we check the create flag
 	log.Log(log.SchedApplication).Debug("Provided rule intermediate result",

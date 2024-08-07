@@ -24,10 +24,12 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -54,6 +56,8 @@ const (
 	PartitionDoesNotExists   = "Partition not found"
 	MissingParamsName        = "Missing parameters"
 	QueueDoesNotExists       = "Queue not found"
+	InvalidUserName          = "Invalid user name"
+	InvalidGroupName         = "Invalid group name"
 	UserDoesNotExists        = "User not found"
 	GroupDoesNotExists       = "Group not found"
 	UserNameMissing          = "User name is missing"
@@ -65,6 +69,7 @@ const (
 var allowedActiveStatusMsg string
 var allowedAppActiveStatuses map[string]bool
 var streamingLimiter *StreamingLimiter
+var maxRESTResponseSize atomic.Uint64
 
 func init() {
 	allowedAppActiveStatuses = make(map[string]bool)
@@ -83,6 +88,22 @@ func init() {
 	allowedActiveStatusMsg = fmt.Sprintf("Only following active statuses are allowed: %s", strings.Join(activeStatuses, ","))
 
 	streamingLimiter = NewStreamingLimiter()
+
+	configs.AddConfigMapCallback("rest-response-size", func() {
+		newSize := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMRESTResponseSize, configs.DefaultRESTResponseSize)
+		if newSize == 0 {
+			log.Log(log.REST).Warn("Illegal value `0` for config key, using default",
+				zap.String("key", configs.CMRESTResponseSize),
+				zap.Uint64("default", configs.DefaultRESTResponseSize))
+			newSize = configs.DefaultRESTResponseSize
+		}
+
+		log.Log(log.REST).Info("Reloading max REST event response size setting",
+			zap.Uint64("current", maxRESTResponseSize.Load()),
+			zap.Uint64("new", newSize))
+		maxRESTResponseSize.Store(newSize)
+	})
+	maxRESTResponseSize.Store(configs.DefaultRESTResponseSize)
 }
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
@@ -117,10 +138,8 @@ func validateQueue(queuePath string) error {
 	if queuePath != "" {
 		queueNameArr := strings.Split(queuePath, ".")
 		for _, name := range queueNameArr {
-			if !configs.QueueNameRegExp.MatchString(name) {
-				return fmt.Errorf("problem in queue query parameter parsing as queue param "+
-					"%s contains invalid queue name %s. Queue name must only have "+
-					"alphanumeric characters, - or _, and be no longer than 64 characters", queuePath, name)
+			if err := configs.IsQueueNameValid(name); err != nil {
+				return err
 			}
 		}
 	}
@@ -210,7 +229,7 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 	if alloc.IsPlaceholderUsed() {
 		requestTime = alloc.GetPlaceholderCreateTime().UnixNano()
 	} else {
-		requestTime = alloc.GetAsk().GetCreateTime().UnixNano()
+		requestTime = alloc.GetCreateTime().UnixNano()
 	}
 	allocTime := alloc.GetCreateTime().UnixNano()
 	allocDAO := &dao.AllocationDAOInfo{
@@ -226,8 +245,8 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 		Priority:         strconv.Itoa(int(alloc.GetPriority())),
 		NodeID:           alloc.GetNodeID(),
 		ApplicationID:    alloc.GetApplicationID(),
-		Partition:        alloc.GetPartitionName(),
 		Preempted:        alloc.IsPreempted(),
+		Originator:       alloc.IsOriginator(),
 	}
 	return allocDAO
 }
@@ -275,31 +294,35 @@ func getStatesDAO(entries []*objects.StateLogEntry) []*dao.StateDAOInfo {
 	return statesDAO
 }
 
-func getApplicationDAO(app *objects.Application) *dao.ApplicationDAOInfo {
+func getApplicationDAO(app *objects.Application, summary *objects.ApplicationSummary) *dao.ApplicationDAOInfo {
 	if app == nil {
 		return &dao.ApplicationDAOInfo{}
 	}
 
 	return &dao.ApplicationDAOInfo{
-		ApplicationID:      app.ApplicationID,
-		UsedResource:       app.GetAllocatedResource().DAOMap(),
-		MaxUsedResource:    app.GetMaxAllocatedResource().DAOMap(),
-		PendingResource:    app.GetPendingResource().DAOMap(),
-		Partition:          common.GetPartitionNameWithoutClusterID(app.Partition),
-		QueueName:          app.GetQueuePath(),
-		SubmissionTime:     app.SubmissionTime.UnixNano(),
-		FinishedTime:       common.ZeroTimeInUnixNano(app.FinishedTime()),
-		Requests:           getAllocationAsksDAO(app.GetAllRequests()),
-		Allocations:        getAllocationsDAO(app.GetAllAllocations()),
-		State:              app.CurrentState(),
-		User:               app.GetUser().User,
-		Groups:             app.GetUser().Groups,
-		RejectedMessage:    app.GetRejectedMessage(),
-		PlaceholderData:    getPlaceholdersDAO(app.GetAllPlaceholderData()),
-		StateLog:           getStatesDAO(app.GetStateLog()),
-		HasReserved:        app.HasReserved(),
-		Reservations:       app.GetReservations(),
-		MaxRequestPriority: app.GetAskMaxPriority(),
+		ApplicationID:       app.ApplicationID,
+		UsedResource:        app.GetAllocatedResource().DAOMap(),
+		MaxUsedResource:     app.GetMaxAllocatedResource().DAOMap(),
+		PendingResource:     app.GetPendingResource().DAOMap(),
+		Partition:           common.GetPartitionNameWithoutClusterID(app.Partition),
+		QueueName:           app.GetQueuePath(),
+		SubmissionTime:      app.SubmissionTime.UnixNano(),
+		FinishedTime:        common.ZeroTimeInUnixNano(app.FinishedTime()),
+		Requests:            getAllocationAsksDAO(app.GetAllRequests()),
+		Allocations:         getAllocationsDAO(app.GetAllAllocations()),
+		State:               app.CurrentState(),
+		User:                app.GetUser().User,
+		Groups:              app.GetUser().Groups,
+		RejectedMessage:     app.GetRejectedMessage(),
+		PlaceholderData:     getPlaceholdersDAO(app.GetAllPlaceholderData()),
+		StateLog:            getStatesDAO(app.GetStateLog()),
+		HasReserved:         app.HasReserved(),
+		Reservations:        app.GetReservations(),
+		MaxRequestPriority:  app.GetAskMaxPriority(),
+		StartTime:           app.StartTime().UnixMilli(),
+		ResourceUsage:       summary.ResourceUsage,
+		PreemptedResource:   summary.PreemptedResource,
+		PlaceholderResource: summary.PlaceholderResource,
 	}
 }
 
@@ -318,7 +341,7 @@ func getAllocationLogsDAO(logEntries []*objects.AllocationLogEntry) []*dao.Alloc
 	return logsDAO
 }
 
-func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
+func getAllocationAskDAO(ask *objects.Allocation) *dao.AllocationAskDAOInfo {
 	return &dao.AllocationAskDAOInfo{
 		AllocationKey:       ask.GetAllocationKey(),
 		AllocationTags:      ask.GetTagsClone(),
@@ -327,9 +350,7 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 		Priority:            strconv.Itoa(int(ask.GetPriority())),
 		RequiredNodeID:      ask.GetRequiredNode(),
 		ApplicationID:       ask.GetApplicationID(),
-		Partition:           common.GetPartitionNameWithoutClusterID(ask.GetPartitionName()),
 		Placeholder:         ask.IsPlaceholder(),
-		PlaceholderTimeout:  ask.GetTimeout().Nanoseconds(),
 		TaskGroupName:       ask.GetTaskGroup(),
 		AllocationLog:       getAllocationLogsDAO(ask.GetAllocationLog()),
 		TriggeredPreemption: ask.HasTriggeredPreemption(),
@@ -339,7 +360,7 @@ func getAllocationAskDAO(ask *objects.AllocationAsk) *dao.AllocationAskDAOInfo {
 	}
 }
 
-func getAllocationAsksDAO(asks []*objects.AllocationAsk) []*dao.AllocationAskDAOInfo {
+func getAllocationAsksDAO(asks []*objects.Allocation) []*dao.AllocationAskDAOInfo {
 	asksDAO := make([]*dao.AllocationAskDAOInfo, 0, len(asks))
 	for _, ask := range asks {
 		if !ask.IsAllocated() {
@@ -655,12 +676,17 @@ func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	queueName := vars.ByName("queue")
-	queueErr := validateQueue(queueName)
+	unescapedQueueName, err := url.QueryUnescape(queueName)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	queueErr := validateQueue(unescapedQueueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
 	}
-	queue := partitionContext.GetQueue(queueName)
+	queue := partitionContext.GetQueue(unescapedQueueName)
 	if queue == nil {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
@@ -724,7 +750,12 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 	}
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
-	queueErr := validateQueue(queueName)
+	unescapedQueueName, err := url.QueryUnescape(queueName)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	queueErr := validateQueue(unescapedQueueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
@@ -734,7 +765,7 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	queue := partitionContext.GetQueue(queueName)
+	queue := partitionContext.GetQueue(unescapedQueueName)
 	if queue == nil {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
@@ -742,7 +773,8 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
 	for _, app := range queue.GetCopyOfApps() {
-		appsDao = append(appsDao, getApplicationDAO(app))
+		summary := app.GetApplicationSummary(partitionContext.RmID)
+		appsDao = append(appsDao, getApplicationDAO(app, summary))
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
@@ -791,7 +823,8 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	}
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(appList))
 	for _, app := range appList {
-		appsDao = append(appsDao, getApplicationDAO(app))
+		summary := app.GetApplicationSummary(partitionContext.RmID)
+		appsDao = append(appsDao, getApplicationDAO(app, summary))
 	}
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -807,6 +840,11 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 	}
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
+	unescapedQueueName, err := url.QueryUnescape(queueName)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	application := vars.ByName("application")
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
@@ -814,15 +852,15 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var app *objects.Application
-	if len(queueName) == 0 {
+	if len(unescapedQueueName) == 0 {
 		app = partitionContext.GetApplication(application)
 	} else {
-		queueErr := validateQueue(queueName)
+		queueErr := validateQueue(unescapedQueueName)
 		if queueErr != nil {
 			buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 			return
 		}
-		queue := partitionContext.GetQueue(queueName)
+		queue := partitionContext.GetQueue(unescapedQueueName)
 		if queue == nil {
 			buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 			return
@@ -833,8 +871,29 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, ApplicationDoesNotExists, http.StatusNotFound)
 		return
 	}
-	appDao := getApplicationDAO(app)
+
+	summary := app.GetApplicationSummary(partitionContext.RmID)
+	appDao := getApplicationDAO(app, summary)
 	if err := json.NewEncoder(w).Encode(appDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getPartitionRules(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+	partition := vars.ByName("partition")
+	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+	rulesDao := partitionContext.GetPlacementRules()
+	if err := json.NewEncoder(w).Encode(rulesDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -999,8 +1058,22 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 		appList = append(appList, partition.GetRejectedApplications()...)
 
 		for _, app := range appList {
-			result = append(result, getApplicationDAO(app))
+			summary := app.GetApplicationSummary(partition.RmID)
+			result = append(result, getApplicationDAO(app, summary))
 		}
+	}
+
+	return result
+}
+
+func getPlacementRulesDAO(lists map[string]*scheduler.PartitionContext) []*dao.RuleDAOInfo {
+	result := make([]*dao.RuleDAOInfo, 0, len(lists))
+
+	for _, partition := range lists {
+		result = append(result, &dao.RuleDAOInfo{
+			Partition: common.GetPartitionNameWithoutClusterID(partition.Name),
+			Rules:     partition.GetPlacementRules(),
+		})
 	}
 
 	return result
@@ -1094,7 +1167,16 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
 		return
 	}
-	userTracker := ugm.GetUserManager().GetUserTracker(user)
+	unescapedUser, err := url.QueryUnescape(user)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !configs.UserRegExp.MatchString(unescapedUser) {
+		buildJSONErrorResponse(w, InvalidUserName, http.StatusBadRequest)
+		return
+	}
+	userTracker := ugm.GetUserManager().GetUserTracker(unescapedUser)
 	if userTracker == nil {
 		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusNotFound)
 		return
@@ -1130,7 +1212,16 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
 		return
 	}
-	groupTracker := ugm.GetUserManager().GetGroupTracker(group)
+	unescapedGroupName, err := url.QueryUnescape(group)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if !configs.GroupRegExp.MatchString(unescapedGroupName) {
+		buildJSONErrorResponse(w, InvalidGroupName, http.StatusBadRequest)
+		return
+	}
+	groupTracker := ugm.GetUserManager().GetGroupTracker(unescapedGroupName)
 	if groupTracker == nil {
 		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusNotFound)
 		return
@@ -1149,9 +1240,8 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count := uint64(10000)
-	var start uint64
-
+	maxCount := maxRESTResponseSize.Load()
+	count := maxCount
 	if countStr := r.URL.Query().Get("count"); countStr != "" {
 		var err error
 		count, err = strconv.ParseUint(countStr, 10, 64)
@@ -1159,12 +1249,16 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 			buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if count > maxCount {
+			count = maxCount
+		}
 		if count == 0 {
 			buildJSONErrorResponse(w, `0 is not a valid value for "count"`, http.StatusBadRequest)
 			return
 		}
 	}
 
+	var start uint64
 	if startStr := r.URL.Query().Get("start"); startStr != "" {
 		var err error
 		start, err = strconv.ParseUint(startStr, 10, 64)

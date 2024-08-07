@@ -20,10 +20,13 @@ package placement
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/placement/types"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 // A simple test rule to place an application based on a nil application.
@@ -34,6 +37,21 @@ type testRule struct {
 
 func (tr *testRule) getName() string {
 	return types.Test
+}
+
+func (tr *testRule) ruleDAO() *dao.RuleDAO {
+	var pDAO *dao.RuleDAO
+	if tr.parent != nil {
+		pDAO = tr.parent.ruleDAO()
+	}
+	return &dao.RuleDAO{
+		Name: types.Test,
+		Parameters: map[string]string{
+			"create": strconv.FormatBool(tr.create),
+		},
+		ParentRule: pDAO,
+		Filter:     tr.filter.filterDAO(),
+	}
 }
 
 // Simple init for the test rule: allow everything as per a normal rule.
@@ -53,6 +71,12 @@ func (tr *testRule) placeApplication(app *objects.Application, queueFn func(stri
 		return "", fmt.Errorf("nil app passed in")
 	}
 	if queuePath := app.GetQueuePath(); queuePath != "" {
+		parts := strings.Split(queuePath, configs.DOT)
+		for _, part := range parts {
+			if err := configs.IsQueueNameValid(part); err != nil {
+				return "", err
+			}
+		}
 		return replaceDot(queuePath), nil
 	}
 	return types.Test, nil

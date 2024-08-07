@@ -21,13 +21,10 @@ package ugm
 import (
 	"strings"
 
-	"go.uber.org/zap"
-
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/locking"
-	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
@@ -62,13 +59,6 @@ func (ut *UserTracker) increaseTrackedResource(queuePath string, applicationID s
 	ut.events.sendIncResourceUsageForUser(ut.userName, queuePath, usage)
 	hierarchy := strings.Split(queuePath, configs.DOT)
 	ut.queueTracker.increaseTrackedResource(hierarchy, applicationID, user, usage)
-	gt := ut.appGroupTrackers[applicationID]
-	log.Log(log.SchedUGM).Debug("Increasing resource usage for group",
-		zap.String("group", gt.getName()),
-		zap.Strings("queue path", hierarchy),
-		zap.String("application", applicationID),
-		zap.Stringer("resource", usage))
-	gt.increaseTrackedResource(queuePath, applicationID, usage, ut.userName)
 }
 
 func (ut *UserTracker) decreaseTrackedResource(queuePath string, applicationID string, usage *resources.Resource, removeApp bool) bool {

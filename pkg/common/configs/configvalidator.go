@@ -69,11 +69,11 @@ var DefaultPreemptionDelay = 30 * time.Second
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.
-var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_:#/@-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
 // allow upper and lower case, add the @ and . (dot) and officially no length.
-var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.@-]*[$]?$`)
+var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:#/_.@-]*[$]?$`)
 
 // Groups should have a slightly more restrictive regexp (no @ . or $ at the end)
 var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.-]*$`)
@@ -478,7 +478,7 @@ func checkPlacementFilter(filter Filter) error {
 }
 
 // Check a single limit entry
-func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName map[string]bool, queue *QueueConfig) error {
+func checkLimit(limit Limit, existingUserName map[string]bool, existingGroupName map[string]bool, queue *QueueConfig) error {
 	if len(limit.Users) == 0 && len(limit.Groups) == 0 {
 		return fmt.Errorf("empty user and group lists defined in limit '%v'", limit)
 	}
@@ -488,15 +488,15 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 			return fmt.Errorf("invalid limit user name '%s' in limit definition", name)
 		}
 
-		if existedUserName[name] {
-			return fmt.Errorf("duplicated user name %s , already existed", name)
+		if existingUserName[name] {
+			return fmt.Errorf("duplicated user name '%s', already exists", name)
 		}
-		existedUserName[name] = true
+		existingUserName[name] = true
 
 		// The user without wildcard should not happen after the wildcard user
 		// It means the wildcard for user should be the last item for limits object list which including the username,
 		// and we should only set one wildcard user for all limits
-		if existedUserName["*"] && name != "*" {
+		if existingUserName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard user %s after wildcard user limit", name)
 		}
 	}
@@ -505,15 +505,15 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 			return fmt.Errorf("invalid limit group name '%s' in limit definition", name)
 		}
 
-		if existedGroupName[name] {
-			return fmt.Errorf("duplicated group name %s , already existed", name)
+		if existingGroupName[name] {
+			return fmt.Errorf("duplicated group name '%s'", name)
 		}
-		existedGroupName[name] = true
+		existingGroupName[name] = true
 
 		// The group without wildcard should not happen after the wildcard group
 		// It means the wildcard for group should be the last item for limits object list which including the group name,
 		// and we should only set one wildcard group for all limits
-		if existedGroupName["*"] && name != "*" {
+		if existingGroupName["*"] && name != "*" {
 			return fmt.Errorf("should not set no wildcard group %s after wildcard group limit", name)
 		}
 	}
@@ -522,7 +522,7 @@ func checkLimit(limit Limit, existedUserName map[string]bool, existedGroupName m
 	// If there is no specific group mentioned the wildcard group limit would thus be the same as the queue limit.
 	// For that reason we do not allow specifying only one group limit that is using the wildcard.
 	// There must be at least one limit with a group name defined.
-	if existedGroupName["*"] && len(existedGroupName) == 1 {
+	if existingGroupName["*"] && len(existingGroupName) == 1 {
 		return fmt.Errorf("should not specify only one group limit that is using the wildcard. " +
 			"There must be at least one limit with a group name defined ")
 	}
@@ -578,11 +578,11 @@ func checkLimits(limits []Limit, obj string, queue *QueueConfig) error {
 		zap.String("objName", obj),
 		zap.Int("limitsLength", len(limits)))
 
-	existedUserName := make(map[string]bool)
-	existedGroupName := make(map[string]bool)
+	existingUserName := make(map[string]bool)
+	existingGroupName := make(map[string]bool)
 
 	for _, limit := range limits {
-		if err := checkLimit(limit, existedUserName, existedGroupName, queue); err != nil {
+		if err := checkLimit(limit, existingUserName, existingGroupName, queue); err != nil {
 			return err
 		}
 	}
@@ -632,7 +632,7 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 // Check the queue names configured for compliance and uniqueness
 // - no duplicate names at each branched level in the tree
 // - queue name is alphanumeric (case ignore) with - and _
-// - queue name is maximum 16 char long
+// - queue name is maximum 64 char long
 func checkQueues(queue *QueueConfig, level int) error {
 	// check the ACLs (if defined)
 	err := checkACL(queue.AdminACL)
@@ -653,22 +653,30 @@ func checkQueues(queue *QueueConfig, level int) error {
 	// check this level for name compliance and uniqueness
 	queueMap := make(map[string]bool)
 	for _, child := range queue.Queues {
-		if !QueueNameRegExp.MatchString(child.Name) {
-			return fmt.Errorf("invalid child name %s, a name must only have alphanumeric characters,"+
-				" - or _, and be no longer than 64 characters", child.Name)
+		err = IsQueueNameValid(child.Name)
+		if err != nil {
+			return err
 		}
 		if queueMap[strings.ToLower(child.Name)] {
-			return fmt.Errorf("duplicate child name found with name %s, level %d", child.Name, level)
+			return fmt.Errorf("duplicate child name found with name '%s', level %d", child.Name, level)
 		}
 		queueMap[strings.ToLower(child.Name)] = true
 	}
 
 	// recurse into the depth if this level passed
-	for _, child := range queue.Queues {
+	for _, q := range queue.Queues {
+		child := q
 		err = checkQueues(&child, level+1)
 		if err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func IsQueueNameValid(queueName string) error {
+	if !QueueNameRegExp.MatchString(queueName) {
+		return common.InvalidQueueName
 	}
 	return nil
 }

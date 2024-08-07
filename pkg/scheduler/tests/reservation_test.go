@@ -77,6 +77,7 @@ partitions:
     preemption:
       enabled: false
 `
+	queueName = "root.leaf-1"
 )
 
 // simple reservation one app one queue
@@ -95,7 +96,6 @@ func TestBasicReservation(t *testing.T) {
 	nodes := createNodes(t, ms, 2, 50000000, 50000)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
-	queueName := "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 
@@ -171,8 +171,7 @@ func TestReservationForTwoQueues(t *testing.T) {
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
 	// add the first scheduling app
-	leaf1Name := "root.leaf-1"
-	err = ms.addApp(appID1, leaf1Name, "default")
+	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app 1 to scheduler failed")
 
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
@@ -274,7 +273,6 @@ func TestRemoveReservedNode(t *testing.T) {
 	nodes := createNodes(t, ms, 2, 50000000, 50000)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
-	queueName := "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 
@@ -327,7 +325,6 @@ func TestAddNewNode(t *testing.T) {
 	ms.mockRM.waitForMinAcceptedNodes(t, 3, 1000)
 	ms.scheduler.GetClusterContext().GetPartition(ms.partitionName).GetNode(nodes[2]).SetSchedulable(false)
 
-	queueName := "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 
@@ -384,7 +381,6 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	nodes := createNodes(t, ms, 2, 30000000, 30000)
 	ms.mockRM.waitForMinAcceptedNodes(t, 2, 1000)
 
-	queueName := "root.leaf-1"
 	err = ms.addApp(appID1, queueName, "default")
 	assert.NilError(t, err, "adding app to scheduler failed")
 	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)

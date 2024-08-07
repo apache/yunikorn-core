@@ -951,7 +951,8 @@ func getQueueApplicationsByStatus(w http.ResponseWriter, r *http.Request) {
 
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
 	for _, app := range appList {
-		appsDao = append(appsDao, getApplicationDAO(app))
+		summary := app.GetApplicationSummary(partitionContext.RmID)
+		appsDao = append(appsDao, getApplicationDAO(app, summary))
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {

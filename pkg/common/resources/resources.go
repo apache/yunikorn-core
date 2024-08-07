@@ -130,18 +130,18 @@ func (r *Resource) ToProto() *si.Resource {
 	return proto
 }
 
-// Return a clone (copy) of the resource it is called on.
+// Clone returns a clone (copy) of the resource it is called on.
 // This provides a deep copy of the object with the exact same member set.
 // NOTE: this is a clone not a sparse copy of the original.
 func (r *Resource) Clone() *Resource {
-	ret := NewResource()
-	if r != nil {
-		for k, v := range r.Resources {
-			ret.Resources[k] = v
-		}
-		return ret
+	if r == nil {
+		return nil
 	}
-	return nil
+	ret := NewResource()
+	for k, v := range r.Resources {
+		ret.Resources[k] = v
+	}
+	return ret
 }
 
 // Add additional resource to the base updating the base resource
@@ -362,6 +362,21 @@ func (r *Resource) SubOnlyExisting(delta *Resource) {
 	for k := range r.Resources {
 		r.Resources[k] = subVal(r.Resources[k], delta.Resources[k])
 	}
+}
+
+// AddOnlyExisting adds delta to defined resource.
+// Ignore any type not defined in the base resource (ie receiver).
+func (r *Resource) AddOnlyExisting(delta *Resource) *Resource {
+	// check nil inputs and shortcut
+	if r == nil || delta == nil {
+		return r.Clone()
+	}
+	sum := NewResource()
+	// neither are nil, add the delta
+	for k := range r.Resources {
+		sum.Resources[k] = addVal(r.Resources[k], delta.Resources[k])
+	}
+	return sum
 }
 
 // SubEliminateNegative subtracts resource returning a new resource with the result

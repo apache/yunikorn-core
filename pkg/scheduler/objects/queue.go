@@ -993,8 +993,7 @@ func (sq *Queue) isRoot() bool {
 // Guard against going over max resources if set
 func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
 	// check this queue: failure stops checks if the allocation is not part of a node addition
-	fit, newAllocated := sq.allocatedResFits(alloc)
-	if !nodeReported && !fit {
+	if !nodeReported && !sq.allocatedResFits(alloc) {
 		return fmt.Errorf("allocation (%v) puts queue '%s' over maximum allocation (%v), current usage (%v)",
 			alloc, sq.QueuePath, sq.maxResource, sq.allocatedResource)
 	}
@@ -1017,17 +1016,18 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	sq.Lock()
 	defer sq.Unlock()
 	// all OK update this queue
-	sq.allocatedResource = newAllocated
+	sq.allocatedResource = resources.Add(sq.allocatedResource, alloc)
 	sq.updateAllocatedResourceMetrics()
 	return nil
 }
 
+// allocatedResFits adds the passed in resource to the allocatedResource of the queue and checks if it still fits in the
+// queues' maximum. If the resource fits it returns true otherwise false.
 // small helper method to access sq.maxResource+sq.allocatedResource and avoid Clone() call
-func (sq *Queue) allocatedResFits(res *resources.Resource) (bool, *resources.Resource) {
+func (sq *Queue) allocatedResFits(res *resources.Resource) bool {
 	sq.RLock()
 	defer sq.RUnlock()
-	newAllocated := resources.Add(sq.allocatedResource, res)
-	return sq.maxResource.FitInMaxUndef(newAllocated), newAllocated
+	return sq.maxResource.FitInMaxUndef(res.AddOnlyExisting(sq.allocatedResource))
 }
 
 // DecAllocatedResource decrement the allocated resources for this queue (recursively)

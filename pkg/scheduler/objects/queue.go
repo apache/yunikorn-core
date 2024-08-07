@@ -1220,6 +1220,63 @@ func (sq *Queue) GetMaxResource() *resources.Resource {
 	return sq.internalGetMax(limit)
 }
 
+// Starting with the root, descend down to the target queue allowing children to override Resource values .
+// If the root includes an explicit 0 value for a Resource, do not include it in the accumulator and treat it as missing.
+// If no children provide a maximum capacity override, the resulting value will be the value found on the Root.
+// It is useful for fair-scheduling to allow a ratio to be produced representing the rough utilization % of a given queue.
+func (sq *Queue) GetFairMaxResource() *resources.Resource {
+	var limit *resources.Resource
+	if sq.parent == nil {
+		cleanedRootResources := resources.NewResource()
+		if sq.maxResource == nil {
+			return cleanedRootResources
+		}
+
+		for k, v := range sq.maxResource.Resources {
+			if v != 0 {
+				cleanedRootResources.Resources[k] = v
+			}
+		}
+
+		return cleanedRootResources
+	}
+
+	limit = sq.parent.GetFairMaxResource()
+	return sq.internalGetFairMaxResource(limit)
+}
+
+func (sq *Queue) internalGetFairMaxResource(parent *resources.Resource) *resources.Resource {
+	sq.RLock()
+	defer sq.RUnlock()
+
+	us := sq.maxResource
+
+	if parent == nil && us == nil {
+		return nil
+	}
+	if parent == nil {
+		return us.Clone()
+	}
+	if us == nil {
+		return parent.Clone()
+	}
+
+	out := resources.NewResource()
+	for k, v := range parent.Resources {
+		out.Resources[k] = v
+	}
+
+	//child wins every resources collision
+	for k, v := range us.Resources {
+		log.Log(log.SchedQueue).Info("child overwriting parent",
+			zap.Any("k", k),
+			zap.Any("v", v))
+
+		out.Resources[k] = v
+	}
+	return out
+}
+
 // GetMaxQueueSet returns the max resource for the queue. The max resource should never be larger than the
 // max resource of the parent. The cluster size, which defines the root limit, is not relevant for this call.
 // Contrary to the GetMaxResource call. This will return nil unless a limit is set.

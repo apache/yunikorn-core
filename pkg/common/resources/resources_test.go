@@ -1271,6 +1271,167 @@ func TestFitInSkip(t *testing.T) {
 	}
 }
 
+func TestGetFairShare(t *testing.T) {
+	//0 guarantee should be treated as absence of a gurantee
+	//test to protect against division by 0. full=0. rare but possible.
+	tests := []struct {
+		allocated  *Resource
+		guaranteed *Resource
+		fairmax    *Resource
+		expected   float64
+	}{
+		// //guarantees exist for each resource type so full does not come into play
+		{
+			allocated:  &Resource{Resources: map[string]Quantity{"vcores": 0}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcores": 1000}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"vcores": 99999}},
+			expected:   float64(0 / 1000),
+		},
+		{
+			allocated:  &Resource{Resources: map[string]Quantity{"vcores": 100, "memory": 2500}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcores": 1000, "memory": 5000}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"vcores": 99999, "memory": 99999}},
+			expected:   float64(2500) / float64(5000),
+		},
+		{
+			allocated:  &Resource{Resources: map[string]Quantity{"vcores": 100, "memory": 2500, "ephemeral-storage": 100}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcores": 1000, "memory": 5000, "ephemeral-storage": 2000}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"vcores": 99999, "memory": 99999, "ephemeral-storage": 99999}},
+			expected:   float64(2500) / float64(5000),
+		},
+
+		//in the absence of guarantees the share denominator will be determined by the full value
+		{ //ephemeral-storage = 1000 / 2000 = 0.5; fairmax ephemeral-stagoe dominates
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			guaranteed: &Resource{Resources: map[string]Quantity{}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 2000, "memory": 99999, "pods": 99999, "vcore": 99999}},
+			expected:   float64(1000) / float64(2000),
+		},
+
+		//there is a guarantee on pods but fairmax ephemeral-storage still dominates
+		{ //ephemeral-storage = 0.5, memory = 1000 / 2000; fairmax ephemeral-stagoe dominates
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"pods": 88888}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 2000, "memory": 99999, "pods": 99999, "vcore": 99999}},
+			expected:   float64(1000) / float64(2000),
+		},
+
+		// //guarantee on vcores  but it still dominates all fairmax resources
+		{ //vcores = 1000 / 2000; gauranteed vcores dominates
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": 2000}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 99999, "memory": 99999, "pods": 99999, "vcore": 99999}},
+			expected:   float64(1000) / float64(2000),
+		},
+
+		//0 allocated
+		{ //ephemeral-storage = 0 / 2000;
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 0, "memory": 0, "pods": 0, "vcore": 0}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcores": 2000}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 99999, "memory": 99999, "pods": 99999, "vcore": 99999}},
+			expected:   float64(0) / float64(2000),
+		},
+
+		//explicit 0 gurantee with usage
+		{ // vcore has usage, therefore share is 1.0(100%)
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 10}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": 0}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": 5000}},
+			expected:   float64(1.0),
+		},
+
+		//explicit 0 gurantee with NO usage
+		{ // vcore has NO usage, so it's share is 0. memory = 1000 / 5000 = 0.20
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 0}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": 0}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": 5000}},
+			expected:   float64(1000) / float64(5000),
+		},
+
+		//explicit 0 fairmax with usage
+		{ // memory has explicity fairmax of 0 and usage.  It's share of 1.0 will dominate.
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			guaranteed: &Resource{Resources: map[string]Quantity{}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 0, "pods": 5000, "vcore": 5000}},
+			expected:   float64(1.0),
+		},
+
+		//explicit 0 fairmax with NO usage
+		{ // memory has explicit fairmax of 0 but no usage so it's share will be 0.  vcore dominates with 1000 / 4000 = 0.25
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 0, "pods": 1000, "vcore": 1000}},
+			guaranteed: &Resource{Resources: map[string]Quantity{}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 0, "pods": 5000, "vcore": 4000}},
+			expected:   float64(1000) / float64(4000),
+		},
+
+		//negative gaurantee with usage
+		{ // negative guarantee with usage on vcore = 1.0
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": -10}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": 5000}},
+			expected:   float64(1.0),
+		},
+
+		//negative guaranteed with NO usage
+		{ // negative guarantee with NO usage on vcore = 0.0.  memory dominates with 1000 / 2000 = 0.5
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 0}},
+			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": -10}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 2000, "pods": 5000, "vcore": 5000}},
+			expected:   float64(1000) / float64(2000),
+		},
+
+		//negative fairmax with usage
+		{ //vcores = 1000 / -1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			guaranteed: &Resource{Resources: map[string]Quantity{}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": -1000}},
+			expected:   float64(1.0),
+		},
+
+		// //negative fairmax with NO usage
+		{ //vcores = 1000 / -1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 0}},
+			guaranteed: &Resource{Resources: map[string]Quantity{}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": -1000}},
+			expected:   float64(1000) / float64(5000),
+		},
+
+		// // negative usage gets no share
+		{ //vcores = -1000 / 1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": -1000}},
+			guaranteed: &Resource{Resources: map[string]Quantity{}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": 1000}},
+			expected:   float64(1000) / float64(5000),
+		},
+
+		// nil guarantees are ignored.
+		{
+			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			guaranteed: nil,
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			expected:   float64(1.0),
+		},
+
+		//nil usage
+		{
+			allocated:  nil,
+			guaranteed: &Resource{Resources: map[string]Quantity{}},
+			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			expected:   float64(0.0),
+		},
+	}
+
+	for _, tc := range tests {
+		subtest := fmt.Sprintf("%s-%s-%s", tc.allocated, tc.guaranteed, tc.fairmax)
+		t.Run(subtest, func(t *testing.T) {
+			share := getFairShare(tc.allocated, tc.guaranteed, tc.fairmax)
+			if !reflect.DeepEqual(share, tc.expected) {
+				t.Errorf("incorrect share for allocated( %s ), guaranteed( %s ), fairmax( %s ) expected %v got: %v", tc.allocated, tc.guaranteed, tc.fairmax, tc.expected, share)
+			}
+		})
+	}
+}
+
 func TestGetShares(t *testing.T) {
 	tests := []struct {
 		res      *Resource
@@ -1657,82 +1818,83 @@ func TestFairnessRatio(t *testing.T) {
 	}
 }
 
-// This tests just to cover code in the CompUsageRatio, CompUsageRatioSeparately and CompUsageShare.
-// This does not check the share calculation and share comparison see TestGetShares and TestCompShares for that.
-func TestCompUsage(t *testing.T) {
+// This tests just to cover code in the CompUsageRatioSeparately
+func TestCompUsageRatioSeparately(t *testing.T) {
 	tests := []struct {
-		left           *Resource
-		right          *Resource
-		leftTotal      *Resource
-		rightTotal     *Resource
-		expectedShares int
-		expectedRatio  int
-		message        string
+		leftAllocated   *Resource
+		rightAllocated  *Resource
+		leftGuaranteed  *Resource
+		rightGuaranteed *Resource
+		leftFairMax     *Resource
+		rightFairMax    *Resource
+		expectedRatio   int
+		message         string
 	}{
 		{
-			left:           NewResource(),
-			right:          NewResource(),
-			leftTotal:      NewResource(),
-			rightTotal:     NewResource(),
-			expectedShares: 0,
-			expectedRatio:  0,
-			message:        "empty resources",
+			leftAllocated:   NewResource(),
+			rightAllocated:  NewResource(),
+			leftGuaranteed:  NewResource(),
+			rightGuaranteed: NewResource(),
+			leftFairMax:     NewResource(),
+			rightFairMax:    NewResource(),
+			expectedRatio:   0,
+			message:         "empty resources",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			expectedShares: 1,
-			expectedRatio:  1,
-			message:        "left larger than right",
+			leftAllocated:   &Resource{Resources: map[string]Quantity{"ephemeral-storage": 100, "memory": 100, "pods": 100, "vcore": 100}},
+			rightAllocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 100, "memory": 100, "pods": 100, "vcore": 100}},
+			leftGuaranteed:  &Resource{Resources: map[string]Quantity{"pods": 200}},
+			rightGuaranteed: &Resource{Resources: map[string]Quantity{"pods": 800}},
+			leftFairMax:     &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			rightFairMax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			expectedRatio:   1,
+			message:         "with gaurantees, left has larger share",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			expectedShares: -1,
-			expectedRatio:  -1,
-			message:        "right larger than left",
+			leftAllocated:   &Resource{Resources: map[string]Quantity{"ephemeral-storage": 100, "memory": 100, "pods": 100, "vcore": 100}},
+			rightAllocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 100, "memory": 100, "pods": 100, "vcore": 100}},
+			leftGuaranteed:  &Resource{Resources: map[string]Quantity{"pods": 800}},
+			rightGuaranteed: &Resource{Resources: map[string]Quantity{"pods": 200}},
+			leftFairMax:     &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			rightFairMax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			expectedRatio:   -1,
+			message:         "with gaurantees, right has larger share",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			expectedShares: 1,
-			expectedRatio:  1,
-			message:        "CompUsageRatioSeparately - left larger than right",
+			leftAllocated:   &Resource{Resources: map[string]Quantity{"ephemeral-storage": 200, "memory": 200, "pods": 200, "vcore": 200}},
+			rightAllocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 100, "memory": 100, "pods": 100, "vcore": 100}},
+			leftGuaranteed:  NewResource(),
+			rightGuaranteed: NewResource(),
+			leftFairMax:     &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			rightFairMax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			expectedRatio:   1,
+			message:         "no gaurantees, left has larger share",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 10, "second": 10, "third": 10}},
-			expectedShares: -1,
-			expectedRatio:  -1,
-			message:        "CompUsageRatioSeparately - right larger than left",
+			leftAllocated:   &Resource{Resources: map[string]Quantity{"ephemeral-storage": 100, "memory": 100, "pods": 100, "vcore": 100}},
+			rightAllocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 200, "memory": 200, "pods": 200, "vcore": 200}},
+			leftGuaranteed:  NewResource(),
+			rightGuaranteed: NewResource(),
+			leftFairMax:     &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			rightFairMax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			expectedRatio:   -1,
+			message:         "no gaurantees, right has larger share",
 		},
 		{
-			left:           &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			right:          &Resource{Resources: map[string]Quantity{"first": 50, "second": 50, "third": 50}},
-			leftTotal:      &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			rightTotal:     &Resource{Resources: map[string]Quantity{"first": 100, "second": 100, "third": 100}},
-			expectedShares: 0,
-			expectedRatio:  0,
-			message:        "CompUsageRatioSeparately - equal values",
+			leftAllocated:   &Resource{Resources: map[string]Quantity{"ephemeral-storage": 100, "memory": 100, "pods": 100, "vcore": 100}},
+			rightAllocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 100, "memory": 100, "pods": 100, "vcore": 100}},
+			leftGuaranteed:  NewResource(),
+			rightGuaranteed: NewResource(),
+			leftFairMax:     &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			rightFairMax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
+			expectedRatio:   0,
+			message:         "no guarantees, tie",
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.message, func(t *testing.T) {
-			shares := CompUsageShares(tc.left, tc.right)
-			if shares != tc.expectedShares {
-				t.Errorf("%s: expected shares %d, got: %d", tc.message, tc.expectedShares, shares)
-			}
-
-			ratio := CompUsageRatioSeparately(tc.left, tc.leftTotal, tc.right, tc.rightTotal)
+			ratio := CompUsageRatioSeparately(tc.leftAllocated, tc.leftGuaranteed, tc.leftFairMax, tc.rightAllocated, tc.rightGuaranteed, tc.rightFairMax)
 			if ratio != tc.expectedRatio {
 				t.Errorf("%s: expected ratio %d, got: %d", tc.message, tc.expectedRatio, ratio)
 			}

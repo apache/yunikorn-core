@@ -145,15 +145,11 @@ func TestNoQueueLimits(t *testing.T) {
 	q3.currentPriority = 3
 
 	queues := []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, false)
-	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q1, q0}), "fair no limit first")
 	sortQueue(queues, policies.FairSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit first - priority")
 
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
-	sortQueue(queues, policies.FairSortPolicy, false)
-	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit second")
 	sortQueue(queues, policies.FairSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit second - priority")
 }

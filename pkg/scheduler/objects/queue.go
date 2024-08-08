@@ -1251,22 +1251,17 @@ func (sq *Queue) internalGetFairMaxResource(parent *resources.Resource) *resourc
 	defer sq.RUnlock()
 
 	us := sq.maxResource
-	switch {
-	case parent == nil && us == nil:
-		return nil
-	case parent == nil:
-		return us.Clone()
-	case us == nil:
+	if us == nil {
 		return parent.Clone()
-	default:
-		out := parent.Clone()
-
-		// child wins every resources collision
-		for k, v := range us.Resources {
-			out.Resources[k] = v
-		}
-		return out
 	}
+
+	out := parent.Clone()
+
+	// perform merge. child wins every resources collision
+	for k, v := range us.Resources {
+		out.Resources[k] = v
+	}
+	return out
 }
 
 // GetMaxQueueSet returns the max resource for the queue. The max resource should never be larger than the

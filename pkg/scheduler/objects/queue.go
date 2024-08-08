@@ -1262,10 +1262,7 @@ func (sq *Queue) internalGetFairMaxResource(parent *resources.Resource) *resourc
 		return parent.Clone()
 	}
 
-	out := resources.NewResource()
-	for k, v := range parent.Resources {
-		out.Resources[k] = v
-	}
+	out := parent.Clone()
 
 	//child wins every resources collision
 	for k, v := range us.Resources {

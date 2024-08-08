@@ -364,19 +364,18 @@ func (r *Resource) SubOnlyExisting(delta *Resource) {
 	}
 }
 
-// AddOnlyExisting adds delta to defined resource.
-// Ignore any type not defined in the base resource (ie receiver).
-func (r *Resource) AddOnlyExisting(delta *Resource) *Resource {
+// AddOnlyExisting adds delta to base resource, ignoring any type not defined in the base resource.
+func AddOnlyExisting(base, delta *Resource) *Resource {
 	// check nil inputs and shortcut
-	if r == nil || delta == nil {
-		return r.Clone()
+	if base == nil || delta == nil {
+		return base.Clone()
 	}
-	sum := NewResource()
 	// neither are nil, add the delta
-	for k := range r.Resources {
-		sum.Resources[k] = addVal(r.Resources[k], delta.Resources[k])
+	result := NewResource()
+	for k := range base.Resources {
+		result.Resources[k] = addVal(base.Resources[k], delta.Resources[k])
 	}
-	return sum
+	return result
 }
 
 // SubEliminateNegative subtracts resource returning a new resource with the result

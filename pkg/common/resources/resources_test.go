@@ -1152,7 +1152,7 @@ func TestAddOnlyExisting(t *testing.T) {
 			if tt.expected != nil {
 				expected = NewResourceFromMap(tt.expected)
 			}
-			result := base.AddOnlyExisting(delta)
+			result := AddOnlyExisting(base, delta)
 			assert.Assert(t, Equals(result, expected), "incorrect result returned")
 		})
 	}

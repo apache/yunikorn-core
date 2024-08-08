@@ -1024,10 +1024,10 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 // allocatedResFits adds the passed in resource to the allocatedResource of the queue and checks if it still fits in the
 // queues' maximum. If the resource fits it returns true otherwise false.
 // small helper method to access sq.maxResource+sq.allocatedResource and avoid Clone() call
-func (sq *Queue) allocatedResFits(res *resources.Resource) bool {
+func (sq *Queue) allocatedResFits(alloc *resources.Resource) bool {
 	sq.RLock()
 	defer sq.RUnlock()
-	return sq.maxResource.FitInMaxUndef(res.AddOnlyExisting(sq.allocatedResource))
+	return sq.maxResource.FitInMaxUndef(resources.AddOnlyExisting(alloc, sq.allocatedResource))
 }
 
 // DecAllocatedResource decrement the allocated resources for this queue (recursively)

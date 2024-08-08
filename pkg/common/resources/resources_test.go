@@ -1271,6 +1271,7 @@ func TestFitInSkip(t *testing.T) {
 	}
 }
 
+//nolint:funlen // thorough test
 func TestGetFairShare(t *testing.T) {
 	// 0 guarantee should be treated as absence of a gurantee
 	// test to protect against division by 0. full=0. rare but possible.
@@ -1285,7 +1286,7 @@ func TestGetFairShare(t *testing.T) {
 			allocated:  &Resource{Resources: map[string]Quantity{"vcores": 0}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"vcores": 1000}},
 			fairmax:    &Resource{Resources: map[string]Quantity{"vcores": 99999}},
-			expected:   float64(0 / 1000),
+			expected:   float64(0.0) / float64(1000.0),
 		},
 		{
 			allocated:  &Resource{Resources: map[string]Quantity{"vcores": 100, "memory": 2500}},
@@ -1381,7 +1382,7 @@ func TestGetFairShare(t *testing.T) {
 		},
 
 		// negative fairmax with usage
-		{ //vcores = 1000 / -1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
+		{ // vcores = 1000 / -1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{}},
 			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": -1000}},

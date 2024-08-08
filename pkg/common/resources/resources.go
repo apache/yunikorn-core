@@ -470,17 +470,14 @@ func getShareFairForDenominator(resourceType string, allocated Quantity, denomin
 		if allocated <= 0 {
 			// explicit 0 or negative value with NO usage
 			return 0.0, true
-
 		} else {
 			// explicit 0 or negative value with usage
 			return 1.0, true
-
 		}
 	case denominator > 0:
 		return (float64(allocated) / float64(denominator)), true
-
 	default:
-		//no denominator. ie. no guarantee or fairmax for resourceType
+		// no denominator. ie. no guarantee or fairmax for resourceType
 		return 0.0, false
 	}
 }
@@ -512,9 +509,7 @@ func getFairShare(allocated, guaranteed, fair *Resource) float64 {
 				maxShare = nextShare
 			}
 		}
-
 	}
-
 	return maxShare
 }
 
@@ -593,7 +588,6 @@ func CompUsageRatioSeparately(leftAllocated, leftGuaranteed, leftFairMax, rightA
 		return -1
 	default:
 		return 0
-
 	}
 }
 

@@ -898,7 +898,7 @@ func TestGetFairMaxResource(t *testing.T) {
 			Tier1Expectation: map[string]string{"memory": "1000", "pods": "1000", "vcore": "900m"},
 		},
 
-		//children provide maximum for resource type that do NOT exist on root queue currently but may later because of autoscaling
+		// children provide maximum for resource type that do NOT exist on root queue currently but may later because of autoscaling
 		{
 			RootResource:     map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
 			ParentResource:   map[string]string{},
@@ -908,7 +908,7 @@ func TestGetFairMaxResource(t *testing.T) {
 			Tier1Expectation: map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
 		},
 
-		//this is true even if they are on the root queue but are currently zero
+		// this is true even if they are on the root queue but are currently zero
 		{
 			RootResource:     map[string]string{"nvidia.com/gpu": "0", "ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "0m"},
 			ParentResource:   map[string]string{},
@@ -918,7 +918,7 @@ func TestGetFairMaxResource(t *testing.T) {
 			Tier1Expectation: map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000"},
 		},
 
-		//multiple level restrictions
+		// multiple level restrictions
 		{
 			RootResource:     map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
 			ParentResource:   map[string]string{"vcore": "900m"},
@@ -928,7 +928,7 @@ func TestGetFairMaxResource(t *testing.T) {
 			Tier1Expectation: map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "900m"},
 		},
 
-		//explicity 0's are honored for non-root queues
+		// explicity 0's are honored for non-root queues
 		{
 			RootResource:     map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
 			ParentResource:   map[string]string{},
@@ -944,15 +944,15 @@ func TestGetFairMaxResource(t *testing.T) {
 		root, err := createRootQueue(tc.RootResource)
 		assert.NilError(t, err, "queue create failed")
 
-		//create parent
+		// create parent
 		parent, err := createManagedQueue(root, "parent", true, tc.ParentResource)
 		assert.NilError(t, err, "failed to create 'parent' queue")
 
-		//create tier0
+		// create tier0
 		tier0, err := createManagedQueue(parent, "tier0", true, tc.Tier0Resource)
 		assert.NilError(t, err, "failed to create 'tier0' queue")
 
-		//create tier1
+		// create tier1
 		tier1, err := createManagedQueue(parent, "tier1", true, tc.Tier1Resource)
 		assert.NilError(t, err, "failed to create 'tier1' queue")
 
@@ -964,7 +964,6 @@ func TestGetFairMaxResource(t *testing.T) {
 			if !resources.Equals(expectedTier0Max, actualTier0Max) {
 				t.Errorf("root.parent.tier0 queue expected max %v, got: %v", expectedTier0Max, actualTier0Max)
 			}
-
 		}
 		if tc.Tier1Expectation != nil {
 			actualTier1Max := tier1.GetFairMaxResource()
@@ -974,9 +973,7 @@ func TestGetFairMaxResource(t *testing.T) {
 			if !resources.Equals(expectedTier1Max, actualTier1Max) {
 				t.Errorf("root.parent.tier0 queue expected max %v, got: %v", expectedTier1Max, actualTier1Max)
 			}
-
 		}
-
 	}
 }
 

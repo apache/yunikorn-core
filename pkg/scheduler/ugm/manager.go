@@ -660,7 +660,7 @@ func (m *Manager) Headroom(queuePath, applicationID string, user security.UserGr
 		return userHeadroom
 	}
 	groupHeadroom := groupTracker.headroom(hierarchy)
-	return resources.ComponentWiseMinPermissive(userHeadroom, groupHeadroom)
+	return resources.ComponentWiseMin(userHeadroom, groupHeadroom)
 }
 
 // CanRunApp checks the maxApplications for this specific application that runs as the user and group.

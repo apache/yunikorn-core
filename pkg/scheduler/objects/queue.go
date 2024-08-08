@@ -600,7 +600,7 @@ func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 	return sq.guaranteedResource
 }
 
-// GetActualGuaranteedResources returns the actual (including parent) guaranteed resources for the queue.
+// GetActualGuaranteedResource returns the actual (including parent) guaranteed resources for the queue.
 func (sq *Queue) GetActualGuaranteedResource() *resources.Resource {
 	if sq == nil {
 		return resources.NewResource()
@@ -608,7 +608,7 @@ func (sq *Queue) GetActualGuaranteedResource() *resources.Resource {
 	parentGuaranteed := sq.parent.GetActualGuaranteedResource()
 	sq.RLock()
 	defer sq.RUnlock()
-	return resources.ComponentWiseMinPermissive(sq.guaranteedResource, parentGuaranteed)
+	return resources.ComponentWiseMin(sq.guaranteedResource, parentGuaranteed)
 }
 
 func (sq *Queue) GetPreemptionDelay() time.Duration {
@@ -1201,7 +1201,7 @@ func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources
 		return headRoom
 	}
 	// take the minimum value of *all* resource types defined
-	return resources.ComponentWiseMinPermissive(headRoom, parentHeadRoom)
+	return resources.ComponentWiseMin(headRoom, parentHeadRoom)
 }
 
 // GetMaxResource returns the max resource for the queue. The max resource should never be larger than the
@@ -1228,12 +1228,10 @@ func (sq *Queue) GetMaxResource() *resources.Resource {
 // When defining a limit you therefore should define all resource quantities.
 func (sq *Queue) GetMaxQueueSet() *resources.Resource {
 	// get the limit for the parent first and check against the queue's own
-	var limit *resources.Resource
 	if sq.parent == nil {
 		return nil
 	}
-	limit = sq.parent.GetMaxQueueSet()
-	return sq.internalGetMax(limit)
+	return sq.internalGetMax(sq.parent.GetMaxQueueSet())
 }
 
 // internalGetMax does the real max calculation.
@@ -1242,9 +1240,6 @@ func (sq *Queue) internalGetMax(parentLimit *resources.Resource) *resources.Reso
 	defer sq.RUnlock()
 	// no parent queue limit set, not even for root
 	if parentLimit == nil {
-		if sq.maxResource == nil {
-			return nil
-		}
 		return sq.maxResource.Clone()
 	}
 	// parent limit set, no queue limit return parent

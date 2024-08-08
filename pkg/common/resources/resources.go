@@ -837,26 +837,10 @@ func StrictlyGreaterThanZero(larger *Resource) bool {
 	return greater
 }
 
-// Returns a new resource with the smallest value for each quantity in the resources
-// If either resource passed in is nil a zero resource is returned
-// If a resource type is missing from one of the Resource, it is considered 0
-func ComponentWiseMin(left, right *Resource) *Resource {
-	out := NewResource()
-	if left != nil && right != nil {
-		for k, v := range left.Resources {
-			out.Resources[k] = min(v, right.Resources[k])
-		}
-		for k, v := range right.Resources {
-			out.Resources[k] = min(v, left.Resources[k])
-		}
-	}
-	return out
-}
-
-// Returns a new Resource with the smallest value for each quantity in the Resources
+// ComponentWiseMin returns a new Resource with the smallest value for each quantity in the Resources
 // If either Resource passed in is nil the other Resource is returned
 // If a Resource type is missing from one of the Resource, it is considered empty and the quantity from the other Resource is returned
-func ComponentWiseMinPermissive(left, right *Resource) *Resource {
+func ComponentWiseMin(left, right *Resource) *Resource {
 	out := NewResource()
 	if right == nil && left == nil {
 		return nil

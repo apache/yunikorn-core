@@ -84,7 +84,8 @@ endif
 
 # shellcheck
 SHELLCHECK_VERSION=v0.9.0
-SHELLCHECK_BIN=${TOOLS_DIR}/shellcheck
+SHELLCHECK_PATH=${TOOLS_DIR}/shellcheck-$(SHELLCHECK_VERSION)
+SHELLCHECK_BIN=${SHELLCHECK_PATH}/shellcheck
 SHELLCHECK_ARCHIVE := shellcheck-$(SHELLCHECK_VERSION).$(OS).$(HOST_ARCH).tar.xz
 ifeq (darwin, $(OS))
 ifeq (arm64, $(HOST_ARCH))
@@ -98,7 +99,8 @@ endif
 
 # golangci-lint
 GOLANGCI_LINT_VERSION=1.57.2
-GOLANGCI_LINT_BIN=$(TOOLS_DIR)/golangci-lint
+GOLANGCI_LINT_PATH=$(TOOLS_DIR)/golangci-lint-v$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT_BIN=$(GOLANGCI_LINT_PATH)/golangci-lint
 GOLANGCI_LINT_ARCHIVE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH).tar.gz
 GOLANGCI_LINT_ARCHIVEBASE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH)
 
@@ -112,16 +114,16 @@ tools: $(SHELLCHECK_BIN) $(GOLANGCI_LINT_BIN)
 # Install shellcheck
 $(SHELLCHECK_BIN):
 	@echo "installing shellcheck $(SHELLCHECK_VERSION)"
-	@mkdir -p "$(TOOLS_DIR)"
+	@mkdir -p "$(SHELLCHECK_PATH)"
 	@curl -sSfL "https://github.com/koalaman/shellcheck/releases/download/$(SHELLCHECK_VERSION)/$(SHELLCHECK_ARCHIVE)" \
-		| tar -x -J --strip-components=1 -C "$(TOOLS_DIR)" "shellcheck-$(SHELLCHECK_VERSION)/shellcheck"
+		| tar -x -J --strip-components=1 -C "$(SHELLCHECK_PATH)" "shellcheck-$(SHELLCHECK_VERSION)/shellcheck"
 
 # Install golangci-lint
 $(GOLANGCI_LINT_BIN):
 	@echo "installing golangci-lint v$(GOLANGCI_LINT_VERSION)"
-	@mkdir -p "$(TOOLS_DIR)"
+	@mkdir -p "$(GOLANGCI_LINT_PATH)"
 	@curl -sSfL "https://github.com/golangci/golangci-lint/releases/download/v$(GOLANGCI_LINT_VERSION)/$(GOLANGCI_LINT_ARCHIVE)" \
-		| tar -x -z --strip-components=1 -C "$(TOOLS_DIR)" "$(GOLANGCI_LINT_ARCHIVEBASE)/golangci-lint"
+		| tar -x -z --strip-components=1 -C "$(GOLANGCI_LINT_PATH)" "$(GOLANGCI_LINT_ARCHIVEBASE)/golangci-lint"
 
 .PHONY: lint
 # Run lint against the previous commit for PR and branch build

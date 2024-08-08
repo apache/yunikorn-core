@@ -312,26 +312,46 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 	return nil
 }
 
+// TryAddAllocation attempts to add the allocation to the node. Used resources will increase available will decrease.
+// A nil Allocation makes no changes. Preempted resources must have been released already.
+// Do a sanity check to make sure it still fits in the node and nothing has changed
+func (sn *Node) TryAddAllocation(alloc *Allocation) bool {
+	return sn.addAllocationInternal(alloc, false)
+}
+
 // AddAllocation adds the allocation to the node. Used resources will increase available will decrease.
 // A nil Allocation makes no changes. Preempted resources must have been released already.
 // Do a sanity check to make sure it still fits in the node and nothing has changed
-func (sn *Node) AddAllocation(alloc *Allocation) bool {
+func (sn *Node) AddAllocation(alloc *Allocation) {
+	_ = sn.addAllocationInternal(alloc, true)
+}
+
+func (sn *Node) addAllocationInternal(alloc *Allocation, force bool) bool {
 	if alloc == nil {
 		return false
 	}
-	defer sn.notifyListeners()
+	result := false
+	defer func() {
+		// check result to ensure we don't notify listeners unnecessarily
+		if result {
+			sn.notifyListeners()
+		}
+	}()
+
 	sn.Lock()
 	defer sn.Unlock()
 	// check if this still fits: it might have changed since pre-check
 	res := alloc.GetAllocatedResource()
-	if sn.availableResource.FitIn(res) {
+	if force || sn.availableResource.FitIn(res) {
 		sn.allocations[alloc.GetAllocationKey()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
 		sn.nodeEvents.SendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)
-		return true
+		result = true
+		return result
 	}
-	return false
+	result = false
+	return result
 }
 
 // ReplaceAllocation replaces the placeholder with the real allocation on the node.

@@ -1268,10 +1268,6 @@ func (sq *Queue) internalGetFairMaxResource(parent *resources.Resource) *resourc
 
 	//child wins every resources collision
 	for k, v := range us.Resources {
-		log.Log(log.SchedQueue).Info("child overwriting parent",
-			zap.Any("k", k),
-			zap.Any("v", v))
-
 		out.Resources[k] = v
 	}
 	return out

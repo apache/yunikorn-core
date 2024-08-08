@@ -466,19 +466,13 @@ func getShareFairForDenominator(resourceType string, allocated Quantity, denomin
 
 	switch {
 	case ok && denominator <= 0:
-		if denominator < 0 {
-			log.Log(log.Resources).Debug("denominator is negative. will not compute share",
-				zap.String("resource key", resourceType),
-				zap.Int64("resource quantity", int64(denominator)))
-		}
-
 		if allocated <= 0 {
 			//explicit 0 or negative value with NO usage
-			return float64(0.0), true
+			return 0.0, true
 
 		} else {
 			//explicit 0 or negative value with usage
-			return float64(1.0), true
+			return 1.0, true
 
 		}
 	case denominator > 0:
@@ -496,7 +490,7 @@ func getShareFairForDenominator(resourceType string, allocated Quantity, denomin
 // If guarantees are present, they will be used for the denominator, otherwise we will fallback to the 'maxfair' capacity of the cluster.
 func getFairShare(allocated, guaranteed, fair *Resource) float64 {
 	if allocated == nil || len(allocated.Resources) == 0 {
-		return float64(0)
+		return 0.0
 	}
 
 	var maxShare float64

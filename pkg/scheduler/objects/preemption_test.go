@@ -324,12 +324,12 @@ func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
 		if i%2 == 0 {
 			alloc1 := markAllocated(nodeID1, ask1)
 			app1.AddAllocation(alloc1)
-			assert.Check(t, node1.AddAllocation(alloc1), "node alloc1 failed")
+			assert.Check(t, node1.TryAddAllocation(alloc1), "node alloc1 failed")
 			assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
 		} else {
 			alloc1 := markAllocated(nodeID2, ask1)
 			app1.AddAllocation(alloc1)
-			assert.Check(t, node2.AddAllocation(alloc1), "node alloc1 failed")
+			assert.Check(t, node2.TryAddAllocation(alloc1), "node alloc1 failed")
 			assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
 		}
 	}

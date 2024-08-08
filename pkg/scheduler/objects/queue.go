@@ -1228,18 +1228,18 @@ func (sq *Queue) GetMaxResource() *resources.Resource {
 func (sq *Queue) GetFairMaxResource() *resources.Resource {
 	var limit *resources.Resource
 	if sq.parent == nil {
-		cleanedRootResources := resources.NewResource()
+		cleaned := resources.NewResource()
 		if sq.maxResource == nil {
-			return cleanedRootResources
+			return cleaned
 		}
 
 		for k, v := range sq.maxResource.Resources {
 			if v != 0 {
-				cleanedRootResources.Resources[k] = v
+				cleaned.Resources[k] = v
 			}
 		}
 
-		return cleanedRootResources
+		return cleaned
 	}
 
 	limit = sq.parent.GetFairMaxResource()

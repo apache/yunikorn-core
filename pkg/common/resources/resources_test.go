@@ -1272,15 +1272,15 @@ func TestFitInSkip(t *testing.T) {
 }
 
 func TestGetFairShare(t *testing.T) {
-	//0 guarantee should be treated as absence of a gurantee
-	//test to protect against division by 0. full=0. rare but possible.
+	// 0 guarantee should be treated as absence of a gurantee
+	// test to protect against division by 0. full=0. rare but possible.
 	tests := []struct {
 		allocated  *Resource
 		guaranteed *Resource
 		fairmax    *Resource
 		expected   float64
 	}{
-		// //guarantees exist for each resource type so full does not come into play
+		// guarantees exist for each resource type so full does not come into play
 		{
 			allocated:  &Resource{Resources: map[string]Quantity{"vcores": 0}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"vcores": 1000}},
@@ -1300,39 +1300,39 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(2500) / float64(5000),
 		},
 
-		//in the absence of guarantees the share denominator will be determined by the full value
-		{ //ephemeral-storage = 1000 / 2000 = 0.5; fairmax ephemeral-stagoe dominates
+		// in the absence of guarantees the share denominator will be determined by the full value
+		{ // ephemeral-storage = 1000 / 2000 = 0.5; fairmax ephemeral-stagoe dominates
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{}},
 			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 2000, "memory": 99999, "pods": 99999, "vcore": 99999}},
 			expected:   float64(1000) / float64(2000),
 		},
 
-		//there is a guarantee on pods but fairmax ephemeral-storage still dominates
-		{ //ephemeral-storage = 0.5, memory = 1000 / 2000; fairmax ephemeral-stagoe dominates
+		// there is a guarantee on pods but fairmax ephemeral-storage still dominates
+		{ // ephemeral-storage = 0.5, memory = 1000 / 2000; fairmax ephemeral-stagoe dominates
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"pods": 88888}},
 			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 2000, "memory": 99999, "pods": 99999, "vcore": 99999}},
 			expected:   float64(1000) / float64(2000),
 		},
 
-		// //guarantee on vcores  but it still dominates all fairmax resources
-		{ //vcores = 1000 / 2000; gauranteed vcores dominates
+		// guarantee on vcores  but it still dominates all fairmax resources
+		{ // vcores = 1000 / 2000; gauranteed vcores dominates
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": 2000}},
 			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 99999, "memory": 99999, "pods": 99999, "vcore": 99999}},
 			expected:   float64(1000) / float64(2000),
 		},
 
-		//0 allocated
-		{ //ephemeral-storage = 0 / 2000;
+		// 0 allocated
+		{ // ephemeral-storage = 0 / 2000;
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 0, "memory": 0, "pods": 0, "vcore": 0}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"vcores": 2000}},
 			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 99999, "memory": 99999, "pods": 99999, "vcore": 99999}},
 			expected:   float64(0) / float64(2000),
 		},
 
-		//explicit 0 gurantee with usage
+		// explicit 0 gurantee with usage
 		{ // vcore has usage, therefore share is 1.0(100%)
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 10}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": 0}},
@@ -1340,7 +1340,7 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(1.0),
 		},
 
-		//explicit 0 gurantee with NO usage
+		// explicit 0 gurantee with NO usage
 		{ // vcore has NO usage, so it's share is 0. memory = 1000 / 5000 = 0.20
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 0}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": 0}},
@@ -1348,7 +1348,7 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(1000) / float64(5000),
 		},
 
-		//explicit 0 fairmax with usage
+		// explicit 0 fairmax with usage
 		{ // memory has explicity fairmax of 0 and usage.  It's share of 1.0 will dominate.
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{}},
@@ -1356,7 +1356,7 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(1.0),
 		},
 
-		//explicit 0 fairmax with NO usage
+		// explicit 0 fairmax with NO usage
 		{ // memory has explicit fairmax of 0 but no usage so it's share will be 0.  vcore dominates with 1000 / 4000 = 0.25
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 0, "pods": 1000, "vcore": 1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{}},
@@ -1364,7 +1364,7 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(1000) / float64(4000),
 		},
 
-		//negative gaurantee with usage
+		// negative gaurantee with usage
 		{ // negative guarantee with usage on vcore = 1.0
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": -10}},
@@ -1372,7 +1372,7 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(1.0),
 		},
 
-		//negative guaranteed with NO usage
+		// negative guaranteed with NO usage
 		{ // negative guarantee with NO usage on vcore = 0.0.  memory dominates with 1000 / 2000 = 0.5
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 0}},
 			guaranteed: &Resource{Resources: map[string]Quantity{"vcore": -10}},
@@ -1380,7 +1380,7 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(1000) / float64(2000),
 		},
 
-		//negative fairmax with usage
+		// negative fairmax with usage
 		{ //vcores = 1000 / -1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{}},
@@ -1388,16 +1388,16 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(1.0),
 		},
 
-		// //negative fairmax with NO usage
-		{ //vcores = 1000 / -1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
+		// negative fairmax with NO usage
+		{ // vcores = 1000 / -1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": 0}},
 			guaranteed: &Resource{Resources: map[string]Quantity{}},
 			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": -1000}},
 			expected:   float64(1000) / float64(5000),
 		},
 
-		// // negative usage gets no share
-		{ //vcores = -1000 / 1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
+		// negative usage gets no share
+		{ // vcores = -1000 / 1000 = -1.  share is dominated by memory = 1000 / 5000 = 0.20
 			allocated:  &Resource{Resources: map[string]Quantity{"ephemeral-storage": 1000, "memory": 1000, "pods": 1000, "vcore": -1000}},
 			guaranteed: &Resource{Resources: map[string]Quantity{}},
 			fairmax:    &Resource{Resources: map[string]Quantity{"ephemeral-storage": 5000, "memory": 5000, "pods": 5000, "vcore": 1000}},
@@ -1412,7 +1412,7 @@ func TestGetFairShare(t *testing.T) {
 			expected:   float64(1.0),
 		},
 
-		//nil usage
+		// nil usage
 		{
 			allocated:  nil,
 			guaranteed: &Resource{Resources: map[string]Quantity{}},

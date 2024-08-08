@@ -455,7 +455,8 @@ func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
 	return true
 }
 
-// Denominator Resources can be either guaranteed Resources or fairmax Resources.
+// getShareFairForDenominator attempts to computes the denominator for a queue's fair share ratio.
+// Here Resources can be either guaranteed Resources or fairmax Resources.
 // If the quanity is explicitly 0 or negative, we will check usage.  If usage >= 0, the share will be set to 1.0.  Otherwise, it will be set 0.0.
 func getShareFairForDenominator(resourceType string, allocated Quantity, denominatorResources *Resource) (float64, bool) {
 	if denominatorResources == nil {
@@ -467,11 +468,11 @@ func getShareFairForDenominator(resourceType string, allocated Quantity, denomin
 	switch {
 	case ok && denominator <= 0:
 		if allocated <= 0 {
-			//explicit 0 or negative value with NO usage
+			// explicit 0 or negative value with NO usage
 			return 0.0, true
 
 		} else {
-			//explicit 0 or negative value with usage
+			// explicit 0 or negative value with usage
 			return 1.0, true
 
 		}
@@ -484,7 +485,7 @@ func getShareFairForDenominator(resourceType string, allocated Quantity, denomin
 	}
 }
 
-// For a given queue, produce a ratio which represents it's current 'fair' share usage.
+// getFairShare produces a ratio which represents it's current 'fair' share usage.
 // Iterate over all of the allocated resource types.  For each, compute the ratio, ultimately returning the max ratio encountered.
 // The numerator will be the allocated usage.
 // If guarantees are present, they will be used for the denominator, otherwise we will fallback to the 'maxfair' capacity of the cluster.
@@ -497,7 +498,7 @@ func getFairShare(allocated, guaranteed, fair *Resource) float64 {
 	for k, v := range allocated.Resources {
 		var nextShare float64
 
-		//if usage <= 0, resource has no share
+		// if usage <= 0, resource has no share
 		if allocated.Resources[k] < 0 {
 			continue
 		}

@@ -1220,6 +1220,7 @@ func (sq *Queue) GetMaxResource() *resources.Resource {
 	return sq.internalGetMax(limit)
 }
 
+// GetFairMaxResource computes the fair max resources for a given queue.
 // Starting with the root, descend down to the target queue allowing children to override Resource values .
 // If the root includes an explicit 0 value for a Resource, do not include it in the accumulator and treat it as missing.
 // If no children provide a maximum capacity override, the resulting value will be the value found on the Root.

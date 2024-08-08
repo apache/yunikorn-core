@@ -20,6 +20,7 @@ package objects
 
 import (
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -69,6 +70,7 @@ type QueuePreemptionSnapshot struct {
 	MaxResource        *resources.Resource      // maximum resources for this queue
 	GuaranteedResource *resources.Resource      // guaranteed resources for this queue
 	PotentialVictims   []*Allocation            // list of allocations which could be preempted
+	AskQueue           *QueuePreemptionSnapshot // snapshot of ask or preemptor queue
 }
 
 // NewPreemptor creates a new preemptor. The preemptor itself is not thread safe, and assumes the application lock is held.
@@ -760,6 +762,7 @@ func (qps *QueuePreemptionSnapshot) Duplicate(copy map[string]*QueuePreemptionSn
 		MaxResource:        qps.MaxResource.Clone(),
 		GuaranteedResource: qps.GuaranteedResource.Clone(),
 		PotentialVictims:   qps.PotentialVictims,
+		AskQueue:           qps.AskQueue,
 	}
 	copy[qps.QueuePath] = snapshot
 	return snapshot
@@ -825,6 +828,24 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 	used := qps.AllocatedResource.Clone()
 	used.SubOnlyExisting(qps.PreemptingResource)
 	remainingGuaranteed.SubOnlyExisting(used)
+	if qps.AskQueue != nil {
+		// In case ask queue has guaranteed set, its own values carries higher precedence over the parent or ancestor
+		if qps.AskQueue.QueuePath == qps.QueuePath && !remainingGuaranteed.IsEmpty() {
+			return resources.MergeIfNotPresent(remainingGuaranteed, parent)
+		}
+		// Queue (potential victim queue path) being processed currently sharing common ancestors or parent with ask queue should not propagate its
+		// actual remaining guaranteed to rest of queue's in the queue hierarchy downwards to let them use their own remaining guaranteed only if guaranteed
+		// has been set. Otherwise, propagating the remaining guaranteed downwards would give wrong perception and those queues might not be chosen
+		// as victims for sibling ( who is under guaranteed and starving for resources) in the same level.
+		// Overall, this increases the chance of choosing victims for preemptor from siblings without causing preemption storm or loop.
+		askQueueRemainingGuaranteed := qps.AskQueue.GuaranteedResource.Clone()
+		askQueueUsed := qps.AskQueue.AllocatedResource.Clone()
+		askQueueUsed.SubOnlyExisting(qps.AskQueue.PreemptingResource)
+		askQueueRemainingGuaranteed.SubOnlyExisting(askQueueUsed)
+		if !remainingGuaranteed.IsEmpty() && strings.HasPrefix(qps.AskQueue.QueuePath, qps.QueuePath) && !askQueueRemainingGuaranteed.IsEmpty() {
+			return nil
+		}
+	}
 	return resources.ComponentWiseMinPermissive(remainingGuaranteed, parent)
 }
 

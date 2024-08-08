@@ -607,8 +607,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 		return err
 	}
 
-	existingAllocations := cc.convertAllocations(nodeInfo.ExistingAllocations)
-	err := partition.AddNode(sn, existingAllocations)
+	err := partition.AddNode(sn)
 	sn.SendNodeAddedEvent()
 	if err != nil {
 		wrapped := errors.Join(errors.New("failure while adding new node, node rejected with error: "), err)
@@ -751,7 +750,7 @@ func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
 		}
 
 		alloc := objects.NewAllocationFromSI(siAlloc)
-		if err := partition.addAllocation(alloc); err != nil {
+		if err := partition.AddAllocation(alloc); err != nil {
 			rejectedAllocs = append(rejectedAllocs, &si.RejectedAllocation{
 				AllocationKey: siAlloc.AllocationKey,
 				ApplicationID: siAlloc.ApplicationID,
@@ -853,16 +852,6 @@ func (cc *ClusterContext) processAllocationReleases(releases []*si.AllocationRel
 			}
 		}
 	}
-}
-
-// Convert the si allocation to a proposal to add to the node
-func (cc *ClusterContext) convertAllocations(allocations []*si.Allocation) []*objects.Allocation {
-	convert := make([]*objects.Allocation, len(allocations))
-	for current, allocation := range allocations {
-		convert[current] = objects.NewAllocationFromSI(allocation)
-	}
-
-	return convert
 }
 
 // Create a RM update event to notify RM of new allocations

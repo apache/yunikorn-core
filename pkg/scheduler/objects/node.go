@@ -312,26 +312,46 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 	return nil
 }
 
+// TryAddAllocation attempts to add the allocation to the node. Used resources will increase available will decrease.
+// A nil Allocation makes no changes. Preempted resources must have been released already.
+// Do a sanity check to make sure it still fits in the node and nothing has changed
+func (sn *Node) TryAddAllocation(alloc *Allocation) bool {
+	return sn.addAllocationInternal(alloc, false)
+}
+
 // AddAllocation adds the allocation to the node. Used resources will increase available will decrease.
 // A nil Allocation makes no changes. Preempted resources must have been released already.
 // Do a sanity check to make sure it still fits in the node and nothing has changed
-func (sn *Node) AddAllocation(alloc *Allocation) bool {
+func (sn *Node) AddAllocation(alloc *Allocation) {
+	_ = sn.addAllocationInternal(alloc, true)
+}
+
+func (sn *Node) addAllocationInternal(alloc *Allocation, force bool) bool {
 	if alloc == nil {
 		return false
 	}
-	defer sn.notifyListeners()
+	result := false
+	defer func() {
+		// check result to ensure we don't notify listeners unnecessarily
+		if result {
+			sn.notifyListeners()
+		}
+	}()
+
 	sn.Lock()
 	defer sn.Unlock()
 	// check if this still fits: it might have changed since pre-check
 	res := alloc.GetAllocatedResource()
-	if sn.availableResource.FitIn(res) {
+	if force || sn.availableResource.FitIn(res) {
 		sn.allocations[alloc.GetAllocationKey()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
 		sn.nodeEvents.SendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)
-		return true
+		result = true
+		return result
 	}
-	return false
+	result = false
+	return result
 }
 
 // ReplaceAllocation replaces the placeholder with the real allocation on the node.
@@ -367,12 +387,12 @@ func (sn *Node) CanAllocate(res *resources.Resource) bool {
 }
 
 // Checking pre-conditions in the shim for an allocation.
-func (sn *Node) preAllocateConditions(ask *Allocation) bool {
+func (sn *Node) preAllocateConditions(ask *Allocation) error {
 	return sn.preConditions(ask, true)
 }
 
 // Checking pre-conditions in the shim for a reservation.
-func (sn *Node) preReserveConditions(ask *Allocation) bool {
+func (sn *Node) preReserveConditions(ask *Allocation) error {
 	return sn.preConditions(ask, false)
 }
 
@@ -382,7 +402,7 @@ func (sn *Node) preReserveConditions(ask *Allocation) bool {
 // The caller must thus not rely on all plugins being executed.
 // This is a lock free call as it does not change the node and multiple predicate checks could be
 // run at the same time.
-func (sn *Node) preConditions(ask *Allocation, allocate bool) bool {
+func (sn *Node) preConditions(ask *Allocation, allocate bool) error {
 	// Check the predicates plugin (k8shim)
 	allocationKey := ask.GetAllocationKey()
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
@@ -400,12 +420,11 @@ func (sn *Node) preConditions(ask *Allocation, allocate bool) bool {
 			// running predicates failed
 			msg := err.Error()
 			ask.LogAllocationFailure(msg, allocate)
-			ask.SendPredicateFailedEvent(msg)
-			return false
+			return err
 		}
 	}
 	// all predicate plugins passed
-	return true
+	return nil
 }
 
 // preAllocateCheck checks if the node should be considered as a possible node to allocate on.

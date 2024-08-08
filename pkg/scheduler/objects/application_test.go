@@ -33,6 +33,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/handler"
+	mockCommon "github.com/apache/yunikorn-core/pkg/mock"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
@@ -2666,6 +2668,53 @@ func TestUpdateRunnableStatus(t *testing.T) {
 	assert.Equal(t, 2, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUEUE, eventSystem.Events[0].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_APP_CANNOTRUN_QUOTA, eventSystem.Events[1].EventChangeDetail)
+}
+
+func TestPredicateFailedEvents(t *testing.T) {
+	setupUGM()
+
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err)
+	headroom, err := resources.NewResourceFromConf(map[string]string{"first": "40"})
+	assert.NilError(t, err)
+	ask := newAllocationAsk("alloc-0", "app-1", res)
+	app := newApplication(appID1, "default", "root")
+	eventSystem := mock.NewEventSystem()
+	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
+	app.disableStateChangeEvents()
+	app.resetAppEvents()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+	sr := sortedRequests{}
+	sr.insert(ask)
+	app.sortedRequests = sr
+	attempts := 0
+
+	mockPlugin := mockCommon.NewPredicatePlugin(true, nil)
+	plugins.RegisterSchedulerPlugin(mockPlugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	app.tryAllocate(headroom, false, time.Second, &attempts, func() NodeIterator {
+		return &testIterator{}
+	}, nilNodeIterator, nilGetNode)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "app-1", event.ReferenceID)
+	assert.Equal(t, "alloc-0", event.ObjectID)
+	assert.Equal(t, "Unschedulable request 'alloc-0': fake predicate plugin failed (2x); ", event.Message)
+}
+
+type testIterator struct{}
+
+func (testIterator) ForEachNode(fn func(*Node) bool) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 20})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 20})
+	fn(node1)
+	fn(node2)
 }
 
 func TestGetMaxResourceFromTag(t *testing.T) {

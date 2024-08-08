@@ -619,9 +619,9 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
-	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
+	err = partition.AddNode(newNodeMaxResource("node-1", res))
 	assert.NilError(t, err, "test node1 add failed unexpected")
-	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
+	err = partition.AddNode(newNodeMaxResource("node-2", res))
 	assert.NilError(t, err, "test node2 add failed unexpected")
 	return partition
 }
@@ -639,9 +639,9 @@ func createPreemptionQueuesNodes(t *testing.T) *PartitionContext {
 	assert.NilError(t, err, "test partition create failed with error")
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
-	err = partition.AddNode(newNodeMaxResource("node-1", res), nil)
+	err = partition.AddNode(newNodeMaxResource("node-1", res))
 	assert.NilError(t, err, "test node1 add failed unexpected")
-	err = partition.AddNode(newNodeMaxResource("node-2", res), nil)
+	err = partition.AddNode(newNodeMaxResource("node-2", res))
 	assert.NilError(t, err, "test node2 add failed unexpected")
 	return partition
 }

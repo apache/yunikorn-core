@@ -19,7 +19,6 @@
 package events
 
 import (
-	"strconv"
 	"testing"
 	"time"
 
@@ -117,24 +116,29 @@ func TestPredicateFailedEvents(t *testing.T) {
 	resource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	eventSystem := mock.NewEventSystemDisabled()
 	events := NewAskEvents(eventSystem)
-	events.SendPredicateFailed("alloc-0", "app-0", "failed", resource)
+	events.SendPredicatesFailed("alloc-0", "app-0", map[string]int{}, resource)
 	assert.Equal(t, 0, len(eventSystem.Events))
 
 	eventSystem = mock.NewEventSystem()
 	events = newAskEventsWithRate(eventSystem, 50*time.Millisecond, 1)
+	errors := map[string]int{
+		"error#0": 2,
+		"error#1": 123,
+		"error#2": 44,
+	}
 	// only the first event is expected to be emitted due to rate limiting
 	for i := 0; i < 200; i++ {
-		events.SendPredicateFailed("alloc-0", "app-0", "failure-"+strconv.FormatUint(uint64(i), 10), resource)
+		events.SendPredicatesFailed("alloc-0", "app-0", errors, resource)
 	}
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
-	assert.Equal(t, "Predicate failed for request 'alloc-0' with message: 'failure-0'", event.Message)
+	assert.Equal(t, "Unschedulable request 'alloc-0': error#0 (2x); error#1 (123x); error#2 (44x); ", event.Message)
 
 	eventSystem.Reset()
 	// wait a bit, a new event is expected
 	time.Sleep(100 * time.Millisecond)
-	events.SendPredicateFailed("alloc-0", "app-0", "failed", resource)
+	events.SendPredicatesFailed("alloc-0", "app-0", errors, resource)
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event = eventSystem.Events[0]
-	assert.Equal(t, "Predicate failed for request 'alloc-0' with message: 'failed'", event.Message)
+	assert.Equal(t, "Unschedulable request 'alloc-0': error#0 (2x); error#1 (123x); error#2 (44x); ", event.Message)
 }

@@ -198,7 +198,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 		SchedulableResource: &si.Resource{
 			Resources: map[string]*si.Quantity{"memory": {Value: -10}},
 		},
-	}), []*objects.Allocation{})
+	}))
 	assert.NilError(t, err, "Unexpected error while adding a new node")
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")

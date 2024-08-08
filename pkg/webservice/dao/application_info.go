@@ -18,30 +18,38 @@
 
 package dao
 
+import (
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+)
+
 type ApplicationsDAOInfo struct {
 	Applications []ApplicationDAOInfo `json:"applications,omitempty"`
 }
 
 type ApplicationDAOInfo struct {
-	ApplicationID      string                  `json:"applicationID"` // no omitempty, application id should not be empty
-	UsedResource       map[string]int64        `json:"usedResource,omitempty"`
-	MaxUsedResource    map[string]int64        `json:"maxUsedResource,omitempty"`
-	PendingResource    map[string]int64        `json:"pendingResource,omitempty"`
-	Partition          string                  `json:"partition"` // no omitempty, partition should not be empty
-	QueueName          string                  `json:"queueName"` // no omitempty, queue name should not be empty
-	SubmissionTime     int64                   `json:"submissionTime,omitempty"`
-	FinishedTime       *int64                  `json:"finishedTime,omitempty"`
-	Requests           []*AllocationAskDAOInfo `json:"requests,omitempty"`
-	Allocations        []*AllocationDAOInfo    `json:"allocations,omitempty"`
-	State              string                  `json:"applicationState,omitempty"`
-	User               string                  `json:"user,omitempty"`
-	Groups             []string                `json:"groups,omitempty"`
-	RejectedMessage    string                  `json:"rejectedMessage,omitempty"`
-	StateLog           []*StateDAOInfo         `json:"stateLog,omitempty"`
-	PlaceholderData    []*PlaceholderDAOInfo   `json:"placeholderData,omitempty"`
-	HasReserved        bool                    `json:"hasReserved,omitempty"`
-	Reservations       []string                `json:"reservations,omitempty"`
-	MaxRequestPriority int32                   `json:"maxRequestPriority,omitempty"`
+	ApplicationID       string                     `json:"applicationID"` // no omitempty, application id should not be empty
+	UsedResource        map[string]int64           `json:"usedResource,omitempty"`
+	MaxUsedResource     map[string]int64           `json:"maxUsedResource,omitempty"`
+	PendingResource     map[string]int64           `json:"pendingResource,omitempty"`
+	Partition           string                     `json:"partition"` // no omitempty, partition should not be empty
+	QueueName           string                     `json:"queueName"` // no omitempty, queue name should not be empty
+	SubmissionTime      int64                      `json:"submissionTime,omitempty"`
+	FinishedTime        *int64                     `json:"finishedTime,omitempty"`
+	Requests            []*AllocationAskDAOInfo    `json:"requests,omitempty"`
+	Allocations         []*AllocationDAOInfo       `json:"allocations,omitempty"`
+	State               string                     `json:"applicationState,omitempty"`
+	User                string                     `json:"user,omitempty"`
+	Groups              []string                   `json:"groups,omitempty"`
+	RejectedMessage     string                     `json:"rejectedMessage,omitempty"`
+	StateLog            []*StateDAOInfo            `json:"stateLog,omitempty"`
+	PlaceholderData     []*PlaceholderDAOInfo      `json:"placeholderData,omitempty"`
+	HasReserved         bool                       `json:"hasReserved,omitempty"`
+	Reservations        []string                   `json:"reservations,omitempty"`
+	MaxRequestPriority  int32                      `json:"maxRequestPriority,omitempty"`
+	StartTime           int64                      `json:"startTime,omitempty"`
+	ResourceUsage       *resources.TrackedResource `json:"resourceUsage,omitempty"`
+	PreemptedResource   *resources.TrackedResource `json:"preemptedResource,omitempty"`
+	PlaceholderResource *resources.TrackedResource `json:"placeholderResource,omitempty"`
 }
 
 type StateDAOInfo struct {

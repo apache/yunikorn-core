@@ -489,9 +489,10 @@ func (a *Allocation) LogAllocationFailure(message string, allocate bool) {
 	entry.Count++
 }
 
-// SendPredicateFailedEvent updates the event system with the reason for a predicate failure.
-func (a *Allocation) SendPredicateFailedEvent(message string) {
-	a.askEvents.SendPredicateFailed(a.allocationKey, a.applicationID, message, a.GetAllocatedResource())
+// SendPredicatesFailedEvent updates the event system with the reason for predicate failures.
+// The map predicateErrors contains how many times certain predicates failed in the scheduling cycle for this ask.
+func (a *Allocation) SendPredicatesFailedEvent(predicateErrors map[string]int) {
+	a.askEvents.SendPredicatesFailed(a.allocationKey, a.applicationID, predicateErrors, a.GetAllocatedResource())
 }
 
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met.

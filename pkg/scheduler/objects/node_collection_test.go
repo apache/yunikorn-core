@@ -163,7 +163,7 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 				node := newNode(nodesInfo[id].nodeID, map[string]resources.Quantity{"vcore": resources.Quantity(defaultCapicity[0]), "memory": resources.Quantity(defaultCapicity[1])})
 				res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(nodesInfo[id].allocatedVcore), "memory": resources.Quantity(nodesInfo[id].allocatedMem)})
 				alloc := newAllocation(fmt.Sprintf("test-app-%d", id+1), fmt.Sprintf("test-%d", id+1), res)
-				if ok := node.AddAllocation(alloc); !ok {
+				if ok := node.TryAddAllocation(alloc); !ok {
 					t.Error("Allocation error happen in node.")
 				}
 
@@ -298,7 +298,7 @@ func TestGetFullNodeIterator(t *testing.T) {
 		} else {
 			res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)})
 			alloc := newAllocation(fmt.Sprintf("test-app-%d", i), fmt.Sprintf("test-%d", i), res)
-			if ok := node.AddAllocation(alloc); !ok {
+			if ok := node.TryAddAllocation(alloc); !ok {
 				t.Error("Allocation error in node.")
 			}
 		}
@@ -347,7 +347,7 @@ func TestGetNodeIterator(t *testing.T) {
 				} else {
 					res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(i)})
 					alloc := newAllocation(fmt.Sprintf("test-app-%d", i), fmt.Sprintf("test-%d", i), res)
-					if ok := node.AddAllocation(alloc); !ok {
+					if ok := node.TryAddAllocation(alloc); !ok {
 						t.Error("Allocation error happen in node.")
 					}
 				}

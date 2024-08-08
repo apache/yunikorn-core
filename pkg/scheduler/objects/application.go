@@ -1013,7 +1013,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 					return nil
 				}
 			}
-			result := sa.tryNode(node, request)
+			// we don't care about predicate error messages here
+			result, _ := sa.tryNode(node, request) //nolint:errcheck
 			if result != nil {
 				// check if the node was reserved and we allocated after a release
 				if _, ok := sa.reservations[reservationKey(node, nil, request)]; ok {
@@ -1157,7 +1158,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			node := getNodeFn(ph.GetNodeID())
 			// got the node run same checks as for reservation (all but fits)
 			// resource usage should not change anyway between placeholder and real one at this point
-			if node != nil && node.preReserveConditions(request) {
+			if node != nil && node.preReserveConditions(request) == nil {
 				_, err := sa.allocateAsk(request)
 				if err != nil {
 					log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
@@ -1198,12 +1199,12 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				return true
 			}
 			// skip the node if conditions can not be satisfied
-			if !node.preAllocateConditions(reqFit) {
+			if err := node.preAllocateConditions(reqFit); err != nil {
 				return true
 			}
 			// update just the node to make sure we keep its spot
 			// no queue update as we're releasing the placeholder and are just temp over the size
-			if !node.AddAllocation(reqFit) {
+			if !node.TryAddAllocation(reqFit) {
 				log.Log(log.SchedApplication).Debug("Node update failed unexpectedly",
 					zap.String("applicationID", sa.ApplicationID),
 					zap.Stringer("ask", reqFit),
@@ -1285,7 +1286,8 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			}
 		}
 		// check allocation possibility
-		result := sa.tryNode(reserve.node, ask)
+		// we don't care about predicate error messages here
+		result, _ := sa.tryNode(reserve.node, ask) //nolint:errcheck
 
 		// allocation worked fix the resultType and return
 		if result != nil {
@@ -1379,7 +1381,8 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 		if !node.FitInNode(ask.GetAllocatedResource()) || node.NodeID == reservedNode {
 			return true
 		}
-		result := sa.tryNode(node, ask)
+		// we don't care about predicate error messages here
+		result, _ := sa.tryNode(node, ask) //nolint:errcheck
 		// allocation worked: update resultType and return
 		if result != nil {
 			result.ResultType = AllocatedReserved
@@ -1404,6 +1407,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	reservedAsks := sa.GetAskReservations(allocKey)
 	allowReserve := !ask.IsAllocated() && len(reservedAsks) == 0
 	var allocResult *AllocationResult
+	var predicateErrors map[string]int
 	iterator.ForEachNode(func(node *Node) bool {
 		// skip the node if the node is not valid for the ask
 		if !node.IsSchedulable() {
@@ -1417,7 +1421,13 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 			return true
 		}
 		tryNodeStart := time.Now()
-		result := sa.tryNode(node, ask)
+		result, err := sa.tryNode(node, ask)
+		if err != nil {
+			if predicateErrors == nil {
+				predicateErrors = make(map[string]int)
+			}
+			predicateErrors[err.Error()]++
+		}
 		// allocation worked so return
 		if result != nil {
 			metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
@@ -1472,6 +1482,10 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 		return allocResult
 	}
 
+	if predicateErrors != nil {
+		ask.SendPredicatesFailedEvent(predicateErrors)
+	}
+
 	// we have not allocated yet, check if we should reserve
 	// NOTE: the node should not be reserved as the iterator filters them but we do not lock the nodes
 	if nodeToReserve != nil && !nodeToReserve.IsReserved() {
@@ -1481,7 +1495,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 			zap.String("allocationKey", allocKey),
 			zap.Int("reservations", len(reservedAsks)))
 		// skip the node if conditions can not be satisfied
-		if !nodeToReserve.preReserveConditions(ask) {
+		if nodeToReserve.preReserveConditions(ask) != nil {
 			return nil
 		}
 		// return reservation allocation and mark it as a reservation
@@ -1492,26 +1506,26 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 }
 
 // Try allocating on one specific node
-func (sa *Application) tryNode(node *Node, ask *Allocation) *AllocationResult {
+func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, error) {
 	toAllocate := ask.GetAllocatedResource()
 	// create the key for the reservation
 	if !node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask)) {
 		// skip schedule onto node
-		return nil
+		return nil, nil
 	}
 	// skip the node if conditions can not be satisfied
-	if !node.preAllocateConditions(ask) {
-		return nil
+	if err := node.preAllocateConditions(ask); err != nil {
+		return nil, err
 	}
 
 	// everything OK really allocate
-	if node.AddAllocation(ask) {
+	if node.TryAddAllocation(ask) {
 		if err := sa.queue.IncAllocatedResource(ask.GetAllocatedResource(), false); err != nil {
 			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
 			node.RemoveAllocation(ask.GetAllocationKey())
-			return nil
+			return nil, nil
 		}
 		// mark this ask as allocated
 		_, err := sa.allocateAsk(ask)
@@ -1522,9 +1536,9 @@ func (sa *Application) tryNode(node *Node, ask *Allocation) *AllocationResult {
 		// all is OK, last update for the app
 		result := newAllocatedAllocationResult(node.NodeID, ask)
 		sa.addAllocationInternal(result.ResultType, ask)
-		return result
+		return result, nil
 	}
-	return nil
+	return nil, nil
 }
 
 func (sa *Application) GetQueuePath() string {

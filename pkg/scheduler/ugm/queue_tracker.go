@@ -222,7 +222,7 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 	if headroom == nil {
 		return childHeadroom
 	}
-	return resources.ComponentWiseMinPermissive(headroom, childHeadroom)
+	return resources.ComponentWiseMin(headroom, childHeadroom)
 }
 
 // Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.

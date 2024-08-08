@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/julienschmidt/httprouter"
@@ -34,7 +35,7 @@ import (
 )
 
 var imHistory *history.InternalMetricsHistory
-var schedulerContext *scheduler.ClusterContext
+var schedulerContext atomic.Pointer[scheduler.ClusterContext]
 
 type WebService struct {
 	httpServer *http.Server
@@ -82,7 +83,7 @@ func (m *WebService) StartWebApp() {
 
 func NewWebApp(context *scheduler.ClusterContext, internalMetrics *history.InternalMetricsHistory) *WebService {
 	m := &WebService{}
-	schedulerContext = context
+	schedulerContext.Store(context)
 	imHistory = internalMetrics
 	return m
 }

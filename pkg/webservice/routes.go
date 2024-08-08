@@ -149,8 +149,8 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/partition/:partition/queue/:queue/applications/:status",
-		getQueueApplicationsByStatus,
+		"/ws/v1/partition/:partition/queue/:queue/applications/:state",
+		getQueueApplicationsByState,
 	},
 	route{
 		"Scheduler",

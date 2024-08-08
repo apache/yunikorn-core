@@ -898,61 +898,49 @@ func getPartitionRules(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getQueueApplicationsByStatus(w http.ResponseWriter, r *http.Request) {
+func getQueueApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
+
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
-	status := vars.ByName("status")
+	appState := strings.ToLower(vars.ByName("state"))
+	status := strings.ToLower(r.URL.Query().Get("status"))
+
 	queueErr := validateQueue(queueName)
 	if queueErr != nil {
 		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
 		return
 	}
-
 	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-
 	queue := partitionContext.GetQueue(queueName)
 	if queue == nil {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
 	}
-
-	var appList []*objects.Application
-
-	switch status {
-	case "Rejected":
-		buildJSONErrorResponse(w, "Queue does not involve rejected state applications.", http.StatusBadRequest)
+	if appState != "active" {
+		buildJSONErrorResponse(w, fmt.Sprintf("The provided state is invalid: %s", appState), http.StatusBadRequest)
 		return
-	case "Completed":
-		buildJSONErrorResponse(w, "Queue does not involve completed state applications.", http.StatusBadRequest)
-		return
-	default:
-		if !allowedAppActiveStatuses[strings.ToLower(status)] {
-			buildJSONErrorResponse(w, "The provided state is invalid.", http.StatusBadRequest)
-			return
-		}
 	}
-
-	status = strings.ToLower(status)
-	for _, app := range queue.GetCopyOfApps() {
-		if strings.ToLower(app.CurrentState()) == status {
-			appList = append(appList, app)
-		}
+	if status != "" && !allowedAppActiveStatuses[status] {
+		buildJSONErrorResponse(w, fmt.Sprintf("The provided status is invalid: %s", status), http.StatusBadRequest)
+		return
 	}
 
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
-	for _, app := range appList {
-		summary := app.GetApplicationSummary(partitionContext.RmID)
-		appsDao = append(appsDao, getApplicationDAO(app, summary))
+	for _, app := range queue.GetCopyOfApps() {
+		if status == "" || strings.ToLower(app.CurrentState()) == status {
+			summary := app.GetApplicationSummary(partitionContext.RmID)
+			appsDao = append(appsDao, getApplicationDAO(app, summary))
+		}
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {

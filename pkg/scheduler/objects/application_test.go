@@ -1054,15 +1054,17 @@ func TestCompleted(t *testing.T) {
 
 func assertResourceUsage(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64, vcoresSecconds int64) {
 	detailedResource := appSummary.ResourceUsage.TrackedResourceMap[instType1]
-	assert.Equal(t, memorySeconds, detailedResource["memory"])
-	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
+	if detailedResource != nil {
+		assert.Equal(t, memorySeconds, int64(detailedResource.Resources["memory"]))
+		assert.Equal(t, vcoresSecconds, int64(detailedResource.Resources["vcores"]))
+	}
 }
 
 func assertPlaceHolderResource(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64,
 	vcoresSecconds int64) {
 	detailedResource := appSummary.PlaceholderResource.TrackedResourceMap[instType1]
-	assert.Equal(t, memorySeconds, detailedResource["memory"])
-	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
+	assert.Equal(t, memorySeconds, int64(detailedResource.Resources["memory"]))
+	assert.Equal(t, vcoresSecconds, int64(detailedResource.Resources["vcores"]))
 }
 
 func TestResourceUsageAggregation(t *testing.T) {

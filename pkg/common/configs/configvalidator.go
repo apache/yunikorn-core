@@ -72,12 +72,11 @@ var DefaultPreemptionDelay = 30 * time.Second
 var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_:#/@-]{1,64}$`)
 
 // User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
-// first char: allow an underscore or a letter
-// middle: allow letters (uppercase or lowercase), digits, or :, ., _, @, -
-// end: allow $.
+// A username must start with a letter(uppercase or lowercase),
+// followed by any number of letter(uppercase or lowercase), digits, ':', '#', '/', '_', '.', '@', '-', and may end with '$'.
 var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:#/_.@-]*[$]?$`)
 
-// Groups should have a slightly more restrictive regexp (no @ . or $ at the end)
+// Groups should have a slightly more restrictive regexp (no # / @ or $ at the end)
 var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.-]*$`)
 
 // all characters that make a name different from a regexp

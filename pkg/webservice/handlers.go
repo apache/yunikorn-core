@@ -60,8 +60,6 @@ const (
 	InvalidGroupName         = "Invalid group name"
 	UserDoesNotExists        = "User not found"
 	GroupDoesNotExists       = "Group not found"
-	UserNameMissing          = "User name is missing"
-	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
 )
@@ -1103,10 +1101,6 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := vars.ByName("user")
-	if user == "" {
-		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
-		return
-	}
 	unescapedUser, err := url.QueryUnescape(user)
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
@@ -1148,10 +1142,6 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	group := vars.ByName("group")
-	if group == "" {
-		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
-		return
-	}
 	unescapedGroupName, err := url.QueryUnescape(group)
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)

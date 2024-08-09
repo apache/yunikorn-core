@@ -1608,6 +1608,110 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	checkIllegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", nil, assertParamsMissing)
 }
 
+func checkGetQueueAppByState(t *testing.T, partition, queue, state, status string, expectedApp []*objects.Application) {
+	var url string
+	if status == "" {
+		url = fmt.Sprintf("/ws/v1/partition/%s/queue/%s/applications/%s", partition, queue, state)
+	} else {
+		url = fmt.Sprintf("/ws/v1/partition/%s/queue/%s/applications/%s?status=%s", partition, queue, state, status)
+	}
+	req, err := http.NewRequest("GET", url, strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partition},
+		httprouter.Param{Key: "queue", Value: queue},
+		httprouter.Param{Key: "state", Value: state},
+	}))
+
+	assert.NilError(t, err, "")
+	resp := &MockResponseWriter{}
+	getQueueApplicationsByState(resp, req)
+
+	var specificStatusApplicationsDAO []*dao.ApplicationDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &specificStatusApplicationsDAO)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, len(specificStatusApplicationsDAO), len(expectedApp))
+
+	daoAppIDs := make(map[string]bool)
+	expectedAppIDs := make(map[string]bool)
+	for _, app := range specificStatusApplicationsDAO {
+		daoAppIDs[app.ApplicationID] = true
+	}
+	for _, app := range expectedApp {
+		expectedAppIDs[app.ApplicationID] = true
+	}
+	assert.DeepEqual(t, daoAppIDs, expectedAppIDs)
+}
+
+func checkGetQueueAppByIllegalStateOrStatus(t *testing.T, partition, queue, state, status string) {
+	var url string
+	if status == "" {
+		url = fmt.Sprintf("/ws/v1/partition/%s/queue/%s/applications/%s", partition, queue, state)
+	} else {
+		url = fmt.Sprintf("/ws/v1/partition/%s/queue/%s/applications/%s?status=%s", partition, queue, state, status)
+	}
+	req, err := http.NewRequest("GET", url, strings.NewReader(""))
+	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
+		httprouter.Param{Key: "partition", Value: partition},
+		httprouter.Param{Key: "queue", Value: queue},
+		httprouter.Param{Key: "state", Value: state},
+	}))
+
+	assert.NilError(t, err, "")
+	resp := &MockResponseWriter{}
+	getQueueApplicationsByState(resp, req)
+
+	var errInfo dao.YAPIError
+	err = json.Unmarshal(resp.outputBytes, &errInfo)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
+	var expectedErrMsg string
+	if strings.ToLower(state) != AppStateActive {
+		expectedErrMsg = fmt.Sprintf("Only following application states are allowed: %s", AppStateActive)
+	} else if status != "" {
+		expectedErrMsg = allowedActiveStatusMsg
+	}
+	assert.Equal(t, errInfo.Message, expectedErrMsg)
+	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func TestGetQueueApplicationsByStateHandler(t *testing.T) {
+	defaultPartition := setup(t, configDefault, 1)
+	NewWebApp(schedulerContext.Load(), nil)
+
+	// Accept status
+	app1 := addApp(t, "app-1", defaultPartition, "root.default", false)
+	app1.SetState(objects.New.String())
+	app2 := addApp(t, "app-2", defaultPartition, "root.default", false)
+	app2.SetState(objects.Accepted.String())
+	app3 := addApp(t, "app-3", defaultPartition, "root.default", false)
+	app3.SetState(objects.Running.String())
+	app4 := addApp(t, "app-4", defaultPartition, "root.default", false)
+	app4.SetState(objects.Completing.String())
+	app5 := addApp(t, "app-5", defaultPartition, "root.default", false)
+	app5.SetState(objects.Failing.String())
+	app6 := addApp(t, "app-6", defaultPartition, "root.default", false)
+	app6.SetState(objects.Resuming.String())
+
+	newStateAppList := []*objects.Application{app1}
+	checkGetQueueAppByState(t, "default", "root.default", "Active", "New", newStateAppList)
+	acceptedStatusAppList := []*objects.Application{app2}
+	checkGetQueueAppByState(t, "default", "root.default", "Active", "Accepted", acceptedStatusAppList)
+	runningStatusAppList := []*objects.Application{app3}
+	checkGetQueueAppByState(t, "default", "root.default", "Active", "Running", runningStatusAppList)
+	completingStatusAppList := []*objects.Application{app4}
+	checkGetQueueAppByState(t, "default", "root.default", "Active", "Completing", completingStatusAppList)
+	failingStatusAppList := []*objects.Application{app5}
+	checkGetQueueAppByState(t, "default", "root.default", "Active", "Failing", failingStatusAppList)
+	resumingStatusAppList := []*objects.Application{app6}
+	checkGetQueueAppByState(t, "default", "root.default", "Active", "Resuming", resumingStatusAppList)
+	allStatusAppList := []*objects.Application{app1, app2, app3, app4, app5, app6}
+	checkGetQueueAppByState(t, "default", "root.default", "Active", "", allStatusAppList)
+
+	checkGetQueueAppByIllegalStateOrStatus(t, "default", "root.default", "Rejected", "")
+	checkGetQueueAppByIllegalStateOrStatus(t, "default", "root.default", "Completed", "")
+	checkGetQueueAppByIllegalStateOrStatus(t, "default", "root.default", "Active", "Invalid")
+}
+
 //nolint:funlen
 func TestGetApplicationHandler(t *testing.T) {
 	part := setup(t, configDefault, 1)

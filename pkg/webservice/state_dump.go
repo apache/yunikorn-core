@@ -64,7 +64,7 @@ func doStateDump(w io.Writer) error {
 	stateDump.Lock()
 	defer stateDump.Unlock()
 
-	partitionContext := schedulerContext.GetPartitionMapClone()
+	partitionContext := schedulerContext.Load().GetPartitionMapClone()
 	records := imHistory.GetRecords()
 	zapConfig := yunikornLog.GetZapConfigs()
 

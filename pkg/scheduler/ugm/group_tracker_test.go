@@ -78,6 +78,9 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, "map[mem:20000000 vcore:20000]", actualResources["root.parent.child2"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:20000000 vcore:20000]", actualResources["root.parent.child12"].String(), "wrong resource")
 	assert.Equal(t, 4, len(groupTracker.getTrackedApplications()))
+
+	groupTracker = nil
+	groupTracker.increaseTrackedResource(path1, TestApp1, usage1, user.User) // no panic
 }
 
 func TestGTDecreaseTrackedResource(t *testing.T) {
@@ -147,6 +150,32 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	removeQT = groupTracker.decreaseTrackedResource(path2, TestApp2, usage5, true)
 	assert.Equal(t, 0, len(groupTracker.getTrackedApplications()))
 	assert.Equal(t, removeQT, true, "wrong remove queue tracker value")
+
+	groupTracker = nil
+	removeQT = groupTracker.decreaseTrackedResource(path1, TestApp1, usage1, true) // no panic
+	assert.Assert(t, !removeQT)
+}
+
+func TestDecreaseAllTrackedResourceUsage(t *testing.T) {
+	GetUserManager()
+	testUser := &security.UserGroup{User: "test", Groups: []string{"test"}}
+	eventSystem := mock.NewEventSystem()
+	groupTracker := newGroupTracker(testUser.User, newUGMEvents(eventSystem))
+
+	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
+	assert.NilError(t, err)
+	groupTracker.increaseTrackedResource(path1, TestApp1, usage1, testUser.User)
+	groupTracker.increaseTrackedResource(path1, TestApp2, usage1, testUser.User)
+	groupTracker.queueTracker.increaseTrackedResource(strings.Split(path1, configs.DOT), TestApp3, user, usage1)
+
+	apps := groupTracker.decreaseAllTrackedResourceUsage(strings.Split(path1, configs.DOT))
+	assert.Equal(t, 2, len(apps))
+	assert.Equal(t, testUser.User, apps[TestApp1])
+	assert.Equal(t, testUser.User, apps[TestApp2])
+
+	groupTracker = nil
+	apps = groupTracker.decreaseAllTrackedResourceUsage(strings.Split(path1, configs.DOT)) // no panic
+	assert.Assert(t, apps == nil)
 }
 
 func TestGTSetAndClearMaxLimits(t *testing.T) {

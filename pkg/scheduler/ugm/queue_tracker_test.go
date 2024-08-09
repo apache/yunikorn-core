@@ -26,6 +26,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
 func TestQTIncreaseTrackedResource(t *testing.T) {
@@ -144,6 +145,10 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
 	queueTracker.increaseTrackedResource([]string{"root", "parent"}, TestApp2, user, usage2)
+
+	// no child queue
+	removeQT = queueTracker.decreaseTrackedResource([]string{"root", "nonexisting"}, TestApp2, usage3, false)
+	assert.Assert(t, !removeQT)
 }
 
 func TestQTQuotaEnforcement(t *testing.T) {
@@ -316,6 +321,74 @@ func TestNewQueueTracker(t *testing.T) {
 	assert.Assert(t, !parent.useWildCard)
 	assert.Assert(t, resources.IsZero(parent.maxResources))
 	assert.Assert(t, resources.IsZero(parent.resourceUsage))
+}
+
+func TestCanBeRemoved(t *testing.T) {
+	GetUserManager()
+	root := newRootQueueTracker(user)
+	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
+	assert.NilError(t, err)
+
+	// create tracker hierarchy
+	root.increaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, user, usage1)
+	parentQ := root.childQueueTrackers["parent"]
+	childQ := parentQ.childQueueTrackers["child1"]
+	assert.Assert(t, !root.canBeRemoved())
+	assert.Assert(t, !parentQ.canBeRemoved())
+	assert.Assert(t, !childQ.canBeRemoved())
+
+	removeQT := root.decreaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, usage1, true)
+	assert.Assert(t, removeQT)
+	assert.Assert(t, root.canBeRemoved())
+}
+
+func TestGetResourceUsageDAOInfo(t *testing.T) {
+	GetUserManager()
+	root := newRootQueueTracker(user)
+	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
+	assert.NilError(t, err)
+
+	// create tracker hierarchy
+	root.increaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, user, usage1)
+
+	// update settings on "parent" and "child1" directly
+	parentQ := root.childQueueTrackers["parent"]
+	childQ := parentQ.childQueueTrackers["child1"]
+	childQ.maxRunningApps = 2
+	maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"first": 123,
+	})
+	childQ.maxResources = maxRes.Clone()
+	parentQ.maxRunningApps = 3
+
+	rootDao := root.getResourceUsageDAOInfo("")
+	assert.Assert(t, resources.Equals(usage1, rootDao.ResourceUsage))
+	assert.Equal(t, "root", rootDao.QueuePath)
+	assert.Equal(t, 1, len(rootDao.RunningApplications))
+	assert.Equal(t, TestApp1, rootDao.RunningApplications[0])
+	assert.Equal(t, 1, len(rootDao.Children))
+	assert.Equal(t, uint64(0), rootDao.MaxApplications)
+	assert.Assert(t, rootDao.MaxResources == nil)
+	parentDao := rootDao.Children[0]
+	assert.Assert(t, resources.Equals(usage1, parentDao.ResourceUsage))
+	assert.Equal(t, "root.parent", parentDao.QueuePath)
+	assert.Equal(t, 1, len(parentDao.RunningApplications))
+	assert.Equal(t, TestApp1, parentDao.RunningApplications[0])
+	assert.Equal(t, uint64(3), parentDao.MaxApplications)
+	assert.Assert(t, parentDao.MaxResources == nil)
+	assert.Equal(t, 1, len(parentDao.Children))
+	childDao := parentDao.Children[0]
+	assert.Assert(t, resources.Equals(usage1, childDao.ResourceUsage))
+	assert.Equal(t, "root.parent.child1", childDao.QueuePath)
+	assert.Equal(t, 1, len(childDao.RunningApplications))
+	assert.Equal(t, TestApp1, childDao.RunningApplications[0])
+	assert.Equal(t, uint64(2), childDao.MaxApplications)
+	assert.Assert(t, resources.Equals(maxRes, childDao.MaxResources))
+	assert.Equal(t, 0, len(childDao.Children))
+
+	root = nil
+	rootDao = root.getResourceUsageDAOInfo("")
+	assert.DeepEqual(t, rootDao, &dao.ResourceUsageDAOInfo{})
 }
 
 func TestSetLimit(t *testing.T) {

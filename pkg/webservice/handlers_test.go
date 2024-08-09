@@ -1665,8 +1665,8 @@ func checkGetQueueAppByIllegalStateOrStatus(t *testing.T, partition, queue, stat
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
 	var expectedErrMsg string
-	if strings.ToLower(state) != "active" {
-		expectedErrMsg = "Only following application states are allowed: active"
+	if strings.ToLower(state) != AppStateActive {
+		expectedErrMsg = fmt.Sprintf("Only following application states are allowed: %s", AppStateActive)
 	} else if status != "" {
 		expectedErrMsg = allowedActiveStatusMsg
 	}

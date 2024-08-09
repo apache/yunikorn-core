@@ -64,6 +64,10 @@ const (
 	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
+
+	AppStateActive    = "active"
+	AppStateRejected  = "rejected"
+	AppStateCompleted = "completed"
 )
 
 var allowedActiveStatusMsg string
@@ -74,12 +78,12 @@ var maxRESTResponseSize atomic.Uint64
 func init() {
 	allowedAppActiveStatuses = make(map[string]bool)
 
-	allowedAppActiveStatuses["new"] = true
-	allowedAppActiveStatuses["accepted"] = true
-	allowedAppActiveStatuses["running"] = true
-	allowedAppActiveStatuses["completing"] = true
-	allowedAppActiveStatuses["failing"] = true
-	allowedAppActiveStatuses["resuming"] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.New.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Accepted.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Running.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Completing.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Failing.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Resuming.String())] = true
 
 	var activeStatuses []string
 	for k := range allowedAppActiveStatuses {
@@ -800,7 +804,7 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	}
 	var appList []*objects.Application
 	switch appState {
-	case "active":
+	case AppStateActive:
 		if status := strings.ToLower(r.URL.Query().Get("status")); status != "" {
 			if !allowedAppActiveStatuses[status] {
 				buildJSONErrorResponse(w, allowedActiveStatusMsg, http.StatusBadRequest)
@@ -814,12 +818,12 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		} else {
 			appList = partitionContext.GetApplications()
 		}
-	case "rejected":
+	case AppStateRejected:
 		appList = partitionContext.GetRejectedApplications()
-	case "completed":
+	case AppStateCompleted:
 		appList = partitionContext.GetCompletedApplications()
 	default:
-		buildJSONErrorResponse(w, "Only following application states are allowed: active, rejected, completed", http.StatusBadRequest)
+		buildJSONErrorResponse(w, fmt.Sprintf("Only following application states are allowed: %s, %s, %s", AppStateActive, AppStateRejected, AppStateCompleted), http.StatusBadRequest)
 		return
 	}
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(appList))
@@ -932,8 +936,8 @@ func getQueueApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
 	}
-	if appState != "active" {
-		buildJSONErrorResponse(w, "Only following application states are allowed: active", http.StatusBadRequest)
+	if appState != AppStateActive {
+		buildJSONErrorResponse(w, fmt.Sprintf("Only following application states are allowed: %s", AppStateActive), http.StatusBadRequest)
 		return
 	}
 	if status != "" && !allowedAppActiveStatuses[status] {

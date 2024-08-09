@@ -238,10 +238,10 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 	}
 }
 
-func setup(t *testing.T) (*Queue, *Queue, *Queue, *Queue, *Queue) {
+func setup(t *testing.T) (rootQ, parentQ, childQ1, childQ2, childQ3 *Queue) {
 	rootQ, err := createRootQueue(map[string]string{})
 	assert.NilError(t, err)
-	var parentQ, childQ1, childQ2, parent1Q, childQ3 *Queue
+	var parent1Q *Queue
 	parentQ, err = createManagedQueue(rootQ, "parent", true, map[string]string{})
 	assert.NilError(t, err)
 	parent1Q, err = createManagedQueue(rootQ, "parent1", true, map[string]string{})
@@ -252,8 +252,9 @@ func setup(t *testing.T) (*Queue, *Queue, *Queue, *Queue, *Queue) {
 	assert.NilError(t, err)
 	childQ3, err = createManagedQueue(parent1Q, "child3", false, map[string]string{})
 	assert.NilError(t, err)
-	return rootQ, parentQ, childQ1, childQ2, childQ3
+	return
 }
+
 func assertZeroRemaining(t *testing.T, rootRemaining *resources.Resource, pRemaining *resources.Resource, cRemaining1 *resources.Resource, cRemaining2 *resources.Resource) {
 	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed and max res not set, so no remaining")
 	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed and max res not set, so no remaining")

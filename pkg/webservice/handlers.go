@@ -912,27 +912,32 @@ func getQueueApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	appState := strings.ToLower(vars.ByName("state"))
 	status := strings.ToLower(r.URL.Query().Get("status"))
 
-	queueErr := validateQueue(queueName)
-	if queueErr != nil {
-		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
-		return
-	}
-	partitionContext := schedulerContext.GetPartitionWithoutClusterID(partition)
+	partitionContext := schedulerContext.Load().GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	queue := partitionContext.GetQueue(queueName)
+	unescapedQueueName, err := url.QueryUnescape(queueName)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	queueErr := validateQueue(unescapedQueueName)
+	if queueErr != nil {
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+		return
+	}
+	queue := partitionContext.GetQueue(unescapedQueueName)
 	if queue == nil {
 		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
 		return
 	}
 	if appState != "active" {
-		buildJSONErrorResponse(w, fmt.Sprintf("The provided state is invalid: %s", appState), http.StatusBadRequest)
+		buildJSONErrorResponse(w, "Only following application states are allowed: active", http.StatusBadRequest)
 		return
 	}
 	if status != "" && !allowedAppActiveStatuses[status] {
-		buildJSONErrorResponse(w, fmt.Sprintf("The provided status is invalid: %s", status), http.StatusBadRequest)
+		buildJSONErrorResponse(w, allowedActiveStatusMsg, http.StatusBadRequest)
 		return
 	}
 

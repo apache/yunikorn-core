@@ -1666,9 +1666,9 @@ func checkGetQueueAppByIllegalStateOrStatus(t *testing.T, partition, queue, stat
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
 	var expectedErrMsg string
 	if strings.ToLower(state) != "active" {
-		expectedErrMsg = fmt.Sprintf("The provided state is invalid: %s", strings.ToLower(state))
+		expectedErrMsg = "Only following application states are allowed: active"
 	} else if status != "" {
-		expectedErrMsg = fmt.Sprintf("The provided status is invalid: %s", strings.ToLower(status))
+		expectedErrMsg = allowedActiveStatusMsg
 	}
 	assert.Equal(t, errInfo.Message, expectedErrMsg)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
@@ -1676,7 +1676,7 @@ func checkGetQueueAppByIllegalStateOrStatus(t *testing.T, partition, queue, stat
 
 func TestGetQueueApplicationsByStateHandler(t *testing.T) {
 	defaultPartition := setup(t, configDefault, 1)
-	NewWebApp(schedulerContext, nil)
+	NewWebApp(schedulerContext.Load(), nil)
 
 	// Accept status
 	app1 := addApp(t, "app-1", defaultPartition, "root.default", false)

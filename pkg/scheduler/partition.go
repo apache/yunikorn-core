@@ -342,13 +342,14 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 
 	guaranteedRes := app.GetGuaranteedResource()
 	maxRes := app.GetMaxResource()
-	if !isRecoveryQueue && (guaranteedRes != nil || maxRes != nil) {
+	maxApps := app.GetMaxApps()
+	if !isRecoveryQueue && (guaranteedRes != nil || maxRes != nil || maxApps != "") {
 		// set resources based on tags, but only if the queue is dynamic (unmanaged)
 		if queue.IsManaged() {
 			log.Log(log.SchedQueue).Warn("Trying to set resources on a queue that is not an unmanaged leaf",
 				zap.String("queueName", queue.QueuePath))
 		} else {
-			queue.SetResources(guaranteedRes, maxRes)
+			queue.SetResources(guaranteedRes, maxRes, maxApps)
 		}
 	}
 

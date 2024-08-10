@@ -588,7 +588,7 @@ func TestComponentWiseMinOnlyExisting(t *testing.T) {
 	}
 }
 
-func TestComponentWiseMinPermissiveWithPrecedence(t *testing.T) {
+func TestMergeIfNotPresent(t *testing.T) {
 	testCases := []struct {
 		name     string
 		left     map[string]Quantity

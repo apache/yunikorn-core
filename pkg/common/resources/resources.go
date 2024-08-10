@@ -923,7 +923,7 @@ func MergeIfNotPresent(left, right *Resource) *Resource {
 	if right == nil {
 		return left.Clone()
 	}
-	out := left
+	out := left.Clone()
 	for k, v := range right.Resources {
 		if _, ok := left.Resources[k]; !ok {
 			out.Resources[k] = v

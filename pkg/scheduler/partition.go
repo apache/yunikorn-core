@@ -351,7 +351,8 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		} else {
 			if maxApps != 0 {
 				queue.SetMaxRunningApps(maxApps)
-			} else {
+			}
+			if guaranteedRes != nil || maxRes != nil {
 				queue.SetResources(guaranteedRes, maxRes)
 			}
 		}

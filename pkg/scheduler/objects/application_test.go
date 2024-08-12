@@ -114,40 +114,50 @@ func TestNewApplication(t *testing.T) {
 	siApp.Tags = map[string]string{
 		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"validMaxRes\":{\"value\":11}}}",
 		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"validGuaranteed\":{\"value\":22}}}",
+		siCommon.AppTagNamespaceResourceMaxApps:    "33",
 	}
 	app = NewApplication(siApp, user, nil, "")
 	guaranteed := app.GetGuaranteedResource()
 	maxResource := app.GetMaxResource()
+	maxApps := app.GetMaxApps()
 	assert.Assert(t, guaranteed != nil, "guaranteed resource has not been set")
 	assert.Equal(t, 1, len(guaranteed.Resources), "more than one resource has been set")
 	assert.Equal(t, resources.Quantity(22), guaranteed.Resources["validGuaranteed"])
 	assert.Assert(t, maxResource != nil, "maximum resource has not been set")
 	assert.Equal(t, 1, len(maxResource.Resources), "more than one resource has been set")
 	assert.Equal(t, resources.Quantity(11), maxResource.Resources["validMaxRes"], "maximum resource is incorrect")
+	assert.Assert(t, maxApps != 0, "maximum apps has not been set or incorrect")
+	assert.Equal(t, uint64(33), maxApps, "maximum apps is incorrect")
 
 	// invalid tags
 	siApp = &si.AddApplicationRequest{}
 	siApp.Tags = map[string]string{
 		siCommon.AppTagNamespaceResourceQuota:      "{xxxxxx}",
 		siCommon.AppTagNamespaceResourceGuaranteed: "{yyyyy}",
+		siCommon.AppTagNamespaceResourceMaxApps:    "zzzzz",
 	}
 	app = NewApplication(siApp, user, nil, "")
 	guaranteed = app.GetGuaranteedResource()
 	maxResource = app.GetMaxResource()
+	maxApps = app.GetMaxApps()
 	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
 	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
 
 	// negative values
 	siApp = &si.AddApplicationRequest{}
 	siApp.Tags = map[string]string{
 		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"negativeMax\":{\"value\":-11}}}",
 		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"negativeGuaranteed\":{\"value\":-22}}}",
+		siCommon.AppTagNamespaceResourceMaxApps:    "-33",
 	}
 	app = NewApplication(siApp, user, nil, "")
 	guaranteed = app.GetGuaranteedResource()
 	maxResource = app.GetMaxResource()
+	maxApps = app.GetMaxApps()
 	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
 	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
 }
 
 // test basic reservations

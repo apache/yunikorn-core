@@ -465,3 +465,86 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, !alloc.IsAllowPreemptSelf(), "alloc should not have allow-preempt-self set")
 	assert.Assert(t, !alloc.IsAllowPreemptOther(), "alloc should not have allow-preempt-other set")
 }
+
+func TestGetUint64Tag(t *testing.T) {
+	app := &Application{
+		tags: map[string]string{
+			"validUintTag":    "12345",
+			"negativeUintTag": "-12345",
+			"invalidUintTag":  "not-a-number",
+			"emptyUintTag":    "",
+		},
+	}
+
+	tests := []struct {
+		name     string
+		tag      string
+		expected uint64
+	}{
+		{"Valid uint64 tag", "validUintTag", uint64(12345)},
+		{"Negative uint64 tag", "negativeUintTag", uint64(0)},
+		{"Invalid uint64 tag", "invalidUintTag", uint64(0)},
+		{"Empty tag", "emptyUintTag", uint64(0)},
+		{"Non-existent tag", "nonExistentTag", uint64(0)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := app.GetUint64Tag(tt.tag)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestGetResourceFromTags(t *testing.T) {
+	app := &Application{
+		tags: map[string]string{
+			"validResourceTag":   "memory=1024,vcores=4",
+			"invalidResourceTag": "invalid-format",
+			"zeroResourceTag":    "memory=0,vcores=0",
+			"emptyResourceTag":   "",
+		},
+	}
+
+	tests := []struct {
+		name     string
+		tag      string
+		expected *resources.Resource
+	}{
+		{
+			name: "Valid resource tag",
+			tag:  "validResourceTag",
+			expected: func() *resources.Resource {
+				res, _ := resources.NewResourceFromString("memory=1024,vcores=4")
+				return res
+			}(),
+		},
+		{
+			name:     "Invalid resource tag",
+			tag:      "invalidResourceTag",
+			expected: nil,
+		},
+		{
+			name:     "Zero resource quantities",
+			tag:      "zeroResourceTag",
+			expected: nil,
+		},
+		{
+			name:     "Empty tag",
+			tag:      "emptyResourceTag",
+			expected: nil,
+		},
+		{
+			name:     "Non-existent tag",
+			tag:      "nonExistentTag",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := app.getResourceFromTags(tt.tag)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

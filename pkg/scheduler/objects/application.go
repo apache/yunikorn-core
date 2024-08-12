@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -2158,8 +2159,20 @@ func (sa *Application) GetMaxResource() *resources.Resource {
 }
 
 // GetMaxApps returns the max apps that is set in the application tags
-func (sa *Application) GetMaxApps() string {
-	return sa.GetTag(siCommon.AppTagNamespaceResourceMaxApps)
+func (sa *Application) GetMaxApps() uint64 {
+	return sa.GetUint64Tag(siCommon.AppTagNamespaceResourceMaxApps)
+}
+
+func (sa *Application) GetUint64Tag(tag string) uint64 {
+	uintValue, err := strconv.ParseUint(sa.GetTag(tag), 10, 64)
+	if err != nil {
+		log.Log(log.SchedQueue).Warn("application tag conversion failure",
+			zap.String("tag", tag),
+			zap.String("json string", sa.GetTag(tag)),
+			zap.Error(err))
+		return 0
+	}
+	return uintValue
 }
 
 func (sa *Application) getResourceFromTags(tag string) *resources.Resource {

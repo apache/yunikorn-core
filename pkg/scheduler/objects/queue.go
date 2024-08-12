@@ -387,13 +387,11 @@ func (sq *Queue) setResourcesFromConf(resource configs.Resources) error {
 			zap.Error(err))
 		return err
 	}
-
-	//nolint:godox //TODO, do we support setting maxApps for static queue?
-	sq.setResources(guaranteedResource, maxResource, "")
+	sq.setResources(guaranteedResource, maxResource)
 	return nil
 }
 
-func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resource, maxApps string) {
+func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resource) {
 	switch {
 	case resources.StrictlyGreaterThanZero(maxResource):
 		log.Log(log.SchedQueue).Debug("setting max resources",
@@ -445,25 +443,21 @@ func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resourc
 		log.Log(log.SchedQueue).Debug("guaranteed resources setting ignored: cannot set zero guaranteed resources",
 			zap.String("queue", sq.QueuePath))
 	}
-
-	// For shim side we already make sure the max apps > 0 and valid parsing
-	maxAppsInt, err := strconv.ParseInt(maxApps, 10, 64)
-	maxAppsUint := uint64(maxAppsInt)
-	if err == nil {
-		log.Log(log.SchedQueue).Debug("setting max running apps",
-			zap.String("queue", sq.QueuePath),
-			zap.Uint64("current", sq.maxRunningApps),
-			zap.Uint64("new", maxAppsUint))
-	}
-	sq.maxRunningApps = maxAppsUint
-
-	//nolint:godox //TODO, we need max apps metrics and event change?
 }
 
-func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resource, maxApps string) {
+func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.setResources(guaranteedResource, maxResource, maxApps)
+	sq.setResources(guaranteedResource, maxResource)
+}
+
+func (sq *Queue) SetMaxRunningApps(maxApps uint64) {
+	if sq == nil {
+		return
+	}
+	sq.Lock()
+	defer sq.Unlock()
+	sq.maxRunningApps = maxApps
 }
 
 // setTemplate sets the template on the queue based on the config.
@@ -1693,20 +1687,6 @@ func (sq *Queue) GetPreemptionPolicy() policies.PreemptionPolicy {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.preemptionPolicy
-}
-
-// SetMaxRunningApps allows setting the maximum running apps on a queue
-// test only
-func (sq *Queue) SetMaxRunningApps(max int) {
-	if sq == nil {
-		return
-	}
-	if max < 0 {
-		return
-	}
-	sq.Lock()
-	defer sq.Unlock()
-	sq.maxRunningApps = uint64(max)
 }
 
 // FindEligiblePreemptionVictims is used to locate tasks which may be preempted for the given ask.

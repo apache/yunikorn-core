@@ -2556,3 +2556,19 @@ func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecor
 	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
 	assert.Equal(t, si.EventRecord_APP_NEW, record.EventChangeDetail, "incorrect change detail, expected none")
 }
+
+func TestQueueSetMaxRunningApps(t *testing.T) {
+	queue := &Queue{}
+	maxApps := uint64(10)
+
+	queue.SetMaxRunningApps(maxApps)
+	assert.Equal(t, maxApps, queue.maxRunningApps)
+
+	queue = nil
+	queue.SetMaxRunningApps(maxApps)
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue setMaxRunningApps")
+		}
+	}()
+}

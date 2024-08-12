@@ -1205,7 +1205,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			}
 			// update just the node to make sure we keep its spot
 			// no queue update as we're releasing the placeholder and are just temp over the size
-			if !node.AddAllocation(reqFit) {
+			if !node.TryAddAllocation(reqFit) {
 				log.Log(log.SchedApplication).Debug("Node update failed unexpectedly",
 					zap.String("applicationID", sa.ApplicationID),
 					zap.Stringer("ask", reqFit),
@@ -1520,7 +1520,7 @@ func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, 
 	}
 
 	// everything OK really allocate
-	if node.AddAllocation(ask) {
+	if node.TryAddAllocation(ask) {
 		if err := sa.queue.IncAllocatedResource(ask.GetAllocatedResource(), false); err != nil {
 			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))

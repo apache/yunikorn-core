@@ -1124,6 +1124,40 @@ func TestSubOnlyExisting(t *testing.T) {
 	assert.Assert(t, Equals(left, expected), "sub failed expected %v, actual %v", expected, left)
 }
 
+func TestAddOnlyExisting(t *testing.T) {
+	var tests = []struct {
+		caseName string
+		base     map[string]Quantity
+		delta    map[string]Quantity
+		expected map[string]Quantity
+	}{
+		{"nil resources", nil, nil, nil},
+		{"nil base", nil, map[string]Quantity{"a": 5}, nil},
+		{"nil delta", map[string]Quantity{"a": 5}, nil, map[string]Quantity{"a": 5}},
+		{"empty base", map[string]Quantity{}, map[string]Quantity{"a": 5}, map[string]Quantity{}},
+		{"single type base matched", map[string]Quantity{"a": 0}, map[string]Quantity{"a": 1, "b": 1}, map[string]Quantity{"a": 1}},
+		{"single type base unmatched", map[string]Quantity{"a": 0}, map[string]Quantity{"b": 1}, map[string]Quantity{"a": 0}},
+		{"multi type base partial match", map[string]Quantity{"a": 1, "b": 0}, map[string]Quantity{"a": 1, "c": 10}, map[string]Quantity{"a": 2, "b": 0}},
+		{"multi type base match", map[string]Quantity{"a": 1, "b": 0}, map[string]Quantity{"a": 1, "b": 10}, map[string]Quantity{"a": 2, "b": 10}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var base, delta, expected *Resource
+			if tt.base != nil {
+				base = NewResourceFromMap(tt.base)
+			}
+			if tt.delta != nil {
+				delta = NewResourceFromMap(tt.delta)
+			}
+			if tt.expected != nil {
+				expected = NewResourceFromMap(tt.expected)
+			}
+			result := AddOnlyExisting(base, delta)
+			assert.Assert(t, Equals(result, expected), "incorrect result returned")
+		})
+	}
+}
+
 func TestSubErrorNegative(t *testing.T) {
 	// simple case (nil checks)
 	result, err := SubErrorNegative(nil, nil)

@@ -2557,6 +2557,44 @@ func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecor
 	assert.Equal(t, si.EventRecord_APP_NEW, record.EventChangeDetail, "incorrect change detail, expected none")
 }
 
+func TestQueue_allocatedResFits(t *testing.T) {
+	const first = "first"
+	const second = "second"
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+
+	tests := []struct {
+		name   string
+		quota  map[string]string
+		used   map[string]string
+		change map[string]string
+		want   bool
+	}{
+		{"all nil", nil, nil, nil, true},
+		{"nil max no usage", nil, nil, map[string]string{first: "1"}, true},
+		{"nil max set usage", nil, map[string]string{first: "1"}, map[string]string{second: "1"}, true},
+		{"max = usage same in alloc", map[string]string{first: "1"}, map[string]string{first: "1"}, map[string]string{first: "1"}, false},
+		{"max = usage other in alloc", map[string]string{first: "1"}, map[string]string{first: "1"}, map[string]string{second: "1"}, true},
+		{"usage over max other in alloc", map[string]string{first: "1", second: "0"}, map[string]string{second: "1"}, map[string]string{first: "1"}, true},
+		{"usage over max same in alloc", map[string]string{first: "1", second: "0"}, map[string]string{second: "1"}, map[string]string{second: "1"}, false},
+		{"partial fit", map[string]string{first: "2", second: "0"}, map[string]string{first: "1", second: "1"}, map[string]string{first: "1", second: "1"}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var quota, used, change *resources.Resource
+			quota, err = resources.NewResourceFromConf(tt.quota)
+			assert.NilError(t, err, "failed to create basic resource: quota")
+			root.SetMaxResource(quota)
+			used, err = resources.NewResourceFromConf(tt.used)
+			assert.NilError(t, err, "failed to create basic resource: used")
+			root.allocatedResource = used
+			change, err = resources.NewResourceFromConf(tt.change)
+			assert.NilError(t, err, "failed to create basic resource: diff")
+			assert.Equal(t, root.allocatedResFits(change), tt.want, "allocatedResFits incorrect state returned")
+		})
+	}
+}
+
 func TestQueueSetMaxRunningApps(t *testing.T) {
 	queue := &Queue{}
 	maxApps := uint64(10)

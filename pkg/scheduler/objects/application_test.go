@@ -108,6 +108,15 @@ func TestNewApplication(t *testing.T) {
 	assert.Assert(t, app.IsNew(), "new application must be in new state")
 	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "no timeout passed in should be modified default")
 	assert.Assert(t, resources.Equals(app.placeholderAsk, res), "placeholder ask not set as expected")
+}
+
+func TestNewApplicationWithAnnotaionUpdate(t *testing.T) {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
+	siApp := &si.AddApplicationRequest{}
+	app := NewApplication(siApp, user, nil, "")
 
 	// valid tags
 	siApp = &si.AddApplicationRequest{}

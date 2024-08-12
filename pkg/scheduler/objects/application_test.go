@@ -115,10 +115,8 @@ func TestNewApplicationWithAnnotaionUpdate(t *testing.T) {
 		User:   "testuser",
 		Groups: []string{},
 	}
-
-	siApp := &si.AddApplicationRequest{}
 	// valid tags
-	siApp = &si.AddApplicationRequest{}
+	siApp := &si.AddApplicationRequest{}
 	siApp.Tags = map[string]string{
 		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"validMaxRes\":{\"value\":11}}}",
 		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"validGuaranteed\":{\"value\":22}}}",

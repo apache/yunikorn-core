@@ -1712,6 +1712,15 @@ func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation
 		return nil
 	}
 
+	// create snapshot for ask or preemptor queue
+	sq.createPreemptionSnapshot(results, queuePath)
+	c := sq
+	// set the ask queue for all queues in the ask queue hierarchy
+	for c.parent != nil {
+		results[c.QueuePath].AskQueue = results[queuePath]
+		c = c.parent
+	}
+
 	// walk the subtree contained within the preemption fence and collect potential victims organized by nodeID
 	fence.findEligiblePreemptionVictims(results, queuePath, ask, priorityMap, queuePriority, false)
 
@@ -1719,7 +1728,7 @@ func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation
 }
 
 // createPreemptionSnapshot is used to create a snapshot of the current queue's resource usage and potential preemption victims
-func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnapshot) *QueuePreemptionSnapshot {
+func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnapshot, askQueuePath string) *QueuePreemptionSnapshot {
 	if sq == nil {
 		return nil
 	}
@@ -1729,7 +1738,7 @@ func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnaps
 		return snapshot
 	}
 
-	parentSnapshot := sq.parent.createPreemptionSnapshot(cache)
+	parentSnapshot := sq.parent.createPreemptionSnapshot(cache, askQueuePath)
 	sq.RLock()
 	defer sq.RUnlock()
 	snapshot = &QueuePreemptionSnapshot{
@@ -1741,6 +1750,7 @@ func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnaps
 		MaxResource:        sq.maxResource.Clone(),
 		GuaranteedResource: sq.guaranteedResource.Clone(),
 		PotentialVictims:   make([]*Allocation, 0),
+		AskQueue:           cache[askQueuePath],
 	}
 	cache[sq.QueuePath] = snapshot
 	return snapshot
@@ -1750,20 +1760,13 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 	if sq == nil {
 		return
 	}
-
-	// if this is the target queue, return it but with an empty victim list so we can use it in calculations
-	if sq.QueuePath == queuePath {
-		sq.createPreemptionSnapshot(results)
-		return
-	}
-
 	if sq.IsLeafQueue() {
 		// leaf queue, skip queue if preemption is disabled
 		if sq.GetPreemptionPolicy() == policies.DisabledPreemptionPolicy {
 			return
 		}
 
-		victims := sq.createPreemptionSnapshot(results)
+		victims := sq.createPreemptionSnapshot(results, queuePath)
 
 		// skip this queue if we are within guaranteed limits
 		remaining := results[sq.QueuePath].GetRemainingGuaranteedResource()

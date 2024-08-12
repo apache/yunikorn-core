@@ -833,7 +833,7 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 			return resources.MergeIfNotPresent(remainingGuaranteed, parent)
 		}
 	}
-	return resources.ComponentWiseMinPermissive(remainingGuaranteed, parent)
+	return resources.ComponentWiseMin(remainingGuaranteed, parent)
 }
 
 // GetGuaranteedResource computes the current guaranteed resources considering parent guaranteed
@@ -841,7 +841,7 @@ func (qps *QueuePreemptionSnapshot) GetGuaranteedResource() *resources.Resource 
 	if qps == nil {
 		return resources.NewResource()
 	}
-	return resources.ComponentWiseMinPermissive(qps.Parent.GetGuaranteedResource(), qps.GuaranteedResource)
+	return resources.ComponentWiseMin(qps.Parent.GetGuaranteedResource(), qps.GuaranteedResource)
 }
 
 // GetMaxResource computes the current max resources considering parent max
@@ -849,7 +849,7 @@ func (qps *QueuePreemptionSnapshot) GetMaxResource() *resources.Resource {
 	if qps == nil {
 		return resources.NewResource()
 	}
-	return resources.ComponentWiseMinPermissive(qps.Parent.GetMaxResource(), qps.MaxResource)
+	return resources.ComponentWiseMin(qps.Parent.GetMaxResource(), qps.MaxResource)
 }
 
 // AddAllocation adds an allocation to this snapshot's resource usage

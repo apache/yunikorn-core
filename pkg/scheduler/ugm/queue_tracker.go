@@ -87,10 +87,14 @@ const (
 	group
 )
 
+func (tt trackingType) String() string {
+	return [...]string{"none", "user", "group"}[tt]
+}
+
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource) {
 	log.Log(log.SchedUGM).Debug("Increasing resource usage",
-		zap.Int("tracking type", int(trackType)),
+		zap.Stringer("tracking type", trackType),
 		zap.String("queue path", qt.queuePath),
 		zap.Strings("hierarchy", hierarchy),
 		zap.String("application", applicationID),
@@ -111,7 +115,7 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 	qt.resourceUsage.AddTo(usage)
 	qt.runningApplications[applicationID] = true
 	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
-		zap.Int("tracking type", int(trackType)),
+		zap.Stringer("tracking type", trackType),
 		zap.String("queue path", qt.queuePath),
 		zap.String("application", applicationID),
 		zap.Stringer("resource", usage),
@@ -222,7 +226,7 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 	if headroom == nil {
 		return childHeadroom
 	}
-	return resources.ComponentWiseMinPermissive(headroom, childHeadroom)
+	return resources.ComponentWiseMin(headroom, childHeadroom)
 }
 
 // Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.

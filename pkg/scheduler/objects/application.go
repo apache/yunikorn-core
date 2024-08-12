@@ -2166,7 +2166,7 @@ func (sa *Application) GetMaxApps() uint64 {
 func (sa *Application) GetUint64Tag(tag string) uint64 {
 	uintValue, err := strconv.ParseUint(sa.GetTag(tag), 10, 64)
 	if err != nil {
-		log.Log(log.SchedQueue).Warn("application tag conversion failure",
+		log.Log(log.SchedApplication).Warn("application tag conversion failure",
 			zap.String("tag", tag),
 			zap.String("json string", sa.GetTag(tag)),
 			zap.Error(err))

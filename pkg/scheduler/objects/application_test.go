@@ -115,9 +115,8 @@ func TestNewApplicationWithAnnotaionUpdate(t *testing.T) {
 		User:   "testuser",
 		Groups: []string{},
 	}
-	siApp := &si.AddApplicationRequest{}
-	app := NewApplication(siApp, user, nil, "")
 
+	siApp := &si.AddApplicationRequest{}
 	// valid tags
 	siApp = &si.AddApplicationRequest{}
 	siApp.Tags = map[string]string{
@@ -125,7 +124,9 @@ func TestNewApplicationWithAnnotaionUpdate(t *testing.T) {
 		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"validGuaranteed\":{\"value\":22}}}",
 		siCommon.AppTagNamespaceResourceMaxApps:    "33",
 	}
-	app = NewApplication(siApp, user, nil, "")
+
+	app := NewApplication(siApp, user, nil, "")
+
 	guaranteed := app.GetGuaranteedResource()
 	maxResource := app.GetMaxResource()
 	maxApps := app.GetMaxApps()

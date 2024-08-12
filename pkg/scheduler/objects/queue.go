@@ -451,6 +451,7 @@ func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resourc
 	sq.setResources(guaranteedResource, maxResource)
 }
 
+// SetMaxRunningApps allows setting the maximum running apps on a queue
 func (sq *Queue) SetMaxRunningApps(maxApps uint64) {
 	if sq == nil {
 		return

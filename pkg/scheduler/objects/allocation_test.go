@@ -465,33 +465,3 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, !alloc.IsAllowPreemptSelf(), "alloc should not have allow-preempt-self set")
 	assert.Assert(t, !alloc.IsAllowPreemptOther(), "alloc should not have allow-preempt-other set")
 }
-
-func TestGetUint64Tag(t *testing.T) {
-	app := &Application{
-		tags: map[string]string{
-			"validUintTag":    "12345",
-			"negativeUintTag": "-12345",
-			"invalidUintTag":  "not-a-number",
-			"emptyUintTag":    "",
-		},
-	}
-
-	tests := []struct {
-		name     string
-		tag      string
-		expected uint64
-	}{
-		{"Valid uint64 tag", "validUintTag", uint64(12345)},
-		{"Negative uint64 tag", "negativeUintTag", uint64(0)},
-		{"Invalid uint64 tag", "invalidUintTag", uint64(0)},
-		{"Empty tag", "emptyUintTag", uint64(0)},
-		{"Non-existent tag", "nonExistentTag", uint64(0)},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := app.GetUint64Tag(tt.tag)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}

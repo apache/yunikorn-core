@@ -158,6 +158,45 @@ func TestNewApplication(t *testing.T) {
 	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
 	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
 	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
+
+	// test seperate max app cases to increase testing coverage
+	// valid max apps
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceMaxApps: "33",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	maxApps = app.GetMaxApps()
+	guaranteed = app.GetGuaranteedResource()
+	maxResource = app.GetMaxResource()
+	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
+	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps != 0, "maximum apps has not been set or incorrect")
+	assert.Equal(t, uint64(33), maxApps, "maximum apps is incorrect")
+
+	// invalid max apps
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceMaxApps: "zzzzz",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	maxApps = app.GetMaxApps()
+	maxResource = app.GetMaxResource()
+	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
+	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
+
+	// negative max apps
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceMaxApps: "-33",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	maxApps = app.GetMaxApps()
+	maxResource = app.GetMaxResource()
+	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
+	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
 }
 
 // test basic reservations

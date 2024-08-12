@@ -358,11 +358,12 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 		}
 	}
 
-	// Load the max & guaranteed resources for all but the root queue
+	// Load the max & guaranteed resources and maxApps for all but the root queue
 	if sq.Name != configs.RootQueue {
 		if err = sq.setResourcesFromConf(conf.Resources); err != nil {
 			return err
 		}
+		sq.maxRunningApps = conf.MaxApplications
 	}
 
 	sq.properties = conf.Properties

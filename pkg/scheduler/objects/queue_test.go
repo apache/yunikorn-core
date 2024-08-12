@@ -1999,6 +1999,7 @@ func TestApplyConf(t *testing.T) {
 				Guaranteed: getResourceConf(),
 			},
 		},
+		MaxApplications: 100,
 	}
 
 	// case 0: leaf can't set template
@@ -2015,6 +2016,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, leaf.template == nil)
 	assert.Assert(t, leaf.maxResource != nil)
 	assert.Assert(t, leaf.guaranteedResource != nil)
+	assert.Assert(t, leaf.maxRunningApps == 100)
 
 	// case 1-1: non-leaf queue can have template
 	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
@@ -2026,6 +2028,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, queue.template != nil)
 	assert.Assert(t, queue.maxResource != nil)
 	assert.Assert(t, queue.guaranteedResource != nil)
+	assert.Assert(t, queue.maxRunningApps == 100)
 
 	// root can't set resources
 	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
@@ -2035,6 +2038,7 @@ func TestApplyConf(t *testing.T) {
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, root.maxResource == nil)
 	assert.Assert(t, root.guaranteedResource == nil)
+	assert.Assert(t, root.maxRunningApps == 0)
 }
 
 func TestNewConfiguredQueue(t *testing.T) {

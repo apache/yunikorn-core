@@ -1028,6 +1028,12 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 func (sq *Queue) allocatedResFits(alloc *resources.Resource) bool {
 	sq.RLock()
 	defer sq.RUnlock()
+	// on the root we want to reject a new allocation if it asks for resources not registered
+	// so do not use the "undefined" flag, also handles pruned max for root
+	if sq.isRoot() {
+		return sq.maxResource.FitIn(resources.AddOnlyExisting(alloc, sq.allocatedResource))
+	}
+	// any other queue undefined is always good
 	return sq.maxResource.FitInMaxUndef(resources.AddOnlyExisting(alloc, sq.allocatedResource))
 }
 

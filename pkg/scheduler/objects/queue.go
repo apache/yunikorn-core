@@ -358,11 +358,12 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 		}
 	}
 
-	// Load the max & guaranteed resources for all but the root queue
+	// Load the max & guaranteed resources and maxApps for all but the root queue
 	if sq.Name != configs.RootQueue {
 		if err = sq.setResourcesFromConf(conf.Resources); err != nil {
 			return err
 		}
+		sq.maxRunningApps = conf.MaxApplications
 	}
 
 	sq.properties = conf.Properties
@@ -609,7 +610,7 @@ func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 	return sq.guaranteedResource
 }
 
-// GetActualGuaranteedResources returns the actual (including parent) guaranteed resources for the queue.
+// GetActualGuaranteedResource returns the actual (including parent) guaranteed resources for the queue.
 func (sq *Queue) GetActualGuaranteedResource() *resources.Resource {
 	if sq == nil {
 		return resources.NewResource()
@@ -617,7 +618,7 @@ func (sq *Queue) GetActualGuaranteedResource() *resources.Resource {
 	parentGuaranteed := sq.parent.GetActualGuaranteedResource()
 	sq.RLock()
 	defer sq.RUnlock()
-	return resources.ComponentWiseMinPermissive(sq.guaranteedResource, parentGuaranteed)
+	return resources.ComponentWiseMin(sq.guaranteedResource, parentGuaranteed)
 }
 
 func (sq *Queue) GetPreemptionDelay() time.Duration {
@@ -1210,7 +1211,7 @@ func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources
 		return headRoom
 	}
 	// take the minimum value of *all* resource types defined
-	return resources.ComponentWiseMinPermissive(headRoom, parentHeadRoom)
+	return resources.ComponentWiseMin(headRoom, parentHeadRoom)
 }
 
 // GetMaxResource returns the max resource for the queue. The max resource should never be larger than the
@@ -1237,12 +1238,10 @@ func (sq *Queue) GetMaxResource() *resources.Resource {
 // When defining a limit you therefore should define all resource quantities.
 func (sq *Queue) GetMaxQueueSet() *resources.Resource {
 	// get the limit for the parent first and check against the queue's own
-	var limit *resources.Resource
 	if sq.parent == nil {
 		return nil
 	}
-	limit = sq.parent.GetMaxQueueSet()
-	return sq.internalGetMax(limit)
+	return sq.internalGetMax(sq.parent.GetMaxQueueSet())
 }
 
 // internalGetMax does the real max calculation.
@@ -1251,9 +1250,6 @@ func (sq *Queue) internalGetMax(parentLimit *resources.Resource) *resources.Reso
 	defer sq.RUnlock()
 	// no parent queue limit set, not even for root
 	if parentLimit == nil {
-		if sq.maxResource == nil {
-			return nil
-		}
 		return sq.maxResource.Clone()
 	}
 	// parent limit set, no queue limit return parent
@@ -1712,6 +1708,15 @@ func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation
 		return nil
 	}
 
+	// create snapshot for ask or preemptor queue
+	sq.createPreemptionSnapshot(results, queuePath)
+	c := sq
+	// set the ask queue for all queues in the ask queue hierarchy
+	for c.parent != nil {
+		results[c.QueuePath].AskQueue = results[queuePath]
+		c = c.parent
+	}
+
 	// walk the subtree contained within the preemption fence and collect potential victims organized by nodeID
 	fence.findEligiblePreemptionVictims(results, queuePath, ask, priorityMap, queuePriority, false)
 
@@ -1719,7 +1724,7 @@ func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation
 }
 
 // createPreemptionSnapshot is used to create a snapshot of the current queue's resource usage and potential preemption victims
-func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnapshot) *QueuePreemptionSnapshot {
+func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnapshot, askQueuePath string) *QueuePreemptionSnapshot {
 	if sq == nil {
 		return nil
 	}
@@ -1729,7 +1734,7 @@ func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnaps
 		return snapshot
 	}
 
-	parentSnapshot := sq.parent.createPreemptionSnapshot(cache)
+	parentSnapshot := sq.parent.createPreemptionSnapshot(cache, askQueuePath)
 	sq.RLock()
 	defer sq.RUnlock()
 	snapshot = &QueuePreemptionSnapshot{
@@ -1741,6 +1746,7 @@ func (sq *Queue) createPreemptionSnapshot(cache map[string]*QueuePreemptionSnaps
 		MaxResource:        sq.maxResource.Clone(),
 		GuaranteedResource: sq.guaranteedResource.Clone(),
 		PotentialVictims:   make([]*Allocation, 0),
+		AskQueue:           cache[askQueuePath],
 	}
 	cache[sq.QueuePath] = snapshot
 	return snapshot
@@ -1750,20 +1756,13 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 	if sq == nil {
 		return
 	}
-
-	// if this is the target queue, return it but with an empty victim list so we can use it in calculations
-	if sq.QueuePath == queuePath {
-		sq.createPreemptionSnapshot(results)
-		return
-	}
-
 	if sq.IsLeafQueue() {
 		// leaf queue, skip queue if preemption is disabled
 		if sq.GetPreemptionPolicy() == policies.DisabledPreemptionPolicy {
 			return
 		}
 
-		victims := sq.createPreemptionSnapshot(results)
+		victims := sq.createPreemptionSnapshot(results, queuePath)
 
 		// skip this queue if we are within guaranteed limits
 		remaining := results[sq.QueuePath].GetRemainingGuaranteedResource()

@@ -33,9 +33,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-// need to change for testing
-var defaultEventChannelSize = 100000
-
 var once sync.Once
 var ev EventSystem
 
@@ -150,7 +147,7 @@ func Init() {
 	buffer := newEventRingBuffer(getRingBufferCapacity())
 	ev = &EventSystemImpl{
 		Store:         store,
-		channel:       make(chan *si.EventRecord, defaultEventChannelSize),
+		channel:       make(chan *si.EventRecord, configs.DefaultEventChannelSize),
 		stop:          make(chan bool),
 		stopped:       false,
 		eventBuffer:   buffer,

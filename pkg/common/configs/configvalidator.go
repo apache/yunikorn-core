@@ -118,7 +118,7 @@ func checkQueueResource(cur QueueConfig, parentM *resources.Resource) (*resource
 	if !parentM.FitInMaxUndef(curM) {
 		return nil, fmt.Errorf("max resource of parent %s is smaller than maximum resource %s for queue %s", parentM.String(), curM.String(), cur.Name)
 	}
-	curM = resources.ComponentWiseMinPermissive(curM, parentM)
+	curM = resources.ComponentWiseMin(curM, parentM)
 	sumG := resources.NewResource()
 	for _, child := range cur.Queues {
 		var childG *resources.Resource
@@ -172,7 +172,7 @@ func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.
 				if !userMaxResource.FitInMaxUndef(limitMaxResources) {
 					return fmt.Errorf("user %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", user, limitMaxResources.String(), cur.Name, userMaxResource.String())
 				}
-				users[curQueuePath][user] = resources.ComponentWiseMinPermissive(limitMaxResources, userMaxResource)
+				users[curQueuePath][user] = resources.ComponentWiseMin(limitMaxResources, userMaxResource)
 			} else if wildcardMaxResource, ok := users[queuePath][common.Wildcard]; user != common.Wildcard && ok {
 				if !wildcardMaxResource.FitInMaxUndef(limitMaxResources) {
 					return fmt.Errorf("user %s max resource %s of queue %s is greater than wildcard maximum resource %s of immediate or ancestor parent queue", user, limitMaxResources.String(), cur.Name, wildcardMaxResource.String())
@@ -189,7 +189,7 @@ func checkLimitResource(cur QueueConfig, users map[string]map[string]*resources.
 					return fmt.Errorf("group %s max resource %s of queue %s is greater than immediate or ancestor parent maximum resource %s", group, limitMaxResources.String(), cur.Name, groupMaxResource.String())
 				}
 				// Override with min resource
-				groups[curQueuePath][group] = resources.ComponentWiseMinPermissive(limitMaxResources, groupMaxResource)
+				groups[curQueuePath][group] = resources.ComponentWiseMin(limitMaxResources, groupMaxResource)
 			} else if wildcardMaxResource, ok := groups[queuePath][common.Wildcard]; group != common.Wildcard && ok {
 				if !wildcardMaxResource.FitInMaxUndef(limitMaxResources) {
 					return fmt.Errorf("group %s max resource %s of queue %s is greater than wildcard maximum resource %s of immediate or ancestor parent queue", group, limitMaxResources.String(), cur.Name, wildcardMaxResource.String())

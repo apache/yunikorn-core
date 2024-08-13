@@ -869,7 +869,7 @@ func TestMaxHeadroomMax(t *testing.T) {
 	assert.Assert(t, resources.Equals(res, headRoom), "leaf2 queue head room not as expected %v, got: %v", res, headRoom)
 }
 
-func TestGetMaxUsage(t *testing.T) {
+func TestGetMaxResource(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -919,14 +919,14 @@ func TestGetMaxUsage(t *testing.T) {
 	resMap = map[string]string{"third": "2"}
 	parent, err = createManagedQueue(root, "parent2", true, resMap)
 	assert.NilError(t, err, "failed to create parent2 queue")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "0", "third": "0"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "5", "third": "2"})
 	assert.NilError(t, err, "failed to create resource")
 	maxUsage = parent.GetMaxResource()
 	assert.Assert(t, resources.Equals(res, maxUsage), "parent2 queue should have max from root set expected %v, got: %v", res, maxUsage)
 	resMap = map[string]string{"first": "5", "second": "10"}
 	leaf, err = createManagedQueue(parent, "leaf2", false, resMap)
 	assert.NilError(t, err, "failed to create leaf2 queue")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "0", "third": "0"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "5", "third": "2"})
 	assert.NilError(t, err, "failed to create resource")
 	maxUsage = leaf.GetMaxResource()
 	assert.Assert(t, resources.Equals(res, maxUsage), "leaf2 queue should have reset merged max set expected %v, got: %v", res, maxUsage)
@@ -977,11 +977,11 @@ func TestGetMaxQueueSet(t *testing.T) {
 	assert.Assert(t, resources.Equals(res, maxSet), "parent2 queue should have max excluding root expected %v, got: %v", res, maxSet)
 
 	// a leaf with max set on different resource than the parent.
-	// The parent has limit and root is ignored: expect the merged parent and leaf to be returned (0 for missing on either)
+	// The parent has limit and root is ignored: expect the merged parent and leaf to be returned
 	resMap = map[string]string{"first": "5", "second": "10"}
 	leaf, err = createManagedQueue(parent, "leaf2", false, resMap)
 	assert.NilError(t, err, "failed to create leaf2 queue")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "5", "third": "0"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "5", "third": "2"})
 	assert.NilError(t, err, "failed to create resource")
 	maxSet = leaf.GetMaxQueueSet()
 	assert.Assert(t, resources.Equals(res, maxSet), "leaf2 queue should have reset merged max set expected %v, got: %v", res, maxSet)
@@ -1999,6 +1999,7 @@ func TestApplyConf(t *testing.T) {
 				Guaranteed: getResourceConf(),
 			},
 		},
+		MaxApplications: 100,
 	}
 
 	// case 0: leaf can't set template
@@ -2015,6 +2016,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, leaf.template == nil)
 	assert.Assert(t, leaf.maxResource != nil)
 	assert.Assert(t, leaf.guaranteedResource != nil)
+	assert.Equal(t, leaf.maxRunningApps, uint64(100))
 
 	// case 1-1: non-leaf queue can have template
 	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
@@ -2026,6 +2028,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, queue.template != nil)
 	assert.Assert(t, queue.maxResource != nil)
 	assert.Assert(t, queue.guaranteedResource != nil)
+	assert.Equal(t, queue.maxRunningApps, uint64(100))
 
 	// root can't set resources
 	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
@@ -2035,6 +2038,7 @@ func TestApplyConf(t *testing.T) {
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, root.maxResource == nil)
 	assert.Assert(t, root.guaranteedResource == nil)
+	assert.Equal(t, root.maxRunningApps, uint64(0))
 }
 
 func TestNewConfiguredQueue(t *testing.T) {

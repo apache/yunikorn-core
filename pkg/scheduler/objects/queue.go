@@ -610,7 +610,14 @@ func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 	return sq.guaranteedResource
 }
 
-// GetActualGuaranteedResource returns the actual (including parent) guaranteed resources for the queue.
+// GetMaxApps returns the maximum number of applications that can run in this queue.
+func (sq *Queue) GetMaxApps() uint64 {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.maxRunningApps
+}
+
+// GetActualGuaranteedResources returns the actual (including parent) guaranteed resources for the queue.
 func (sq *Queue) GetActualGuaranteedResource() *resources.Resource {
 	if sq == nil {
 		return resources.NewResource()

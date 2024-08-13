@@ -110,7 +110,7 @@ func TestNewApplication(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.placeholderAsk, res), "placeholder ask not set as expected")
 }
 
-func TestNewApplicationWithAnnotaionUpdate(t *testing.T) {
+func TestNewApplicationWithAnnotationUpdate(t *testing.T) {
 	user := security.UserGroup{
 		User:   "testuser",
 		Groups: []string{},
@@ -185,7 +185,6 @@ func TestNewApplicationWithAnnotaionUpdate(t *testing.T) {
 	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
 	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
 
-	// test seperate max app cases to increase testing coverage
 	// valid max apps
 	siApp = &si.AddApplicationRequest{}
 	siApp.Tags = map[string]string{
@@ -2897,7 +2896,7 @@ func TestGetUint64Tag(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := app.GetUint64Tag(tt.tag)
+			result := app.getUint64Tag(tt.tag)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

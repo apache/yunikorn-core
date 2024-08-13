@@ -2160,10 +2160,10 @@ func (sa *Application) GetMaxResource() *resources.Resource {
 
 // GetMaxApps returns the max apps that is set in the application tags
 func (sa *Application) GetMaxApps() uint64 {
-	return sa.GetUint64Tag(siCommon.AppTagNamespaceResourceMaxApps)
+	return sa.getUint64Tag(siCommon.AppTagNamespaceResourceMaxApps)
 }
 
-func (sa *Application) GetUint64Tag(tag string) uint64 {
+func (sa *Application) getUint64Tag(tag string) uint64 {
 	uintValue, err := strconv.ParseUint(sa.GetTag(tag), 10, 64)
 	if err != nil {
 		log.Log(log.SchedApplication).Warn("application tag conversion failure",

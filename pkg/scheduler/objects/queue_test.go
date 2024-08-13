@@ -2600,6 +2600,11 @@ func TestQueue_allocatedResFits(t *testing.T) {
 }
 
 func TestQueueSetMaxRunningApps(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue setMaxRunningApps")
+		}
+	}()
 	queue := &Queue{}
 	maxApps := uint64(10)
 
@@ -2608,9 +2613,4 @@ func TestQueueSetMaxRunningApps(t *testing.T) {
 
 	queue = nil
 	queue.SetMaxRunningApps(maxApps)
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatal("panic on nil queue setMaxRunningApps")
-		}
-	}()
 }

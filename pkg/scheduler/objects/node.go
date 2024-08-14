@@ -155,15 +155,22 @@ func (sn *Node) GetCapacity() *resources.Resource {
 	return sn.totalResource.Clone()
 }
 
+// SetCapacity changes the node resource capacity and returns the resource delta.
+// The delta is positive for an increased capacity and negative for a decrease.
 func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource {
-	defer sn.notifyListeners()
+	var delta *resources.Resource
+	defer func() {
+		if delta != nil {
+			sn.notifyListeners()
+		}
+	}()
 	sn.Lock()
 	defer sn.Unlock()
 	if resources.Equals(sn.totalResource, newCapacity) {
 		log.Log(log.SchedNode).Debug("skip updating capacity, not changed")
 		return nil
 	}
-	delta := resources.Sub(newCapacity, sn.totalResource)
+	delta = resources.Sub(newCapacity, sn.totalResource)
 	sn.totalResource = newCapacity
 	sn.refreshAvailableResource()
 	sn.nodeEvents.SendNodeCapacityChangedEvent(sn.NodeID, sn.totalResource.Clone())

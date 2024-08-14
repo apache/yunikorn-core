@@ -279,6 +279,7 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	// remove the node this cannot fail
 	released, confirmed := partition.removeNode(nodeID1)
 	assert.Equal(t, 0, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
+	assert.Assert(t, partition.GetTotalPartitionResource().IsEmpty(), "partition should have 'empty' resource object (pruned)")
 	assert.Equal(t, 1, len(released), "node did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node did not confirm correct allocation")
 	assert.Equal(t, released[0].GetAllocationKey(), allocAllocationKey, "allocationKey returned by release not the same as on allocation")
@@ -337,6 +338,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	// remove the node that has both placeholder and real allocation
 	released, confirmed := partition.removeNode(nodeID1)
 	assert.Equal(t, 0, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
+	assert.Assert(t, partition.GetTotalPartitionResource().IsEmpty(), "partition should have 'empty' resource object (pruned)")
 	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node removal should not have confirmed allocation")
 	assert.Equal(t, ph.GetAllocationKey(), released[0].GetAllocationKey(), "allocationKey returned by release not the same as the placeholder")
@@ -1883,17 +1885,18 @@ func TestRequiredNodeAllocation(t *testing.T) {
 func assertPreemptedResource(t *testing.T, appSummary *objects.ApplicationSummary, memorySeconds int64,
 	vcoresSecconds int64) {
 	detailedResource := appSummary.PreemptedResource.TrackedResourceMap["UNKNOWN"]
-	memValue, memPresent := detailedResource["memory"]
-	vcoreValue, vcorePresent := detailedResource["vcore"]
+
+	memValue, memPresent := detailedResource.Resources["memory"]
+	vcoreValue, vcorePresent := detailedResource.Resources["vcore"]
 
 	if memorySeconds != -1 {
-		assert.Equal(t, memorySeconds, memValue)
+		assert.Equal(t, memorySeconds, int64(memValue))
 	} else {
 		assert.Equal(t, memPresent, false)
 	}
 
 	if vcoresSecconds != -1 {
-		assert.Equal(t, vcoresSecconds, vcoreValue)
+		assert.Equal(t, vcoresSecconds, int64(vcoreValue))
 	} else {
 		assert.Equal(t, vcorePresent, false)
 	}
@@ -1963,7 +1966,7 @@ func TestPreemption(t *testing.T) {
 	assertPreemptedResource(t, appSummary, -1, 5000)
 
 	appSummary = app2.GetApplicationSummary("default")
-	assertPreemptedResource(t, appSummary, -1, 0)
+	assert.Assert(t, appSummary.PreemptedResource.TrackedResourceMap["UNKNOWN"] == nil)
 }
 
 // Preemption followed by a normal allocation
@@ -2592,29 +2595,38 @@ func TestUpdateRootQueue(t *testing.T) {
 	assert.Equal(t, partition.GetQueue("root.parent").CurrentState(), objects.Draining.String(), "parent queue should have been marked for removal")
 
 	// add new node, node 3 with 'memory' resource type
-	res1, err1 := resources.NewResourceFromConf(map[string]string{"vcore": "20", "memory": "50"})
-	assert.NilError(t, err1, "resource creation failed")
-	err = partition.AddNode(newNodeMaxResource("node-3", res1))
+	res, err = resources.NewResourceFromConf(map[string]string{"memory": "50"})
+	assert.NilError(t, err, "resource creation failed")
+	err = partition.AddNode(newNodeMaxResource("node-3", res))
 	assert.NilError(t, err, "test node3 add failed unexpected")
 
 	// root max resource gets updated with 'memory' resource type
-	expRes, err1 := resources.NewResourceFromConf(map[string]string{"vcore": "40", "memory": "50"})
-	assert.NilError(t, err1, "resource creation failed")
-	assert.Assert(t, resources.Equals(expRes, partition.root.GetMaxResource()), "root max resource not set as expected")
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "20", "memory": "50"})
+	assert.NilError(t, err, "resource creation failed")
+	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
+	assert.Assert(t, resources.Equals(res, partition.root.GetMaxResource()), "root max resource not set as expected")
 
 	// remove node, node 3. root max resource won't have 'memory' resource type and updated with less 'vcore'
 	partition.removeNode("node-3")
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "20"})
+	assert.NilError(t, err, "resource creation failed")
 	assert.Assert(t, resources.Equals(res, partition.root.GetMaxResource()), "root max resource not set as expected")
-
+	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
+	assert.Equal(t, len(res.Resources), len(partition.root.GetMaxResource().Resources), "expected pruned resource on queue without memory set")
+	assert.Equal(t, len(res.Resources), len(partition.totalPartitionResource.Resources), "expected pruned resource on partition without memory set")
 	// remove node, node 2. root max resource gets updated with less 'vcores'
 	partition.removeNode("node-2")
-	expRes1, err1 := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
-	assert.NilError(t, err1, "resource creation failed")
-	assert.Assert(t, resources.Equals(expRes1, partition.root.GetMaxResource()), "root max resource not set as expected")
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "resource creation failed")
+	assert.Assert(t, resources.Equals(res, partition.root.GetMaxResource()), "root max resource not set as expected")
+	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
+	assert.Equal(t, len(res.Resources), len(partition.root.GetMaxResource().Resources), "expected pruned resource on queue without memory set")
+	assert.Equal(t, len(res.Resources), len(partition.totalPartitionResource.Resources), "expected pruned resource on partition without memory set")
 
 	// remove node, node 1. root max resource should set to nil
 	partition.removeNode("node-1")
 	assert.Assert(t, resources.Equals(nil, partition.root.GetMaxResource()), "root max resource not set as expected")
+	assert.Assert(t, partition.totalPartitionResource.IsEmpty(), "partition resource not set as expected")
 }
 
 // transition an application to completed state and wait for it to be processed into the completedApplications map
@@ -2778,6 +2790,11 @@ func TestUpdateNode(t *testing.T) {
 	if !resources.Equals(expectedRes, partition.GetTotalPartitionResource()) {
 		t.Errorf("Expected partition resource %s, doesn't match with actual partition resource %s", expectedRes, partition.GetTotalPartitionResource())
 	}
+
+	// clear out and make sure it is pruned
+	delta = resources.Multiply(expectedRes, -1)
+	partition.updatePartitionResource(delta)
+	assert.Assert(t, partition.GetTotalPartitionResource().IsEmpty())
 }
 
 func TestAddTGApplication(t *testing.T) {

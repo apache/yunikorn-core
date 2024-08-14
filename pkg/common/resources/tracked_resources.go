@@ -31,23 +31,28 @@ type TrackedResource struct {
 	// TrackedResourceMap is a two-level map for aggregated resource usage.
 	// The top-level key is the instance type, and the value is a map:
 	//   resource type (CPU, memory, etc.) -> aggregated used time (in seconds) of the resource type.
-	TrackedResourceMap map[string]map[string]int64
+	TrackedResourceMap map[string]*Resource
 
 	locking.RWMutex
 }
 
 // NewTrackedResource creates a new instance of TrackedResource.
 func NewTrackedResource() *TrackedResource {
-	return &TrackedResource{TrackedResourceMap: make(map[string]map[string]int64)}
+	return &TrackedResource{TrackedResourceMap: make(map[string]*Resource)}
 }
 
 // NewTrackedResourceFromMap creates NewTrackedResource from the given map.
 // Using for Testing purpose only.
-func NewTrackedResourceFromMap(m map[string]map[string]int64) *TrackedResource {
+func NewTrackedResourceFromMap(m map[string]map[string]Quantity) *TrackedResource {
 	if m == nil {
 		return NewTrackedResource()
 	}
-	return &TrackedResource{TrackedResourceMap: m}
+
+	trackedMap := make(map[string]*Resource)
+	for inst, inner := range m {
+		trackedMap[inst] = NewResourceFromMap(inner)
+	}
+	return &TrackedResource{TrackedResourceMap: trackedMap}
 }
 
 func (tr *TrackedResource) String() string {
@@ -56,7 +61,7 @@ func (tr *TrackedResource) String() string {
 
 	var resourceUsage []string
 	for instanceType, resourceTypeMap := range tr.TrackedResourceMap {
-		for resourceType, usageTime := range resourceTypeMap {
+		for resourceType, usageTime := range resourceTypeMap.Resources {
 			resourceUsage = append(resourceUsage, fmt.Sprintf("%s:%s=%d", instanceType, resourceType, usageTime))
 		}
 	}
@@ -73,11 +78,7 @@ func (tr *TrackedResource) Clone() *TrackedResource {
 	tr.RLock()
 	defer tr.RUnlock()
 	for k, v := range tr.TrackedResourceMap {
-		dest := make(map[string]int64)
-		for key, element := range v {
-			dest[key] = element
-		}
-		ret.TrackedResourceMap[k] = dest
+		ret.TrackedResourceMap[k] = v.Clone()
 	}
 	return ret
 }
@@ -96,10 +97,10 @@ func (tr *TrackedResource) AggregateTrackedResource(instType string,
 	timeDiff := int64(releaseTime.Sub(bindTime).Seconds())
 	aggregatedResourceTime, ok := tr.TrackedResourceMap[instType]
 	if !ok {
-		aggregatedResourceTime = map[string]int64{}
+		aggregatedResourceTime = NewResource()
 	}
 	for key, element := range resource.Resources {
-		aggregatedResourceTime[key] += int64(element) * timeDiff
+		aggregatedResourceTime.Resources[key] += element * Quantity(timeDiff)
 	}
 	tr.TrackedResourceMap[instType] = aggregatedResourceTime
 }
@@ -119,23 +120,7 @@ func EqualsTracked(left, right *TrackedResource) bool {
 			return false
 		}
 
-		if !equalsMapContents(v, inner) {
-			return false
-		}
-	}
-
-	return true
-}
-
-func equalsMapContents(left, right map[string]int64) bool {
-	for k, v := range left {
-		if right[k] != v {
-			return false
-		}
-	}
-
-	for k, v := range right {
-		if left[k] != v {
+		if !Equals(v, inner) {
 			return false
 		}
 	}

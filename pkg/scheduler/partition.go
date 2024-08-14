@@ -551,7 +551,8 @@ func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 	return pc.nodes.GetNode(nodeID)
 }
 
-// Add the node to the partition.
+// AddNode adds the node to the partition. Updates the partition and root queue resources if the node is added
+// successfully to the partition.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddNode(node *objects.Node) error {
 	if node == nil {
@@ -569,7 +570,9 @@ func (pc *PartitionContext) AddNode(node *objects.Node) error {
 	return nil
 }
 
-// Update the partition resources based on the change of the node information
+// updatePartitionResource updates the partition resources based on the change of the node information.
+// The delta is added to the total partition resources. A removal or decrease MUST be negative.
+// The passed in delta is not changed and only read.
 func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 	pc.Lock()
 	defer pc.Unlock()
@@ -579,39 +582,29 @@ func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 		} else {
 			pc.totalPartitionResource.AddTo(delta)
 		}
+		// remove any zero values from the final resource definition
+		pc.totalPartitionResource.Prune()
+		// set the root queue size
 		pc.root.SetMaxResource(pc.totalPartitionResource)
 	}
 }
 
-// Update the partition details when adding a node.
+// addNodeToList adds a node to the partition, and updates the metrics & resource tracking information
+// if the node was added successfully to the partition.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
 	// we don't grab a lock here because we only update pc.nodes which is internally protected
 	if err := pc.nodes.AddNode(node); err != nil {
 		return fmt.Errorf("failed to add node %s to partition %s, error: %v", node.NodeID, pc.Name, err)
 	}
 
-	pc.addNodeResources(node)
-	return nil
-}
-
-// Update metrics & resource tracking information.
-// This locks the partition. The partition may not be locked when we process the allocation
-// additions to the node as that takes further app, queue or node locks.
-func (pc *PartitionContext) addNodeResources(node *objects.Node) {
-	pc.Lock()
-	defer pc.Unlock()
+	pc.updatePartitionResource(node.GetCapacity())
 	metrics.GetSchedulerMetrics().IncActiveNodes()
-	// update/set the resources available in the cluster
-	if pc.totalPartitionResource == nil {
-		pc.totalPartitionResource = node.GetCapacity().Clone()
-	} else {
-		pc.totalPartitionResource.AddTo(node.GetCapacity())
-	}
-	pc.root.SetMaxResource(pc.totalPartitionResource)
 	log.Log(log.SchedPartition).Info("Updated available resources from added node",
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
-		zap.Stringer("partitionResource", pc.totalPartitionResource))
+		zap.Stringer("partitionResource", pc.GetTotalPartitionResource()))
+	return nil
 }
 
 // removeNodeFromList removes the node from the list of partition nodes.
@@ -630,20 +623,6 @@ func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID))
 	return node
-}
-
-// removeNodeResources updates the partition and root queue resources as part of the node removal process.
-// This locks the partition.
-func (pc *PartitionContext) removeNodeResources(node *objects.Node) {
-	pc.Lock()
-	defer pc.Unlock()
-	// cleanup the available resources, partition resources cannot be nil at this point
-	pc.totalPartitionResource.SubFrom(node.GetCapacity())
-	pc.root.SetMaxResource(pc.totalPartitionResource)
-	log.Log(log.SchedPartition).Info("Updated available resources from removed node",
-		zap.String("partitionName", pc.Name),
-		zap.String("nodeID", node.NodeID),
-		zap.Stringer("partitionResource", pc.totalPartitionResource))
 }
 
 // removeNode removes a node from the partition. It returns all released and confirmed allocations.
@@ -674,7 +653,12 @@ func (pc *PartitionContext) removeNode(nodeID string) ([]*objects.Allocation, []
 	released, confirmed := pc.removeNodeAllocations(node)
 
 	// update the resource linked to this node, all allocations are removed, queue usage should have decreased
-	pc.removeNodeResources(node)
+	// The delta passed in must be negative: the delta is always added
+	pc.updatePartitionResource(resources.Multiply(node.GetCapacity(), -1))
+	log.Log(log.SchedPartition).Info("Updated available resources from removed node",
+		zap.String("partitionName", pc.Name),
+		zap.String("nodeID", node.NodeID),
+		zap.Stringer("partitionResource", pc.GetTotalPartitionResource()))
 	return released, confirmed
 }
 

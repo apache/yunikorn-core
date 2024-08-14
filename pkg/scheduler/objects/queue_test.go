@@ -1163,7 +1163,7 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	// all outstanding pods use only an unlimited resource type
 	// max is set for a different resource type and fully allocated
 	// queue structure:
-	// root
+	// root (max.cpu = 10, pods: 10)
 	//   - queue1 (max.cpu = 10)
 	//
 	// submit app1 to root.queue1, app1 asks for 20 1xPOD requests

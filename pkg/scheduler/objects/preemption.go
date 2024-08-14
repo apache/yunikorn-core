@@ -326,7 +326,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 					// removing task does not violate queue constraints, adjust queue and node
 					nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
 					// check if ask now fits and we haven't had this happen before
-					if nodeCurrentAvailable.FitInMaxUndef(p.ask.GetAllocatedResource()) && index < 0 {
+					if nodeCurrentAvailable.FitIn(p.ask.GetAllocatedResource()) && index < 0 {
 						index = len(results)
 					}
 					// add victim to results

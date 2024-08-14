@@ -144,7 +144,20 @@ func (r *Resource) Clone() *Resource {
 	return ret
 }
 
-// Add additional resource to the base updating the base resource
+// Prune removes any resource type that has a zero value set.
+// Note that a zero value set and a type not being set are interpreted differently for quotas.
+func (r *Resource) Prune() {
+	if r == nil {
+		return
+	}
+	for k, v := range r.Resources {
+		if v == 0 {
+			delete(r.Resources, k)
+		}
+	}
+}
+
+// AddTo adds the resource to the base updating the base resource
 // Should be used by temporary computation only
 // A nil base resource does not change
 // A nil passed in resource is treated as a zero valued resource and leaves base unchanged

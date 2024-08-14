@@ -24,9 +24,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
-
+	"golang.org/x/exp/maps"
 	"gotest.tools/v3/assert"
+
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 func CheckLenOfResource(res *Resource, expected int) (bool, string) {
@@ -2134,6 +2135,38 @@ func TestResource_DominantResource(t *testing.T) {
 			if got := tt.used.DominantResourceType(tt.capacity); got != tt.wantName {
 				t.Errorf("DominantResourceType() = %v, want %v", got, tt.wantName)
 			}
+		})
+	}
+}
+
+func TestResource_PruneNil(t *testing.T) {
+	// make sure we're nil safe IDE will complain about the receiver being nil
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil resource in prune test")
+		}
+	}()
+	var empty *Resource
+	empty.Prune()
+}
+
+func TestResource_Prune(t *testing.T) {
+	var tests = []struct {
+		caseName string
+		input    map[string]Quantity
+		output   map[string]Quantity
+	}{
+		{"no types", map[string]Quantity{}, map[string]Quantity{}},
+		{"all types with value", map[string]Quantity{"first": 1, "second": -2, "third": 3}, map[string]Quantity{"first": 1, "second": -2, "third": 3}},
+		{"zero type", map[string]Quantity{"first": 1, "zero": 0, "third": 3}, map[string]Quantity{"first": 1, "third": 3}},
+		{"no types with value", map[string]Quantity{"first": 0, "second": 0}, map[string]Quantity{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			original := NewResourceFromMap(tt.input)
+			original.Prune()
+			assert.Equal(t, len(tt.output), len(original.Resources), "unexpected resource types returned")
+			assert.Assert(t, maps.Equal(original.Resources, tt.output), "resource type maps are not equal")
 		})
 	}
 }

@@ -388,7 +388,6 @@ func (sq *Queue) setResourcesFromConf(resource configs.Resources) error {
 			zap.Error(err))
 		return err
 	}
-
 	sq.setResources(guaranteedResource, maxResource)
 	return nil
 }
@@ -451,6 +450,16 @@ func (sq *Queue) SetResources(guaranteedResource, maxResource *resources.Resourc
 	sq.Lock()
 	defer sq.Unlock()
 	sq.setResources(guaranteedResource, maxResource)
+}
+
+// SetMaxRunningApps allows setting the maximum running apps on a queue
+func (sq *Queue) SetMaxRunningApps(maxApps uint64) {
+	if sq == nil {
+		return
+	}
+	sq.Lock()
+	defer sq.Unlock()
+	sq.maxRunningApps = maxApps
 }
 
 // setTemplate sets the template on the queue based on the config.
@@ -601,7 +610,14 @@ func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 	return sq.guaranteedResource
 }
 
-// GetActualGuaranteedResource returns the actual (including parent) guaranteed resources for the queue.
+// GetMaxApps returns the maximum number of applications that can run in this queue.
+func (sq *Queue) GetMaxApps() uint64 {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.maxRunningApps
+}
+
+// GetActualGuaranteedResources returns the actual (including parent) guaranteed resources for the queue.
 func (sq *Queue) GetActualGuaranteedResource() *resources.Resource {
 	if sq == nil {
 		return resources.NewResource()
@@ -1681,20 +1697,6 @@ func (sq *Queue) GetPreemptionPolicy() policies.PreemptionPolicy {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.preemptionPolicy
-}
-
-// SetMaxRunningApps allows setting the maximum running apps on a queue
-// test only
-func (sq *Queue) SetMaxRunningApps(max int) {
-	if sq == nil {
-		return
-	}
-	if max < 0 {
-		return
-	}
-	sq.Lock()
-	defer sq.Unlock()
-	sq.maxRunningApps = uint64(max)
 }
 
 // FindEligiblePreemptionVictims is used to locate tasks which may be preempted for the given ask.

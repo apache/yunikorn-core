@@ -2611,6 +2611,22 @@ func TestQueue_allocatedResFits_Root(t *testing.T) {
 	}
 }
 
+func TestQueueSetMaxRunningApps(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue setMaxRunningApps")
+		}
+	}()
+	queue := &Queue{}
+	maxApps := uint64(10)
+
+	queue.SetMaxRunningApps(maxApps)
+	assert.Equal(t, maxApps, queue.maxRunningApps)
+
+	queue = nil
+	queue.SetMaxRunningApps(maxApps)
+}
+
 func TestQueue_allocatedResFits_Other(t *testing.T) {
 	const first = "first"
 	const second = "second"

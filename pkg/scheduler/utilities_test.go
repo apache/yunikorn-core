@@ -392,6 +392,7 @@ func newLimitedPartition(resLimit map[string]string) (*PartitionContext, error) 
 						Resources: configs.Resources{
 							Max: resLimit,
 						},
+						MaxApplications: 2,
 						Limits: []configs.Limit{
 							{
 								Limit: "limited queue limit",

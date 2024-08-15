@@ -1769,6 +1769,9 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 	if sq == nil {
 		return
 	}
+	if sq.GetQueuePath() == queuePath {
+		return
+	}
 	if sq.IsLeafQueue() {
 		// leaf queue, skip queue if preemption is disabled
 		if sq.GetPreemptionPolicy() == policies.DisabledPreemptionPolicy {

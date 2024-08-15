@@ -209,7 +209,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	node.AddAllocation(alloc)
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, !healthInfo.Healthy, "Scheduler should not be healthy")
-	assert.Assert(t, !healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should not be successful")
+	assert.Assert(t, !healthInfo.HealthChecks[7].Succeeded, "The orphan allocation check on the node should not be successful")
 
 	// add the allocation to the app as well
 	part := schedulerContext.partitions[partName]
@@ -218,13 +218,13 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	err = part.AddApplication(app)
 	assert.NilError(t, err, "Could not add application")
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
-	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
+	assert.Assert(t, healthInfo.HealthChecks[7].Succeeded, "The orphan allocation check on the node should be successful")
 
 	// remove the allocation from the node, so we will have an orphan allocation assigned to the app
 	node.RemoveAllocation("key")
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
-	assert.Assert(t, healthInfo.HealthChecks[9].Succeeded, "The orphan allocation check on the node should be successful")
-	assert.Assert(t, !healthInfo.HealthChecks[10].Succeeded, "The orphan allocation check on the app should not be successful")
+	assert.Assert(t, healthInfo.HealthChecks[7].Succeeded, "The orphan allocation check on the node should be successful")
+	assert.Assert(t, !healthInfo.HealthChecks[8].Succeeded, "The orphan allocation check on the app should not be successful")
 }
 
 func TestGetSchedulerHealthStatusMetrics(t *testing.T) {

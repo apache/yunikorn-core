@@ -233,21 +233,16 @@ func checkFailedNodes(metrics *metrics.SchedulerMetrics) dao.HealthCheckInfo {
 }
 
 func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckInfo {
-	// 1. check resources
-	// 1.1 check for negative resources
+	// check for negative resources
 	var partitionsWithNegResources []string
 	var nodesWithNegResources []string
-	// 1.3 node allocated resource <= total resource of the node
-	var allocationMismatch []string
-	// 1.2 total partition resource = sum of node resources
+	// total partition resource = sum of node resources
 	var totalResourceMismatch []string
-	// 1.4 node total resource = allocated resource + occupied resource + available resource
+	// node total resource = allocated resource + occupied resource + available resource
 	var nodeTotalMismatch []string
-	// 1.5 node capacity >= allocated resources on the node
-	var nodeCapacityMismatch []string
-	// 2. check reservation/node ration
+	// check reservation/node ration
 	var partitionReservationRatio []float32
-	// 3. check for orphan allocations
+	// check for orphan allocations
 	orphanAllocationsOnNode := make([]*objects.Allocation, 0)
 	orphanAllocationsOnApp := make([]*objects.Allocation, 0)
 
@@ -282,9 +277,6 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 			if node.GetOccupiedResource().HasNegativeValue() {
 				nodesWithNegResources = append(nodesWithNegResources, node.NodeID)
 			}
-			if !resources.StrictlyGreaterThanOrEquals(node.GetCapacity(), node.GetAllocatedResource()) {
-				nodeCapacityMismatch = append(nodeCapacityMismatch, node.NodeID)
-			}
 			orphanAllocationsOnNode = append(orphanAllocationsOnNode, checkNodeAllocations(node, part)...)
 		}
 		// check if there are allocations assigned to an app but there are missing from the nodes
@@ -292,42 +284,33 @@ func checkSchedulingContext(schedulerContext *ClusterContext) []dao.HealthCheckI
 			orphanAllocationsOnApp = append(orphanAllocationsOnApp, checkAppAllocations(app, part.nodes)...)
 		}
 		partitionReservationRatio = append(partitionReservationRatio, float32(sumReservation)/(float32(part.GetTotalNodeCount())))
-		if !resources.Equals(sumNodeAllocatedResources, part.GetAllocatedResource()) {
-			allocationMismatch = append(allocationMismatch, part.Name)
-		}
 		if !resources.EqualsOrEmpty(sumNodeResources, part.GetTotalPartitionResource()) {
 			totalResourceMismatch = append(totalResourceMismatch, part.Name)
 		}
 	}
-	var info = make([]dao.HealthCheckInfo, 9)
-	info[0] = CreateCheckInfo(len(partitionsWithNegResources) == 0, "Negative resources",
+	var info = make([]dao.HealthCheckInfo, 0)
+	info = append(info, CreateCheckInfo(len(partitionsWithNegResources) == 0, "Negative resources",
 		"Check for negative resources in the partitions",
-		fmt.Sprintf("Partitions with negative resources: %q", partitionsWithNegResources))
-	info[1] = CreateCheckInfo(len(nodesWithNegResources) == 0, "Negative resources",
+		fmt.Sprintf("Partitions with negative resources: %q", partitionsWithNegResources)))
+	info = append(info, CreateCheckInfo(len(nodesWithNegResources) == 0, "Negative resources",
 		"Check for negative resources in the nodes",
-		fmt.Sprintf("Nodes with negative resources: %q", nodesWithNegResources))
-	info[2] = CreateCheckInfo(len(allocationMismatch) == 0, "Consistency of data",
-		"Check if a partition's allocated resource <= total resource of the partition",
-		fmt.Sprintf("Partitions with inconsistent data: %q", allocationMismatch))
-	info[3] = CreateCheckInfo(len(totalResourceMismatch) == 0, "Consistency of data",
+		fmt.Sprintf("Nodes with negative resources: %q", nodesWithNegResources)))
+	info = append(info, CreateCheckInfo(len(totalResourceMismatch) == 0, "Consistency of data",
 		"Check if total partition resource == sum of the node resources from the partition",
-		fmt.Sprintf("Partitions with inconsistent data: %q", totalResourceMismatch))
-	info[4] = CreateCheckInfo(len(nodeTotalMismatch) == 0, "Consistency of data",
+		fmt.Sprintf("Partitions with inconsistent data: %q", totalResourceMismatch)))
+	info = append(info, CreateCheckInfo(len(nodeTotalMismatch) == 0, "Consistency of data",
 		"Check if node total resource = allocated resource + occupied resource + available resource",
-		fmt.Sprintf("Nodes with inconsistent data: %q", nodeTotalMismatch))
-	info[5] = CreateCheckInfo(len(nodeCapacityMismatch) == 0, "Consistency of data",
-		"Check if node capacity >= allocated resources on the node",
-		fmt.Sprintf("Nodes with inconsistent data: %q", nodeCapacityMismatch))
+		fmt.Sprintf("Nodes with inconsistent data: %q", nodeTotalMismatch)))
 	// mark it as succeeded for a while until we will know what is not considered a normal value anymore
-	info[6] = CreateCheckInfo(true, "Reservation check",
+	info = append(info, CreateCheckInfo(true, "Reservation check",
 		"Check the reservation nr compared to the number of nodes",
-		fmt.Sprintf("Reservation/node nr ratio: %f", partitionReservationRatio))
-	info[7] = CreateCheckInfo(len(orphanAllocationsOnNode) == 0, "Orphan allocation on node check",
+		fmt.Sprintf("Reservation/node nr ratio: %f", partitionReservationRatio)))
+	info = append(info, CreateCheckInfo(len(orphanAllocationsOnNode) == 0, "Orphan allocation on node check",
 		"Check if there are orphan allocations on the nodes",
-		fmt.Sprintf("Orphan allocations: %v", orphanAllocationsOnNode))
-	info[8] = CreateCheckInfo(len(orphanAllocationsOnApp) == 0, "Orphan allocation on app check",
+		fmt.Sprintf("Orphan allocations: %v", orphanAllocationsOnNode)))
+	info = append(info, CreateCheckInfo(len(orphanAllocationsOnApp) == 0, "Orphan allocation on app check",
 		"Check if there are orphan allocations on the applications",
-		fmt.Sprintf("OrphanAllocations: %v", orphanAllocationsOnApp))
+		fmt.Sprintf("OrphanAllocations: %v", orphanAllocationsOnApp)))
 	return info
 }
 

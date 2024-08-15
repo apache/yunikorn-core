@@ -127,11 +127,11 @@ partitions:
 
 	// Request pods
 	app1NumPods := numPods / 2
-	app1Asks := make([]*si.AllocationAsk, app1NumPods)
+	app1Asks := make([]*si.Allocation, app1NumPods)
 	for i := 0; i < app1NumPods; i++ {
-		app1Asks[i] = &si.AllocationAsk{
+		app1Asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-1-%d", i),
-			ResourceAsk: &si.Resource{
+			ResourcePerAlloc: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: int64(requestMem)},
 					"vcore":  {Value: int64(requestVcore)},
@@ -141,19 +141,19 @@ partitions:
 		}
 	}
 	err = proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: app1Asks,
-		RmID: "rm:123",
+		Allocations: app1Asks,
+		RmID:        "rm:123",
 	})
 	if err != nil {
 		b.Error(err.Error())
 	}
 
 	app2NumPods := numPods - app1NumPods
-	app2Asks := make([]*si.AllocationAsk, app2NumPods)
+	app2Asks := make([]*si.Allocation, app2NumPods)
 	for i := 0; i < app2NumPods; i++ {
-		app2Asks[i] = &si.AllocationAsk{
+		app2Asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-2-%d", i),
-			ResourceAsk: &si.Resource{
+			ResourcePerAlloc: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: int64(requestMem)},
 					"vcore":  {Value: int64(requestVcore)},
@@ -163,8 +163,8 @@ partitions:
 		}
 	}
 	err = proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: app2Asks,
-		RmID: "rm:123",
+		Allocations: app2Asks,
+		RmID:        "rm:123",
 	})
 	if err != nil {
 		b.Error(err.Error())

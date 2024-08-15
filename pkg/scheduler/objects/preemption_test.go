@@ -28,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const alloc = "alloc"
@@ -1565,8 +1566,11 @@ func scoreMap(nodeID string, orig, self []bool) map[string][]*Allocation {
 }
 
 func allocForScore(originator bool, allowPreemptSelf bool) *Allocation {
-	ask := NewAllocationAsk("alloc1", appID1, resources.NewResource())
-	ask.originator = originator
-	ask.allowPreemptSelf = allowPreemptSelf
-	return markAllocated(nodeID1, ask)
+	return NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    "alloc1",
+		ApplicationID:    appID1,
+		Originator:       originator,
+		NodeID:           nodeID1,
+		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: allowPreemptSelf},
+	})
 }

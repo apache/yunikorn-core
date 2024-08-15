@@ -713,13 +713,7 @@ func (cc *ClusterContext) handleRMUpdateAllocationEvent(event *rmevent.RMUpdateA
 	if len(request.Allocations) != 0 {
 		cc.processAllocations(request)
 	}
-	if len(request.Asks) != 0 {
-		cc.processAsks(request)
-	}
 	if request.Releases != nil {
-		if len(request.Releases.AllocationAsksToRelease) > 0 {
-			cc.processAskReleases(request.Releases.AllocationAsksToRelease)
-		}
 		if len(request.Releases.AllocationsToRelease) > 0 {
 			cc.processAllocationReleases(request.Releases.AllocationsToRelease, request.RmID)
 		}
@@ -750,13 +744,15 @@ func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
 		}
 
 		alloc := objects.NewAllocationFromSI(siAlloc)
-		if err := partition.AddAllocation(alloc); err != nil {
+
+		_, newAlloc, err := partition.UpdateAllocation(alloc)
+		if err != nil {
 			rejectedAllocs = append(rejectedAllocs, &si.RejectedAllocation{
 				AllocationKey: siAlloc.AllocationKey,
 				ApplicationID: siAlloc.ApplicationID,
 				Reason:        err.Error(),
 			})
-			log.Log(log.SchedContext).Error("Invalid allocation add requested by shim",
+			log.Log(log.SchedContext).Error("Invalid allocation update requested by shim",
 				zap.String("partition", siAlloc.PartitionName),
 				zap.String("nodeID", siAlloc.NodeID),
 				zap.String("applicationID", siAlloc.ApplicationID),
@@ -764,7 +760,10 @@ func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
 				zap.Error(err))
 			continue
 		}
-		cc.notifyRMNewAllocation(request.RmID, alloc)
+		// at some point, we may need to handle new requests as well
+		if newAlloc {
+			cc.notifyRMNewAllocation(request.RmID, alloc)
+		}
 	}
 
 	// Reject allocs returned to RM proxy for the apps and partitions not found
@@ -773,67 +772,6 @@ func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
 			RmID:                request.RmID,
 			RejectedAllocations: rejectedAllocs,
 		})
-	}
-}
-
-func (cc *ClusterContext) processAsks(request *si.AllocationRequest) {
-	// Send rejects back to RM
-	rejectedAsks := make([]*si.RejectedAllocationAsk, 0)
-
-	// Send to scheduler
-	for _, siAsk := range request.Asks {
-		// try to get ApplicationInfo
-		partition := cc.GetPartition(siAsk.PartitionName)
-		if partition == nil {
-			msg := fmt.Sprintf("Failed to find partition %s, for application %s and allocation %s", siAsk.PartitionName, siAsk.ApplicationID, siAsk.AllocationKey)
-			log.Log(log.SchedContext).Error("Invalid ask add requested by shim, partition not found",
-				zap.String("partition", siAsk.PartitionName),
-				zap.String("applicationID", siAsk.ApplicationID),
-				zap.String("askKey", siAsk.AllocationKey))
-			rejectedAsks = append(rejectedAsks, &si.RejectedAllocationAsk{
-				AllocationKey: siAsk.AllocationKey,
-				ApplicationID: siAsk.ApplicationID,
-				Reason:        msg,
-			})
-			continue
-		}
-
-		// try adding to app
-		if err := partition.addAllocationAsk(siAsk); err != nil {
-			rejectedAsks = append(rejectedAsks,
-				&si.RejectedAllocationAsk{
-					AllocationKey: siAsk.AllocationKey,
-					ApplicationID: siAsk.ApplicationID,
-					Reason:        err.Error(),
-				})
-			log.Log(log.SchedContext).Error("Invalid ask add requested by shim",
-				zap.String("partition", siAsk.PartitionName),
-				zap.String("applicationID", siAsk.ApplicationID),
-				zap.String("askKey", siAsk.AllocationKey),
-				zap.Error(err))
-		}
-	}
-
-	// Reject asks returned to RM Proxy for the apps and partitions not found
-	if len(rejectedAsks) > 0 {
-		cc.rmEventHandler.HandleEvent(&rmevent.RMRejectedAllocationAskEvent{
-			RmID:                   request.RmID,
-			RejectedAllocationAsks: rejectedAsks,
-		})
-	}
-}
-
-func (cc *ClusterContext) processAskReleases(releases []*si.AllocationAskRelease) {
-	for _, toRelease := range releases {
-		partition := cc.GetPartition(toRelease.PartitionName)
-		if partition == nil {
-			log.Log(log.SchedContext).Error("Invalid ask release requested by shim, partition not found",
-				zap.String("partition", toRelease.PartitionName),
-				zap.String("applicationID", toRelease.ApplicationID),
-				zap.String("askKey", toRelease.AllocationKey))
-			continue
-		}
-		partition.removeAllocationAsk(toRelease)
 	}
 }
 

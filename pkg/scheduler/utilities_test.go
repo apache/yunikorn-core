@@ -21,7 +21,6 @@ package scheduler
 import (
 	"strconv"
 	"testing"
-	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -568,26 +567,47 @@ func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, p
 }
 
 func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.Allocation {
-	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		AllocationKey: allocKey,
-		ApplicationID: appID,
-		PartitionName: "test",
-		ResourceAsk:   res.ToProto(),
-		Priority:      prio,
-		TaskGroupName: taskGroup,
-		Placeholder:   placeHolder,
+	return objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    allocKey,
+		ApplicationID:    appID,
+		PartitionName:    "test",
+		ResourcePerAlloc: res.ToProto(),
+		Priority:         prio,
+		TaskGroupName:    taskGroup,
+		Placeholder:      placeHolder,
+	})
+}
+
+func newAllocationTG(allocKey, appID, nodeID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.Allocation {
+	return newAllocationAll(allocKey, appID, nodeID, taskGroup, res, 1, placeHolder)
+}
+
+func newAllocation(allocKey, appID, nodeID string, res *resources.Resource) *objects.Allocation {
+	return newAllocationAll(allocKey, appID, nodeID, "", res, 1, false)
+}
+
+func newAllocationAll(allocKey, appID, nodeID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.Allocation {
+	return objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    allocKey,
+		ApplicationID:    appID,
+		PartitionName:    "test",
+		NodeID:           nodeID,
+		ResourcePerAlloc: res.ToProto(),
+		Priority:         prio,
+		TaskGroupName:    taskGroup,
+		Placeholder:      placeHolder,
 	})
 }
 
 func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.Allocation {
-	return objects.NewAllocationAskFromSI(&si.AllocationAsk{
-		AllocationKey: allocKey,
-		ApplicationID: appID,
-		PartitionName: "default",
-		ResourceAsk:   res.ToProto(),
-		Priority:      prio,
-		TaskGroupName: taskGroup,
-		Placeholder:   false,
+	return objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    allocKey,
+		ApplicationID:    appID,
+		PartitionName:    "default",
+		ResourcePerAlloc: res.ToProto(),
+		Priority:         prio,
+		TaskGroupName:    taskGroup,
+		Placeholder:      false,
 		PreemptionPolicy: &si.PreemptionPolicy{
 			AllowPreemptSelf:  true,
 			AllowPreemptOther: true,
@@ -725,10 +745,4 @@ func getMaxApplications(usage *dao.ResourceUsageDAOInfo, maxApplications map[str
 		}
 	}
 	return maxApplications
-}
-
-func markAllocated(nodeID string, alloc *objects.Allocation) *objects.Allocation {
-	alloc.SetBindTime(time.Now())
-	alloc.SetNodeID(nodeID)
-	return alloc
 }

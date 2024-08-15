@@ -23,6 +23,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -45,27 +46,30 @@ func TestInspectOutstandingRequests(t *testing.T) {
 		"vcores": 1,
 		"memory": 1,
 	})
-	siAsk1 := &si.AllocationAsk{
-		AllocationKey: "ask-uuid-1",
-		ApplicationID: appID1,
-		ResourceAsk:   askResource.ToProto(),
+	siAsk1 := &si.Allocation{
+		AllocationKey:    "ask-uuid-1",
+		ApplicationID:    appID1,
+		ResourcePerAlloc: askResource.ToProto(),
 	}
-	siAsk2 := &si.AllocationAsk{
-		AllocationKey: "ask-uuid-2",
-		ApplicationID: appID1,
-		ResourceAsk:   askResource.ToProto(),
+	siAsk2 := &si.Allocation{
+		AllocationKey:    "ask-uuid-2",
+		ApplicationID:    appID1,
+		ResourcePerAlloc: askResource.ToProto(),
 	}
-	siAsk3 := &si.AllocationAsk{
-		AllocationKey: "ask-uuid-3",
-		ApplicationID: appID2,
-		ResourceAsk:   askResource.ToProto(),
+	siAsk3 := &si.Allocation{
+		AllocationKey:    "ask-uuid-3",
+		ApplicationID:    appID2,
+		ResourcePerAlloc: askResource.ToProto(),
 	}
-	err = partition.addAllocationAsk(siAsk1)
+	askCreated, _, err := partition.UpdateAllocation(objects.NewAllocationFromSI(siAsk1))
 	assert.NilError(t, err)
-	err = partition.addAllocationAsk(siAsk2)
+	assert.Check(t, askCreated)
+	askCreated, _, err = partition.UpdateAllocation(objects.NewAllocationFromSI(siAsk2))
 	assert.NilError(t, err)
-	err = partition.addAllocationAsk(siAsk3)
+	assert.Check(t, askCreated)
+	askCreated, _, err = partition.UpdateAllocation(objects.NewAllocationFromSI(siAsk3))
 	assert.NilError(t, err)
+	assert.Check(t, askCreated)
 
 	// mark asks as attempted
 	expectedTotal := resources.NewResourceFromMap(map[string]resources.Quantity{

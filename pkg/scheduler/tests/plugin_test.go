@@ -89,10 +89,10 @@ partitions:
 
 	// now submit a request, that uses 8/10 memory from the node
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 8},
 					},
@@ -113,10 +113,10 @@ partitions:
 	//  - queue has plenty of resources
 	// we expect the plugin to be called to trigger an update
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 5},
 					},

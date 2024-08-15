@@ -451,7 +451,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
-		sa.notifyRMAllocationAskReleased(sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
+		sa.notifyRMAllocationReleased(sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
 		sa.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
 		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
 		sa.notifyRMAllocationReleased(sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
@@ -1982,30 +1982,6 @@ func (sa *Application) notifyRMAllocationReleased(released []*Allocation, termin
 	} else {
 		log.Log(log.SchedApplication).Info("failed to sync shim on released allocations")
 	}
-}
-
-// notifyRMAllocationAskReleased send an ask release event to the RM to if the event handler is configured
-// and at least one ask has been released.
-// No locking must be called while holding the lock
-func (sa *Application) notifyRMAllocationAskReleased(released []*Allocation, terminationType si.TerminationType, message string) {
-	// only generate event if needed
-	if len(released) == 0 || sa.rmEventHandler == nil {
-		return
-	}
-	releaseEvent := &rmevent.RMReleaseAllocationAskEvent{
-		ReleasedAllocationAsks: make([]*si.AllocationAskRelease, 0),
-		RmID:                   sa.rmID,
-	}
-	for _, alloc := range released {
-		releaseEvent.ReleasedAllocationAsks = append(releaseEvent.ReleasedAllocationAsks, &si.AllocationAskRelease{
-			ApplicationID:   alloc.GetApplicationID(),
-			PartitionName:   common.GetPartitionNameWithoutClusterID(sa.Partition),
-			AllocationKey:   alloc.GetAllocationKey(),
-			TerminationType: terminationType,
-			Message:         message,
-		})
-	}
-	sa.rmEventHandler.HandleEvent(releaseEvent)
 }
 
 func (sa *Application) IsAllocationAssignedToApp(alloc *Allocation) bool {

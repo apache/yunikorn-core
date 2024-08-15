@@ -30,17 +30,17 @@ import (
 
 func createAllocationAsk(allocationKey string, app string, allowPreemption bool, isOriginator bool, priority int32, res *resources.Resource) *Allocation {
 	tags := map[string]string{}
-	siAsk := &si.AllocationAsk{
+	siAsk := &si.Allocation{
 		AllocationKey:    allocationKey,
 		ApplicationID:    app,
 		PartitionName:    "default",
 		Priority:         priority,
-		ResourceAsk:      res.ToProto(),
+		ResourcePerAlloc: res.ToProto(),
 		Originator:       isOriginator,
 		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: allowPreemption, AllowPreemptOther: true},
-		Tags:             tags,
+		AllocationTags:   tags,
 	}
-	ask := NewAllocationAskFromSI(siAsk)
+	ask := NewAllocationFromSI(siAsk)
 	return ask
 }
 

@@ -126,10 +126,10 @@ func TestSchedulerRecovery(t *testing.T) {
 	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-0",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -139,7 +139,7 @@ func TestSchedulerRecovery(t *testing.T) {
 			},
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -182,12 +182,12 @@ func TestSchedulerRecovery(t *testing.T) {
 		[]string{"node-1:1234", "node-2:1234"}, 20, 1000)
 
 	// ask for 4 more allocations
-	asks := make([]*si.AllocationAsk, 4)
+	asks := make([]*si.Allocation, 4)
 	mem := [4]int64{50, 100, 50, 100}
 	for i := 0; i < 4; i++ {
-		asks[i] = &si.AllocationAsk{
+		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i+2),
-			ResourceAsk: &si.Resource{
+			ResourcePerAlloc: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: mem[i]},
 					"vcore":  {Value: 5},
@@ -197,8 +197,8 @@ func TestSchedulerRecovery(t *testing.T) {
 		}
 	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: asks,
-		RmID: "rm:123",
+		Allocations: asks,
+		RmID:        "rm:123",
 	})
 
 	assert.NilError(t, err, "UpdateRequest further alloc on existing app failed")
@@ -389,10 +389,10 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -402,7 +402,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 			},
 			{
 				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -823,10 +823,10 @@ partitions:
 	assert.Assert(t, appQueue != nil, "application queue was not created")
 
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -836,7 +836,7 @@ partitions:
 			},
 			{
 				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -1047,10 +1047,10 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 
 	// Add a new placeholder ask with a different task group
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "ph-alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -1068,10 +1068,10 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 
 	// Add two real asks
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "real-alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -1082,7 +1082,7 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 			},
 			{
 				AllocationKey: "real-alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},
@@ -1146,9 +1146,12 @@ func TestPlaceholderRecovery(t *testing.T) { //nolint:funlen
 
 func registerAllocations(partition *scheduler.PartitionContext, allocs []*si.Allocation) error {
 	for _, alloc := range allocs {
-		err := partition.AddAllocation(objects.NewAllocationFromSI(alloc))
+		_, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(alloc))
 		if err != nil {
 			return err
+		}
+		if !allocCreated {
+			return fmt.Errorf("no alloc created")
 		}
 	}
 	return nil

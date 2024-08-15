@@ -147,17 +147,17 @@ func (m *mockScheduler) removeApp(appID, partition string) error {
 }
 
 func (m *mockScheduler) addAppRequest(appID, allocKeyPrefix string, resource *si.Resource, repeat int) error {
-	asks := make([]*si.AllocationAsk, repeat)
+	asks := make([]*si.Allocation, repeat)
 	for i := 0; i < repeat; i++ {
-		asks[i] = &si.AllocationAsk{
-			AllocationKey: fmt.Sprintf("%s-%d", allocKeyPrefix, i),
-			ApplicationID: appID,
-			ResourceAsk:   resource,
+		asks[i] = &si.Allocation{
+			AllocationKey:    fmt.Sprintf("%s-%d", allocKeyPrefix, i),
+			ApplicationID:    appID,
+			ResourcePerAlloc: resource,
 		}
 	}
 	return m.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: asks,
-		RmID: m.rmID,
+		Allocations: asks,
+		RmID:        m.rmID,
 	})
 }
 
@@ -168,21 +168,6 @@ func (m *mockScheduler) releaseAllocRequest(appID, allocationKey string) error {
 				{
 					ApplicationID: appID,
 					AllocationKey: allocationKey,
-					PartitionName: m.partitionName,
-				},
-			},
-		},
-		RmID: m.rmID,
-	})
-}
-
-func (m *mockScheduler) releaseAskRequest(appID, allocKey string) error {
-	return m.proxy.UpdateAllocation(&si.AllocationRequest{
-		Releases: &si.AllocationReleasesRequest{
-			AllocationAsksToRelease: []*si.AllocationAskRelease{
-				{
-					ApplicationID: appID,
-					AllocationKey: allocKey,
 					PartitionName: m.partitionName,
 				},
 			},

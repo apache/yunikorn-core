@@ -1426,14 +1426,14 @@ func TestReplaceAllocationTracking(t *testing.T) {
 }
 
 func TestTimeoutPlaceholderSoftStyle(t *testing.T) {
-	runTimeoutPlaceholderTest(t, Resuming.String(), Soft)
+	runTimeoutPlaceholderTest(t, Resuming.String(), Soft, []int{1, 2})
 }
 
 func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
-	runTimeoutPlaceholderTest(t, Failing.String(), Hard)
+	runTimeoutPlaceholderTest(t, Failing.String(), Hard, []int{1, 2})
 }
 
-func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
+func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string, expectedReleases []int) {
 	setupUGM()
 	// create a fake queue
 	queue, err := createRootQueue(nil)
@@ -1487,14 +1487,12 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 	events := testHandler.GetEvents()
 	var found int
+	idx := 0
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
-			assert.Equal(t, len(allocRelease.ReleasedAllocations), 2, "two allocations should have been released")
+			assert.Equal(t, len(allocRelease.ReleasedAllocations), expectedReleases[idx], "wrong number of allocations released")
 			found++
-		}
-		if askRelease, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
-			assert.Equal(t, len(askRelease.ReleasedAllocationAsks), 1, "one allocation ask should have been released")
-			found++
+			idx++
 		}
 	}
 	// check if the Replaced of PlaceHolderData is 0
@@ -1568,9 +1566,6 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 			assert.Equal(t, allocRelease.ReleasedAllocations[0].AllocationKey, ph.allocationKey, "wrong placeholder allocation released on timeout")
 			found = true
 		}
-		if _, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
-			t.Fatal("unexpected release allocation ask event found in list of events")
-		}
 	}
 	assert.Assert(t, found, "release allocation event not found in list")
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "Unexpected allocated resources for the app")
@@ -1618,9 +1613,6 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
 			assert.Equal(t, len(allocRelease.ReleasedAllocations), 1, "one allocation should have been released")
 			found = true
-		}
-		if _, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
-			t.Fatal("unexpected release allocation ask event found in list of events")
 		}
 	}
 	assert.Assert(t, found, "release allocation event not found in list")

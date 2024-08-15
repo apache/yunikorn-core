@@ -39,12 +39,12 @@ const past = 1640995200 // 2022-1-1 00:00:00
 
 func TestNewAsk(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	siAsk := &si.AllocationAsk{
-		AllocationKey: "ask-1",
-		ApplicationID: "app-1",
-		ResourceAsk:   res.ToProto(),
+	siAsk := &si.Allocation{
+		AllocationKey:    "ask-1",
+		ApplicationID:    "app-1",
+		ResourcePerAlloc: res.ToProto(),
 	}
-	ask := NewAllocationAskFromSI(siAsk)
+	ask := NewAllocationFromSI(siAsk)
 	if ask == nil {
 		t.Fatal("NewAllocationAskFromSI create failed while it should not")
 	}
@@ -80,14 +80,14 @@ func TestGetCreateTime(t *testing.T) {
 }
 
 func TestPreemptionPolicy(t *testing.T) {
-	ask1 := NewAllocationAskFromSI(&si.AllocationAsk{
+	ask1 := NewAllocationFromSI(&si.Allocation{
 		AllocationKey:    "allow-self-deny-other",
 		ApplicationID:    "allow-self-deny-other",
 		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: true, AllowPreemptOther: false}})
 	assert.Check(t, ask1.IsAllowPreemptSelf(), "preempt self not allowed")
 	assert.Check(t, !ask1.IsAllowPreemptOther(), "preempt other allowed")
 
-	ask2 := NewAllocationAskFromSI(&si.AllocationAsk{
+	ask2 := NewAllocationFromSI(&si.Allocation{
 		AllocationKey:    "deny-self-allow-other",
 		ApplicationID:    "deny-self-allow-other",
 		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: false, AllowPreemptOther: true}})
@@ -96,12 +96,12 @@ func TestPreemptionPolicy(t *testing.T) {
 }
 
 func TestPreemptCheckTime(t *testing.T) {
-	siAsk := &si.AllocationAsk{
+	siAsk := &si.Allocation{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
 		PartitionName: "default",
 	}
-	ask := NewAllocationAskFromSI(siAsk)
+	ask := NewAllocationFromSI(siAsk)
 	assert.Equal(t, ask.GetPreemptCheckTime(), time.Time{}, "preemptCheckTime was not default")
 
 	now := time.Now().Add(-1 * time.Second)
@@ -110,28 +110,28 @@ func TestPreemptCheckTime(t *testing.T) {
 }
 
 func TestPlaceHolder(t *testing.T) {
-	siAsk := &si.AllocationAsk{
+	siAsk := &si.Allocation{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
 		PartitionName: "default",
 	}
-	ask := NewAllocationAskFromSI(siAsk)
+	ask := NewAllocationFromSI(siAsk)
 	assert.Assert(t, !ask.IsPlaceholder(), "standard ask should not be a placeholder")
 	assert.Equal(t, ask.GetTaskGroup(), "", "standard ask should not have a TaskGroupName")
 
-	siAsk = &si.AllocationAsk{
+	siAsk = &si.Allocation{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
 		PartitionName: "default",
 		TaskGroupName: "",
 		Placeholder:   true,
 	}
-	ask = NewAllocationAskFromSI(siAsk)
+	ask = NewAllocationFromSI(siAsk)
 	var nilAsk *Allocation
 	assert.Equal(t, ask, nilAsk, "placeholder ask created without a TaskGroupName")
 
 	siAsk.TaskGroupName = "TestPlaceHolder"
-	ask = NewAllocationAskFromSI(siAsk)
+	ask = NewAllocationFromSI(siAsk)
 	assert.Assert(t, ask != nilAsk, "placeholder ask creation failed unexpectedly")
 	assert.Assert(t, ask.IsPlaceholder(), "ask should have been a placeholder")
 	assert.Equal(t, ask.GetTaskGroup(), siAsk.TaskGroupName, "TaskGroupName not set as expected")
@@ -140,34 +140,34 @@ func TestPlaceHolder(t *testing.T) {
 func TestGetRequiredNode(t *testing.T) {
 	tag := make(map[string]string)
 	// unset case
-	siAsk := &si.AllocationAsk{
-		AllocationKey: "ask1",
-		ApplicationID: "app1",
-		PartitionName: "default",
-		Tags:          tag,
+	siAsk := &si.Allocation{
+		AllocationKey:  "ask1",
+		ApplicationID:  "app1",
+		PartitionName:  "default",
+		AllocationTags: tag,
 	}
-	ask := NewAllocationAskFromSI(siAsk)
+	ask := NewAllocationFromSI(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "", "required node is empty as expected")
 	// set case
 	tag[siCommon.DomainYuniKorn+siCommon.KeyRequiredNode] = "NodeName"
-	siAsk = &si.AllocationAsk{
-		AllocationKey: "ask1",
-		ApplicationID: "app1",
-		PartitionName: "default",
-		Tags:          tag,
+	siAsk = &si.Allocation{
+		AllocationKey:  "ask1",
+		ApplicationID:  "app1",
+		PartitionName:  "default",
+		AllocationTags: tag,
 	}
-	ask = NewAllocationAskFromSI(siAsk)
+	ask = NewAllocationFromSI(siAsk)
 	assert.Equal(t, ask.GetRequiredNode(), "NodeName", "required node should be NodeName")
 }
 
 func TestAllocationLog(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	siAsk := &si.AllocationAsk{
-		AllocationKey: "ask-1",
-		ApplicationID: "app-1",
-		ResourceAsk:   res.ToProto(),
+	siAsk := &si.Allocation{
+		AllocationKey:    "ask-1",
+		ApplicationID:    "app-1",
+		ResourcePerAlloc: res.ToProto(),
 	}
-	ask := NewAllocationAskFromSI(siAsk)
+	ask := NewAllocationFromSI(siAsk)
 
 	// log a reservation event
 	ask.LogAllocationFailure("reserve1", false)
@@ -202,12 +202,12 @@ func TestAllocationLog(t *testing.T) {
 
 func TestSendPredicateFailed(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	siAsk := &si.AllocationAsk{
-		AllocationKey: "ask-1",
-		ApplicationID: "app-1",
-		ResourceAsk:   res.ToProto(),
+	siAsk := &si.Allocation{
+		AllocationKey:    "ask-1",
+		ApplicationID:    "app-1",
+		ResourcePerAlloc: res.ToProto(),
 	}
-	ask := NewAllocationAskFromSI(siAsk)
+	ask := NewAllocationFromSI(siAsk)
 	eventSystem := mock.NewEventSystemDisabled()
 	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
 	ask.SendPredicatesFailedEvent(map[string]int{})
@@ -224,13 +224,13 @@ func TestSendPredicateFailed(t *testing.T) {
 }
 
 func TestCreateTime(t *testing.T) {
-	siAsk := &si.AllocationAsk{
+	siAsk := &si.Allocation{
 		AllocationKey: "ask1",
 		ApplicationID: "app1",
 		PartitionName: "default",
 	}
-	siAsk.Tags = map[string]string{siCommon.CreationTime: "1622530800"}
-	ask := NewAllocationAskFromSI(siAsk)
+	siAsk.AllocationTags = map[string]string{siCommon.CreationTime: "1622530800"}
+	ask := NewAllocationFromSI(siAsk)
 	assert.Equal(t, ask.GetTag(siCommon.CreationTime), "1622530800")
 	assert.Equal(t, ask.GetTag("unknown"), "")
 	assert.Equal(t, ask.GetCreateTime(), time.Unix(1622530800, 0))

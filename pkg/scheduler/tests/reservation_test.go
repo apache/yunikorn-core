@@ -413,7 +413,7 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	// delete pending asks
 	for _, ask := range app.GetReservations() {
 		askID := ask[strings.Index(ask, "|")+1:]
-		err = ms.releaseAskRequest(appID1, askID)
+		err = ms.releaseAllocRequest(appID1, askID)
 		assert.NilError(t, err, "ask release update failed")
 	}
 	// delete existing allocations

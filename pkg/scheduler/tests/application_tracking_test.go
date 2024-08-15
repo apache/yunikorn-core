@@ -111,10 +111,10 @@ func TestApplicationHistoryTracking(t *testing.T) {
 
 	// Add allocation ask & check events
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -166,7 +166,7 @@ func TestApplicationHistoryTracking(t *testing.T) {
 
 	eventsDao, err = client.GetBatchEvents()
 	assert.NilError(t, err)
-	assert.Equal(t, 17, len(eventsDao.EventRecords), "number of events generated")
+	assert.Equal(t, 18, len(eventsDao.EventRecords), "number of events generated")
 	verifyAllocationCancelledEvents(t, eventsDao.EventRecords[13:])
 	events, _ = getEventsFromStream(t, false, stream, 4)
 	assert.NilError(t, err)

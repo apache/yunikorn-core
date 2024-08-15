@@ -83,62 +83,7 @@ type AllocationLogEntry struct {
 	Count          int32
 }
 
-// NewAllocationAsk creates an Allocation which is not yet satisfied.
-// Visible by tests
-func NewAllocationAsk(allocationKey string, applicationID string, allocatedResource *resources.Resource) *Allocation {
-	return &Allocation{
-		allocationKey:     allocationKey,
-		applicationID:     applicationID,
-		allocatedResource: allocatedResource,
-		allocLog:          make(map[string]*AllocationLogEntry),
-		resKeyPerNode:     make(map[string]string),
-		resKeyWithoutNode: reservationKeyWithoutNode(applicationID, allocationKey),
-		askEvents:         schedEvt.NewAskEvents(events.GetEventSystem()),
-	}
-}
-
-// NewAllocationAskFromSI creates an Allocation which is not yet satisfied, populating it from an SI AllocationAsk.
-// If the incoming ask is invalid, nil is returned.
-func NewAllocationAskFromSI(ask *si.AllocationAsk) *Allocation {
-	var createTime time.Time
-	siCreationTime, err := strconv.ParseInt(ask.Tags[siCommon.CreationTime], 10, 64)
-	if err != nil {
-		log.Log(log.SchedAllocation).Debug("CreationTime is not set on the Allocation object or invalid",
-			zap.String("creationTime", ask.Tags[siCommon.CreationTime]))
-		createTime = time.Now()
-	} else {
-		createTime = time.Unix(siCreationTime, 0)
-	}
-
-	a := &Allocation{
-		allocationKey:     ask.AllocationKey,
-		applicationID:     ask.ApplicationID,
-		allocatedResource: resources.NewResourceFromProto(ask.ResourceAsk),
-		tags:              CloneAllocationTags(ask.Tags),
-		createTime:        createTime,
-		priority:          ask.Priority,
-		placeholder:       ask.Placeholder,
-		taskGroupName:     ask.TaskGroupName,
-		requiredNode:      common.GetRequiredNodeFromTag(ask.Tags),
-		allowPreemptSelf:  common.IsAllowPreemptSelf(ask.PreemptionPolicy),
-		allowPreemptOther: common.IsAllowPreemptOther(ask.PreemptionPolicy),
-		originator:        ask.Originator,
-		allocLog:          make(map[string]*AllocationLogEntry),
-		resKeyPerNode:     make(map[string]string),
-		resKeyWithoutNode: reservationKeyWithoutNode(ask.ApplicationID, ask.AllocationKey),
-		askEvents:         schedEvt.NewAskEvents(events.GetEventSystem()),
-	}
-	// this is a safety check placeholder and task group name must be set as a combo
-	// order is important as task group can be set without placeholder but not the other way around
-	if a.placeholder && a.taskGroupName == "" {
-		log.Log(log.SchedAllocation).Debug("ask cannot be a placeholder without a TaskGroupName",
-			zap.Stringer("SI ask", ask))
-		return nil
-	}
-	return a
-}
-
-// NewAllocatoinFromSI Create a new Allocation which has already been placed on a node, populating it with info from
+// NewAllocationFromSI Create a new Allocation which has already been placed on a node, populating it with info from
 // the SI Allocation object. If the input object is invalid, nil is returned.
 func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	if alloc == nil {
@@ -162,6 +107,15 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		createTime = time.Unix(siCreationTime, 0)
 	}
 
+	var allocated bool
+	var nodeID string
+	var bindTime time.Time
+	if alloc.NodeID != "" {
+		allocated = true
+		nodeID = alloc.NodeID
+		bindTime = time.Now()
+	}
+
 	return &Allocation{
 		allocationKey:     alloc.AllocationKey,
 		applicationID:     alloc.ApplicationID,
@@ -179,9 +133,9 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		resKeyPerNode:     make(map[string]string),
 		resKeyWithoutNode: reservationKeyWithoutNode(alloc.ApplicationID, alloc.AllocationKey),
 		askEvents:         schedEvt.NewAskEvents(events.GetEventSystem()),
-		allocated:         true,
-		bindTime:          time.Now(),
-		nodeID:            alloc.NodeID,
+		allocated:         allocated,
+		nodeID:            nodeID,
+		bindTime:          bindTime,
 	}
 }
 

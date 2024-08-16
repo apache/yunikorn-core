@@ -213,7 +213,6 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 //nolint:funlen
 func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, potentialVictims []*Allocation) (int, []*Allocation) {
 	nodeCurrentAvailable := nodeAvailable.Clone()
-	allocationsByQueueSnap := p.duplicateQueueSnapshots()
 
 	// Initial check: Will allocation fit on node without preemption? This is possible if preemption was triggered due
 	// to queue limits and not node resource limits.
@@ -222,6 +221,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 		return -1, make([]*Allocation, 0)
 	}
 
+	allocationsByQueueSnap := p.duplicateQueueSnapshots()
 	// get the current queue snapshot
 	askQueue, ok := allocationsByQueueSnap[p.queuePath]
 	if !ok {

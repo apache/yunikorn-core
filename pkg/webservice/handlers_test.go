@@ -1407,18 +1407,24 @@ func TestGetPartitionNode(t *testing.T) {
 	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
 	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 500})
 	alloc1 := newAlloc("alloc-1", appID, node1ID, resAlloc1)
-	allocs := []*objects.Allocation{alloc1}
 	err = partition.AddNode(node1)
 	assert.NilError(t, err, "add node to partition should not have failed")
-	_, allocCreated, err := partition.UpdateAllocation(allocs[0])
+	_, allocCreated, err := partition.UpdateAllocation(alloc1)
 	assert.NilError(t, err, "add alloc-1 should not have failed")
+	assert.Check(t, allocCreated)
+	falloc1 := newForeignAlloc("foreign-1", "", node1ID, resAlloc1, siCommon.AllocTypeDefault, 0)
+	_, allocCreated, err = partition.UpdateAllocation(falloc1)
+	assert.NilError(t, err, "add falloc-1 should not have failed")
+	assert.Check(t, allocCreated)
+	falloc2 := newForeignAlloc("foreign-2", "", node1ID, resAlloc2, siCommon.AllocTypeStatic, 123)
+	_, allocCreated, err = partition.UpdateAllocation(falloc2)
+	assert.NilError(t, err, "add falloc-2 should not have failed")
 	assert.Check(t, allocCreated)
 
 	alloc2 := newAlloc("alloc-2", appID, node2ID, resAlloc2)
-	allocs = []*objects.Allocation{alloc2}
 	err = partition.AddNode(node2)
 	assert.NilError(t, err, "add node to partition should not have failed")
-	_, allocCreated, err = partition.UpdateAllocation(allocs[0])
+	_, allocCreated, err = partition.UpdateAllocation(alloc2)
 	assert.NilError(t, err, "add alloc-2 should not have failed")
 	assert.Check(t, allocCreated)
 
@@ -1434,6 +1440,14 @@ func TestGetPartitionNode(t *testing.T) {
 	err = json.Unmarshal(resp.outputBytes, &nodeInfo)
 	assert.NilError(t, err, unmarshalError)
 	assertNodeInfo(t, &nodeInfo, node1ID, "alloc-1", attributesOfnode1, map[string]int64{"memory": 50, "vcore": 30})
+	assert.Equal(t, 2, len(nodeInfo.ForeignAllocations))
+	if nodeInfo.ForeignAllocations[0].AllocationKey == "foreign-1" {
+		assertForeignAllocation(t, "foreign-1", "0", node1ID, resAlloc1, true, nodeInfo.ForeignAllocations[0])
+		assertForeignAllocation(t, "foreign-2", "123", node1ID, resAlloc2, false, nodeInfo.ForeignAllocations[1])
+	} else {
+		assertForeignAllocation(t, "foreign-1", "0", node1ID, resAlloc1, true, nodeInfo.ForeignAllocations[1])
+		assertForeignAllocation(t, "foreign-2", "123", node1ID, resAlloc2, false, nodeInfo.ForeignAllocations[0])
+	}
 
 	// Test node id is missing
 	req, err = createRequest(t, "/ws/v1/partition/default/node/node_1", map[string]string{"partition": "default", "node": ""})
@@ -1462,6 +1476,20 @@ func assertNodeInfo(t *testing.T, node *dao.NodeDAOInfo, expectedID string, expe
 	assert.Equal(t, expectedAllocationKey, node.Allocations[0].AllocationKey)
 	assert.DeepEqual(t, expectedAttibute, node.Attributes)
 	assert.DeepEqual(t, expectedUtilized, node.Utilized)
+}
+
+func assertForeignAllocation(t *testing.T, key, priority, nodeID string, expectedRes *resources.Resource, preemptable bool, info *dao.ForeignAllocationDAOInfo) {
+	t.Helper()
+	assert.Equal(t, key, info.AllocationKey)
+	assert.Equal(t, priority, info.Priority)
+	assert.Equal(t, nodeID, info.NodeID)
+	resMap := make(map[string]resources.Quantity)
+	for k, v := range info.ResourcePerAlloc {
+		resMap[k] = resources.Quantity(v)
+	}
+	resFromInfo := resources.NewResourceFromMap(resMap)
+	assert.Assert(t, resources.Equals(resFromInfo, expectedRes))
+	assert.Equal(t, preemptable, info.Preemptable)
 }
 
 // addApp Add app to the given partition and assert the app count, state etc
@@ -2989,5 +3017,17 @@ func newAlloc(allocationKey string, appID string, nodeID string, resAlloc *resou
 		ApplicationID:    appID,
 		NodeID:           nodeID,
 		ResourcePerAlloc: resAlloc.ToProto(),
+	})
+}
+
+func newForeignAlloc(allocationKey string, appID string, nodeID string, resAlloc *resources.Resource, fType string, priority int32) *objects.Allocation {
+	return objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    allocationKey,
+		NodeID:           nodeID,
+		ResourcePerAlloc: resAlloc.ToProto(),
+		AllocationTags: map[string]string{
+			siCommon.Foreign: fType,
+		},
+		Priority: priority,
 	})
 }

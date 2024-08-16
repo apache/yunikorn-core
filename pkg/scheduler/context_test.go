@@ -37,9 +37,10 @@ import (
 const pName = "default"
 
 type mockEventHandler struct {
-	eventHandled  bool
-	rejectedNodes []*si.RejectedNode
-	acceptedNodes []*si.AcceptedNode
+	eventHandled    bool
+	rejectedNodes   []*si.RejectedNode
+	acceptedNodes   []*si.AcceptedNode
+	newAllocHandler func(*rmevent.RMNewAllocationsEvent)
 }
 
 func newMockEventHandler() *mockEventHandler {
@@ -56,6 +57,10 @@ func (m *mockEventHandler) HandleEvent(ev interface{}) {
 		m.rejectedNodes = append(m.rejectedNodes, nodeEvent.RejectedNodes...)
 		m.acceptedNodes = append(m.acceptedNodes, nodeEvent.AcceptedNodes...)
 	}
+
+	if allocEvent, ok := ev.(*rmevent.RMNewAllocationsEvent); ok && m.newAllocHandler != nil {
+		m.newAllocHandler(allocEvent)
+	}
 }
 
 func createTestContext(t *testing.T, partitionName string) *ClusterContext {
@@ -71,7 +76,13 @@ func createTestContext(t *testing.T, partitionName string) *ClusterContext {
 				Name:      "root",
 				Parent:    true,
 				SubmitACL: "*",
-				Queues:    nil,
+				Queues: []configs.QueueConfig{
+					{
+						Name:      "default",
+						Parent:    false,
+						SubmitACL: "*",
+					},
+				},
 			},
 		},
 	}
@@ -294,6 +305,87 @@ func TestContextDrainingNodeBackToSchedulableMetrics(t *testing.T) {
 	n = getNodeInfoForUpdatingNode(si.NodeInfo_DRAIN_TO_SCHEDULABLE)
 	context.updateNode(n)
 	verifyMetrics(t, 0, "draining")
+}
+
+func TestContext_OnAllocationNotification(t *testing.T) {
+	context := createTestContext(t, pName)
+	eventHandler := context.rmEventHandler.(*mockEventHandler) //nolint:errcheck
+	var lastAllocEvent *rmevent.RMNewAllocationsEvent
+	eventHandler.newAllocHandler = func(event *rmevent.RMNewAllocationsEvent) {
+		lastAllocEvent = event
+		go func() {
+			event.Channel <- &rmevent.Result{Succeeded: true}
+		}()
+	}
+
+	n := getNodeInfoForAddingNode()
+	err := context.addNode(n, true)
+	assert.NilError(t, err, "unexpected error returned from addNode")
+	partition := context.GetPartition(pName)
+	assert.Assert(t, partition != nil)
+	assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
+
+	// register application
+	appReq := &si.ApplicationRequest{
+		New: []*si.AddApplicationRequest{
+			{
+				QueueName:     defQueue,
+				PartitionName: pName,
+				Ugi: &si.UserGroupInformation{
+					User:   "testuser",
+					Groups: []string{"testgroup"},
+				},
+				ApplicationID: appID1,
+			},
+		},
+		RmID: "rm:123",
+	}
+	context.handleRMUpdateApplicationEvent(&rmevent.RMUpdateApplicationEvent{Request: appReq})
+
+	// add a Yunikorn allocation
+	allocReq := &si.AllocationRequest{
+		Allocations: []*si.Allocation{
+			{
+				AllocationKey: allocKey,
+				ResourcePerAlloc: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"first": {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+				NodeID:        "test-1",
+				PartitionName: pName,
+			},
+		},
+		RmID: "rm:123",
+	}
+	context.handleRMUpdateAllocationEvent(&rmevent.RMUpdateAllocationEvent{Request: allocReq})
+	assert.Assert(t, lastAllocEvent != nil)
+	assert.Equal(t, lastAllocEvent.Allocations[0].AllocationKey, allocKey)
+
+	// add a non-Yunikorn allocation
+	lastAllocEvent = nil
+	nonYkAllocReq := &si.AllocationRequest{
+		Allocations: []*si.Allocation{
+			{
+				AllocationKey: "foreign-alloc-1",
+				ResourcePerAlloc: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"first": {Value: 1},
+					},
+				},
+				AllocationTags: map[string]string{
+					siCommon.Foreign: siCommon.AllocTypeDefault,
+				},
+				NodeID:        "test-1",
+				PartitionName: pName,
+			},
+		},
+		RmID: "rm:123",
+	}
+
+	context.handleRMUpdateAllocationEvent(&rmevent.RMUpdateAllocationEvent{Request: nonYkAllocReq})
+	assert.Assert(t, lastAllocEvent == nil, "unexpected allocation event")
 }
 
 func getNodeInfoForAddingNode() *si.NodeInfo {

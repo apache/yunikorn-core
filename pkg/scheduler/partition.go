@@ -65,6 +65,7 @@ type PartitionContext struct {
 	reservations           int                             // number of reservations
 	placeholderAllocations int                             // number of placeholder allocations
 	preemptionEnabled      bool                            // whether preemption is enabled or not
+	foreignAllocs          map[string]string               // allocKey-nodeID assignment of non-Yunikorn allocations
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -94,6 +95,7 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		applications:          make(map[string]*objects.Application),
 		completedApplications: make(map[string]*objects.Application),
 		nodes:                 objects.NewNodeCollection(conf.Name),
+		foreignAllocs:         make(map[string]string),
 	}
 	pc.partitionManager = newPartitionManager(pc, cc)
 	if err := pc.initialPartitionFromConfig(conf); err != nil {
@@ -1131,11 +1133,16 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 	allocationKey := alloc.GetAllocationKey()
 	applicationID := alloc.GetApplicationID()
 	nodeID := alloc.GetNodeID()
+	node := pc.GetNode(alloc.GetNodeID())
 
 	log.Log(log.SchedPartition).Info("processing allocation",
 		zap.String("partitionName", pc.Name),
 		zap.String("appID", applicationID),
 		zap.String("allocationKey", allocationKey))
+
+	if alloc.IsForeign() {
+		return pc.handleForeignAllocation(allocationKey, applicationID, nodeID, node, alloc)
+	}
 
 	// find application
 	app := pc.getApplication(alloc.GetApplicationID())
@@ -1146,10 +1153,8 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 	queue := app.GetQueue()
 
 	// find node if one is specified
-	var node *objects.Node = nil
 	allocated := alloc.IsAllocated()
 	if allocated {
-		node = pc.GetNode(alloc.GetNodeID())
 		if node == nil {
 			metrics.GetSchedulerMetrics().IncSchedulingError()
 			return false, false, fmt.Errorf("failed to find node %s", nodeID)
@@ -1286,10 +1291,52 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 	return false, false, nil
 }
 
+func (pc *PartitionContext) handleForeignAllocation(allocationKey, applicationID, nodeID string, node *objects.Node, alloc *objects.Allocation) (requestCreated bool, allocCreated bool, err error) {
+	allocated := alloc.IsAllocated()
+	if !allocated {
+		return false, false, fmt.Errorf("trying to add a foreign request (non-allocation) %s", allocationKey)
+	}
+	if alloc.GetNodeID() == "" {
+		return false, false, fmt.Errorf("node ID is empty for allocation %s", allocationKey)
+	}
+	if node == nil {
+		return false, false, fmt.Errorf("failed to find node %s for allocation %s", nodeID, allocationKey)
+	}
+
+	existingNodeID := pc.getOrSetNodeIDForAlloc(allocationKey, nodeID)
+	if existingNodeID == "" {
+		log.Log(log.SchedPartition).Info("handling new foreign allocation",
+			zap.String("partitionName", pc.Name),
+			zap.String("nodeID", nodeID),
+			zap.String("allocationKey", allocationKey))
+		node.AddAllocation(alloc)
+		return false, true, nil
+	}
+
+	log.Log(log.SchedPartition).Info("handling foreign allocation update",
+		zap.String("partitionName", pc.Name),
+		zap.String("appID", applicationID),
+		zap.String("allocationKey", allocationKey))
+	// this is a placeholder for eventual resource updates; nothing to do yet
+	return false, false, nil
+}
+
 func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation, forced bool) (security.UserGroup, error) {
 	pc.RLock()
 	defer pc.RUnlock()
 	return pc.userGroupCache.ConvertUGI(ugi, forced)
+}
+
+// getOrSetNodeIDForAlloc returns the nodeID for a given foreign allocation, or sets is if it's unset
+func (pc *PartitionContext) getOrSetNodeIDForAlloc(allocKey, nodeID string) string {
+	pc.Lock()
+	defer pc.Unlock()
+	id := pc.foreignAllocs[allocKey]
+	if id != "" {
+		return id
+	}
+	pc.foreignAllocs[allocKey] = nodeID
+	return ""
 }
 
 // calculate overall nodes resource usage and returns a map as the result,
@@ -1373,6 +1420,10 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 	appID := release.ApplicationID
 	allocationKey := release.GetAllocationKey()
+	if appID == "" {
+		pc.removeForeignAllocation(allocationKey)
+		return nil, nil
+	}
 	app := pc.getApplication(appID)
 	// no app nothing to do everything should already be clean
 	if app == nil {
@@ -1494,6 +1545,28 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 
 	return released, confirmed
+}
+
+func (pc *PartitionContext) removeForeignAllocation(allocID string) {
+	nodeID := pc.foreignAllocs[allocID]
+	if nodeID == "" {
+		log.Log(log.SchedPartition).Warn("Tried to remove a non-existing foreign allocation",
+			zap.String("allocationID", allocID),
+			zap.String("nodeID", nodeID))
+		return
+	}
+	delete(pc.foreignAllocs, allocID)
+	node := pc.GetNode(nodeID)
+	if node == nil {
+		log.Log(log.SchedPartition).Warn("Node not found for foreign allocation",
+			zap.String("allocationID", allocID),
+			zap.String("nodeID", nodeID))
+		return
+	}
+	log.Log(log.SchedPartition).Info("Removing foreign allocation",
+		zap.String("allocationID", allocID),
+		zap.String("nodeID", nodeID))
+	node.RemoveAllocation(allocID)
 }
 
 func (pc *PartitionContext) GetCurrentState() string {

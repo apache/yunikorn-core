@@ -661,9 +661,6 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		if sr := nodeInfo.SchedulableResource; sr != nil {
 			partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
 		}
-		if or := nodeInfo.OccupiedResource; or != nil {
-			node.SetOccupiedResource(resources.NewResourceFromProto(or))
-		}
 	case si.NodeInfo_DRAIN_NODE:
 		if node.IsSchedulable() {
 			// set the state to not schedulable
@@ -759,7 +756,7 @@ func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
 			continue
 		}
 		// at some point, we may need to handle new requests as well
-		if newAlloc {
+		if newAlloc && !alloc.IsForeign() {
 			cc.notifyRMNewAllocation(request.RmID, alloc)
 		}
 	}

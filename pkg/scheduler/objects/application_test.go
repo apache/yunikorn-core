@@ -445,7 +445,7 @@ func TestAllocateDeallocate(t *testing.T) {
 	}
 	// deallocate again should fail
 	if delta, err := app.DeallocateAsk(aKey); err == nil || delta != nil {
-		t.Error("attempt to call Deallocate() twice should have failed")
+		t.Error("attempt to call deallocate() twice should have failed")
 	}
 }
 

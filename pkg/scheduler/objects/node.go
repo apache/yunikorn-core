@@ -73,7 +73,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 		reservations:      make(map[string]*reservation),
 		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
-		occupiedResource:  resources.NewResourceFromProto(proto.OccupiedResource),
+		occupiedResource:  resources.NewResource(),
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		listeners:         make([]NodeListener, 0),
@@ -243,6 +243,30 @@ func (sn *Node) GetAllAllocations() []*Allocation {
 	return arr
 }
 
+func (sn *Node) GetAllocations() []*Allocation {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.getAllocations(false)
+}
+
+// Get a copy of the allocations on this node
+func (sn *Node) GetForeignAllocations() []*Allocation {
+	sn.RLock()
+	defer sn.RUnlock()
+	return sn.getAllocations(true)
+}
+
+func (sn *Node) getAllocations(foreign bool) []*Allocation {
+	arr := make([]*Allocation, 0)
+	for _, v := range sn.allocations {
+		if (v.IsForeign() && foreign) || (!v.IsForeign() && !foreign) {
+			arr = append(arr, v)
+		}
+	}
+
+	return arr
+}
+
 // Set the node to unschedulable.
 // This will cause the node to be skipped during the scheduling cycle.
 // Visible for testing only
@@ -312,15 +336,24 @@ func (sn *Node) FitInNode(resRequest *resources.Resource) bool {
 // is found the Allocation removed is returned. Used resources will decrease available
 // will increase as per the allocation removed.
 func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
-	defer sn.notifyListeners()
+	var alloc *Allocation
+	defer func() {
+		if alloc != nil && !alloc.IsForeign() {
+			sn.notifyListeners()
+		}
+	}()
 	sn.Lock()
 	defer sn.Unlock()
 
-	alloc := sn.allocations[allocationKey]
+	alloc = sn.allocations[allocationKey]
 	if alloc != nil {
 		delete(sn.allocations, allocationKey)
-		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
-		sn.allocatedResource.Prune()
+		if alloc.IsForeign() {
+			sn.occupiedResource = resources.Sub(sn.occupiedResource, alloc.GetAllocatedResource())
+		} else {
+			sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
+			sn.allocatedResource.Prune()
+		}
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.GetAllocatedResource())
 		return alloc
@@ -348,20 +381,26 @@ func (sn *Node) addAllocationInternal(alloc *Allocation, force bool) bool {
 		return false
 	}
 	result := false
+	foreign := alloc.IsForeign()
 	defer func() {
 		// check result to ensure we don't notify listeners unnecessarily
-		if result {
+		if result && !foreign {
 			sn.notifyListeners()
 		}
 	}()
 
 	sn.Lock()
 	defer sn.Unlock()
+	if foreign {
+		sn.occupiedResource = resources.Add(sn.occupiedResource, alloc.GetAllocatedResource())
+	}
 	// check if this still fits: it might have changed since pre-check
 	res := alloc.GetAllocatedResource()
 	if force || sn.availableResource.FitIn(res) {
 		sn.allocations[alloc.GetAllocationKey()] = alloc
-		sn.allocatedResource.AddTo(res)
+		if !foreign {
+			sn.allocatedResource.AddTo(res)
+		}
 		sn.availableResource.SubFrom(res)
 		sn.availableResource.Prune()
 		sn.nodeEvents.SendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)

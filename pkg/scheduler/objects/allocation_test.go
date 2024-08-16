@@ -466,3 +466,35 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, !alloc.IsAllowPreemptSelf(), "alloc should not have allow-preempt-self set")
 	assert.Assert(t, !alloc.IsAllowPreemptOther(), "alloc should not have allow-preempt-other set")
 }
+
+func TestNewForeignAllocFromSI(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"first": 1,
+	})
+	siAlloc := &si.Allocation{
+		AllocationKey:    "foreign-1",
+		NodeID:           "node-1",
+		ResourcePerAlloc: res.ToProto(),
+		TaskGroupName:    "",
+		AllocationTags: map[string]string{
+			"foreign": "default",
+		},
+	}
+
+	alloc := NewAllocationFromSI(siAlloc)
+	assert.Assert(t, alloc.IsPreemptable())
+	assert.Assert(t, alloc.IsForeign())
+	assert.Equal(t, "foreign-1", alloc.GetAllocationKey())
+	assert.Equal(t, "node-1", alloc.GetNodeID())
+	assert.Assert(t, resources.Equals(res, alloc.GetAllocatedResource()))
+
+	// static allocation
+	siAlloc.AllocationTags["foreign"] = "static"
+	alloc = NewAllocationFromSI(siAlloc)
+	assert.Assert(t, !alloc.IsPreemptable())
+
+	// illegal value for foreign type
+	siAlloc.AllocationTags["foreign"] = "xyz"
+	alloc = NewAllocationFromSI(siAlloc)
+	assert.Assert(t, alloc.IsPreemptable())
+}

@@ -625,26 +625,23 @@ partitions:
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(100))
 
-	// update node capacity
-	err = ms.proxy.UpdateNode(&si.NodeRequest{
-		Nodes: []*si.NodeInfo{
+	// update node capacity - add foreign pod
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"memory": 80, "vcore": 5})
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Allocations: []*si.Allocation{
 			{
-				NodeID:     "node-1:1234",
-				Attributes: map[string]string{},
-				OccupiedResource: &si.Resource{
-					Resources: map[string]*si.Quantity{
-						"memory": {Value: 80},
-						"vcore":  {Value: 5},
-					},
+				AllocationKey:    "foreignpod-1",
+				ResourcePerAlloc: res.ToProto(),
+				AllocationTags: map[string]string{
+					"foreign": "true",
 				},
-				Action: si.NodeInfo_UPDATE,
+				NodeID: "node-1:1234",
 			},
 		},
 		RmID: "rm:123",
 	})
-
 	assert.NilError(t, err, "NodeRequest failed")
-
 	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
 		[]string{"node-1:1234"}, 20, 1000)
 	assert.Equal(t, int64(node1.GetCapacity().Resources[common.Memory]), int64(100))
@@ -653,4 +650,25 @@ partitions:
 	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[common.CPU]), int64(5))
 	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
 	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(20))
+
+	// update node capacity - remove foreign pod
+	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+		Releases: &si.AllocationReleasesRequest{
+			AllocationsToRelease: []*si.AllocationRelease{
+				{
+					AllocationKey: "foreignpod-1",
+				},
+			},
+		},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err)
+	waitForAvailableNodeResource(t, ms.scheduler.GetClusterContext(), "[rm:123]default",
+		[]string{"node-1:1234"}, 100, 1000)
+	assert.Equal(t, int64(node1.GetCapacity().Resources[common.Memory]), int64(100))
+	assert.Equal(t, int64(node1.GetCapacity().Resources[common.CPU]), int64(10))
+	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[common.Memory]), int64(0))
+	assert.Equal(t, int64(node1.GetOccupiedResource().Resources[common.CPU]), int64(0))
+	assert.Equal(t, int64(schedulingNode1.GetAllocatedResource().Resources[common.Memory]), int64(0))
+	assert.Equal(t, int64(schedulingNode1.GetAvailableResource().Resources[common.Memory]), int64(100))
 }

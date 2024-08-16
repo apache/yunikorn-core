@@ -49,6 +49,8 @@ type Allocation struct {
 	originator        bool
 	tags              map[string]string
 	resKeyWithoutNode string // the reservation key without node
+	foreign           bool
+	preemptable       bool
 
 	// Mutable fields which need protection
 	allocated            bool
@@ -106,6 +108,19 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		createTime = time.Unix(siCreationTime, 0)
 	}
 
+	foreign := false
+	preemptable := true
+	if foreignType, ok := alloc.AllocationTags["foreign"]; ok {
+		foreign = true
+		switch foreignType {
+		case "static":
+			preemptable = false
+		case "default":
+			preemptable = true
+		default:
+		}
+	}
+
 	var allocated bool
 	var nodeID string
 	var bindTime time.Time
@@ -135,7 +150,17 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		allocated:         allocated,
 		nodeID:            nodeID,
 		bindTime:          bindTime,
+		foreign:           foreign,
+		preemptable:       preemptable,
 	}
+}
+
+// NewAllocationFromSIAllocated creates an Allocation where the "allocated" flag is always true,
+// regardless whehether the NodeID if empty or not
+func NewAllocationFromSIAllocated(siAlloc *si.Allocation) *Allocation {
+	alloc := NewAllocationFromSI(siAlloc)
+	alloc.allocated = true
+	return alloc
 }
 
 // NewSIFromAllocation converts the Allocation into a SI object. This is a limited set of values that gets copied into
@@ -572,4 +597,12 @@ func (a *Allocation) setUserQuotaCheckPassed() {
 		a.userQuotaCheckFailed = false
 		a.askEvents.SendRequestFitsInUserQuota(a.allocationKey, a.applicationID, a.allocatedResource)
 	}
+}
+
+func (a *Allocation) IsForeign() bool {
+	return a.foreign
+}
+
+func (a *Allocation) IsPreemptable() bool {
+	return a.preemptable
 }

@@ -166,13 +166,13 @@ func TestSortPolicyWeighting(t *testing.T) {
 	nc.SetNodeSortingPolicy(fair)
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 2000, "memory": 16000})
 
-	proto1 := newProto("test1", totalRes, nil, map[string]string{})
+	proto1 := newProto("test1", totalRes, map[string]string{})
 	node1 := NewNode(proto1)
 	if err := nc.AddNode(node1); err != nil {
 		t.Fatal("Failed to add node1")
 	}
 
-	proto2 := newProto("test2", totalRes, nil, map[string]string{})
+	proto2 := newProto("test2", totalRes, map[string]string{})
 	node2 := NewNode(proto2)
 	if err := nc.AddNode(node2); err != nil {
 		t.Fatal("Failed to add node2")
@@ -232,13 +232,13 @@ func TestSortPolicy(t *testing.T) {
 	nc.SetNodeSortingPolicy(bp)
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 2000, "memory": 4000})
 
-	proto1 := newProto("test1", totalRes, nil, map[string]string{})
+	proto1 := newProto("test1", totalRes, map[string]string{})
 	node1 := NewNode(proto1)
 	if err := nc.AddNode(node1); err != nil {
 		t.Fatal("Failed to add node1")
 	}
 
-	proto2 := newProto("test2", totalRes, nil, map[string]string{})
+	proto2 := newProto("test2", totalRes, map[string]string{})
 	node2 := NewNode(proto2)
 	if err := nc.AddNode(node2); err != nil {
 		t.Fatal("Failed to add node2")
@@ -313,7 +313,7 @@ func TestAbsResourceUsage(t *testing.T) {
 	nc.SetNodeSortingPolicy(fair)
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 0, "memory": 16000})
 
-	proto1 := newProto("test1", totalRes, nil, map[string]string{})
+	proto1 := newProto("test1", totalRes, map[string]string{})
 	node1 := NewNode(proto1)
 	if err := nc.AddNode(node1); err != nil {
 		t.Fatal("Failed to add node1")

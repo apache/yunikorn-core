@@ -254,10 +254,31 @@ func getAllocationDAO(alloc *objects.Allocation) *dao.AllocationDAOInfo {
 	return allocDAO
 }
 
+func getForeignAllocationDAO(alloc *objects.Allocation) *dao.ForeignAllocationDAOInfo {
+	allocTime := alloc.GetCreateTime().UnixNano()
+	allocDAO := &dao.ForeignAllocationDAOInfo{
+		AllocationKey:    alloc.GetAllocationKey(),
+		AllocationTime:   allocTime,
+		ResourcePerAlloc: alloc.GetAllocatedResource().DAOMap(),
+		Priority:         strconv.Itoa(int(alloc.GetPriority())),
+		NodeID:           alloc.GetNodeID(),
+		Preemptable:      alloc.IsPreemptable(),
+	}
+	return allocDAO
+}
+
 func getAllocationsDAO(allocations []*objects.Allocation) []*dao.AllocationDAOInfo {
 	allocsDAO := make([]*dao.AllocationDAOInfo, 0, len(allocations))
 	for _, alloc := range allocations {
 		allocsDAO = append(allocsDAO, getAllocationDAO(alloc))
+	}
+	return allocsDAO
+}
+
+func getForeignAllocationsDAO(allocations []*objects.Allocation) []*dao.ForeignAllocationDAOInfo {
+	allocsDAO := make([]*dao.ForeignAllocationDAOInfo, 0, len(allocations))
+	for _, alloc := range allocations {
+		allocsDAO = append(allocsDAO, getForeignAllocationDAO(alloc))
 	}
 	return allocsDAO
 }
@@ -375,19 +396,20 @@ func getAllocationAsksDAO(asks []*objects.Allocation) []*dao.AllocationAskDAOInf
 
 func getNodeDAO(node *objects.Node) *dao.NodeDAOInfo {
 	return &dao.NodeDAOInfo{
-		NodeID:       node.NodeID,
-		HostName:     node.Hostname,
-		RackName:     node.Rackname,
-		Attributes:   node.GetAttributes(),
-		Capacity:     node.GetCapacity().DAOMap(),
-		Occupied:     node.GetOccupiedResource().DAOMap(),
-		Allocated:    node.GetAllocatedResource().DAOMap(),
-		Available:    node.GetAvailableResource().DAOMap(),
-		Utilized:     node.GetUtilizedResource().DAOMap(),
-		Allocations:  getAllocationsDAO(node.GetAllAllocations()),
-		Schedulable:  node.IsSchedulable(),
-		IsReserved:   node.IsReserved(),
-		Reservations: node.GetReservationKeys(),
+		NodeID:             node.NodeID,
+		HostName:           node.Hostname,
+		RackName:           node.Rackname,
+		Attributes:         node.GetAttributes(),
+		Capacity:           node.GetCapacity().DAOMap(),
+		Occupied:           node.GetOccupiedResource().DAOMap(),
+		Allocated:          node.GetAllocatedResource().DAOMap(),
+		Available:          node.GetAvailableResource().DAOMap(),
+		Utilized:           node.GetUtilizedResource().DAOMap(),
+		Allocations:        getAllocationsDAO(node.GetAllocations()),
+		ForeignAllocations: getForeignAllocationsDAO(node.GetForeignAllocations()),
+		Schedulable:        node.IsSchedulable(),
+		IsReserved:         node.IsReserved(),
+		Reservations:       node.GetReservationKeys(),
 	}
 }
 

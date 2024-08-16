@@ -89,7 +89,6 @@ func TestContext_UpdateNode(t *testing.T) {
 		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
 	}
 	full := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	partition := context.GetPartition(pName)
 	if partition == nil {
 		t.Fatalf("partition should have been found")
@@ -110,15 +109,9 @@ func TestContext_UpdateNode(t *testing.T) {
 	assert.Assert(t, resources.Equals(full, partition.GetTotalPartitionResource()), "partition resource should be updated")
 	// try to update: fail due to unknown action
 	n.SchedulableResource = &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 5}}}
-	n.OccupiedResource = &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 5}}}
 	context.updateNode(n)
 	node := partition.GetNode("test-1")
 	assert.Assert(t, resources.Equals(full, node.GetAvailableResource()), "node available resource should not be updated")
-	n.Action = si.NodeInfo_UPDATE
-	context.updateNode(n)
-	assert.Assert(t, resources.Equals(half, partition.GetTotalPartitionResource()), "partition resource should be updated")
-	assert.Assert(t, resources.IsZero(node.GetAvailableResource()), "node available should have been updated to zero")
-	assert.Assert(t, resources.Equals(half, node.GetOccupiedResource()), "node occupied should have been updated")
 
 	// other actions
 	n = &si.NodeInfo{

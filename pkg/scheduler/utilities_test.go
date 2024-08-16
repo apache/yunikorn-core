@@ -52,6 +52,7 @@ const (
 	allocKey3       = "alloc-3"
 	maxresources    = "maxresources"
 	maxapplications = "maxapplications"
+	foreignAlloc1   = "foreign-alloc-1"
 )
 
 func newBasePartitionNoRootDefault() (*PartitionContext, error) {
@@ -599,6 +600,26 @@ func newAllocationAll(allocKey, appID, nodeID, taskGroup string, res *resources.
 	})
 }
 
+func newForeignRequest(allocKey string) *objects.Allocation {
+	return objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey: allocKey,
+		AllocationTags: map[string]string{
+			"foreign": "true",
+		},
+	})
+}
+
+func newForeignAllocation(allocKey, nodeID string) *objects.Allocation {
+	alloc := objects.NewAllocationFromSIAllocated(&si.Allocation{
+		AllocationKey: allocKey,
+		AllocationTags: map[string]string{
+			"foreign": "true",
+		},
+		NodeID: nodeID,
+	})
+	return alloc
+}
+
 func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.Allocation {
 	return objects.NewAllocationFromSI(&si.Allocation{
 		AllocationKey:    allocKey,
@@ -614,18 +635,14 @@ func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.
 		},
 	})
 }
-func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
+
+func newNodeMaxResource(nodeID string, max *resources.Resource) *objects.Node {
 	proto := &si.NodeInfo{
 		NodeID:              nodeID,
 		Attributes:          map[string]string{},
 		SchedulableResource: max.ToProto(),
-		OccupiedResource:    occupied.ToProto(),
 	}
 	return objects.NewNode(proto)
-}
-
-func newNodeMaxResource(nodeID string, max *resources.Resource) *objects.Node {
-	return newNodeWithResources(nodeID, max, nil)
 }
 
 // partition with an expected basic queue hierarchy

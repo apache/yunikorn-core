@@ -41,14 +41,14 @@ func TestNewNode(t *testing.T) {
 	if node != nil {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
-	proto := newProto(testNode, nil, nil, nil)
+	proto := newProto(testNode, nil, nil)
 	node = NewNode(proto)
 	if node == nil || node.NodeID != testNode {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
 
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
-	proto = newProto(testNode, totalRes, nil, map[string]string{})
+	proto = newProto(testNode, totalRes, map[string]string{})
 	node = NewNode(proto)
 	if node == nil || node.NodeID != testNode {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
@@ -74,24 +74,19 @@ func TestNewNode(t *testing.T) {
 	assert.Equal(t, "rack1", node.Rackname)
 	assert.Equal(t, "partition1", node.Partition)
 
-	// test capacity/available/occupied resources
+	// test capacity/available resources
 	totalResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
-	occupiedResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 30, "second": 20})
 	availableResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 70, "second": 80})
-	proto = newProto(testNode, totalResources, occupiedResources, map[string]string{})
+	proto = newProto(testNode, totalResources, map[string]string{})
 	node = NewNode(proto)
 	assert.Equal(t, node.NodeID, testNode, "node not returned correctly: node is nul or incorrect name")
 	if !resources.Equals(node.GetCapacity(), totalResources) {
 		t.Errorf("node total resources not set correctly: %v expected got %v",
 			totalResources, node.GetCapacity())
 	}
-	if !resources.Equals(node.GetAvailableResource(), availableResources) {
+	if !resources.Equals(node.GetAvailableResource(), totalResources) {
 		t.Errorf("node available resources not set correctly: %v expected got %v",
 			availableResources, node.GetAvailableResource())
-	}
-	if !resources.Equals(node.GetOccupiedResource(), occupiedResources) {
-		t.Errorf("node occupied resources not set correctly: %v expected got %v",
-			occupiedResources, node.GetOccupiedResource())
 	}
 }
 
@@ -328,7 +323,7 @@ func TestAttributes(t *testing.T) {
 		testname := fmt.Sprintf("Attributes in the node %d", index)
 		t.Run(testname, func(t *testing.T) {
 			nodename := fmt.Sprintf("%s-%d", testNode, index)
-			node := NewNode(newProto(nodename, nil, nil, tt.inputs))
+			node := NewNode(newProto(nodename, nil, tt.inputs))
 			if node == nil || node.NodeID != nodename {
 				t.Error("node not returned correctly: node is nul or incorrect name")
 			}
@@ -363,7 +358,7 @@ func TestAttributes(t *testing.T) {
 }
 
 func TestGetInstanceType(t *testing.T) {
-	proto := newProto(testNode, nil, nil, map[string]string{
+	proto := newProto(testNode, nil, map[string]string{
 		common.NodePartition: "partition1",
 		"label1":             "key1",
 		"label2":             "key2",
@@ -621,36 +616,11 @@ func TestUpdateResources(t *testing.T) {
 		t.Fatalf("node not initialised correctly")
 	}
 
-	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
-	node.SetOccupiedResource(occupied)
-	if !resources.Equals(occupied, node.GetOccupiedResource()) {
-		t.Errorf("occupied resources should have been updated to: %s, got %s", occupied, node.GetOccupiedResource())
-	}
-	available := resources.Sub(total, occupied)
-	if !resources.Equals(available, node.GetAvailableResource()) {
-		t.Errorf("available resources should have been updated to: %s, got %s", available, node.GetAvailableResource())
-	}
-
 	// adjust capacity check available updated
 	total = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5})
 	node.SetCapacity(total)
 	if !resources.Equals(total, node.GetCapacity()) {
 		t.Errorf("total resources should have been updated to: %s, got %s", total, node.GetCapacity())
-	}
-	available = resources.Sub(total, occupied)
-	if !resources.Equals(available, node.GetAvailableResource()) {
-		t.Errorf("available resources should have been updated to: %s, got %s", available, node.GetAvailableResource())
-	}
-
-	// over allocate available should go negative and no error
-	occupied = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 10})
-	node.SetOccupiedResource(occupied)
-	if !resources.Equals(occupied, node.GetOccupiedResource()) {
-		t.Errorf("occupied resources should have been updated to: %s, got %s", occupied, node.GetOccupiedResource())
-	}
-	available = resources.Sub(total, occupied)
-	if !resources.Equals(available, node.GetAvailableResource()) {
-		t.Errorf("available resources should have been updated to: %s, got %s", available, node.GetAvailableResource())
 	}
 
 	// reset and check with allocated
@@ -661,19 +631,9 @@ func TestUpdateResources(t *testing.T) {
 	}
 	alloc := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5})
 	node.allocatedResource = alloc.Clone()
-	available = resources.Sub(total, alloc)
+	available := resources.Sub(total, alloc)
 	// fake the update to recalculate available
 	node.refreshAvailableResource()
-	if !resources.Equals(available, node.GetAvailableResource()) {
-		t.Errorf("available resources should have been updated to: %s, got %s", available, node.GetAvailableResource())
-	}
-	// set occupied and make sure available changes
-	occupied = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3, "second": 1})
-	node.SetOccupiedResource(occupied)
-	if !resources.Equals(occupied, node.GetOccupiedResource()) {
-		t.Errorf("occupied resources should have been updated to: %s, got %s", occupied, node.GetOccupiedResource())
-	}
-	available.SubFrom(occupied)
 	if !resources.Equals(available, node.GetAvailableResource()) {
 		t.Errorf("available resources should have been updated to: %s, got %s", available, node.GetAvailableResource())
 	}
@@ -703,8 +663,7 @@ func TestAddRemoveListener(t *testing.T) {
 func TestNodeEvents(t *testing.T) {
 	mockEvents := evtMock.NewEventSystem()
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
-	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
-	proto := newProto(testNode, total, occupied, map[string]string{
+	proto := newProto(testNode, total, map[string]string{
 		"ready": "true",
 	})
 	node := NewNode(proto)
@@ -740,15 +699,6 @@ func TestNodeEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_ALLOC, event.EventChangeDetail)
-
-	mockEvents.Reset()
-	node.SetOccupiedResource(resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 20, "memory": 20}))
-	event = mockEvents.Events[0]
-	assert.Equal(t, si.EventRecord_NODE, event.Type)
-	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
-	assert.Equal(t, si.EventRecord_NODE_OCCUPIED, event.EventChangeDetail)
-	assert.Equal(t, int64(20), event.Resource.Resources["cpu"].Value)
-	assert.Equal(t, int64(20), event.Resource.Resources["memory"].Value)
 
 	mockEvents.Reset()
 	node.SetCapacity(resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 90, "memory": 90}))
@@ -819,8 +769,7 @@ func TestPreconditions(t *testing.T) {
 
 	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(true, map[string]int{}))
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
-	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
-	proto := newProto(testNode, total, occupied, map[string]string{
+	proto := newProto(testNode, total, map[string]string{
 		"ready": "true",
 	})
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
@@ -838,4 +787,31 @@ func TestPreconditions(t *testing.T) {
 	err = node.preConditions(ask, true)
 	assert.NilError(t, err)
 	assert.Equal(t, 1, len(ask.allocLog))
+}
+
+func TestForeignAllocation(t *testing.T) {
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
+	proto := newProto(testNode, total, nil)
+	node := NewNode(proto)
+
+	listener := &testListener{}
+	node.AddListener(listener)
+
+	// add foreign allocation
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 5})
+	alloc := newForeignAllocation("foreign-1", testNode)
+	alloc.allocatedResource = res.Clone()
+	node.AddAllocation(alloc)
+	assert.Assert(t, resources.Equals(res, node.GetOccupiedResource()))
+	newTotal := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 90, "memory": 95})
+	assert.Assert(t, resources.Equals(newTotal, node.GetAvailableResource()))
+	assert.Assert(t, resources.Equals(resources.Zero, node.GetAllocatedResource()))
+	assert.Equal(t, 0, listener.updateCount)
+
+	// remove foreign allocation
+	node.RemoveAllocation("foreign-1")
+	assert.Assert(t, resources.Equals(resources.Zero, node.GetOccupiedResource()))
+	assert.Assert(t, resources.Equals(total, node.GetAvailableResource()))
+	assert.Assert(t, resources.Equals(resources.Zero, node.GetAllocatedResource()))
+	assert.Equal(t, 0, listener.updateCount)
 }

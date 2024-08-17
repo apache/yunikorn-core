@@ -1208,7 +1208,7 @@ func (sq *Queue) getMaxHeadRoom() *resources.Resource {
 func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
-	headRoom := sq.maxResource.Clone()
+	headRoom := sq.maxResource
 
 	// if we have no max set headroom is always the same as the parent
 	if headRoom == nil {
@@ -1217,7 +1217,7 @@ func (sq *Queue) internalHeadRoom(parentHeadRoom *resources.Resource) *resources
 
 	// calculate what we have left over after removing all allocation
 	// ignore unlimited resource types (ie the ones not defined in max)
-	headRoom.SubOnlyExisting(sq.allocatedResource)
+	headRoom = resources.SubOnlyExisting(headRoom, sq.allocatedResource)
 
 	// check the minimum of the two: parentHeadRoom is nil for root
 	if parentHeadRoom == nil {

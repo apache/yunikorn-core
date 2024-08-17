@@ -926,8 +926,8 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 				// if headroom is still enough for the resources
 				*total = append(*total, request)
 			}
-			headRoom.SubOnlyExisting(request.GetAllocatedResource())
-			userHeadRoom.SubOnlyExisting(request.GetAllocatedResource())
+			headRoom = resources.SubOnlyExisting(headRoom, request.GetAllocatedResource())
+			userHeadRoom = resources.SubOnlyExisting(userHeadRoom, request.GetAllocatedResource())
 		}
 	}
 }

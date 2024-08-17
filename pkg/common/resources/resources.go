@@ -363,18 +363,20 @@ func Sub(left, right *Resource) *Resource {
 	return out
 }
 
-// SubOnlyExisting subtract delta from defined resource.
-// Ignore any type not defined in the base resource (ie receiver).
-// Used as part of the headroom updates as undefined resources are unlimited
-func (r *Resource) SubOnlyExisting(delta *Resource) {
+// SubOnlyExisting subtracts delta from base resource.
+// Ignores any type not defined in the base resource (ie receiver).
+// Used as part of the headroom updates as undefined resources are unlimited.
+func SubOnlyExisting(base, delta *Resource) *Resource {
 	// check nil inputs and shortcut
-	if r == nil || delta == nil {
-		return
+	if base == nil || delta == nil {
+		return base.Clone()
 	}
 	// neither are nil, subtract the delta
-	for k := range r.Resources {
-		r.Resources[k] = subVal(r.Resources[k], delta.Resources[k])
+	result := NewResource()
+	for k := range base.Resources {
+		result.Resources[k] = subVal(base.Resources[k], delta.Resources[k])
 	}
+	return result
 }
 
 // AddOnlyExisting adds delta to base resource, ignoring any type not defined in the base resource.

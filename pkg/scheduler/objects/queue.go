@@ -732,6 +732,7 @@ func (sq *Queue) incPendingResource(delta *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.pending = resources.Add(sq.pending, delta)
+	sq.pending.Prune()
 	sq.updatePendingResourceMetrics()
 }
 
@@ -754,6 +755,7 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 			zap.String("queueName", sq.QueuePath),
 			zap.Error(err))
 	} else {
+		sq.pending.Prune()
 		sq.updatePendingResourceMetrics()
 	}
 }
@@ -1034,6 +1036,7 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	defer sq.Unlock()
 	// all OK update this queue
 	sq.allocatedResource = resources.Add(sq.allocatedResource, alloc)
+	sq.allocatedResource.Prune()
 	sq.updateAllocatedResourceMetrics()
 	return nil
 }
@@ -1085,6 +1088,7 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	defer sq.Unlock()
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
+	sq.allocatedResource.Prune()
 	sq.updateAllocatedResourceMetrics()
 	return nil
 }
@@ -1105,6 +1109,7 @@ func (sq *Queue) IncPreemptingResource(alloc *resources.Resource) {
 	defer sq.Unlock()
 	sq.parent.IncPreemptingResource(alloc)
 	sq.preemptingResource = resources.Add(sq.preemptingResource, alloc)
+	sq.preemptingResource.Prune()
 	sq.updatePreemptingResourceMetrics()
 }
 
@@ -1117,6 +1122,7 @@ func (sq *Queue) DecPreemptingResource(alloc *resources.Resource) {
 	defer sq.Unlock()
 	sq.parent.DecPreemptingResource(alloc)
 	sq.preemptingResource = resources.Sub(sq.preemptingResource, alloc)
+	sq.preemptingResource.Prune()
 	sq.updatePreemptingResourceMetrics()
 }
 

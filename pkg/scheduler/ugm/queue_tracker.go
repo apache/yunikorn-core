@@ -113,6 +113,7 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 		qt.resourceUsage = resources.NewResource()
 	}
 	qt.resourceUsage.AddTo(usage)
+	qt.resourceUsage.Prune()
 	qt.runningApplications[applicationID] = true
 	log.Log(log.SchedUGM).Debug("Successfully increased resource usage",
 		zap.Stringer("tracking type", trackType),
@@ -153,6 +154,7 @@ func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationI
 		}
 	}
 	qt.resourceUsage.SubFrom(usage)
+	qt.resourceUsage.Prune()
 	if removeApp {
 		log.Log(log.SchedUGM).Debug("Removed application from running applications",
 			zap.String("application", applicationID),

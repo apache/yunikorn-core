@@ -314,7 +314,6 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.allocatedResource.Prune()
-		sn.availableResource.Prune()
 		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.allocatedResource)
 		return alloc
 	}
@@ -356,7 +355,6 @@ func (sn *Node) addAllocationInternal(alloc *Allocation, force bool) bool {
 		sn.allocations[alloc.GetAllocationKey()] = alloc
 		sn.allocatedResource.AddTo(res)
 		sn.availableResource.SubFrom(res)
-		sn.allocatedResource.Prune()
 		sn.availableResource.Prune()
 		sn.nodeEvents.SendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)
 		result = true
@@ -382,7 +380,6 @@ func (sn *Node) ReplaceAllocation(allocationKey string, replace *Allocation, del
 	// The allocatedResource and availableResource should be updated in the same way
 	sn.allocatedResource.AddTo(delta)
 	sn.availableResource.SubFrom(delta)
-	sn.allocatedResource.Prune()
 	sn.availableResource.Prune()
 	if !before.FitIn(sn.allocatedResource) {
 		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",

@@ -728,11 +728,11 @@ func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error)
 		sa.updateAskMaxPriority()
 	}
 
-	delta := resources.Multiply(ask.GetAllocatedResource(), -1)
-	sa.pending = resources.Add(sa.pending, delta)
+	delta := ask.GetAllocatedResource()
+	sa.pending = resources.Sub(sa.pending, delta)
 	sa.pending.Prune()
 	// update the pending of the queue with the same delta
-	sa.queue.incPendingResource(delta)
+	sa.queue.decPendingResource(delta)
 
 	return delta, nil
 }
@@ -751,7 +751,6 @@ func (sa *Application) deallocateAsk(ask *Allocation) (*resources.Resource, erro
 
 	delta := ask.GetAllocatedResource()
 	sa.pending = resources.Add(sa.pending, delta)
-	sa.pending.Prune()
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(delta)
 
@@ -1664,8 +1663,6 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		sa.incUserResourceUsage(alloc.GetAllocatedResource())
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedPlaceholder, sa.maxAllocatedResource)
-		sa.allocatedPlaceholder.Prune()
-		sa.maxAllocatedResource.Prune()
 
 		// If there are no more placeholder to allocate we should move state
 		if resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk) {
@@ -1692,8 +1689,6 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		sa.incUserResourceUsage(alloc.GetAllocatedResource())
 		sa.allocatedResource = resources.Add(sa.allocatedResource, alloc.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
-		sa.allocatedResource.Prune()
-		sa.maxAllocatedResource.Prune()
 	}
 	sa.appEvents.SendNewAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.allocatedResource)
 	sa.allocations[alloc.GetAllocationKey()] = alloc

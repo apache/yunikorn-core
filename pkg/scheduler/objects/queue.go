@@ -732,7 +732,6 @@ func (sq *Queue) incPendingResource(delta *resources.Resource) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.pending = resources.Add(sq.pending, delta)
-	sq.pending.Prune()
 	sq.updatePendingResourceMetrics()
 }
 
@@ -1036,7 +1035,6 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	defer sq.Unlock()
 	// all OK update this queue
 	sq.allocatedResource = resources.Add(sq.allocatedResource, alloc)
-	sq.allocatedResource.Prune()
 	sq.updateAllocatedResourceMetrics()
 	return nil
 }
@@ -1109,7 +1107,6 @@ func (sq *Queue) IncPreemptingResource(alloc *resources.Resource) {
 	defer sq.Unlock()
 	sq.parent.IncPreemptingResource(alloc)
 	sq.preemptingResource = resources.Add(sq.preemptingResource, alloc)
-	sq.preemptingResource.Prune()
 	sq.updatePreemptingResourceMetrics()
 }
 
@@ -1617,7 +1614,7 @@ func (sq *Queue) updateMaxResourceMetrics() {
 func (sq *Queue) updateAllocatedResourceMetrics() {
 	// Special case when we prune the allocated resources to zero, we need to update the metrics
 	// here only keep basic types memory and vcores to make sure we have updated metrics
-	if sq.allocatedResource == nil || len(sq.allocatedResource.Resources) == 0 {
+	if sq.allocatedResource.IsEmpty() {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics("memory", float64(0))
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics("vcores", float64(0))
 	}
@@ -1628,9 +1625,9 @@ func (sq *Queue) updateAllocatedResourceMetrics() {
 
 // updatePendingResourceMetrics updates pending resource metrics for all queue types.
 func (sq *Queue) updatePendingResourceMetrics() {
-	// Special case when we prune the allocated resources to zero, we need to update the metrics
+	// Special case when we prune the pending resources to zero, we need to update the metrics
 	// here only keep basic types memory and vcores to make sure we have updated metrics
-	if sq.pending == nil || len(sq.pending.Resources) == 0 {
+	if sq.pending.IsEmpty() {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics("memory", float64(0))
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics("vcores", float64(0))
 	}
@@ -1641,7 +1638,9 @@ func (sq *Queue) updatePendingResourceMetrics() {
 
 // updatePreemptingResourceMetrics updates preempting resource metrics for all queue types.
 func (sq *Queue) updatePreemptingResourceMetrics() {
-	if sq.pending == nil || len(sq.pending.Resources) == 0 {
+	// Special case when we prune the preempting resources to zero, we need to update the metrics
+	// here only keep basic types memory and vcores to make sure we have updated metrics
+	if sq.preemptingResource.IsEmpty() {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics("memory", float64(0))
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics("vcores", float64(0))
 	}

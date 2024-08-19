@@ -432,8 +432,8 @@ func TestAllocateDeallocate(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	// allocate
-	if delta, err := app.AllocateAsk(aKey); err != nil || !resources.Equals(resources.Multiply(res, -1), delta) {
-		t.Errorf("AllocateAsk() did not return correct delta, err %v, expected %v got %v", err, resources.Multiply(res, -1), delta)
+	if delta, err := app.AllocateAsk(aKey); err != nil || !resources.Equals(res, delta) {
+		t.Errorf("AllocateAsk() did not return correct delta, err %v, expected %v got %v", err, res, delta)
 	}
 	// allocate again should fail
 	if delta, err := app.AllocateAsk(aKey); err == nil || delta != nil {

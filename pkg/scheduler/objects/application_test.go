@@ -943,7 +943,8 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	released = app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
 	assert.Assert(t, app.IsCompleting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
-	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}))
+	// zero resource should be pruned
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")
@@ -1674,7 +1675,8 @@ func TestIncAndDecUserResourceUsage(t *testing.T) {
 	app.decUserResourceUsage(res, false)
 	assertUserGroupResource(t, getTestUserGroup(), res)
 	app.decUserResourceUsage(res, false)
-	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}))
+	// zero resource should be pruned
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 func TestIncAndDecUserResourceUsageInSameGroup(t *testing.T) {
@@ -1722,7 +1724,8 @@ func TestIncAndDecUserResourceUsageInSameGroup(t *testing.T) {
 	// Decrease testuser and testuser2 to 0
 	app.decUserResourceUsage(res, false)
 	app2.decUserResourceUsage(res, false)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), nil, 0)
+	// zero resoure should be pruned
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), nil, nil, 0)
 }
 
 func TestGetAllRequests(t *testing.T) {

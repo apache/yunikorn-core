@@ -363,9 +363,7 @@ func Sub(left, right *Resource) *Resource {
 	return out
 }
 
-// SubOnlyExisting subtracts delta from base resource.
-// Ignores any type not defined in the base resource (ie receiver).
-// Used as part of the headroom updates as undefined resources are unlimited.
+// SubOnlyExisting subtracts delta from base resource, ignoring any type not defined in the base resource.
 func SubOnlyExisting(base, delta *Resource) *Resource {
 	// check nil inputs and shortcut
 	if base == nil || delta == nil {

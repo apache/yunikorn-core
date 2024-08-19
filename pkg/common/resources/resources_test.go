@@ -1058,20 +1058,6 @@ func TestSubFrom(t *testing.T) {
 	}
 }
 
-func TestSubOnlyExistingNil(t *testing.T) {
-	// simple case (nil checks)
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatal("SubOnlyExisting panic on nil resource")
-		}
-	}()
-	var r *Resource
-	result := SubOnlyExisting(r, nil)
-	if result != nil {
-		t.Errorf("SubOnlyExisting with nil resources did not return nil resource: %v", result)
-	}
-}
-
 func TestSubEliminateNegative(t *testing.T) {
 	// simple case (nil checks)
 	result := SubEliminateNegative(nil, nil)

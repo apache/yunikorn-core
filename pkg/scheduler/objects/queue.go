@@ -1615,6 +1615,12 @@ func (sq *Queue) updateMaxResourceMetrics() {
 
 // updateAllocatedResourceMetrics updates allocated resource metrics for all queue types.
 func (sq *Queue) updateAllocatedResourceMetrics() {
+	// Special case when we prune the allocated resources to zero, we need to update the metrics
+	// here only keep basic types memory and vcores to make sure we have updated metrics
+	if sq.allocatedResource == nil || len(sq.allocatedResource.Resources) == 0 {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics("memory", float64(0))
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics("vcores", float64(0))
+	}
 	for k, v := range sq.allocatedResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
 	}
@@ -1622,6 +1628,12 @@ func (sq *Queue) updateAllocatedResourceMetrics() {
 
 // updatePendingResourceMetrics updates pending resource metrics for all queue types.
 func (sq *Queue) updatePendingResourceMetrics() {
+	// Special case when we prune the allocated resources to zero, we need to update the metrics
+	// here only keep basic types memory and vcores to make sure we have updated metrics
+	if sq.pending == nil || len(sq.pending.Resources) == 0 {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics("memory", float64(0))
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics("vcores", float64(0))
+	}
 	for k, v := range sq.pending.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
 	}
@@ -1629,6 +1641,10 @@ func (sq *Queue) updatePendingResourceMetrics() {
 
 // updatePreemptingResourceMetrics updates preempting resource metrics for all queue types.
 func (sq *Queue) updatePreemptingResourceMetrics() {
+	if sq.pending == nil || len(sq.pending.Resources) == 0 {
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics("memory", float64(0))
+		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics("vcores", float64(0))
+	}
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}

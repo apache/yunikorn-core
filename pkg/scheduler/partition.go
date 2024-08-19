@@ -582,6 +582,7 @@ func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 		} else {
 			pc.totalPartitionResource.AddTo(delta)
 		}
+		// remove any zero values from the final resource definition
 		pc.totalPartitionResource.Prune()
 		// set the root queue size
 		pc.root.SetMaxResource(pc.totalPartitionResource)

@@ -1058,20 +1058,6 @@ func TestSubFrom(t *testing.T) {
 	}
 }
 
-func TestSubOnlyExistingNil(t *testing.T) {
-	// simple case (nil checks)
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatal("SubOnlyExisting panic on nil resource")
-		}
-	}()
-	var r *Resource
-	r.SubOnlyExisting(nil)
-	if r != nil {
-		t.Errorf("sub nil resources did not return nil resource: %v", r)
-	}
-}
-
 func TestSubEliminateNegative(t *testing.T) {
 	// simple case (nil checks)
 	result := SubEliminateNegative(nil, nil)
@@ -1081,32 +1067,38 @@ func TestSubEliminateNegative(t *testing.T) {
 }
 
 func TestSubOnlyExisting(t *testing.T) {
-	// remove nil from empty resource
-	left := NewResource()
-	left.SubOnlyExisting(nil)
-	assert.Equal(t, len(left.Resources), 0, "sub nil resource did not return unchanged resource")
-
-	// remove from empty resource
-	delta := NewResourceFromMap(map[string]Quantity{"a": 5})
-	left.SubOnlyExisting(delta)
-	assert.Equal(t, len(left.Resources), 0, "sub simple resource did not return unchanged resource")
-
-	// complex case: just checking the resource merge, values check is secondary
-	left = &Resource{Resources: map[string]Quantity{"a": 0}}
-	delta = &Resource{Resources: map[string]Quantity{"a": 1, "b": 0}}
-	left.SubOnlyExisting(delta)
-	expected := &Resource{Resources: map[string]Quantity{"a": -1}}
-	assert.Equal(t, len(left.Resources), 1, "sub with 1 resource returned more or less types")
-	assert.Assert(t, Equals(left, expected), "sub failed expected %v, actual %v", expected, left)
-
-	// complex case: just checking the resource merge, values check is secondary
-	left = &Resource{Resources: map[string]Quantity{"a": 1, "b": 0}}
-	delta = &Resource{Resources: map[string]Quantity{"a": 1}}
-	left.SubOnlyExisting(delta)
-	assert.Equal(t, len(left.Resources), 2, "sub with 2 resource returned more or less types")
-
-	expected = &Resource{Resources: map[string]Quantity{"a": 0, "b": 0}}
-	assert.Assert(t, Equals(left, expected), "sub failed expected %v, actual %v", expected, left)
+	var tests = []struct {
+		caseName string
+		base     map[string]Quantity
+		delta    map[string]Quantity
+		expected map[string]Quantity
+	}{
+		{"nil resources", nil, nil, nil},
+		{"nil base", nil, map[string]Quantity{"a": 5}, nil},
+		{"nil delta", map[string]Quantity{"a": 5}, nil, map[string]Quantity{"a": 5}},
+		{"empty base", map[string]Quantity{}, map[string]Quantity{"a": 5}, map[string]Quantity{}},
+		{"single type base matched", map[string]Quantity{"a": 5}, map[string]Quantity{"a": 3, "b": 1}, map[string]Quantity{"a": 2}},
+		{"single type base unmatched", map[string]Quantity{"a": 5}, map[string]Quantity{"b": 1}, map[string]Quantity{"a": 5}},
+		{"multi type base partial match", map[string]Quantity{"a": 5, "b": 3}, map[string]Quantity{"a": 2, "c": 1}, map[string]Quantity{"a": 3, "b": 3}},
+		{"multi type base match", map[string]Quantity{"a": 5, "b": 3}, map[string]Quantity{"a": 2, "b": 1}, map[string]Quantity{"a": 3, "b": 2}},
+		{"negative result", map[string]Quantity{"a": 1}, map[string]Quantity{"a": 3}, map[string]Quantity{"a": -2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var base, delta, expected *Resource
+			if tt.base != nil {
+				base = NewResourceFromMap(tt.base)
+			}
+			if tt.delta != nil {
+				delta = NewResourceFromMap(tt.delta)
+			}
+			if tt.expected != nil {
+				expected = NewResourceFromMap(tt.expected)
+			}
+			result := SubOnlyExisting(base, delta)
+			assert.Assert(t, Equals(result, expected), "incorrect result returned")
+		})
+	}
 }
 
 func TestAddOnlyExisting(t *testing.T) {

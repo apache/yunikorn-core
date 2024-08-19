@@ -219,8 +219,7 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 
 	// arrived at the leaf or on the way out: check against current max if set
 	if !resources.IsZero(qt.maxResources) {
-		headroom = qt.maxResources.Clone()
-		headroom.SubOnlyExisting(qt.resourceUsage)
+		headroom = resources.SubOnlyExisting(qt.maxResources, qt.resourceUsage)
 	}
 
 	if headroom == nil {

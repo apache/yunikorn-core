@@ -768,21 +768,17 @@ func (qps *QueuePreemptionSnapshot) Duplicate(copy map[string]*QueuePreemptionSn
 }
 
 func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource {
-	if qps == nil {
-		return nil
-	}
-	parentPreemptableResource := qps.Parent.GetPreemptableResource()
-	actual := qps.AllocatedResource.Clone()
-
 	// No usage, so nothing to preempt
-	if actual.IsEmpty() {
+	if qps == nil || qps.AllocatedResource.IsEmpty() {
 		return nil
 	}
-	actual.SubOnlyExisting(qps.PreemptingResource)
+
+	parentPreemptableResource := qps.Parent.GetPreemptableResource()
+	actual := resources.SubOnlyExisting(qps.AllocatedResource, qps.PreemptingResource)
 
 	// Calculate preemptable resource. +ve means Over utilized, -ve means Under utilized, 0 means correct utilization
 	guaranteed := qps.GuaranteedResource
-	actual.SubOnlyExisting(guaranteed)
+	actual = resources.SubOnlyExisting(actual, guaranteed)
 	preemptableResource := actual
 
 	// Keep only the resource type which needs to be preempted
@@ -815,7 +811,7 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 		return nil
 	}
 	parent := qps.Parent.GetRemainingGuaranteedResource()
-	remainingGuaranteed := qps.GuaranteedResource.Clone()
+	remainingGuaranteed := qps.GuaranteedResource
 
 	// No Guaranteed set, so nothing remaining
 	// In case of guaranteed not set for queues at specific level, inherits the same from parent queue.
@@ -824,9 +820,8 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 	if parent.IsEmpty() && remainingGuaranteed.IsEmpty() {
 		return nil
 	}
-	used := qps.AllocatedResource.Clone()
-	used.SubOnlyExisting(qps.PreemptingResource)
-	remainingGuaranteed.SubOnlyExisting(used)
+	used := resources.SubOnlyExisting(qps.AllocatedResource, qps.PreemptingResource)
+	remainingGuaranteed = resources.SubOnlyExisting(remainingGuaranteed, used)
 	if qps.AskQueue != nil {
 		// In case ask queue has guaranteed set, its own values carries higher precedence over the parent or ancestor
 		if qps.AskQueue.QueuePath == qps.QueuePath && !remainingGuaranteed.IsEmpty() {

@@ -21,6 +21,8 @@ package resources
 import (
 	"fmt"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -128,6 +130,11 @@ func TestTrackedResourceClone(t *testing.T) {
 			}
 		})
 	}
+
+	// case: tracked resource is nil
+	tr := (*TrackedResource)(nil)
+	cloned := tr.Clone()
+	assert.Assert(t, cloned == nil)
 }
 
 // TestTrackedResourceAggregateTrackedResource tests the AggregateTrackedResource function.
@@ -211,6 +218,11 @@ func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 			}
 		})
 	}
+
+	// case: resource is nil
+	tr := NewTrackedResourceFromMap(nil)
+	tr.AggregateTrackedResource("instanceType1", nil, time.Now().Add(-time.Minute))
+	assert.Assert(t, tr.TrackedResourceMap != nil && len(tr.TrackedResourceMap) == 0)
 }
 
 func TestEqualsTracked(t *testing.T) {
@@ -262,4 +274,41 @@ func TestEqualsTracked(t *testing.T) {
 			assert.Assert(t, result == tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, compare, base)
 		})
 	}
+}
+
+func TestTrackedResourceString(t *testing.T) {
+	sortTrackedResourceString := func(s string) string {
+		s = strings.TrimPrefix(s, "TrackedResource{")
+		s = strings.TrimSuffix(s, "}")
+		parts := strings.Split(s, ",")
+		sort.Strings(parts)
+		return "TrackedResource{" + strings.Join(parts, ",") + "}"
+	}
+
+	// case: empty tracked resource
+	tr1 := NewTrackedResource()
+	expected := "TrackedResource{}"
+	assert.Equal(t, sortTrackedResourceString(expected), sortTrackedResourceString(tr1.String()))
+
+	// case: tracked resource with one instance type and one resource
+	tr2 := NewTrackedResourceFromMap(map[string]map[string]Quantity{
+		"instanceType1": {
+			"cpu": 10,
+		},
+	})
+	expected = "TrackedResource{instanceType1:cpu=10}"
+	assert.Equal(t, sortTrackedResourceString(expected), sortTrackedResourceString(tr2.String()))
+
+	// case: tracked resource with multiple instance types and resource
+	tr3 := NewTrackedResourceFromMap(map[string]map[string]Quantity{
+		"instanceType1": {
+			"cpu":    10,
+			"memory": 20,
+		},
+		"instanceType2": {
+			"memory": 15,
+		},
+	})
+	expected = "TrackedResource{instanceType1:cpu=10,instanceType1:memory=20,instanceType2:memory=15}"
+	assert.Equal(t, sortTrackedResourceString(expected), sortTrackedResourceString(tr3.String()))
 }

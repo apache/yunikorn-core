@@ -356,6 +356,13 @@ func TestMatchAnyOnlyExisting(t *testing.T) {
 			}
 		})
 	}
+
+	// case: left and right resource is same instance
+	quantity := map[string]Quantity{"first": 1}
+	left := NewResourceFromMap(quantity)
+	right := left
+	result := left.MatchAny(right)
+	assert.Assert(t, result)
 }
 
 func TestStrictlyGreaterThanOnlyExisting(t *testing.T) {

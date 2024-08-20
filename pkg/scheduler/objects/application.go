@@ -191,7 +191,13 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.rmID = rmID
 	app.appEvents = schedEvt.NewApplicationEvents(events.GetEventSystem())
 	app.appEvents.SendNewApplicationEvent(app.ApplicationID)
+	app.setNewMetrics()
 	return app
+}
+
+func (sa *Application) setNewMetrics() {
+	metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
+	metrics.GetQueueMetrics(sa.GetQueuePath()).IncQueueApplicationsNew()
 }
 
 func (sa *Application) String() string {

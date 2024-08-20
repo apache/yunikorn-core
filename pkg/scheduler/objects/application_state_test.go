@@ -280,65 +280,84 @@ func TestAppStateTransitionEvents(t *testing.T) {
 // app-00002: New -> Accepted -> Running -> Completing -> Running -> Failing-> Failed
 // app-00003: New -> Accepted -> Running -> Failing -> Failed
 // app-00004: New -> Rejected
-// Final metrics will be: 0 running, 3 accepted, 1 completed, 2 failed and 1 rejected applications
+// Final metrics will be: 0 running, 0 accepted, 1 completed, 2 failed and 1 rejected applications
 func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
-	queue := createQueue(t, "root.metrics")
+	queue := createQueue(t, "metrics")
 	metrics.GetSchedulerMetrics().Reset()
 	// app-00001: New -> Resuming -> Accepted --> Running -> Completing-> Completed
 	app := newApplication("app-00001", "default", "root.metrics")
 	app.SetQueue(queue)
 	assertState(t, app, nil, New.String())
-	assertTotalAppsRunningMetrics(t, 0)
-	assertTotalAppsCompletedMetrics(t, 0)
-	assertTotalAppsRejectedMetrics(t, 0)
-	// New -> Resuming
-	err := app.HandleApplicationEvent(ResumeApplication)
-	assertState(t, app, err, Resuming.String())
+	assertTotalAppsNewMetrics(t, 1)
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
-	assertQueueApplicationsAcceptedMetrics(t, app, 1)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 0)
+	assertQueueApplicationsNewMetrics(t, app, 1)
+
+	// New -> Resuming
+	err := app.HandleApplicationEvent(ResumeApplication)
+	assertState(t, app, err, Resuming.String())
+	assertTotalAppsNewMetrics(t, 0)
+	assertTotalAppsRunningMetrics(t, 0)
+	assertTotalAppsCompletedMetrics(t, 0)
+	assertTotalAppsRejectedMetrics(t, 0)
+	assertQueueRunningApps(t, app, 0)
+	assertQueueApplicationsRunningMetrics(t, app, 0)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
+	assertQueueApplicationsRejectedMetrics(t, app, 0)
+	assertQueueApplicationsFailedMetrics(t, app, 0)
+	assertQueueApplicationsCompletedMetrics(t, app, 0)
+	assertQueueApplicationsResumingMetrics(t, app, 1)
+	assertQueueApplicationsNewMetrics(t, app, 0)
 	// Resuming -> Accepted
 	err = app.HandleApplicationEvent(RunApplication)
 	assertState(t, app, err, Accepted.String())
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
+	assertTotalAppsNewMetrics(t, 0)
+	assertTotalAppsAcceptedMetrics(t, 1)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
 	assertQueueApplicationsAcceptedMetrics(t, app, 1)
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 0)
+	assertQueueApplicationsNewMetrics(t, app, 0)
 	// Accepted -> Running
 	err = app.HandleApplicationEvent(RunApplication)
 	assertState(t, app, err, Running.String())
 	assertTotalAppsRunningMetrics(t, 1)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
+	assertTotalAppsAcceptedMetrics(t, 0)
 	assertQueueRunningApps(t, app, 1)
 	assertQueueApplicationsRunningMetrics(t, app, 1)
-	assertQueueApplicationsAcceptedMetrics(t, app, 1)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 0)
+	assertQueueApplicationsNewMetrics(t, app, 0)
 	// Running -> Running
 	err = app.HandleApplicationEvent(RunApplication)
 	assertState(t, app, err, Running.String())
 	assertTotalAppsRunningMetrics(t, 1)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
+	assertTotalAppsAcceptedMetrics(t, 0)
 	assertQueueRunningApps(t, app, 1)
 	assertQueueApplicationsRunningMetrics(t, app, 1)
-	assertQueueApplicationsAcceptedMetrics(t, app, 1)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 0)
+	assertQueueApplicationsNewMetrics(t, app, 0)
 	// Running -> Completing
 	err = app.HandleApplicationEvent(CompleteApplication)
 	assertState(t, app, err, Completing.String())
@@ -347,10 +366,11 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRejectedMetrics(t, 0)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
-	assertQueueApplicationsAcceptedMetrics(t, app, 1)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 0)
+	assertQueueApplicationsCompletingMetrics(t, app, 1)
 	// Completing -> Completed
 	err = app.HandleApplicationEvent(CompleteApplication)
 	assertState(t, app, err, Completed.String())
@@ -359,10 +379,11 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRejectedMetrics(t, 0)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
-	assertQueueApplicationsAcceptedMetrics(t, app, 1)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 0)
 	assertQueueApplicationsCompletedMetrics(t, app, 1)
+	assertQueueApplicationsCompletingMetrics(t, app, 0)
 
 	// app-00002: New -> Accepted -> Completing -> Running -> Failing-> Failed
 	app = newApplication("app-00002", "default", "root.metrics")
@@ -391,7 +412,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRejectedMetrics(t, 0)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
-	assertQueueApplicationsAcceptedMetrics(t, app, 2)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 1)
 	assertQueueApplicationsCompletedMetrics(t, app, 1)
@@ -417,7 +438,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRejectedMetrics(t, 0)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
-	assertQueueApplicationsAcceptedMetrics(t, app, 3)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 0)
 	assertQueueApplicationsFailedMetrics(t, app, 2)
 	assertQueueApplicationsCompletedMetrics(t, app, 1)
@@ -434,7 +455,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRejectedMetrics(t, 1)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
-	assertQueueApplicationsAcceptedMetrics(t, app, 3)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 1)
 	assertQueueApplicationsFailedMetrics(t, app, 2)
 	assertQueueApplicationsCompletedMetrics(t, app, 1)
@@ -446,11 +467,25 @@ func assertState(t testing.TB, app *Application, err error, expected string) {
 	assert.Equal(t, app.CurrentState(), expected, "application not in expected state.")
 }
 
+func assertTotalAppsNewMetrics(t testing.TB, expected int) {
+	t.Helper()
+	totalAppsNew, err := metrics.GetSchedulerMetrics().GetTotalApplicationsNew()
+	assert.NilError(t, err, "no error expected when getting total new application count.")
+	assert.Equal(t, totalAppsNew, expected, "total new application metrics is not as expected.")
+}
+
 func assertTotalAppsRunningMetrics(t testing.TB, expected int) {
 	t.Helper()
 	totalAppsRunning, err := metrics.GetSchedulerMetrics().GetTotalApplicationsRunning()
 	assert.NilError(t, err, "no error expected when getting total running application count.")
 	assert.Equal(t, totalAppsRunning, expected, "total running application metrics is not as expected.")
+}
+
+func assertTotalAppsAcceptedMetrics(t testing.TB, expected int) {
+	t.Helper()
+	totalAppsAccepted, err := metrics.GetSchedulerMetrics().GetTotalApplicationsAccepted()
+	assert.NilError(t, err, "no error expected when getting total accepted application count.")
+	assert.Equal(t, totalAppsAccepted, expected, "total accepted application metrics is not as expected.")
 }
 
 func assertTotalAppsCompletedMetrics(t testing.TB, expected int) {
@@ -501,11 +536,32 @@ func assertQueueApplicationsFailedMetrics(t testing.TB, app *Application, expect
 	assert.Equal(t, queueApplicationsFailed, expected, "total failed application metrics in queue is not as expected.")
 }
 
+func assertQueueApplicationsResumingMetrics(t testing.TB, app *Application, expected int) {
+	t.Helper()
+	queueApplicationsResuming, err := metrics.GetQueueMetrics(app.queuePath).GetQueueApplicationsResuming()
+	assert.NilError(t, err, "no error expected when getting total resuming application count in queue.")
+	assert.Equal(t, queueApplicationsResuming, expected, "total resuming application metrics in queue is not as expected.")
+}
+
 func assertQueueApplicationsCompletedMetrics(t testing.TB, app *Application, expected int) {
 	t.Helper()
 	queueApplicationsCompleted, err := metrics.GetQueueMetrics(app.queuePath).GetQueueApplicationsCompleted()
 	assert.NilError(t, err, "no error expected when getting total completed application count in queue.")
 	assert.Equal(t, queueApplicationsCompleted, expected, "total completed application metrics in queue is not as expected.")
+}
+
+func assertQueueApplicationsCompletingMetrics(t testing.TB, app *Application, expected int) {
+	t.Helper()
+	queueApplicationsCompleting, err := metrics.GetQueueMetrics(app.queuePath).GetQueueApplicationsCompleting()
+	assert.NilError(t, err, "no error expected when getting total completing application count in queue.")
+	assert.Equal(t, queueApplicationsCompleting, expected, "total completing application metrics in queue is not as expected.")
+}
+
+func assertQueueApplicationsNewMetrics(t testing.TB, app *Application, expected int) {
+	t.Helper()
+	queueApplicationsNew, err := metrics.GetQueueMetrics(app.queuePath).GetQueueApplicationsNew()
+	assert.NilError(t, err, "no error expected when getting total new applications in queue.")
+	assert.Equal(t, queueApplicationsNew, expected, "total new applications in queue is not as expected.")
 }
 
 func createQueue(t *testing.T, queueName string) *Queue {

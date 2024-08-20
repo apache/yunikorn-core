@@ -555,8 +555,6 @@ func (cc *ClusterContext) handleRMUpdateApplicationEvent(event *rmevent.RMUpdate
 	}
 	// Update metrics with removed applications
 	if len(request.Remove) > 0 {
-		metrics.GetSchedulerMetrics().SubTotalApplicationsRunning(len(request.Remove))
-		metrics.GetSchedulerMetrics().AddTotalApplicationsCompleted(len(request.Remove))
 		for _, app := range request.Remove {
 			partition := cc.GetPartition(app.PartitionName)
 			if partition == nil {

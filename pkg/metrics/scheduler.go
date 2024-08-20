@@ -266,10 +266,6 @@ func (m *SchedulerMetrics) DecTotalApplicationsAccepted() {
 	m.applicationSubmission.WithLabelValues(AppAccepted).Dec()
 }
 
-func (m *SchedulerMetrics) AddTotalApplicationsAccepted(value int) {
-	m.applicationSubmission.WithLabelValues(AppAccepted).Add(float64(value))
-}
-
 func (m *SchedulerMetrics) GetTotalApplicationsAccepted() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.applicationSubmission.WithLabelValues(AppAccepted).Write(metricDto)
@@ -280,16 +276,12 @@ func (m *SchedulerMetrics) GetTotalApplicationsAccepted() (int, error) {
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsRejected() {
-	m.applicationSubmission.WithLabelValues(ContainerRejected).Inc()
-}
-
-func (m *SchedulerMetrics) AddTotalApplicationsRejected(value int) {
-	m.applicationSubmission.WithLabelValues(ContainerRejected).Add(float64(value))
+	m.applicationSubmission.WithLabelValues(AppRejected).Inc()
 }
 
 func (m *SchedulerMetrics) GetTotalApplicationsRejected() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.applicationSubmission.WithLabelValues(ContainerRejected).Write(metricDto)
+	err := m.applicationSubmission.WithLabelValues(AppRejected).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -302,10 +294,6 @@ func (m *SchedulerMetrics) IncTotalApplicationsRunning() {
 
 func (m *SchedulerMetrics) DecTotalApplicationsRunning() {
 	m.application.WithLabelValues(AppRunning).Dec()
-}
-
-func (m *SchedulerMetrics) SubTotalApplicationsRunning(value int) {
-	m.application.WithLabelValues(AppRunning).Sub(float64(value))
 }
 
 func (m *SchedulerMetrics) GetTotalApplicationsRunning() (int, error) {
@@ -360,10 +348,6 @@ func (m *SchedulerMetrics) DecTotalApplicationsFailed() {
 
 func (m *SchedulerMetrics) IncTotalApplicationsCompleted() {
 	m.application.WithLabelValues(AppCompleted).Inc()
-}
-
-func (m *SchedulerMetrics) AddTotalApplicationsCompleted(value int) {
-	m.application.WithLabelValues(AppCompleted).Add(float64(value))
 }
 
 func (m *SchedulerMetrics) GetTotalApplicationsCompleted() (int, error) {

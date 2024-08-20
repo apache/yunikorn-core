@@ -124,14 +124,6 @@ func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUp
 		log.Log(log.RMProxy).DPanic("RM is not registered",
 			zap.String("rmID", event.RmID))
 	}
-
-	// update app metrics
-	if len(event.RejectedApplications) > 0 {
-		metrics.GetSchedulerMetrics().AddTotalApplicationsRejected(len(event.RejectedApplications))
-	}
-	if len(event.AcceptedApplications) > 0 {
-		metrics.GetSchedulerMetrics().AddTotalApplicationsAccepted(len(event.AcceptedApplications))
-	}
 }
 
 func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllocationEvent) {

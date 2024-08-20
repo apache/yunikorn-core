@@ -312,8 +312,8 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 	if alloc != nil {
 		delete(sn.allocations, allocationKey)
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
-		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.allocatedResource.Prune()
+		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.allocatedResource)
 		return alloc
 	}

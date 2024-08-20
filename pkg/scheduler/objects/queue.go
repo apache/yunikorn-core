@@ -754,8 +754,12 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 			zap.String("queueName", sq.QueuePath),
 			zap.Error(err))
 	} else {
-		sq.pending.Prune()
 		sq.updatePendingResourceMetrics()
+		// We should update the metrics before pruning the resource.
+		// For example:
+		// If we prune the resource first and the resource become nil after pruning,
+		// the metrics will not be updated with nil resource, this is not expected.
+		sq.pending.Prune()
 	}
 }
 
@@ -1086,8 +1090,12 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	defer sq.Unlock()
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
-	sq.allocatedResource.Prune()
+	// We should update the metrics before pruning the resource.
+	// For example:
+	// If we prune the resource first and the resource become nil after pruning,
+	// the metrics will not be updated with nil resource, this is not expected.
 	sq.updateAllocatedResourceMetrics()
+	sq.allocatedResource.Prune()
 	return nil
 }
 
@@ -1119,8 +1127,12 @@ func (sq *Queue) DecPreemptingResource(alloc *resources.Resource) {
 	defer sq.Unlock()
 	sq.parent.DecPreemptingResource(alloc)
 	sq.preemptingResource = resources.Sub(sq.preemptingResource, alloc)
-	sq.preemptingResource.Prune()
 	sq.updatePreemptingResourceMetrics()
+	// We should update the metrics before pruning the resource.
+	// For example:
+	// If we prune the resource first and the resource become nil after pruning,
+	// the metrics will not be updated with nil resource, this is not expected.
+	sq.preemptingResource.Prune()
 }
 
 func (sq *Queue) IsPrioritySortEnabled() bool {
@@ -1612,12 +1624,6 @@ func (sq *Queue) updateMaxResourceMetrics() {
 
 // updateAllocatedResourceMetrics updates allocated resource metrics for all queue types.
 func (sq *Queue) updateAllocatedResourceMetrics() {
-	// Special case when we prune the allocated resources to zero, we need to update the metrics
-	// here only keep basic types memory and vcores to make sure we have updated metrics
-	if sq.allocatedResource.IsEmpty() {
-		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics("memory", float64(0))
-		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics("vcores", float64(0))
-	}
 	for k, v := range sq.allocatedResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
 	}
@@ -1625,12 +1631,6 @@ func (sq *Queue) updateAllocatedResourceMetrics() {
 
 // updatePendingResourceMetrics updates pending resource metrics for all queue types.
 func (sq *Queue) updatePendingResourceMetrics() {
-	// Special case when we prune the pending resources to zero, we need to update the metrics
-	// here only keep basic types memory and vcores to make sure we have updated metrics
-	if sq.pending.IsEmpty() {
-		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics("memory", float64(0))
-		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics("vcores", float64(0))
-	}
 	for k, v := range sq.pending.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
 	}
@@ -1638,12 +1638,6 @@ func (sq *Queue) updatePendingResourceMetrics() {
 
 // updatePreemptingResourceMetrics updates preempting resource metrics for all queue types.
 func (sq *Queue) updatePreemptingResourceMetrics() {
-	// Special case when we prune the preempting resources to zero, we need to update the metrics
-	// here only keep basic types memory and vcores to make sure we have updated metrics
-	if sq.preemptingResource.IsEmpty() {
-		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics("memory", float64(0))
-		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics("vcores", float64(0))
-	}
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}

@@ -1,0 +1,91 @@
+name: Pre-commit checks
+
+on:
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: .go_version
+      - name: Check license
+        run: make license-check
+      - name: Go lint
+        run: make lint
+      - name: Run Version Check
+        run: make pseudo
+      - name: Run ShellCheck
+        run: make check_scripts
+      - name: Unit tests
+        run: make test
+      - name: Code coverage
+        uses: codecov/codecov-action@v4
+        with:
+          files: build/coverage.txt
+          # After codecov/codecov-action@v4, tokenless uploading of coverage files to non-public repo is unsupported.
+          # To enable codecov analysis in your forked repo. Please configure CODECOV_TOKEN in your repository secrets.
+          # Ref: https://docs.codecov.com/docs/adding-the-codecov-token
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  e2e-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        k8s: [v1.31.0]
+        plugin: [""]
+    steps:
+      - name: Checkout yunikorn-k8shim source code
+        uses: actions/checkout@v4
+        with:
+          repository: apache/yunikorn-k8shim
+          fetch-depth: 2
+          path: k8shim
+      - name: Checkout yunikorn-core source code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+          path: core
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: k8shim/.go_version
+      - name: Set hugepage
+        run: |
+          echo "vm.nr_hugepages = 1024" | sudo tee -a /etc/sysctl.conf
+          sudo sysctl -p
+          sudo sysctl -a | grep vm.nr_hugepages
+      - name: Cache and Restore e2e required tools
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            k8shim/tools
+          key: ${{ runner.os }}-e2e-${{ hashFiles('k8shim/Makefile') }}
+          restore-keys: |
+            ${{ runner.os }}-e2e-
+      - name: Replace yunikorn-core dependency
+        run: cd k8shim && go mod edit -replace "github.com/apache/yunikorn-core=../core" && grep yunikorn-core go.mod
+      - name: Run e2e tests
+        run: cd k8shim && ./scripts/run-e2e-tests.sh -a "test" -n "yk8s" -v "kindest/node:${KIND_NODE_IMAGE}" ${KIND_EXTRA_ARGS}
+        env:
+          KIND_NODE_IMAGE: ${{ matrix.k8s }}
+          KIND_EXTRA_ARGS: ${{ matrix.plugin }}
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: ${{ failure() }}
+        with:
+          name: ${{ github.job }} stdout (${{ matrix.k8s }}${{ matrix.plugin == '--plugin' && format(', {0}', matrix.plugin) || matrix.plugin }})
+          path: k8shim/build/e2e

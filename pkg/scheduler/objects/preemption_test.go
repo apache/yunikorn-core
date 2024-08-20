@@ -293,6 +293,58 @@ func TestTryPreemptionOnNode(t *testing.T) {
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
+// TestTryPreemption_NodeWithCapacityLesserThanAsk Test try preemption on node whose capacity is lesser than ask resource requirements with simple queue hierarchy. Since Node won't accommodate the ask even after preempting all allocations, there is no use in considering the node.
+// Guaranteed and Max resource set on both victim queue path and preemptor queue path in 2 levels. victim and preemptor queue are siblings.
+// Request (Preemptor) resource type matches with all resource types of the victim. But Guaranteed set only on specific resource type. 2 Victims are available, but 1 should be preempted because further preemption would make usage go below the guaranteed quota
+// Setup:
+// Nodes are Node1 and Node2. Nodes are full. No space to accommodate the ask.
+// root.parent. Guaranteed set on parent, first: 10
+// root.parent.child1. Guaranteed set, first: 5. 2 Allocations (belongs to single app) are running. Each Allocation usage is first:5, pods: 1. Total usage is first:10, pods: 2.
+// root.parent.child2. Guaranteed set, first: 6. Request of first:6 is waiting for resources.
+// Nome of the node would be considered for preemption as ask requirements is higher than the node capacity. Hence, no results.
+func TestTryPreemption_NodeWithCapacityLesserThanAsk(t *testing.T) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5, "pods": 1})
+	iterator := getNodeIteratorFn(node1, node2)
+	rootQ, err := createRootQueue(map[string]string{"first": "10", "pods": "2"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, map[string]string{"first": "10"}, map[string]string{"first": "5"})
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, map[string]string{"first": "6"})
+	assert.NilError(t, err)
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+	ask1.createTime = time.Now().Add(-1 * time.Minute)
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+	ask2.createTime = time.Now()
+	assert.NilError(t, app1.AddAllocationAsk(ask2))
+	alloc1 := markAllocated(nodeID1, ask1)
+	app1.AddAllocation(alloc1)
+	assert.Check(t, node1.TryAddAllocation(alloc1), "node alloc1 failed")
+	alloc2 := markAllocated(nodeID2, ask2)
+	app1.AddAllocation(alloc2)
+	assert.Check(t, node2.TryAddAllocation(alloc2), "node alloc2 failed")
+	assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
+	assert.NilError(t, childQ1.IncAllocatedResource(ask2.GetAllocatedResource(), false))
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.applications[appID2] = app2
+	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6, "pods": 1}))
+	assert.NilError(t, app2.AddAllocationAsk(ask3))
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result == nil, "unexpected result")
+	assert.Equal(t, ok, false, "no victims found")
+	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
+	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+}
+
 // TestTryPreemptionOnNodeWithOGParentAndUGPreemptor Test try preemption on node with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue path in 2 levels. victim and preemptor queue are siblings.
 // Parent is over guaranteed whereas preemptor is under guaranteed with pending pods. Parent is over guaranteed because of another child.

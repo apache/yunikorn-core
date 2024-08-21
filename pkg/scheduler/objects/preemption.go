@@ -835,8 +835,8 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 		// Overall, this increases the chance of choosing victims for preemptor from siblings without causing preemption storm or loop.
 		askQueueRemainingGuaranteed := qps.AskQueue.GuaranteedResource.Clone()
 		askQueueUsed := qps.AskQueue.AllocatedResource.Clone()
-		resources.SubOnlyExisting(askQueueUsed, qps.AskQueue.PreemptingResource)
-		resources.SubOnlyExisting(askQueueRemainingGuaranteed, askQueueUsed)
+		askQueueUsed = resources.SubOnlyExisting(askQueueUsed, qps.AskQueue.PreemptingResource)
+		askQueueRemainingGuaranteed = resources.SubOnlyExisting(askQueueRemainingGuaranteed, askQueueUsed)
 		if !remainingGuaranteed.IsEmpty() && strings.HasPrefix(qps.AskQueue.QueuePath, qps.QueuePath) && !askQueueRemainingGuaranteed.IsEmpty() {
 			return nil
 		}

@@ -137,6 +137,8 @@ func eventDesc() fsm.Events {
 // The first argument must always be an Application and if there is a second,
 // that must be a string. If this precondition is not met, a runtime panic
 // will occur.
+//
+//nolint:funlen
 func callbacks() fsm.Callbacks {
 	return fsm.Callbacks{
 		"enter_state": func(_ context.Context, event *fsm.Event) {

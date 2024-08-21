@@ -755,6 +755,11 @@ func (sq *Queue) decPendingResource(delta *resources.Resource) {
 			zap.Error(err))
 	} else {
 		sq.updatePendingResourceMetrics()
+		// We should update the metrics before pruning the resource.
+		// For example:
+		// If we prune the resource first and the resource become nil after pruning,
+		// the metrics will not be updated with nil resource, this is not expected.
+		sq.pending.Prune()
 	}
 }
 
@@ -1085,7 +1090,12 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	defer sq.Unlock()
 	// all OK update the queue
 	sq.allocatedResource = resources.Sub(sq.allocatedResource, alloc)
+	// We should update the metrics before pruning the resource.
+	// For example:
+	// If we prune the resource first and the resource become nil after pruning,
+	// the metrics will not be updated with nil resource, this is not expected.
 	sq.updateAllocatedResourceMetrics()
+	sq.allocatedResource.Prune()
 	return nil
 }
 
@@ -1118,6 +1128,11 @@ func (sq *Queue) DecPreemptingResource(alloc *resources.Resource) {
 	sq.parent.DecPreemptingResource(alloc)
 	sq.preemptingResource = resources.Sub(sq.preemptingResource, alloc)
 	sq.updatePreemptingResourceMetrics()
+	// We should update the metrics before pruning the resource.
+	// For example:
+	// If we prune the resource first and the resource become nil after pruning,
+	// the metrics will not be updated with nil resource, this is not expected.
+	sq.preemptingResource.Prune()
 }
 
 func (sq *Queue) IsPrioritySortEnabled() bool {

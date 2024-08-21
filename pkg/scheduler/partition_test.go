@@ -281,7 +281,8 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.Equal(t, 1, len(released), "node did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node did not confirm correct allocation")
 	assert.Equal(t, released[0].GetAllocationKey(), allocAllocationKey, "allocationKey returned by release not the same as on allocation")
-	assertLimits(t, getTestUserGroup(), resources.Zero)
+	// zero resource should be pruned
+	assertLimits(t, getTestUserGroup(), nil)
 
 	assert.NilError(t, err, "the event should have been processed")
 }
@@ -346,7 +347,8 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), appRes), "app should have updated pending resources")
 	// check the interim state of the placeholder involved
 	assert.Check(t, !ph.HasRelease(), "placeholder should not have release linked anymore")
-	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}))
+	// zero resource should be pruned
+	assertLimits(t, getTestUserGroup(), nil)
 }
 
 func TestCalculateNodesResourceUsage(t *testing.T) {
@@ -1077,7 +1079,8 @@ func TestRemoveApp(t *testing.T) {
 
 	allocs = partition.removeApplication("will_not_remove")
 	assert.Equal(t, 1, len(allocs), "existing application with allocations returned unexpected allocations %v", allocs)
-	assertLimits(t, getTestUserGroup(), resources.Zero)
+	// zero resource should be pruned
+	assertLimits(t, getTestUserGroup(), nil)
 }
 
 func TestRemoveAppAllocs(t *testing.T) {
@@ -1139,7 +1142,8 @@ func TestRemoveAppAllocs(t *testing.T) {
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 1, len(allocs), "removal request for existing allocation returned wrong allocations: %v", allocs)
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "removal requests did not remove all allocations: %v", partition.allocations)
-	assertLimits(t, getTestUserGroup(), resources.Zero)
+	// zero resource should be pruned
+	assertLimits(t, getTestUserGroup(), nil)
 }
 
 func TestRemoveAllPlaceholderAllocs(t *testing.T) {
@@ -2218,7 +2222,8 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 	}
 	releases, _ := partition.removeAllocation(release)
 	assert.Equal(t, 0, len(releases), "not expecting any released allocations")
-	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 0}), getExpectedQueuesLimitsForPreemptionWithRequiredNode())
+	// zero resource should be pruned
+	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), nil, getExpectedQueuesLimitsForPreemptionWithRequiredNode())
 	return partition, app
 }
 
@@ -2974,7 +2979,8 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "nothing should be allocated on node")
 	assert.Assert(t, resources.IsZero(app.GetQueue().GetAllocatedResource()), "nothing should be allocated on queue")
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "no allocation should be registered on the partition")
-	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0, "second": 0}))
+	// zero resource should be pruned
+	assertLimits(t, getTestUserGroup(), nil)
 }
 
 // one real allocation should trigger cleanup of all placeholders
@@ -3044,7 +3050,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 	assert.Assert(t, resources.IsZero(app.GetQueue().GetAllocatedResource()), "nothing should be allocated on queue")
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "no allocation should be registered on the partition")
 	assert.Equal(t, 0, partition.getPhAllocationCount(), "no placeholder allocation should be on the partition")
-	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0, "second": 0}))
+	assertLimits(t, getTestUserGroup(), nil)
 }
 
 func TestPlaceholderBiggerThanReal(t *testing.T) {

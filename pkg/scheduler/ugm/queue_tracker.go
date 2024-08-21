@@ -153,6 +153,7 @@ func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationI
 		}
 	}
 	qt.resourceUsage.SubFrom(usage)
+	qt.resourceUsage.Prune()
 	if removeApp {
 		log.Log(log.SchedUGM).Debug("Removed application from running applications",
 			zap.String("application", applicationID),

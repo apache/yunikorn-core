@@ -581,6 +581,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 			if !ask.IsAllocated() {
 				deltaPendingResource = ask.GetAllocatedResource()
 				sa.pending = resources.Sub(sa.pending, deltaPendingResource)
+				sa.pending.Prune()
 			}
 			delete(sa.requests, allocKey)
 			sa.sortedRequests.remove(ask)
@@ -648,6 +649,7 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	// Update total pending resource
 	delta.SubFrom(oldAskResource)
 	sa.pending = resources.Add(sa.pending, delta)
+	sa.pending.Prune()
 	sa.queue.incPendingResource(delta)
 
 	log.Log(log.SchedApplication).Info("ask added successfully to application",
@@ -726,10 +728,11 @@ func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error)
 		sa.updateAskMaxPriority()
 	}
 
-	delta := resources.Multiply(ask.GetAllocatedResource(), -1)
-	sa.pending = resources.Add(sa.pending, delta)
+	delta := ask.GetAllocatedResource()
+	sa.pending = resources.Sub(sa.pending, delta)
+	sa.pending.Prune()
 	// update the pending of the queue with the same delta
-	sa.queue.incPendingResource(delta)
+	sa.queue.decPendingResource(delta)
 
 	return delta, nil
 }
@@ -1797,6 +1800,7 @@ func (sa *Application) removeAllocationInternal(allocationKey string, releaseTyp
 		// as and when every ph gets removed (for replacement), resource usage would be reduced.
 		// When real allocation happens as part of replacement, usage would be increased again with real alloc resource
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
+		sa.allocatedPlaceholder.Prune()
 
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
@@ -1821,6 +1825,7 @@ func (sa *Application) removeAllocationInternal(allocationKey string, releaseTyp
 		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
+		sa.allocatedResource.Prune()
 
 		// Aggregate the resources used by this alloc to the application's resource tracker
 		sa.trackCompletedResource(alloc)

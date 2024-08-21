@@ -27,11 +27,16 @@ import (
 )
 
 const (
-	AppAccepted  = "accepted"
-	AppRunning   = "running"
-	AppFailed    = "failed"
-	AppRejected  = "rejected"
-	AppCompleted = "completed"
+	AppNew        = "new"
+	AppAccepted   = "accepted"
+	AppRunning    = "running"
+	AppFailing    = "failing"
+	AppFailed     = "failed"
+	AppRejected   = "rejected"
+	AppResuming   = "resuming"
+	AppCompleting = "completing"
+	AppCompleted  = "completed"
+	AppExpired    = "expired"
 
 	ContainerReleased  = "released"
 	ContainerAllocated = "allocated"
@@ -65,7 +70,7 @@ func InitQueueMetrics(name string) *QueueMetrics {
 			Namespace:   Namespace,
 			Name:        "queue_app",
 			ConstLabels: prometheus.Labels{"queue": name},
-			Help:        "Queue application metrics. State of the application includes `accepted`, `rejected`, `running`, `failed`, `completed`.",
+			Help:        "Queue application metrics. State of the application includes `new`, `accepted`, `rejected`, `running`, `failing`, `failed`, `resuming`, `completing`, `completed`.",
 		}, []string{"state"})
 
 	q.appMetricsSubsystem = prometheus.NewGaugeVec(
@@ -73,7 +78,7 @@ func InitQueueMetrics(name string) *QueueMetrics {
 			Namespace: Namespace,
 			Subsystem: replaceStr,
 			Name:      "queue_app",
-			Help:      "Queue application metrics. State of the application includes `accepted`, `rejected`, `running`, `failed`, `completed`.",
+			Help:      "Queue application metrics. State of the application includes `new`, `accepted`, `rejected`, `running`, `failing`, `failed`, `resuming`, `completing`, `completed`.",
 		}, []string{"state"})
 
 	q.containerMetrics = prometheus.NewCounterVec(
@@ -160,8 +165,29 @@ func (m *QueueMetrics) GetQueueApplicationsRunning() (int, error) {
 	return -1, err
 }
 
+func (m *QueueMetrics) IncQueueApplicationsNew() {
+	m.incQueueApplications(AppNew)
+}
+
+func (m *QueueMetrics) DecQueueApplicationsNew() {
+	m.decQueueApplications(AppNew)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsNew() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppNew).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
 func (m *QueueMetrics) IncQueueApplicationsAccepted() {
 	m.incQueueApplications(AppAccepted)
+}
+
+func (m *QueueMetrics) DecQueueApplicationsAccepted() {
+	m.decQueueApplications(AppAccepted)
 }
 
 func (m *QueueMetrics) GetQueueApplicationsAccepted() (int, error) {
@@ -186,6 +212,40 @@ func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
 	return -1, err
 }
 
+func (m *QueueMetrics) IncQueueApplicationsResuming() {
+	m.incQueueApplications(AppResuming)
+}
+
+func (m *QueueMetrics) DecQueueApplicationsResuming() {
+	m.decQueueApplications(AppResuming)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsResuming() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppResuming).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
+func (m *QueueMetrics) IncQueueApplicationsFailing() {
+	m.incQueueApplications(AppFailing)
+}
+
+func (m *QueueMetrics) DecQueueApplicationsFailing() {
+	m.decQueueApplications(AppFailing)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsFailing() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppFailing).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
 func (m *QueueMetrics) IncQueueApplicationsFailed() {
 	m.incQueueApplications(AppFailed)
 }
@@ -193,6 +253,23 @@ func (m *QueueMetrics) IncQueueApplicationsFailed() {
 func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.appMetricsLabel.WithLabelValues(AppFailed).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
+func (m *QueueMetrics) IncQueueApplicationsCompleting() {
+	m.incQueueApplications(AppCompleting)
+}
+
+func (m *QueueMetrics) DecQueueApplicationsCompleting() {
+	m.decQueueApplications(AppCompleting)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsCompleting() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetricsLabel.WithLabelValues(AppCompleting).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}

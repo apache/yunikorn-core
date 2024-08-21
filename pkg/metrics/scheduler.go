@@ -89,7 +89,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_submission_total",
-			Help:      "Total number of application submissions. State of the attempt includes `accepted` and `rejected`.",
+			Help:      "Total number of application submissions. State of the attempt includes `new`, `accepted` and `rejected`.",
 		}, []string{"result"})
 
 	s.application = prometheus.NewGaugeVec(
@@ -97,7 +97,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_total",
-			Help:      "Total number of applications. State of the application includes `running`, `completed` and `failed`.",
+			Help:      "Total number of applications. State of the application includes `running`, `resuming`, `failing`, `completing`, `completed` and `failed`.",
 		}, []string{"state"})
 
 	s.node = prometheus.NewGaugeVec(
@@ -241,25 +241,39 @@ func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
 	return -1, err
 }
 
+func (m *SchedulerMetrics) IncTotalApplicationsNew() {
+	m.applicationSubmission.WithLabelValues(AppNew).Inc()
+}
+
+func (m *SchedulerMetrics) GetTotalApplicationsNew() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.applicationSubmission.WithLabelValues(AppNew).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Counter.Value), nil
+	}
+	return -1, err
+}
+
 func (m *SchedulerMetrics) IncTotalApplicationsAccepted() {
 	m.applicationSubmission.WithLabelValues(AppAccepted).Inc()
 }
 
-func (m *SchedulerMetrics) AddTotalApplicationsAccepted(value int) {
-	m.applicationSubmission.WithLabelValues(AppAccepted).Add(float64(value))
+func (m *SchedulerMetrics) GetTotalApplicationsAccepted() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.applicationSubmission.WithLabelValues(AppAccepted).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Counter.Value), nil
+	}
+	return -1, err
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsRejected() {
-	m.applicationSubmission.WithLabelValues(ContainerRejected).Inc()
-}
-
-func (m *SchedulerMetrics) AddTotalApplicationsRejected(value int) {
-	m.applicationSubmission.WithLabelValues(ContainerRejected).Add(float64(value))
+	m.applicationSubmission.WithLabelValues(AppRejected).Inc()
 }
 
 func (m *SchedulerMetrics) GetTotalApplicationsRejected() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.applicationSubmission.WithLabelValues(ContainerRejected).Write(metricDto)
+	err := m.applicationSubmission.WithLabelValues(AppRejected).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Counter.Value), nil
 	}
@@ -274,10 +288,6 @@ func (m *SchedulerMetrics) DecTotalApplicationsRunning() {
 	m.application.WithLabelValues(AppRunning).Dec()
 }
 
-func (m *SchedulerMetrics) SubTotalApplicationsRunning(value int) {
-	m.application.WithLabelValues(AppRunning).Sub(float64(value))
-}
-
 func (m *SchedulerMetrics) GetTotalApplicationsRunning() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.application.WithLabelValues(AppRunning).Write(metricDto)
@@ -287,16 +297,45 @@ func (m *SchedulerMetrics) GetTotalApplicationsRunning() (int, error) {
 	return -1, err
 }
 
+func (m *SchedulerMetrics) IncTotalApplicationsFailing() {
+	m.application.WithLabelValues(AppFailing).Inc()
+}
+
+func (m *SchedulerMetrics) DecTotalApplicationsFailing() {
+	m.application.WithLabelValues(AppFailing).Dec()
+}
+
 func (m *SchedulerMetrics) IncTotalApplicationsFailed() {
 	m.application.WithLabelValues(AppFailed).Inc()
 }
 
-func (m *SchedulerMetrics) IncTotalApplicationsCompleted() {
-	m.application.WithLabelValues(AppCompleted).Inc()
+func (m *SchedulerMetrics) IncTotalApplicationsCompleting() {
+	m.application.WithLabelValues(AppCompleting).Inc()
 }
 
-func (m *SchedulerMetrics) AddTotalApplicationsCompleted(value int) {
-	m.application.WithLabelValues(AppCompleted).Add(float64(value))
+func (m *SchedulerMetrics) DecTotalApplicationsCompleting() {
+	m.application.WithLabelValues(AppCompleting).Dec()
+}
+
+func (m *SchedulerMetrics) IncTotalApplicationsResuming() {
+	m.application.WithLabelValues(AppResuming).Inc()
+}
+
+func (m *SchedulerMetrics) DecTotalApplicationsResuming() {
+	m.application.WithLabelValues(AppResuming).Dec()
+}
+
+func (m *SchedulerMetrics) GetTotalApplicationsResuming() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.application.WithLabelValues(AppResuming).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
+func (m *SchedulerMetrics) IncTotalApplicationsCompleted() {
+	m.application.WithLabelValues(AppCompleted).Inc()
 }
 
 func (m *SchedulerMetrics) GetTotalApplicationsCompleted() (int, error) {

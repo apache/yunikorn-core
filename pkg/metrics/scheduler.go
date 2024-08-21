@@ -90,7 +90,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_submission_total",
 			Help:      "Total number of application submissions. State of the attempt includes `accepted` and `rejected`.",
-		}, []string{"result"})
+		}, []string{"state"})
 
 	s.application = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{

@@ -125,11 +125,6 @@ func TestApplicationsRejected(t *testing.T) {
 	curr, err := qm.GetQueueApplicationsRejected()
 	assert.NilError(t, err)
 	assert.Equal(t, 1, curr)
-
-	qm.DecQueueApplicationsRejected()
-	curr, err = qm.GetQueueApplicationsRejected()
-	assert.NilError(t, err)
-	assert.Equal(t, 0, curr)
 }
 
 func TestApplicationsFailed(t *testing.T) {
@@ -142,11 +137,6 @@ func TestApplicationsFailed(t *testing.T) {
 	curr, err := qm.GetQueueApplicationsFailed()
 	assert.NilError(t, err)
 	assert.Equal(t, 1, curr)
-
-	qm.DecQueueApplicationsFailed()
-	curr, err = qm.GetQueueApplicationsFailed()
-	assert.NilError(t, err)
-	assert.Equal(t, 0, curr)
 }
 
 func TestApplicationsCompleting(t *testing.T) {
@@ -176,11 +166,6 @@ func TestApplicationsCompleted(t *testing.T) {
 	curr, err := qm.GetQueueApplicationsCompleted()
 	assert.NilError(t, err)
 	assert.Equal(t, 1, curr)
-
-	qm.DecQueueApplicationsCompleted()
-	curr, err = qm.GetQueueApplicationsCompleted()
-	assert.NilError(t, err)
-	assert.Equal(t, 0, curr)
 }
 
 func TestAllocatedContainers(t *testing.T) {

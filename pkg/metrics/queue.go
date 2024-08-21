@@ -203,10 +203,6 @@ func (m *QueueMetrics) IncQueueApplicationsRejected() {
 	m.incQueueApplications(AppRejected)
 }
 
-func (m *QueueMetrics) DecQueueApplicationsRejected() {
-	m.decQueueApplications(AppRejected)
-}
-
 func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.appMetricsLabel.WithLabelValues(AppRejected).Write(metricDto)
@@ -254,10 +250,6 @@ func (m *QueueMetrics) IncQueueApplicationsFailed() {
 	m.incQueueApplications(AppFailed)
 }
 
-func (m *QueueMetrics) DecQueueApplicationsFailed() {
-	m.decQueueApplications(AppFailed)
-}
-
 func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.appMetricsLabel.WithLabelValues(AppFailed).Write(metricDto)
@@ -286,10 +278,6 @@ func (m *QueueMetrics) GetQueueApplicationsCompleting() (int, error) {
 
 func (m *QueueMetrics) IncQueueApplicationsCompleted() {
 	m.incQueueApplications(AppCompleted)
-}
-
-func (m *QueueMetrics) DecQueueApplicationsCompleted() {
-	m.decQueueApplications(AppCompleted)
 }
 
 func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {

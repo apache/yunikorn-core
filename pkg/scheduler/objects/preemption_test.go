@@ -1584,7 +1584,7 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorS
 func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChild_As_Siblings(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 2})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "25"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "20"}, nil)
 	assert.NilError(t, err)
@@ -1659,7 +1659,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChil
 func TestTryPreemption_OnNode_UGParent_With_GNotSetOnBothChilds(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 2})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "25"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "20"}, nil)
 	assert.NilError(t, err)
@@ -1728,7 +1728,7 @@ func TestTryPreemption_OnNode_UGParent_With_GNotSetOnBothChilds(t *testing.T) {
 func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Siblings(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 2})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "25"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "20"}, nil)
 	assert.NilError(t, err)

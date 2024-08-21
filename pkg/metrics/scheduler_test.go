@@ -38,10 +38,10 @@ func TestDrainingNodes(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncDrainingNodes()
-	verifyMetric(t, 1, "draining", "yunikorn_scheduler_node")
+	verifyMetric(t, 1, "draining", "yunikorn_scheduler_node", dto.MetricType_GAUGE, "state")
 
 	sm.DecDrainingNodes()
-	verifyMetric(t, 0, "draining", "yunikorn_scheduler_node")
+	verifyMetric(t, 0, "draining", "yunikorn_scheduler_node", dto.MetricType_GAUGE, "state")
 }
 
 func TestTotalDecommissionedNodes(t *testing.T) {
@@ -49,7 +49,7 @@ func TestTotalDecommissionedNodes(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalDecommissionedNodes()
-	verifyMetric(t, 1, "decommissioned", "yunikorn_scheduler_node")
+	verifyMetric(t, 1, "decommissioned", "yunikorn_scheduler_node", dto.MetricType_GAUGE, "state")
 }
 
 func TestTryPreemptionLatency(t *testing.T) {
@@ -65,14 +65,11 @@ func TestSchedulerApplicationsNew(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsNew()
-	verifyMetric(t, 1, "new", "yunikorn_scheduler_application_submission_total")
+	verifyMetric(t, 1, "new", "yunikorn_scheduler_application_submission_total", dto.MetricType_COUNTER, "result")
 
 	curr, err := sm.GetTotalApplicationsNew()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
-
-	sm.DecTotalApplicationsNew()
-	verifyMetric(t, 0, "new", "yunikorn_scheduler_application_submission_total")
 }
 
 func TestSchedulerApplicationsAccepted(t *testing.T) {
@@ -80,14 +77,11 @@ func TestSchedulerApplicationsAccepted(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsAccepted()
-	verifyMetric(t, 1, "accepted", "yunikorn_scheduler_application_submission_total")
+	verifyMetric(t, 1, "accepted", "yunikorn_scheduler_application_submission_total", dto.MetricType_COUNTER, "result")
 
 	curr, err := sm.GetTotalApplicationsAccepted()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
-
-	sm.DecTotalApplicationsAccepted()
-	verifyMetric(t, 0, "accepted", "yunikorn_scheduler_application_submission_total")
 }
 
 func TestSchedulerApplicationsRejected(t *testing.T) {
@@ -95,7 +89,7 @@ func TestSchedulerApplicationsRejected(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsRejected()
-	verifyMetric(t, 1, "rejected", "yunikorn_scheduler_application_submission_total")
+	verifyMetric(t, 1, "rejected", "yunikorn_scheduler_application_submission_total", dto.MetricType_COUNTER, "result")
 
 	curr, err := sm.GetTotalApplicationsRejected()
 	assert.NilError(t, err)
@@ -107,14 +101,14 @@ func TestSchedulerApplicationsRunning(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsRunning()
-	verifyMetric(t, 1, "running", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 1, "running", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 
 	curr, err := sm.GetTotalApplicationsRunning()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
 
 	sm.DecTotalApplicationsRunning()
-	verifyMetric(t, 0, "running", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 0, "running", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 }
 
 func TestSchedulerApplicationsCompleting(t *testing.T) {
@@ -122,10 +116,10 @@ func TestSchedulerApplicationsCompleting(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsCompleting()
-	verifyMetric(t, 1, "completing", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 1, "completing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 
 	sm.DecTotalApplicationsCompleting()
-	verifyMetric(t, 0, "completing", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 0, "completing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 }
 
 func TestSchedulerApplicationsResuming(t *testing.T) {
@@ -133,14 +127,14 @@ func TestSchedulerApplicationsResuming(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsResuming()
-	verifyMetric(t, 1, "resuming", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 1, "resuming", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 
 	curr, err := sm.GetTotalApplicationsResuming()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
 
 	sm.DecTotalApplicationsResuming()
-	verifyMetric(t, 0, "resuming", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 0, "resuming", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 }
 
 func TestSchedulerApplicationsFailing(t *testing.T) {
@@ -148,10 +142,10 @@ func TestSchedulerApplicationsFailing(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsFailing()
-	verifyMetric(t, 1, "failing", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 1, "failing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 
 	sm.DecTotalApplicationsFailing()
-	verifyMetric(t, 0, "failing", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 0, "failing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 }
 
 func TestSchedulerApplicationsCompleted(t *testing.T) {
@@ -159,7 +153,7 @@ func TestSchedulerApplicationsCompleted(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsCompleted()
-	verifyMetric(t, 1, "completed", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 1, "completed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 
 	curr, err := sm.GetTotalApplicationsCompleted()
 	assert.NilError(t, err)
@@ -171,7 +165,7 @@ func TestSchedulerApplicationsFailed(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsFailed()
-	verifyMetric(t, 1, "failed", "yunikorn_scheduler_application_total")
+	verifyMetric(t, 1, "failed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 }
 
 func getSchedulerMetrics(t *testing.T) *SchedulerMetrics {
@@ -193,7 +187,7 @@ func verifyHistogram(t *testing.T, name string, value float64, delta float64) {
 	}
 }
 
-func verifyMetric(t *testing.T, expectedCounter float64, expectedState string, name string) {
+func verifyMetric(t *testing.T, expectedCounter float64, expectedState string, name string, metricType dto.MetricType, labelName string) {
 	mfs, err := prometheus.DefaultGatherer.Gather()
 	assert.NilError(t, err)
 
@@ -201,13 +195,19 @@ func verifyMetric(t *testing.T, expectedCounter float64, expectedState string, n
 	for _, metric := range mfs {
 		if strings.Contains(metric.GetName(), name) {
 			assert.Equal(t, 1, len(metric.Metric))
-			assert.Equal(t, dto.MetricType_GAUGE, metric.GetType())
+			assert.Equal(t, metricType, metric.GetType())
 			m := metric.Metric[0]
 			assert.Equal(t, 1, len(m.Label))
-			assert.Equal(t, "state", *m.Label[0].Name)
+			assert.Equal(t, labelName, *m.Label[0].Name)
 			assert.Equal(t, expectedState, *m.Label[0].Value)
-			assert.Assert(t, m.Gauge != nil)
-			assert.Equal(t, expectedCounter, *m.Gauge.Value)
+			switch metricType {
+			case dto.MetricType_GAUGE:
+				assert.Equal(t, expectedCounter, *m.Gauge.Value)
+			case dto.MetricType_COUNTER:
+				assert.Equal(t, expectedCounter, *m.Counter.Value)
+			default:
+				assert.Assert(t, false, "unsupported")
+			}
 			checked = true
 			break
 		}

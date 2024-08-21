@@ -172,8 +172,8 @@ func callbacks() fsm.Callbacks {
 		},
 		fmt.Sprintf("leave_%s", New.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
+			// only updated queue metrics because scheduler metrics are increased only for submission count
 			metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsNew()
-			metrics.GetSchedulerMetrics().DecTotalApplicationsNew()
 		},
 		fmt.Sprintf("enter_%s", Accepted.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
@@ -182,8 +182,8 @@ func callbacks() fsm.Callbacks {
 		},
 		fmt.Sprintf("leave_%s", Accepted.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
+			// only updated queue metrics because scheduler metrics are increased only for submission count
 			metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsAccepted()
-			metrics.GetSchedulerMetrics().DecTotalApplicationsAccepted()
 		},
 		fmt.Sprintf("enter_%s", Rejected.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck

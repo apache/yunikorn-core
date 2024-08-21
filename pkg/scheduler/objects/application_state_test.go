@@ -280,7 +280,9 @@ func TestAppStateTransitionEvents(t *testing.T) {
 // app-00002: New -> Accepted -> Running -> Completing -> Running -> Failing-> Failed
 // app-00003: New -> Accepted -> Running -> Failing -> Failed
 // app-00004: New -> Rejected
-// Final metrics will be: 0 running, 0 accepted, 1 completed, 2 failed and 1 rejected applications
+// Final queue metrics will be: 0 new, 0 running, 0 accepted, 1 completed, 2 failed and 1 rejected applications
+// Final scheduler metrics will be: 4 new, 0 running, 3 accepted, 1 completed, 2 failed and 1 rejected applications
+// Because the scheduler app submission state (new, accepted, rejected)is counter based, and it will not be decremented when the state changes
 func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	queue := createQueue(t, "metrics")
 	metrics.GetSchedulerMetrics().Reset()
@@ -303,7 +305,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	// New -> Resuming
 	err := app.HandleApplicationEvent(ResumeApplication)
 	assertState(t, app, err, Resuming.String())
-	assertTotalAppsNewMetrics(t, 0)
+	assertTotalAppsNewMetrics(t, 1)
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
@@ -321,7 +323,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
-	assertTotalAppsNewMetrics(t, 0)
+	assertTotalAppsNewMetrics(t, 1)
 	assertTotalAppsAcceptedMetrics(t, 1)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
@@ -336,7 +338,8 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRunningMetrics(t, 1)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
-	assertTotalAppsAcceptedMetrics(t, 0)
+	assertTotalAppsNewMetrics(t, 1)
+	assertTotalAppsAcceptedMetrics(t, 1)
 	assertQueueRunningApps(t, app, 1)
 	assertQueueApplicationsRunningMetrics(t, app, 1)
 	assertQueueApplicationsAcceptedMetrics(t, app, 0)
@@ -350,7 +353,9 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRunningMetrics(t, 1)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
-	assertTotalAppsAcceptedMetrics(t, 0)
+	assertTotalAppsAcceptedMetrics(t, 1)
+	assertTotalAppsNewMetrics(t, 1)
+	assertTotalAppsAcceptedMetrics(t, 1)
 	assertQueueRunningApps(t, app, 1)
 	assertQueueApplicationsRunningMetrics(t, app, 1)
 	assertQueueApplicationsAcceptedMetrics(t, app, 0)
@@ -364,6 +369,8 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 0)
 	assertTotalAppsRejectedMetrics(t, 0)
+	assertTotalAppsNewMetrics(t, 1)
+	assertTotalAppsAcceptedMetrics(t, 1)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
 	assertQueueApplicationsAcceptedMetrics(t, app, 0)
@@ -377,6 +384,8 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 1)
 	assertTotalAppsRejectedMetrics(t, 0)
+	assertTotalAppsNewMetrics(t, 1)
+	assertTotalAppsAcceptedMetrics(t, 1)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
 	assertQueueApplicationsAcceptedMetrics(t, app, 0)
@@ -410,6 +419,8 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 1)
 	assertTotalAppsRejectedMetrics(t, 0)
+	assertTotalAppsNewMetrics(t, 2)
+	assertTotalAppsAcceptedMetrics(t, 2)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
 	assertQueueApplicationsAcceptedMetrics(t, app, 0)
@@ -436,6 +447,8 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 1)
 	assertTotalAppsRejectedMetrics(t, 0)
+	assertTotalAppsNewMetrics(t, 3)
+	assertTotalAppsAcceptedMetrics(t, 3)
 	assertQueueRunningApps(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
 	assertQueueApplicationsAcceptedMetrics(t, app, 0)
@@ -453,7 +466,10 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsRunningMetrics(t, 0)
 	assertTotalAppsCompletedMetrics(t, 1)
 	assertTotalAppsRejectedMetrics(t, 1)
+	assertTotalAppsNewMetrics(t, 4)
+	assertTotalAppsAcceptedMetrics(t, 3)
 	assertQueueRunningApps(t, app, 0)
+	assertQueueApplicationsNewMetrics(t, app, 0)
 	assertQueueApplicationsRunningMetrics(t, app, 0)
 	assertQueueApplicationsAcceptedMetrics(t, app, 0)
 	assertQueueApplicationsRejectedMetrics(t, app, 1)

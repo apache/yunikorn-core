@@ -57,7 +57,7 @@ var resourceUsageRangeBuckets = []string{
 // SchedulerMetrics to declare scheduler metrics
 type SchedulerMetrics struct {
 	containerAllocation   *prometheus.CounterVec
-	applicationSubmission *prometheus.GaugeVec
+	applicationSubmission *prometheus.CounterVec
 	application           *prometheus.GaugeVec
 	node                  *prometheus.GaugeVec
 	nodeResourceUsage     map[string]*prometheus.GaugeVec
@@ -84,20 +84,20 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Help:      "Total number of attempts to allocate containers. State of the attempt includes `allocated`, `rejected`, `error`, `released`",
 		}, []string{"state"})
 
-	s.applicationSubmission = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
+	s.applicationSubmission = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_submission_total",
-			Help:      "Total number of application submissions. State of the attempt includes `accepted` and `rejected`.",
-		}, []string{"state"})
+			Help:      "Total number of application submissions. State of the attempt includes `new`, `accepted` and `rejected`.",
+		}, []string{"result"})
 
 	s.application = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_total",
-			Help:      "Total number of applications. State of the application includes `running`, `completed` and `failed`.",
+			Help:      "Total number of applications. State of the application includes `running`, `resuming`, `failing`, `completing`, `completed` and `failed`.",
 		}, []string{"state"})
 
 	s.node = prometheus.NewGaugeVec(
@@ -245,15 +245,11 @@ func (m *SchedulerMetrics) IncTotalApplicationsNew() {
 	m.applicationSubmission.WithLabelValues(AppNew).Inc()
 }
 
-func (m *SchedulerMetrics) DecTotalApplicationsNew() {
-	m.applicationSubmission.WithLabelValues(AppNew).Dec()
-}
-
 func (m *SchedulerMetrics) GetTotalApplicationsNew() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.applicationSubmission.WithLabelValues(AppNew).Write(metricDto)
 	if err == nil {
-		return int(*metricDto.Gauge.Value), nil
+		return int(*metricDto.Counter.Value), nil
 	}
 	return -1, err
 }
@@ -262,15 +258,11 @@ func (m *SchedulerMetrics) IncTotalApplicationsAccepted() {
 	m.applicationSubmission.WithLabelValues(AppAccepted).Inc()
 }
 
-func (m *SchedulerMetrics) DecTotalApplicationsAccepted() {
-	m.applicationSubmission.WithLabelValues(AppAccepted).Dec()
-}
-
 func (m *SchedulerMetrics) GetTotalApplicationsAccepted() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.applicationSubmission.WithLabelValues(AppAccepted).Write(metricDto)
 	if err == nil {
-		return int(*metricDto.Gauge.Value), nil
+		return int(*metricDto.Counter.Value), nil
 	}
 	return -1, err
 }
@@ -283,7 +275,7 @@ func (m *SchedulerMetrics) GetTotalApplicationsRejected() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.applicationSubmission.WithLabelValues(AppRejected).Write(metricDto)
 	if err == nil {
-		return int(*metricDto.Gauge.Value), nil
+		return int(*metricDto.Counter.Value), nil
 	}
 	return -1, err
 }
@@ -340,10 +332,6 @@ func (m *SchedulerMetrics) GetTotalApplicationsResuming() (int, error) {
 		return int(*metricDto.Gauge.Value), nil
 	}
 	return -1, err
-}
-
-func (m *SchedulerMetrics) DecTotalApplicationsFailed() {
-	m.application.WithLabelValues(AppFailed).Dec()
 }
 
 func (m *SchedulerMetrics) IncTotalApplicationsCompleted() {

@@ -30,12 +30,38 @@ import (
 
 var qm *QueueMetrics
 
+func TestApplicationsNew(t *testing.T) {
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
+
+	qm.IncQueueApplicationsNew()
+	verifyAppMetrics(t, "new")
+
+	curr, err := qm.GetQueueApplicationsNew()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsNew()
+	curr, err = qm.GetQueueApplicationsNew()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
+}
+
 func TestApplicationsRunning(t *testing.T) {
 	qm = getQueueMetrics()
 	defer unregisterQueueMetrics()
 
 	qm.IncQueueApplicationsRunning()
 	verifyAppMetrics(t, "running")
+
+	curr, err := qm.GetQueueApplicationsRunning()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsRunning()
+	curr, err = qm.GetQueueApplicationsRunning()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
 }
 
 func TestApplicationsAccepted(t *testing.T) {
@@ -44,6 +70,49 @@ func TestApplicationsAccepted(t *testing.T) {
 
 	qm.IncQueueApplicationsAccepted()
 	verifyAppMetrics(t, "accepted")
+
+	curr, err := qm.GetQueueApplicationsAccepted()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsAccepted()
+	curr, err = qm.GetQueueApplicationsAccepted()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
+}
+
+func TestApplicationsResuming(t *testing.T) {
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
+
+	qm.IncQueueApplicationsResuming()
+	verifyAppMetrics(t, "resuming")
+
+	curr, err := qm.GetQueueApplicationsResuming()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsResuming()
+	curr, err = qm.GetQueueApplicationsResuming()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
+}
+
+func TestApplicationsFailing(t *testing.T) {
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
+
+	qm.IncQueueApplicationsFailing()
+	verifyAppMetrics(t, "failing")
+
+	curr, err := qm.GetQueueApplicationsFailing()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsFailing()
+	curr, err = qm.GetQueueApplicationsFailing()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
 }
 
 func TestApplicationsRejected(t *testing.T) {
@@ -52,6 +121,15 @@ func TestApplicationsRejected(t *testing.T) {
 
 	qm.IncQueueApplicationsRejected()
 	verifyAppMetrics(t, "rejected")
+
+	curr, err := qm.GetQueueApplicationsRejected()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsRejected()
+	curr, err = qm.GetQueueApplicationsRejected()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
 }
 
 func TestApplicationsFailed(t *testing.T) {
@@ -60,6 +138,32 @@ func TestApplicationsFailed(t *testing.T) {
 
 	qm.IncQueueApplicationsFailed()
 	verifyAppMetrics(t, "failed")
+
+	curr, err := qm.GetQueueApplicationsFailed()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsFailed()
+	curr, err = qm.GetQueueApplicationsFailed()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
+}
+
+func TestApplicationsCompleting(t *testing.T) {
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
+
+	qm.IncQueueApplicationsCompleting()
+	verifyAppMetrics(t, "completing")
+
+	curr, err := qm.GetQueueApplicationsCompleting()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsCompleting()
+	curr, err = qm.GetQueueApplicationsCompleting()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
 }
 
 func TestApplicationsCompleted(t *testing.T) {
@@ -68,6 +172,15 @@ func TestApplicationsCompleted(t *testing.T) {
 
 	qm.IncQueueApplicationsCompleted()
 	verifyAppMetrics(t, "completed")
+
+	curr, err := qm.GetQueueApplicationsCompleted()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsCompleted()
+	curr, err = qm.GetQueueApplicationsCompleted()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
 }
 
 func TestAllocatedContainers(t *testing.T) {

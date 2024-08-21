@@ -27,6 +27,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+
 	"gotest.tools/v3/assert"
 )
 
@@ -57,6 +58,120 @@ func TestTryPreemptionLatency(t *testing.T) {
 
 	sm.ObserveTryPreemptionLatency(time.Now().Add(-1 * time.Minute))
 	verifyHistogram(t, "trypreemption_latency_milliseconds", 60, 1)
+}
+
+func TestSchedulerApplicationsNew(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsNew()
+	verifyMetric(t, 1, "new")
+
+	curr, err := sm.GetTotalApplicationsNew()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 1)
+
+	sm.DecTotalApplicationsNew()
+	verifyMetric(t, 0, "new")
+}
+
+func TestSchedulerApplicationsAccepted(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsAccepted()
+	verifyMetric(t, 1, "accepted")
+
+	curr, err := sm.GetTotalApplicationsAccepted()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 1)
+
+	sm.DecTotalApplicationsAccepted()
+	verifyMetric(t, 0, "accepted")
+}
+
+func TestSchedulerApplicationsRejected(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsRejected()
+	verifyMetric(t, 1, "rejected")
+
+	curr, err := sm.GetTotalApplicationsRejected()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 1)
+}
+
+func TestSchedulerApplicationsRunning(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsRunning()
+	verifyMetric(t, 1, "running")
+
+	curr, err := sm.GetTotalApplicationsRunning()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 1)
+
+	sm.DecTotalApplicationsRunning()
+	verifyMetric(t, 0, "running")
+}
+
+func TestSchedulerApplicationsCompleting(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsCompleting()
+	verifyMetric(t, 1, "completing")
+
+	sm.DecTotalApplicationsCompleting()
+	verifyMetric(t, 0, "completing")
+}
+
+func TestSchedulerApplicationsResuming(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsResuming()
+	verifyMetric(t, 1, "resuming")
+
+	curr, err := sm.GetTotalApplicationsResuming()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 1)
+
+	sm.DecTotalApplicationsResuming()
+	verifyMetric(t, 0, "resuming")
+}
+
+func TestSchedulerApplicationsFailing(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsFailing()
+	verifyMetric(t, 1, "failing")
+
+	sm.DecTotalApplicationsFailing()
+	verifyMetric(t, 0, "failing")
+}
+
+func TestSchedulerApplicationsCompleted(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsCompleted()
+	verifyMetric(t, 1, "completed")
+
+	curr, err := sm.GetTotalApplicationsCompleted()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 1)
+}
+
+func TestSchedulerApplicationsFailed(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsFailed()
+	verifyMetric(t, 1, "failed")
 }
 
 func getSchedulerMetrics(t *testing.T) *SchedulerMetrics {

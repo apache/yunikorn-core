@@ -301,19 +301,6 @@ func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {
 	return -1, err
 }
 
-func (m *QueueMetrics) IncQueueApplicationsExpired() {
-	m.incQueueApplications(AppExpired)
-}
-
-func (m *QueueMetrics) GetQueueApplicationsExpired() (int, error) {
-	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppExpired).Write(metricDto)
-	if err == nil {
-		return int(*metricDto.Gauge.Value), nil
-	}
-	return -1, err
-}
-
 func (m *QueueMetrics) IncAllocatedContainer() {
 	m.containerMetrics.WithLabelValues(ContainerAllocated).Inc()
 }

@@ -940,7 +940,7 @@ func TestGetFairMaxResource(t *testing.T) {
 			RootResource:     nil,
 			ParentResource:   map[string]string{},
 			Tier0Resource:    map[string]string{},
-			Tier0Expectation: map[string]string{},
+			Tier0Expectation: nil,
 			Tier1Resource:    map[string]string{},
 			Tier1Expectation: nil,
 		},

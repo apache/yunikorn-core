@@ -869,6 +869,7 @@ func TestMaxHeadroomMax(t *testing.T) {
 	assert.Assert(t, resources.Equals(res, headRoom), "leaf2 queue head room not as expected %v, got: %v", res, headRoom)
 }
 
+// nolint: funlen
 func TestGetFairMaxResource(t *testing.T) {
 	tests := []struct {
 		name             string

@@ -1246,16 +1246,16 @@ func (sq *Queue) GetFairMaxResource() *resources.Resource {
 	return sq.internalGetFairMaxResource(limit)
 }
 
-func (sq *Queue) internalGetFairMaxResource(parent *resources.Resource) *resources.Resource {
+func (sq *Queue) internalGetFairMaxResource(limit *resources.Resource) *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
 
 	us := sq.maxResource
 	if us == nil {
-		return parent.Clone()
+		return limit.Clone()
 	}
 
-	out := parent.Clone()
+	out := limit.Clone()
 
 	// perform merge. child wins every resources collision
 	for k, v := range us.Resources {

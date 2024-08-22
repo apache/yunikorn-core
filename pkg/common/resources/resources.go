@@ -518,10 +518,8 @@ func getFairShare(allocated, guaranteed, fair *Resource) float64 {
 		if !found {
 			nextShare, found = getShareFairForDenominator(k, v, fair)
 		}
-		if found {
-			if nextShare > maxShare {
-				maxShare = nextShare
-			}
+		if found && nextShare > maxShare {
+			maxShare = nextShare
 		}
 	}
 	return maxShare

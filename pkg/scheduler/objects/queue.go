@@ -1250,7 +1250,7 @@ func (sq *Queue) internalGetFairMaxResource(limit *resources.Resource) *resource
 	sq.RLock()
 	defer sq.RUnlock()
 
-	if sq.maxResource.IsEmpty() {
+	if sq.maxResource.IsEmpty() || limit.IsEmpty() {
 		return limit
 	}
 

@@ -144,7 +144,20 @@ func (r *Resource) Clone() *Resource {
 	return ret
 }
 
-// Add additional resource to the base updating the base resource
+// Prune removes any resource type that has a zero value set.
+// Note that a zero value set and a type not being set are interpreted differently for quotas.
+func (r *Resource) Prune() {
+	if r == nil {
+		return
+	}
+	for k, v := range r.Resources {
+		if v == 0 {
+			delete(r.Resources, k)
+		}
+	}
+}
+
+// AddTo adds the resource to the base updating the base resource
 // Should be used by temporary computation only
 // A nil base resource does not change
 // A nil passed in resource is treated as a zero valued resource and leaves base unchanged
@@ -350,18 +363,18 @@ func Sub(left, right *Resource) *Resource {
 	return out
 }
 
-// SubOnlyExisting subtract delta from defined resource.
-// Ignore any type not defined in the base resource (ie receiver).
-// Used as part of the headroom updates as undefined resources are unlimited
-func (r *Resource) SubOnlyExisting(delta *Resource) {
+// SubOnlyExisting subtracts delta from base resource, ignoring any type not defined in the base resource.
+func SubOnlyExisting(base, delta *Resource) *Resource {
 	// check nil inputs and shortcut
-	if r == nil || delta == nil {
-		return
+	if base == nil || delta == nil {
+		return base.Clone()
 	}
 	// neither are nil, subtract the delta
-	for k := range r.Resources {
-		r.Resources[k] = subVal(r.Resources[k], delta.Resources[k])
+	result := NewResource()
+	for k := range base.Resources {
+		result.Resources[k] = subVal(base.Resources[k], delta.Resources[k])
 	}
+	return result
 }
 
 // AddOnlyExisting adds delta to base resource, ignoring any type not defined in the base resource.
@@ -679,12 +692,11 @@ func compareShares(lshares, rshares []float64) int {
 	return 0
 }
 
-// Compare the resources equal returns the specific values for following cases:
-// left  right  return
-// nil   nil    true
-// nil   <set>  false
-// <set> nil    false
-// <set> <set>  true/false  *based on the individual Quantity values
+// Equals Compare the resources based on common resource type available in both left and right Resource
+// Resource type available in left Resource but not in right Resource and vice versa is not taken into account
+// False in case anyone of the resources is nil
+// False in case resource type value differs
+// True in case when resource type values of left Resource matches with right Resource if resource type is available
 func Equals(left, right *Resource) bool {
 	if left == right {
 		return true
@@ -699,13 +711,39 @@ func Equals(left, right *Resource) bool {
 			return false
 		}
 	}
-
 	for k, v := range right.Resources {
 		if left.Resources[k] != v {
 			return false
 		}
 	}
+	return true
+}
 
+// DeepEquals Compare the resources based on resource type existence and its values as well
+// False in case anyone of the resources is nil
+// False in case resource length differs
+// False in case resource type existed in left Resource not exist in right Resource
+// False in case resource type value differs
+// True in case when all resource type and its values of left Resource matches with right Resource
+func DeepEquals(left, right *Resource) bool {
+	if left == right {
+		return true
+	}
+	if left == nil || right == nil {
+		return false
+	}
+	if len(right.Resources) != len(left.Resources) {
+		return false
+	}
+	for k, v := range left.Resources {
+		if val, ok := right.Resources[k]; ok {
+			if val != v {
+				return false
+			}
+		} else {
+			return false
+		}
+	}
 	return true
 }
 
@@ -901,26 +939,10 @@ func StrictlyGreaterThanZero(larger *Resource) bool {
 	return greater
 }
 
-// Returns a new resource with the smallest value for each quantity in the resources
-// If either resource passed in is nil a zero resource is returned
-// If a resource type is missing from one of the Resource, it is considered 0
-func ComponentWiseMin(left, right *Resource) *Resource {
-	out := NewResource()
-	if left != nil && right != nil {
-		for k, v := range left.Resources {
-			out.Resources[k] = min(v, right.Resources[k])
-		}
-		for k, v := range right.Resources {
-			out.Resources[k] = min(v, left.Resources[k])
-		}
-	}
-	return out
-}
-
-// Returns a new Resource with the smallest value for each quantity in the Resources
+// ComponentWiseMin returns a new Resource with the smallest value for each quantity in the Resources
 // If either Resource passed in is nil the other Resource is returned
 // If a Resource type is missing from one of the Resource, it is considered empty and the quantity from the other Resource is returned
-func ComponentWiseMinPermissive(left, right *Resource) *Resource {
+func ComponentWiseMin(left, right *Resource) *Resource {
 	out := NewResource()
 	if right == nil && left == nil {
 		return nil
@@ -942,6 +964,29 @@ func ComponentWiseMinPermissive(left, right *Resource) *Resource {
 		if val, ok := left.Resources[k]; ok {
 			out.Resources[k] = min(v, val)
 		} else {
+			out.Resources[k] = v
+		}
+	}
+	return out
+}
+
+// MergeIfNotPresent Returns a new Resource by merging resource type values present in right with left
+// only if resource type not present in left.
+// If either Resource passed in is nil the other Resource is returned
+// If a Resource type is missing from one of the Resource, it is considered empty and the quantity from the other Resource is returned
+func MergeIfNotPresent(left, right *Resource) *Resource {
+	if right == nil && left == nil {
+		return nil
+	}
+	if left == nil {
+		return right.Clone()
+	}
+	if right == nil {
+		return left.Clone()
+	}
+	out := left.Clone()
+	for k, v := range right.Resources {
+		if _, ok := left.Resources[k]; !ok {
 			out.Resources[k] = v
 		}
 	}

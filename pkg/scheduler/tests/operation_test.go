@@ -89,10 +89,10 @@ partitions:
 
 	// App asks for 2 allocations
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -102,7 +102,7 @@ partitions:
 			},
 			{
 				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -227,10 +227,10 @@ partitions:
 
 	// App asks for 2 allocations
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -240,7 +240,7 @@ partitions:
 			},
 			{
 				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},

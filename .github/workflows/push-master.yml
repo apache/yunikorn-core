@@ -1,18 +1,13 @@
-name: Pre-commit checks
+name: Push to master
 
 on:
-  pull_request:
-    branches:
-      - master
   push:
     branches:
       - master
-  workflow_dispatch: {}
 
 jobs:
-  build:
+  unit-tests:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -22,19 +17,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: .go_version
-      - name: Check license
-        run: make license-check
-        if: ${{ github.event_name == 'pull_request' }}
-      - name: Go lint
-        run: make lint
-        if: ${{ github.event_name == 'pull_request' }}
-      - name: Run Version Check
-        run: make pseudo
-        if: ${{ github.event_name == 'pull_request' }}
-      - name: Run ShellCheck
-        run: make check_scripts
-        if: ${{ github.event_name == 'pull_request' }}
-      - name: unit test
+      - name: Unit tests
         run: make test
       - name: Code coverage
         uses: codecov/codecov-action@v4

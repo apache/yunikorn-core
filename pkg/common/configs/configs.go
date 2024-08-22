@@ -45,6 +45,7 @@ const (
 	DefaultEventTrackingEnabled    = true
 	DefaultEventRequestCapacity    = 1000
 	DefaultEventRingBufferCapacity = 100000
+	DefaultEventChannelSize        = 100000
 	DefaultMaxStreams              = uint64(100)
 	DefaultMaxStreamsPerHost       = uint64(15)
 	DefaultRESTResponseSize        = uint64(10000)

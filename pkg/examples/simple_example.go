@@ -209,10 +209,10 @@ partitions:
 
 	// Send request
 	err = proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10},
 						"vcore":  {Value: 1},

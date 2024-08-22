@@ -108,46 +108,120 @@ func TestNewApplication(t *testing.T) {
 	assert.Assert(t, app.IsNew(), "new application must be in new state")
 	assert.Equal(t, app.execTimeout, defaultPlaceholderTimeout, "no timeout passed in should be modified default")
 	assert.Assert(t, resources.Equals(app.placeholderAsk, res), "placeholder ask not set as expected")
+}
 
+func TestNewApplicationWithAnnotationUpdate(t *testing.T) {
+	user := security.UserGroup{
+		User:   "testuser",
+		Groups: []string{},
+	}
 	// valid tags
-	siApp = &si.AddApplicationRequest{}
+	siApp := &si.AddApplicationRequest{}
 	siApp.Tags = map[string]string{
 		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"validMaxRes\":{\"value\":11}}}",
 		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"validGuaranteed\":{\"value\":22}}}",
+		siCommon.AppTagNamespaceResourceMaxApps:    "33",
 	}
-	app = NewApplication(siApp, user, nil, "")
+
+	app := NewApplication(siApp, user, nil, "")
+
 	guaranteed := app.GetGuaranteedResource()
 	maxResource := app.GetMaxResource()
+	maxApps := app.GetMaxApps()
 	assert.Assert(t, guaranteed != nil, "guaranteed resource has not been set")
 	assert.Equal(t, 1, len(guaranteed.Resources), "more than one resource has been set")
 	assert.Equal(t, resources.Quantity(22), guaranteed.Resources["validGuaranteed"])
 	assert.Assert(t, maxResource != nil, "maximum resource has not been set")
 	assert.Equal(t, 1, len(maxResource.Resources), "more than one resource has been set")
 	assert.Equal(t, resources.Quantity(11), maxResource.Resources["validMaxRes"], "maximum resource is incorrect")
+	assert.Assert(t, maxApps != 0, "maximum apps has not been set or incorrect")
+	assert.Equal(t, uint64(33), maxApps, "maximum apps is incorrect")
+
+	// valid tags without max apps
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"validMaxRes\":{\"value\":11}}}",
+		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"validGuaranteed\":{\"value\":22}}}",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	guaranteed = app.GetGuaranteedResource()
+	maxResource = app.GetMaxResource()
+	maxApps = app.GetMaxApps()
+	assert.Assert(t, guaranteed != nil, "guaranteed resource has not been set")
+	assert.Equal(t, 1, len(guaranteed.Resources), "more than one resource has been set")
+	assert.Equal(t, resources.Quantity(22), guaranteed.Resources["validGuaranteed"])
+	assert.Assert(t, maxResource != nil, "maximum resource has not been set")
+	assert.Equal(t, 1, len(maxResource.Resources), "more than one resource has been set")
+	assert.Equal(t, resources.Quantity(11), maxResource.Resources["validMaxRes"], "maximum resource is incorrect")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set")
 
 	// invalid tags
 	siApp = &si.AddApplicationRequest{}
 	siApp.Tags = map[string]string{
 		siCommon.AppTagNamespaceResourceQuota:      "{xxxxxx}",
 		siCommon.AppTagNamespaceResourceGuaranteed: "{yyyyy}",
+		siCommon.AppTagNamespaceResourceMaxApps:    "zzzzz",
 	}
 	app = NewApplication(siApp, user, nil, "")
 	guaranteed = app.GetGuaranteedResource()
 	maxResource = app.GetMaxResource()
+	maxApps = app.GetMaxApps()
 	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
 	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
 
 	// negative values
 	siApp = &si.AddApplicationRequest{}
 	siApp.Tags = map[string]string{
 		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"negativeMax\":{\"value\":-11}}}",
 		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"negativeGuaranteed\":{\"value\":-22}}}",
+		siCommon.AppTagNamespaceResourceMaxApps:    "-33",
 	}
 	app = NewApplication(siApp, user, nil, "")
 	guaranteed = app.GetGuaranteedResource()
 	maxResource = app.GetMaxResource()
+	maxApps = app.GetMaxApps()
 	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
 	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
+
+	// valid max apps
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceMaxApps: "33",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	maxApps = app.GetMaxApps()
+	guaranteed = app.GetGuaranteedResource()
+	maxResource = app.GetMaxResource()
+	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
+	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps != 0, "maximum apps has not been set or incorrect")
+	assert.Equal(t, uint64(33), maxApps, "maximum apps is incorrect")
+
+	// invalid max apps
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceMaxApps: "zzzzz",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	maxApps = app.GetMaxApps()
+	maxResource = app.GetMaxResource()
+	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
+	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
+
+	// negative max apps
+	siApp = &si.AddApplicationRequest{}
+	siApp.Tags = map[string]string{
+		siCommon.AppTagNamespaceResourceMaxApps: "-33",
+	}
+	app = NewApplication(siApp, user, nil, "")
+	maxApps = app.GetMaxApps()
+	maxResource = app.GetMaxResource()
+	assert.Assert(t, guaranteed == nil, "guaranteed resource should have not been set")
+	assert.Assert(t, maxResource == nil, "maximum resource should have not been set")
+	assert.Assert(t, maxApps == 0, "maximum apps should have not been set or incorrect")
 }
 
 // test basic reservations
@@ -358,8 +432,8 @@ func TestAllocateDeallocate(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	// allocate
-	if delta, err := app.AllocateAsk(aKey); err != nil || !resources.Equals(resources.Multiply(res, -1), delta) {
-		t.Errorf("AllocateAsk() did not return correct delta, err %v, expected %v got %v", err, resources.Multiply(res, -1), delta)
+	if delta, err := app.AllocateAsk(aKey); err != nil || !resources.Equals(res, delta) {
+		t.Errorf("AllocateAsk() did not return correct delta, err %v, expected %v got %v", err, res, delta)
 	}
 	// allocate again should fail
 	if delta, err := app.AllocateAsk(aKey); err == nil || delta != nil {
@@ -869,7 +943,8 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	released = app.RemoveAllocationAsk(askID)
 	assert.Equal(t, released, 0, "allocation ask should not have been reserved")
 	assert.Assert(t, app.IsCompleting(), "Application should have stayed same, changed unexpectedly: %s", app.CurrentState())
-	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}))
+	// zero resource should be pruned
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 
 	log := app.GetStateLog()
 	assert.Equal(t, len(log), 2, "wrong number of app events")
@@ -1054,15 +1129,17 @@ func TestCompleted(t *testing.T) {
 
 func assertResourceUsage(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64, vcoresSecconds int64) {
 	detailedResource := appSummary.ResourceUsage.TrackedResourceMap[instType1]
-	assert.Equal(t, memorySeconds, detailedResource["memory"])
-	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
+	if detailedResource != nil {
+		assert.Equal(t, memorySeconds, int64(detailedResource.Resources["memory"]))
+		assert.Equal(t, vcoresSecconds, int64(detailedResource.Resources["vcores"]))
+	}
 }
 
 func assertPlaceHolderResource(t *testing.T, appSummary *ApplicationSummary, memorySeconds int64,
 	vcoresSecconds int64) {
 	detailedResource := appSummary.PlaceholderResource.TrackedResourceMap[instType1]
-	assert.Equal(t, memorySeconds, detailedResource["memory"])
-	assert.Equal(t, vcoresSecconds, detailedResource["vcores"])
+	assert.Equal(t, memorySeconds, int64(detailedResource.Resources["memory"]))
+	assert.Equal(t, vcoresSecconds, int64(detailedResource.Resources["vcores"]))
 }
 
 func TestResourceUsageAggregation(t *testing.T) {
@@ -1350,14 +1427,14 @@ func TestReplaceAllocationTracking(t *testing.T) {
 }
 
 func TestTimeoutPlaceholderSoftStyle(t *testing.T) {
-	runTimeoutPlaceholderTest(t, Resuming.String(), Soft)
+	runTimeoutPlaceholderTest(t, Resuming.String(), Soft, []int{1, 2})
 }
 
 func TestTimeoutPlaceholderAllocAsk(t *testing.T) {
-	runTimeoutPlaceholderTest(t, Failing.String(), Hard)
+	runTimeoutPlaceholderTest(t, Failing.String(), Hard, []int{1, 2})
 }
 
-func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
+func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string, expectedReleases []int) {
 	setupUGM()
 	// create a fake queue
 	queue, err := createRootQueue(nil)
@@ -1411,14 +1488,12 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 	events := testHandler.GetEvents()
 	var found int
+	idx := 0
 	for _, event := range events {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
-			assert.Equal(t, len(allocRelease.ReleasedAllocations), 2, "two allocations should have been released")
+			assert.Equal(t, len(allocRelease.ReleasedAllocations), expectedReleases[idx], "wrong number of allocations released")
 			found++
-		}
-		if askRelease, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
-			assert.Equal(t, len(askRelease.ReleasedAllocationAsks), 1, "one allocation ask should have been released")
-			found++
+			idx++
 		}
 	}
 	// check if the Replaced of PlaceHolderData is 0
@@ -1492,9 +1567,6 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 			assert.Equal(t, allocRelease.ReleasedAllocations[0].AllocationKey, ph.allocationKey, "wrong placeholder allocation released on timeout")
 			found = true
 		}
-		if _, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
-			t.Fatal("unexpected release allocation ask event found in list of events")
-		}
 	}
 	assert.Assert(t, found, "release allocation event not found in list")
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "Unexpected allocated resources for the app")
@@ -1542,9 +1614,6 @@ func TestTimeoutPlaceholderCompleting(t *testing.T) {
 		if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
 			assert.Equal(t, len(allocRelease.ReleasedAllocations), 1, "one allocation should have been released")
 			found = true
-		}
-		if _, ok := event.(*rmevent.RMReleaseAllocationAskEvent); ok {
-			t.Fatal("unexpected release allocation ask event found in list of events")
 		}
 	}
 	assert.Assert(t, found, "release allocation event not found in list")
@@ -1606,7 +1675,8 @@ func TestIncAndDecUserResourceUsage(t *testing.T) {
 	app.decUserResourceUsage(res, false)
 	assertUserGroupResource(t, getTestUserGroup(), res)
 	app.decUserResourceUsage(res, false)
-	assertUserGroupResource(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}))
+	// zero resource should be pruned
+	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
 func TestIncAndDecUserResourceUsageInSameGroup(t *testing.T) {
@@ -1654,7 +1724,8 @@ func TestIncAndDecUserResourceUsageInSameGroup(t *testing.T) {
 	// Decrease testuser and testuser2 to 0
 	app.decUserResourceUsage(res, false)
 	app2.decUserResourceUsage(res, false)
-	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), nil, 0)
+	// zero resoure should be pruned
+	assertUserResourcesAndGroupResources(t, getUserGroup("testuser", testgroups), nil, nil, 0)
 }
 
 func TestGetAllRequests(t *testing.T) {
@@ -2796,4 +2867,34 @@ func (sa *Application) resetAppEvents() {
 	sa.Lock()
 	defer sa.Unlock()
 	sa.appEvents = schedEvt.NewApplicationEvents(events.GetEventSystem())
+}
+
+func TestGetUint64Tag(t *testing.T) {
+	app := &Application{
+		tags: map[string]string{
+			"validUintTag":    "12345",
+			"negativeUintTag": "-12345",
+			"invalidUintTag":  "not-a-number",
+			"emptyUintTag":    "",
+		},
+	}
+
+	tests := []struct {
+		name     string
+		tag      string
+		expected uint64
+	}{
+		{"Valid uint64 tag", "validUintTag", uint64(12345)},
+		{"Negative uint64 tag", "negativeUintTag", uint64(0)},
+		{"Invalid uint64 tag", "invalidUintTag", uint64(0)},
+		{"Empty tag", "emptyUintTag", uint64(0)},
+		{"Non-existent tag", "nonExistentTag", uint64(0)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := app.getUint64Tag(tt.tag)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

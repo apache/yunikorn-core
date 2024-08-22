@@ -24,9 +24,10 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
-
+	"golang.org/x/exp/maps"
 	"gotest.tools/v3/assert"
+
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 func CheckLenOfResource(res *Resource, expected int) (bool, string) {
@@ -355,6 +356,13 @@ func TestMatchAnyOnlyExisting(t *testing.T) {
 			}
 		})
 	}
+
+	// case: left and right resource is same instance
+	quantity := map[string]Quantity{"first": 1}
+	left := NewResourceFromMap(quantity)
+	right := left
+	result := left.MatchAny(right)
+	assert.Assert(t, result)
 }
 
 func TestStrictlyGreaterThanOnlyExisting(t *testing.T) {
@@ -468,62 +476,6 @@ func TestStrictlyGreaterThanOrEquals(t *testing.T) {
 }
 
 func TestComponentWiseMin(t *testing.T) {
-	type inputs struct {
-		res1    map[string]Quantity
-		res2    map[string]Quantity
-		sameRef bool
-	}
-	var tests = []struct {
-		caseName string
-		input    inputs
-		expected map[string]Quantity
-	}{
-		{"nil case", inputs{nil, nil, false}, make(map[string]Quantity)},
-		{"nil and zero", inputs{nil, map[string]Quantity{}, false}, make(map[string]Quantity)},
-		{"zero and nil", inputs{map[string]Quantity{}, nil, false}, make(map[string]Quantity)},
-		{"zero resource", inputs{map[string]Quantity{}, nil, true}, make(map[string]Quantity)},
-		{"empty resource and zero resource", inputs{map[string]Quantity{}, map[string]Quantity{"zero": 0}, false}, map[string]Quantity{"zero": 0}},
-		{"zero resource and empty resource", inputs{map[string]Quantity{"zero": 0}, map[string]Quantity{}, false}, map[string]Quantity{"zero": 0}},
-		{"no overlapping resources type", inputs{map[string]Quantity{"first": 5}, map[string]Quantity{"second": 10}, false}, map[string]Quantity{"first": 0, "second": 0}},
-		{"no overlapping resources type", inputs{map[string]Quantity{"second": 10}, map[string]Quantity{"first": 5}, false}, map[string]Quantity{"first": 0, "second": 0}},
-		{"overlapping resources type", inputs{map[string]Quantity{"first": 5}, map[string]Quantity{"first": 10}, false}, map[string]Quantity{"first": 5}},
-		{"overlapping resources type", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}, false}, map[string]Quantity{"first": 5}},
-		{"negative values", inputs{map[string]Quantity{"first": -5, "second": -5}, map[string]Quantity{"first": 10}, false}, map[string]Quantity{"first": -5, "second": -5}},
-		{"negative values", inputs{map[string]Quantity{"first": 10}, map[string]Quantity{"first": -5, "second": -5}, false}, map[string]Quantity{"first": -5, "second": -5}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.caseName, func(t *testing.T) {
-			var res1, res2 *Resource
-			if tt.input.res1 != nil {
-				res1 = NewResourceFromMap(tt.input.res1)
-			}
-			if tt.input.sameRef {
-				res2 = res1
-			} else if tt.input.res2 != nil {
-				res2 = NewResourceFromMap(tt.input.res2)
-			}
-
-			result := ComponentWiseMin(res1, res2)
-			if result == nil {
-				t.Error("Result should be a zero resource instead of nil")
-			} else if len(result.Resources) != len(tt.expected) {
-				t.Errorf("Length got %d, expected %d", len(result.Resources), len(tt.expected))
-			}
-
-			for expectedKey, expectedValue := range tt.expected {
-				if value, ok := result.Resources[expectedKey]; ok {
-					if value != expectedValue {
-						t.Errorf("Value of %s is wrong, got %d, expected %d", expectedKey, value, expectedValue)
-					}
-				} else {
-					t.Errorf("resource key %v is not set", expectedKey)
-				}
-			}
-		})
-	}
-}
-
-func TestComponentWiseMinPermissive(t *testing.T) {
 	smallerRes := NewResourceFromMap(map[string]Quantity{"first": 5, "second": 15, "third": 6})
 	higherRes := NewResourceFromMap(map[string]Quantity{"first": 7, "second": 10, "forth": 6})
 	expected := NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10, "third": 6, "forth": 6})
@@ -542,7 +494,7 @@ func TestComponentWiseMinPermissive(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			result := ComponentWiseMinPermissive(tc.res1, tc.res2)
+			result := ComponentWiseMin(tc.res1, tc.res2)
 			assert.DeepEqual(t, result, tc.expected)
 		})
 	}
@@ -583,6 +535,46 @@ func TestComponentWiseMinOnlyExisting(t *testing.T) {
 		}
 		t.Run(tc.name, func(t *testing.T) {
 			result := ComponentWiseMinOnlyExisting(left, right)
+			assert.DeepEqual(t, result, expected)
+		})
+	}
+}
+
+func TestMergeIfNotPresent(t *testing.T) {
+	testCases := []struct {
+		name     string
+		left     map[string]Quantity
+		right    map[string]Quantity
+		expected map[string]Quantity
+	}{
+		{"Min of nil resources should be nil", nil, nil, nil},
+		{"Min of empty resources should be empty resource ", map[string]Quantity{}, map[string]Quantity{}, map[string]Quantity{}},
+		{"Min of positive resource and nil resource", map[string]Quantity{"first": 5}, nil, map[string]Quantity{"first": 5}},
+		{"Min of nil resource and positive resource", nil, map[string]Quantity{"first": 5}, map[string]Quantity{"first": 5}},
+		{"Min of two positive resources", map[string]Quantity{"first": 5}, map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}},
+		{"Min of two positive resources", map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5}, map[string]Quantity{"first": 10}},
+		{"Min of positive resource and negative resource", map[string]Quantity{"first": 5}, map[string]Quantity{"first": -5}, map[string]Quantity{"first": 5}},
+		{"Min of positive resource and negative resource", map[string]Quantity{"first": -5}, map[string]Quantity{"first": 5}, map[string]Quantity{"first": -5}},
+		{"Min of two positive resources with extra resource types", map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5, "second": 15}, map[string]Quantity{"first": 10, "second": 15}},
+		{"Min of two positive resources with extra resource types", map[string]Quantity{"first": 5, "second": 15}, map[string]Quantity{"first": 10}, map[string]Quantity{"first": 5, "second": 15}},
+		{"Min of positive resource and negative resource with extra resource types", map[string]Quantity{"first": 10}, map[string]Quantity{"first": -5, "second": 15}, map[string]Quantity{"first": 10, "second": 15}},
+		{"Min of positive resource and negative resource with extra resource types", map[string]Quantity{"first": -5, "second": 15}, map[string]Quantity{"first": 10}, map[string]Quantity{"first": -5, "second": 15}},
+	}
+	for _, tc := range testCases {
+		var left *Resource
+		var right *Resource
+		var expected *Resource
+		if tc.left != nil {
+			left = NewResourceFromMap(tc.left)
+		}
+		if tc.right != nil {
+			right = NewResourceFromMap(tc.right)
+		}
+		if tc.expected != nil {
+			expected = NewResourceFromMap(tc.expected)
+		}
+		t.Run(tc.name, func(t *testing.T) {
+			result := MergeIfNotPresent(left, right)
 			assert.DeepEqual(t, result, expected)
 		})
 	}
@@ -1073,20 +1065,6 @@ func TestSubFrom(t *testing.T) {
 	}
 }
 
-func TestSubOnlyExistingNil(t *testing.T) {
-	// simple case (nil checks)
-	defer func() {
-		if r := recover(); r != nil {
-			t.Fatal("SubOnlyExisting panic on nil resource")
-		}
-	}()
-	var r *Resource
-	r.SubOnlyExisting(nil)
-	if r != nil {
-		t.Errorf("sub nil resources did not return nil resource: %v", r)
-	}
-}
-
 func TestSubEliminateNegative(t *testing.T) {
 	// simple case (nil checks)
 	result := SubEliminateNegative(nil, nil)
@@ -1096,32 +1074,38 @@ func TestSubEliminateNegative(t *testing.T) {
 }
 
 func TestSubOnlyExisting(t *testing.T) {
-	// remove nil from empty resource
-	left := NewResource()
-	left.SubOnlyExisting(nil)
-	assert.Equal(t, len(left.Resources), 0, "sub nil resource did not return unchanged resource")
-
-	// remove from empty resource
-	delta := NewResourceFromMap(map[string]Quantity{"a": 5})
-	left.SubOnlyExisting(delta)
-	assert.Equal(t, len(left.Resources), 0, "sub simple resource did not return unchanged resource")
-
-	// complex case: just checking the resource merge, values check is secondary
-	left = &Resource{Resources: map[string]Quantity{"a": 0}}
-	delta = &Resource{Resources: map[string]Quantity{"a": 1, "b": 0}}
-	left.SubOnlyExisting(delta)
-	expected := &Resource{Resources: map[string]Quantity{"a": -1}}
-	assert.Equal(t, len(left.Resources), 1, "sub with 1 resource returned more or less types")
-	assert.Assert(t, Equals(left, expected), "sub failed expected %v, actual %v", expected, left)
-
-	// complex case: just checking the resource merge, values check is secondary
-	left = &Resource{Resources: map[string]Quantity{"a": 1, "b": 0}}
-	delta = &Resource{Resources: map[string]Quantity{"a": 1}}
-	left.SubOnlyExisting(delta)
-	assert.Equal(t, len(left.Resources), 2, "sub with 2 resource returned more or less types")
-
-	expected = &Resource{Resources: map[string]Quantity{"a": 0, "b": 0}}
-	assert.Assert(t, Equals(left, expected), "sub failed expected %v, actual %v", expected, left)
+	var tests = []struct {
+		caseName string
+		base     map[string]Quantity
+		delta    map[string]Quantity
+		expected map[string]Quantity
+	}{
+		{"nil resources", nil, nil, nil},
+		{"nil base", nil, map[string]Quantity{"a": 5}, nil},
+		{"nil delta", map[string]Quantity{"a": 5}, nil, map[string]Quantity{"a": 5}},
+		{"empty base", map[string]Quantity{}, map[string]Quantity{"a": 5}, map[string]Quantity{}},
+		{"single type base matched", map[string]Quantity{"a": 5}, map[string]Quantity{"a": 3, "b": 1}, map[string]Quantity{"a": 2}},
+		{"single type base unmatched", map[string]Quantity{"a": 5}, map[string]Quantity{"b": 1}, map[string]Quantity{"a": 5}},
+		{"multi type base partial match", map[string]Quantity{"a": 5, "b": 3}, map[string]Quantity{"a": 2, "c": 1}, map[string]Quantity{"a": 3, "b": 3}},
+		{"multi type base match", map[string]Quantity{"a": 5, "b": 3}, map[string]Quantity{"a": 2, "b": 1}, map[string]Quantity{"a": 3, "b": 2}},
+		{"negative result", map[string]Quantity{"a": 1}, map[string]Quantity{"a": 3}, map[string]Quantity{"a": -2}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			var base, delta, expected *Resource
+			if tt.base != nil {
+				base = NewResourceFromMap(tt.base)
+			}
+			if tt.delta != nil {
+				delta = NewResourceFromMap(tt.delta)
+			}
+			if tt.expected != nil {
+				expected = NewResourceFromMap(tt.expected)
+			}
+			result := SubOnlyExisting(base, delta)
+			assert.Assert(t, Equals(result, expected), "incorrect result returned")
+		})
+	}
 }
 
 func TestAddOnlyExisting(t *testing.T) {
@@ -1208,6 +1192,31 @@ func TestEqualsOrEmpty(t *testing.T) {
 
 	for _, tt := range tests {
 		if got := EqualsOrEmpty(tt.left, tt.right); got != tt.want {
+			t.Errorf("got %v, want %v", got, tt.want)
+		}
+	}
+}
+
+func TestDeepEquals(t *testing.T) {
+	var tests = []struct {
+		left, right *Resource
+		want        bool
+	}{
+		{nil, nil, true},
+		{nil, NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), nil, false},
+		{nil, NewResource(), false},
+		{NewResource(), nil, false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0}), NewResourceFromMap(map[string]Quantity{"a": 0}), true},
+		{NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), true},
+		{NewResourceFromMap(map[string]Quantity{"a": 0}), NewResourceFromMap(map[string]Quantity{"b": 0, "c": 1}), false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0, "b": 1}), NewResourceFromMap(map[string]Quantity{"a": 1, "b": 1}), false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0, "c": 1}), NewResourceFromMap(map[string]Quantity{"a": 0, "d": 3}), false},
+		{NewResourceFromMap(map[string]Quantity{"a": 0}), NewResourceFromMap(map[string]Quantity{"d": 0}), false},
+	}
+
+	for _, tt := range tests {
+		if got := DeepEquals(tt.left, tt.right); got != tt.want {
 			t.Errorf("got %v, want %v", got, tt.want)
 		}
 	}
@@ -2288,6 +2297,38 @@ func TestResource_DominantResource(t *testing.T) {
 			if got := tt.used.DominantResourceType(tt.capacity); got != tt.wantName {
 				t.Errorf("DominantResourceType() = %v, want %v", got, tt.wantName)
 			}
+		})
+	}
+}
+
+func TestResource_PruneNil(t *testing.T) {
+	// make sure we're nil safe IDE will complain about the receiver being nil
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil resource in prune test")
+		}
+	}()
+	var empty *Resource
+	empty.Prune()
+}
+
+func TestResource_Prune(t *testing.T) {
+	var tests = []struct {
+		caseName string
+		input    map[string]Quantity
+		output   map[string]Quantity
+	}{
+		{"no types", map[string]Quantity{}, map[string]Quantity{}},
+		{"all types with value", map[string]Quantity{"first": 1, "second": -2, "third": 3}, map[string]Quantity{"first": 1, "second": -2, "third": 3}},
+		{"zero type", map[string]Quantity{"first": 1, "zero": 0, "third": 3}, map[string]Quantity{"first": 1, "third": 3}},
+		{"no types with value", map[string]Quantity{"first": 0, "second": 0}, map[string]Quantity{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			original := NewResourceFromMap(tt.input)
+			original.Prune()
+			assert.Equal(t, len(tt.output), len(original.Resources), "unexpected resource types returned")
+			assert.Assert(t, maps.Equal(original.Resources, tt.output), "resource type maps are not equal")
 		})
 	}
 }

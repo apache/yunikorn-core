@@ -124,14 +124,6 @@ func (rmp *RMProxy) processApplicationUpdateEvent(event *rmevent.RMApplicationUp
 		log.Log(log.RMProxy).DPanic("RM is not registered",
 			zap.String("rmID", event.RmID))
 	}
-
-	// update app metrics
-	if len(event.RejectedApplications) > 0 {
-		metrics.GetSchedulerMetrics().AddTotalApplicationsRejected(len(event.RejectedApplications))
-	}
-	if len(event.AcceptedApplications) > 0 {
-		metrics.GetSchedulerMetrics().AddTotalApplicationsAccepted(len(event.AcceptedApplications))
-	}
 }
 
 func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllocationEvent) {
@@ -160,27 +152,6 @@ func (rmp *RMProxy) triggerUpdateAllocation(rmID string, response *si.Allocation
 		log.Log(log.RMProxy).DPanic("RM is not registered",
 			zap.String("rmID", rmID))
 	}
-}
-
-func (rmp *RMProxy) processRMReleaseAllocationAskEvent(event *rmevent.RMReleaseAllocationAskEvent) {
-	if len(event.ReleasedAllocationAsks) == 0 {
-		return
-	}
-	response := &si.AllocationResponse{
-		ReleasedAsks: event.ReleasedAllocationAsks,
-	}
-	rmp.triggerUpdateAllocation(event.RmID, response)
-}
-
-func (rmp *RMProxy) processRMRejectedAllocationAskEvent(event *rmevent.RMRejectedAllocationAskEvent) {
-	if len(event.RejectedAllocationAsks) == 0 {
-		return
-	}
-	response := &si.AllocationResponse{
-		Rejected: event.RejectedAllocationAsks,
-	}
-	rmp.triggerUpdateAllocation(event.RmID, response)
-	metrics.GetSchedulerMetrics().AddRejectedContainers(len(event.RejectedAllocationAsks))
 }
 
 func (rmp *RMProxy) processRMRejectedAllocationEvent(event *rmevent.RMRejectedAllocationEvent) {
@@ -224,14 +195,10 @@ func (rmp *RMProxy) handleRMEvents() {
 				rmp.processApplicationUpdateEvent(v)
 			case *rmevent.RMReleaseAllocationEvent:
 				rmp.processRMReleaseAllocationEvent(v)
-			case *rmevent.RMRejectedAllocationAskEvent:
-				rmp.processRMRejectedAllocationAskEvent(v)
 			case *rmevent.RMRejectedAllocationEvent:
 				rmp.processRMRejectedAllocationEvent(v)
 			case *rmevent.RMNodeUpdateEvent:
 				rmp.processRMNodeUpdateEvent(v)
-			case *rmevent.RMReleaseAllocationAskEvent:
-				rmp.processRMReleaseAllocationAskEvent(v)
 			default:
 				panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
 			}
@@ -304,17 +271,9 @@ func (rmp *RMProxy) UpdateAllocation(request *si.AllocationRequest) error {
 		alloc.PartitionName = common.GetNormalizedPartitionName(alloc.PartitionName, request.RmID)
 	}
 
-	// Update asks
-	for _, ask := range request.Asks {
-		ask.PartitionName = common.GetNormalizedPartitionName(ask.PartitionName, request.RmID)
-	}
-
 	// Update releases
 	if request.Releases != nil {
 		for _, rel := range request.Releases.AllocationsToRelease {
-			rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmID)
-		}
-		for _, rel := range request.Releases.AllocationAsksToRelease {
 			rel.PartitionName = common.GetNormalizedPartitionName(rel.PartitionName, request.RmID)
 		}
 	}

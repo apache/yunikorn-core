@@ -81,11 +81,6 @@ type RMApplicationUpdateEvent struct {
 	UpdatedApplications  []*si.UpdatedApplication
 }
 
-type RMRejectedAllocationAskEvent struct {
-	RmID                   string
-	RejectedAllocationAsks []*si.RejectedAllocationAsk
-}
-
 type RMRejectedAllocationEvent struct {
 	RmID                string
 	RejectedAllocations []*si.RejectedAllocation
@@ -95,11 +90,6 @@ type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease
 	Channel             chan *Result `json:"-"`
-}
-
-type RMReleaseAllocationAskEvent struct {
-	RmID                   string
-	ReleasedAllocationAsks []*si.AllocationAskRelease
 }
 
 type RMNodeUpdateEvent struct {

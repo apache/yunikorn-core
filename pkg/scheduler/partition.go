@@ -342,13 +342,19 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 
 	guaranteedRes := app.GetGuaranteedResource()
 	maxRes := app.GetMaxResource()
-	if !isRecoveryQueue && (guaranteedRes != nil || maxRes != nil) {
+	maxApps := app.GetMaxApps()
+	if !isRecoveryQueue && (guaranteedRes != nil || maxRes != nil || maxApps != 0) {
 		// set resources based on tags, but only if the queue is dynamic (unmanaged)
 		if queue.IsManaged() {
 			log.Log(log.SchedQueue).Warn("Trying to set resources on a queue that is not an unmanaged leaf",
 				zap.String("queueName", queue.QueuePath))
 		} else {
-			queue.SetResources(guaranteedRes, maxRes)
+			if maxApps != 0 {
+				queue.SetMaxRunningApps(maxApps)
+			}
+			if guaranteedRes != nil || maxRes != nil {
+				queue.SetResources(guaranteedRes, maxRes)
+			}
 		}
 	}
 
@@ -545,7 +551,8 @@ func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 	return pc.nodes.GetNode(nodeID)
 }
 
-// Add the node to the partition.
+// AddNode adds the node to the partition. Updates the partition and root queue resources if the node is added
+// successfully to the partition.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddNode(node *objects.Node) error {
 	if node == nil {
@@ -563,7 +570,9 @@ func (pc *PartitionContext) AddNode(node *objects.Node) error {
 	return nil
 }
 
-// Update the partition resources based on the change of the node information
+// updatePartitionResource updates the partition resources based on the change of the node information.
+// The delta is added to the total partition resources. A removal or decrease MUST be negative.
+// The passed in delta is not changed and only read.
 func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 	pc.Lock()
 	defer pc.Unlock()
@@ -573,39 +582,29 @@ func (pc *PartitionContext) updatePartitionResource(delta *resources.Resource) {
 		} else {
 			pc.totalPartitionResource.AddTo(delta)
 		}
+		// remove any zero values from the final resource definition
+		pc.totalPartitionResource.Prune()
+		// set the root queue size
 		pc.root.SetMaxResource(pc.totalPartitionResource)
 	}
 }
 
-// Update the partition details when adding a node.
+// addNodeToList adds a node to the partition, and updates the metrics & resource tracking information
+// if the node was added successfully to the partition.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) addNodeToList(node *objects.Node) error {
 	// we don't grab a lock here because we only update pc.nodes which is internally protected
 	if err := pc.nodes.AddNode(node); err != nil {
 		return fmt.Errorf("failed to add node %s to partition %s, error: %v", node.NodeID, pc.Name, err)
 	}
 
-	pc.addNodeResources(node)
-	return nil
-}
-
-// Update metrics & resource tracking information.
-// This locks the partition. The partition may not be locked when we process the allocation
-// additions to the node as that takes further app, queue or node locks.
-func (pc *PartitionContext) addNodeResources(node *objects.Node) {
-	pc.Lock()
-	defer pc.Unlock()
+	pc.updatePartitionResource(node.GetCapacity())
 	metrics.GetSchedulerMetrics().IncActiveNodes()
-	// update/set the resources available in the cluster
-	if pc.totalPartitionResource == nil {
-		pc.totalPartitionResource = node.GetCapacity().Clone()
-	} else {
-		pc.totalPartitionResource.AddTo(node.GetCapacity())
-	}
-	pc.root.SetMaxResource(pc.totalPartitionResource)
 	log.Log(log.SchedPartition).Info("Updated available resources from added node",
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID),
-		zap.Stringer("partitionResource", pc.totalPartitionResource))
+		zap.Stringer("partitionResource", pc.GetTotalPartitionResource()))
+	return nil
 }
 
 // removeNodeFromList removes the node from the list of partition nodes.
@@ -624,20 +623,6 @@ func (pc *PartitionContext) removeNodeFromList(nodeID string) *objects.Node {
 		zap.String("partitionName", pc.Name),
 		zap.String("nodeID", node.NodeID))
 	return node
-}
-
-// removeNodeResources updates the partition and root queue resources as part of the node removal process.
-// This locks the partition.
-func (pc *PartitionContext) removeNodeResources(node *objects.Node) {
-	pc.Lock()
-	defer pc.Unlock()
-	// cleanup the available resources, partition resources cannot be nil at this point
-	pc.totalPartitionResource.SubFrom(node.GetCapacity())
-	pc.root.SetMaxResource(pc.totalPartitionResource)
-	log.Log(log.SchedPartition).Info("Updated available resources from removed node",
-		zap.String("partitionName", pc.Name),
-		zap.String("nodeID", node.NodeID),
-		zap.Stringer("partitionResource", pc.totalPartitionResource))
 }
 
 // removeNode removes a node from the partition. It returns all released and confirmed allocations.
@@ -668,7 +653,12 @@ func (pc *PartitionContext) removeNode(nodeID string) ([]*objects.Allocation, []
 	released, confirmed := pc.removeNodeAllocations(node)
 
 	// update the resource linked to this node, all allocations are removed, queue usage should have decreased
-	pc.removeNodeResources(node)
+	// The delta passed in must be negative: the delta is always added
+	pc.updatePartitionResource(resources.Multiply(node.GetCapacity(), -1))
+	log.Log(log.SchedPartition).Info("Updated available resources from removed node",
+		zap.String("partitionName", pc.Name),
+		zap.String("nodeID", node.NodeID),
+		zap.Stringer("partitionResource", pc.GetTotalPartitionResource()))
 	return released, confirmed
 }
 
@@ -1123,65 +1113,170 @@ func (pc *PartitionContext) GetNodes() []*objects.Node {
 	return pc.nodes.GetNodes()
 }
 
-// Add an already bound allocation to the partition/node/application/queue.
-// Queue max allocation is not checked as the allocation came from the RM.
-//
+// UpdateAllocation adds or updates an Allocation. If the Allocation has no NodeID specified, it is considered a
+// pending allocation and processed appropriate. This call is idempotent, and can be called multiple times with the
+// same allocation (such as on change updates from the shim)
+// Upon successfully processing, two flags are returned: requestCreated (if a new request was added) and allocCreated (if an allocation was satisifed).
+// This can be used by callers that need this information to take further action.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) AddAllocation(alloc *objects.Allocation) error {
+func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (requestCreated bool, allocCreated bool, err error) { //nolint:funlen
 	// cannot do anything with a nil alloc, should only happen if the shim broke things badly
 	if alloc == nil {
-		return nil
+		return false, false, nil
 	}
 	if pc.isStopped() {
-		return fmt.Errorf("partition %s is stopped cannot add new allocation %s", pc.Name, alloc.GetAllocationKey())
+		return false, false, fmt.Errorf("partition %s is stopped; cannot process allocation %s", pc.Name, alloc.GetAllocationKey())
 	}
 
-	log.Log(log.SchedPartition).Info("adding recovered allocation",
+	allocationKey := alloc.GetAllocationKey()
+	applicationID := alloc.GetApplicationID()
+	nodeID := alloc.GetNodeID()
+
+	log.Log(log.SchedPartition).Info("processing allocation",
 		zap.String("partitionName", pc.Name),
-		zap.String("appID", alloc.GetApplicationID()),
-		zap.String("allocationKey", alloc.GetAllocationKey()))
+		zap.String("appID", applicationID),
+		zap.String("allocationKey", allocationKey))
 
-	// Check if allocation violates any resource restriction, or allocate on a
-	// non-existent application or nodes.
-	node := pc.GetNode(alloc.GetNodeID())
-	if node == nil {
-		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("failed to find node %s", alloc.GetNodeID())
-	}
-
+	// find application
 	app := pc.getApplication(alloc.GetApplicationID())
 	if app == nil {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("failed to find application %s", alloc.GetApplicationID())
+		return false, false, fmt.Errorf("failed to find application %s", applicationID)
 	}
 	queue := app.GetQueue()
 
-	// Do not check if the new allocation goes beyond the queue's max resource (recursive).
-	// still handle a returned error but they should never happen.
-	if err := queue.IncAllocatedResource(alloc.GetAllocatedResource(), true); err != nil {
-		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return fmt.Errorf("cannot allocate resource from application %s: %v ",
-			alloc.GetApplicationID(), err)
+	// find node if one is specified
+	var node *objects.Node = nil
+	allocated := alloc.IsAllocated()
+	if allocated {
+		node = pc.GetNode(alloc.GetNodeID())
+		if node == nil {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return false, false, fmt.Errorf("failed to find node %s", nodeID)
+		}
 	}
 
-	metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
-	node.AddAllocation(alloc)
-	alloc.SetInstanceType(node.GetInstanceType())
-	app.RecoverAllocationAsk(alloc)
-	app.AddAllocation(alloc)
+	// check to see if allocation exists already on app
+	existing := app.GetAllocationAsk(allocationKey)
 
-	// track the number of allocations
-	pc.updateAllocationCount(1)
-	if alloc.IsPlaceholder() {
-		pc.incPhAllocationCount()
+	// CASE 1/2: no existing allocation
+	if existing == nil {
+		// CASE 1: new request
+		if node == nil {
+			log.Log(log.SchedPartition).Info("handling new request",
+				zap.String("partitionName", pc.Name),
+				zap.String("appID", applicationID),
+				zap.String("allocationKey", allocationKey))
+
+			if err := app.AddAllocationAsk(alloc); err != nil {
+				log.Log(log.SchedPartition).Info("failed to add request",
+					zap.String("partitionName", pc.Name),
+					zap.String("appID", applicationID),
+					zap.String("allocationKey", allocationKey),
+					zap.Error(err))
+				return false, false, err
+			}
+
+			log.Log(log.SchedPartition).Info("added new request",
+				zap.String("partitionName", pc.Name),
+				zap.String("appID", applicationID),
+				zap.String("allocationKey", allocationKey))
+			return true, false, nil
+		}
+
+		// CASE 2: new allocation already assigned
+		log.Log(log.SchedPartition).Info("handling existing allocation",
+			zap.String("partitionName", pc.Name),
+			zap.String("appID", applicationID),
+			zap.String("allocationKey", allocationKey))
+
+		// Do not check if the new allocation goes beyond the queue's max resource (recursive).
+		// still handle a returned error but they should never happen.
+		if err := queue.IncAllocatedResource(alloc.GetAllocatedResource(), true); err != nil {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return false, false, fmt.Errorf("cannot allocate resource from application %s: %v ",
+				alloc.GetApplicationID(), err)
+		}
+
+		metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
+		node.AddAllocation(alloc)
+		alloc.SetInstanceType(node.GetInstanceType())
+		app.RecoverAllocationAsk(alloc)
+		app.AddAllocation(alloc)
+		pc.updateAllocationCount(1)
+		if alloc.IsPlaceholder() {
+			pc.incPhAllocationCount()
+		}
+
+		log.Log(log.SchedPartition).Info("added existing allocation",
+			zap.String("partitionName", pc.Name),
+			zap.String("appID", applicationID),
+			zap.String("allocationKey", allocationKey),
+			zap.Bool("placeholder", alloc.IsPlaceholder()))
+		return false, true, nil
 	}
 
-	log.Log(log.SchedPartition).Info("recovered allocation",
+	// CASE 3: updating an existing allocation
+	if existing.IsAllocated() {
+		// this is a placeholder for eventual resource updates; nothing to do yet
+		log.Log(log.SchedPartition).Info("handling allocation update",
+			zap.String("partitionName", pc.Name),
+			zap.String("appID", applicationID),
+			zap.String("allocationKey", allocationKey))
+		return false, false, nil
+	}
+
+	// CASE 4: transitioning from requested to allocated
+	if allocated {
+		log.Log(log.SchedPartition).Info("handling allocation placement",
+			zap.String("partitionName", pc.Name),
+			zap.String("appID", applicationID),
+			zap.String("allocationKey", allocationKey))
+
+		existing.SetNodeID(nodeID)
+		existing.SetBindTime(alloc.GetBindTime())
+		if _, err := app.AllocateAsk(allocationKey); err != nil {
+			log.Log(log.SchedPartition).Info("failed to allocate ask for allocation placement",
+				zap.String("partitionName", pc.Name),
+				zap.String("appID", applicationID),
+				zap.String("allocationKey", allocationKey),
+				zap.Error(err))
+			return false, false, err
+		}
+
+		// Do not check if the new allocation goes beyond the queue's max resource (recursive).
+		// still handle a returned error but they should never happen.
+		if err := queue.IncAllocatedResource(alloc.GetAllocatedResource(), true); err != nil {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return false, false, fmt.Errorf("cannot allocate resource from application %s: %v ",
+				alloc.GetApplicationID(), err)
+		}
+
+		metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
+		node.AddAllocation(existing)
+		existing.SetInstanceType(node.GetInstanceType())
+		app.AddAllocation(existing)
+		pc.updateAllocationCount(1)
+		if existing.IsPlaceholder() {
+			pc.incPhAllocationCount()
+		}
+
+		log.Log(log.SchedPartition).Info("external allocation placed",
+			zap.String("partitionName", pc.Name),
+			zap.String("appID", applicationID),
+			zap.String("allocationKey", allocationKey),
+			zap.Bool("placeholder", alloc.IsPlaceholder()))
+		return false, true, nil
+	}
+
+	// CASE 5: updating existing request
+	log.Log(log.SchedPartition).Info("handling request update",
 		zap.String("partitionName", pc.Name),
-		zap.String("appID", alloc.GetApplicationID()),
-		zap.String("allocationKey", alloc.GetAllocationKey()),
-		zap.Bool("placeholder", alloc.IsPlaceholder()))
-	return nil
+		zap.String("appID", applicationID),
+		zap.String("allocationKey", allocationKey))
+
+	// this is a placeholder for eventual resource updates; nothing to do yet
+	return false, false, nil
 }
 
 func (pc *PartitionContext) convertUGI(ugi *si.UserGroupInformation, forced bool) (security.UserGroup, error) {
@@ -1265,7 +1360,7 @@ func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app 
 
 // removeAllocation removes the referenced allocation(s) from the applications and nodes
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
+func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) { //nolint:funlen
 	if release == nil {
 		return nil, nil
 	}
@@ -1385,48 +1480,13 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	if release.TerminationType == si.TerminationType_TIMEOUT || release.TerminationType == si.TerminationType_PREEMPTED_BY_SCHEDULER {
 		released = nil
 	}
+
+	if release.TerminationType != si.TerminationType_TIMEOUT {
+		// handle ask releases as well
+		_ = app.RemoveAllocationAsk(allocationKey)
+	}
+
 	return released, confirmed
-}
-
-// Remove the allocation ask from the specified application
-// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) removeAllocationAsk(release *si.AllocationAskRelease) {
-	if release == nil {
-		return
-	}
-	appID := release.ApplicationID
-	allocKey := release.AllocationKey
-	// A timeout termination is send by the core to the shim, ignore on return.
-	if release.TerminationType == si.TerminationType_TIMEOUT {
-		log.Log(log.SchedPartition).Debug("Ignoring ask release with termination type Timeout",
-			zap.String("appID", appID),
-			zap.String("ask", allocKey))
-		return
-	}
-	app := pc.getApplication(appID)
-	if app == nil {
-		log.Log(log.SchedPartition).Info("Invalid ask release requested by shim",
-			zap.String("appID", appID),
-			zap.String("ask", allocKey),
-			zap.Stringer("terminationType", release.TerminationType))
-		return
-	}
-	// remove the allocation asks from the app
-	_ = app.RemoveAllocationAsk(allocKey)
-}
-
-// Add the allocation ask to the specified application
-// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) addAllocationAsk(siAsk *si.AllocationAsk) error {
-	if siAsk == nil {
-		return nil
-	}
-	app := pc.getApplication(siAsk.ApplicationID)
-	if app == nil {
-		return fmt.Errorf("failed to find application %s, for allocation ask %s", siAsk.ApplicationID, siAsk.AllocationKey)
-	}
-	// add the allocation asks to the app
-	return app.AddAllocationAsk(objects.NewAllocationAskFromSI(siAsk))
 }
 
 func (pc *PartitionContext) GetCurrentState() string {

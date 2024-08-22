@@ -28,6 +28,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const alloc = "alloc"
@@ -144,7 +145,7 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 		t.Run(tt.testName, func(t *testing.T) {
 			node := newNode("node1", map[string]resources.Quantity{"first": 20})
 			iterator := getNodeIteratorFn(node)
-			rootQ, err := createRootQueue(nil)
+			rootQ, err := createRootQueue(map[string]string{"first": "20"})
 			assert.NilError(t, err)
 			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{}, tt.parentGuaranteed)
 			assert.NilError(t, err)
@@ -242,7 +243,7 @@ func TestTryPreemptionOnNode(t *testing.T) {
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5, "pods": 1})
 	iterator := getNodeIteratorFn(node1, node2)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"first": "10", "pods": "2"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
 	assert.NilError(t, err)
@@ -292,6 +293,123 @@ func TestTryPreemptionOnNode(t *testing.T) {
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 }
 
+// TestTryPreemption_NodeWithCapacityLesserThanAsk Test try preemption on node whose capacity is lesser than ask resource requirements with simple queue hierarchy. Since Node won't accommodate the ask even after preempting all allocations, there is no use in considering the node.
+// Guaranteed and Max resource set on both victim queue path and preemptor queue path in 2 levels. victim and preemptor queue are siblings.
+// Request (Preemptor) resource type matches with all resource types of the victim. But Guaranteed set only on specific resource type. 2 Victims are available, but 1 should be preempted because further preemption would make usage go below the guaranteed quota
+// Setup:
+// Nodes are Node1 and Node2. Nodes are full. No space to accommodate the ask.
+// root.parent. Guaranteed set on parent, first: 10
+// root.parent.child1. Guaranteed set, first: 5. 2 Allocations (belongs to single app) are running. Each Allocation usage is first:5, pods: 1. Total usage is first:10, pods: 2.
+// root.parent.child2. Guaranteed set, first: 6. Request of first:6 is waiting for resources.
+// Nome of the node would be considered for preemption as ask requirements is higher than the node capacity. Hence, no results.
+func TestTryPreemption_NodeWithCapacityLesserThanAsk(t *testing.T) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5, "pods": 1})
+	iterator := getNodeIteratorFn(node1, node2)
+	rootQ, err := createRootQueue(map[string]string{"first": "10", "pods": "2"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, map[string]string{"first": "10"}, map[string]string{"first": "5"})
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, map[string]string{"first": "6"})
+	assert.NilError(t, err)
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+	ask1.createTime = time.Now().Add(-1 * time.Minute)
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+	ask2.createTime = time.Now()
+	assert.NilError(t, app1.AddAllocationAsk(ask2))
+	alloc1 := markAllocated(nodeID1, ask1)
+	app1.AddAllocation(alloc1)
+	assert.Check(t, node1.TryAddAllocation(alloc1), "node alloc1 failed")
+	alloc2 := markAllocated(nodeID2, ask2)
+	app1.AddAllocation(alloc2)
+	assert.Check(t, node2.TryAddAllocation(alloc2), "node alloc2 failed")
+	assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
+	assert.NilError(t, childQ1.IncAllocatedResource(ask2.GetAllocatedResource(), false))
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.applications[appID2] = app2
+	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6, "pods": 1}))
+	assert.NilError(t, app2.AddAllocationAsk(ask3))
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result == nil, "unexpected result")
+	assert.Equal(t, ok, false, "no victims found")
+	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
+	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+}
+
+// TestTryPreemptionOnNodeWithOGParentAndUGPreemptor Test try preemption on node with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// Guaranteed and Max resource set on both victim queue path and preemptor queue path in 2 levels. victim and preemptor queue are siblings.
+// Parent is over guaranteed whereas preemptor is under guaranteed with pending pods. Parent is over guaranteed because of another child.
+// Setup:
+// Nodes are Node1 and Node2. Nodes are full. No space to accommodate the ask.
+// root.parent. Guaranteed set on parent, first: 2. Usage is first: 6. So over guaranteed.
+// root.parent.child1. No Guaranteed set. Usage is first: 6. 6 Allocations (belongs to single app) are running. Each Allocation usage is first:1. Total usage is first:6.
+// root.parent.child2. Guaranteed set, first: 1. Ask of first:1 is waiting for resources.
+// 1 Allocation on root.parent.child1 should be preempted to free up resources for ask arrived in root.parent.child2.
+func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 3, "pods": 1})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 3, "pods": 1})
+	iterator := getNodeIteratorFn(node1, node2)
+	rootQ, err := createRootQueue(map[string]string{"first": "6", "pods": "2"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "2"})
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, map[string]string{"first": "1"})
+	assert.NilError(t, err)
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+
+	for i := 1; i <= 6; i++ {
+		ask1 := newAllocationAsk("alloc"+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+		ask1.createTime = time.Now().Add(time.Duration(i*-1) * time.Minute)
+		assert.NilError(t, app1.AddAllocationAsk(ask1))
+		if i%2 == 0 {
+			alloc1 := markAllocated(nodeID1, ask1)
+			app1.AddAllocation(alloc1)
+			assert.Check(t, node1.TryAddAllocation(alloc1), "node alloc1 failed")
+			assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
+		} else {
+			alloc1 := markAllocated(nodeID2, ask1)
+			app1.AddAllocation(alloc1)
+			assert.Check(t, node2.TryAddAllocation(alloc1), "node alloc1 failed")
+			assert.NilError(t, childQ1.IncAllocatedResource(ask1.GetAllocatedResource(), false))
+		}
+	}
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.applications[appID2] = app2
+	ask3 := newAllocationAsk("alloc7", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+	assert.NilError(t, app2.AddAllocationAsk(ask3))
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	// register predicate handler
+	preemptions := []mock.Preemption{
+		mock.NewPreemption(true, "alloc7", nodeID2, []string{"alloc1"}, 0, 0),
+	}
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result != nil, "no result")
+	assert.Assert(t, ok, "no victims found")
+	assert.Equal(t, "alloc7", result.Request.allocationKey, "wrong alloc")
+	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
+	assert.Check(t, node2.GetAllocation("alloc1").IsPreempted(), "alloc1 preempted")
+}
+
 // TestTryPreemptionOnQueue Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue path in 2 levels. victim and preemptor queue are siblings.
 // Request (Preemptor) resource type matches with all resource types of the victim. But Guaranteed set only on specific resource type. 2 Victims are available, but 1 should be preempted because further preemption would make usage go below the guaranteed quota
@@ -305,7 +423,7 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "pods": 2})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "pods": 2})
 	iterator := getNodeIteratorFn(node1, node2)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"first": "20", "pods": "4"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, nil)
 	assert.NilError(t, err)
@@ -367,7 +485,7 @@ func TestTryPreemption_VictimsAvailable_InsufficientResource(t *testing.T) {
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "pods": 2})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "pods": 2})
 	iterator := getNodeIteratorFn(node1, node2)
-	rootQ, err := createRootQueue(map[string]string{"first": "20", "pods": "5"})
+	rootQ, err := createRootQueue(map[string]string{"first": "20", "pods": "4"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "8"}, nil)
 	assert.NilError(t, err)
@@ -420,7 +538,7 @@ func TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource(t *testing.T
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5, "pods": 1})
 	iterator := getNodeIteratorFn(node1, node2)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"first": "10", "pods": "2"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "6"}, nil)
 	assert.NilError(t, err)
@@ -483,7 +601,7 @@ func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 4, "pods": 1})
 	iterator := getNodeIteratorFn(node1, node2)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"first": "9", "pods": "2"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "6"}, nil)
 	assert.NilError(t, err)
@@ -548,7 +666,7 @@ func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 30})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 30})
 	iterator := getNodeIteratorFn(node1, node2)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"first": "60"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "18"}, nil)
 	assert.NilError(t, err)
@@ -632,7 +750,7 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 30})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 30})
 	iterator := getNodeIteratorFn(node1, node2)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"first": "60"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "18"}, nil)
 	assert.NilError(t, err)
@@ -716,7 +834,7 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 3, "mem": 400})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "3", "mem": "400"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "2"}, nil)
 	assert.NilError(t, err)
@@ -786,7 +904,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *test
 func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 2, "mem": 400})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "2", "mem": "400"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "2"}, nil)
 	assert.NilError(t, err)
@@ -857,7 +975,7 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(
 func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 5, "mem": 700})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "5", "mem": "700"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "3"}, nil)
 	assert.NilError(t, err)
@@ -959,7 +1077,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSid
 func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 3, "mem": 600})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "3", "mem": "600"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"vcores": "3"}, nil)
 	assert.NilError(t, err)
@@ -1060,7 +1178,7 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreem
 func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 5, "gpu": 300, "mem": 200})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "5", "gpu": "300", "mem": "200"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, nil, nil)
 	assert.NilError(t, err)
@@ -1162,7 +1280,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T
 func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 3, "gpu": 300, "mem": 200})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "3", "gpu": "300", "mem": "200"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, nil, nil)
 	assert.NilError(t, err)
@@ -1263,7 +1381,7 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *te
 func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 5, "gpu": 700, "mem": 200})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "5", "gpu": "700", "mem": "200"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, nil, nil)
 	assert.NilError(t, err)
@@ -1366,7 +1484,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t 
 func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"vcores": 3, "gpu": 700, "mem": 200})
 	iterator := getNodeIteratorFn(node)
-	rootQ, err := createRootQueue(nil)
+	rootQ, err := createRootQueue(map[string]string{"vcores": "3", "gpu": "700", "mem": "200"})
 	assert.NilError(t, err)
 	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, nil, nil)
 	assert.NilError(t, err)
@@ -1500,8 +1618,11 @@ func scoreMap(nodeID string, orig, self []bool) map[string][]*Allocation {
 }
 
 func allocForScore(originator bool, allowPreemptSelf bool) *Allocation {
-	ask := NewAllocationAsk("alloc1", appID1, resources.NewResource())
-	ask.originator = originator
-	ask.allowPreemptSelf = allowPreemptSelf
-	return markAllocated(nodeID1, ask)
+	return NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    "alloc1",
+		ApplicationID:    appID1,
+		Originator:       originator,
+		NodeID:           nodeID1,
+		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: allowPreemptSelf},
+	})
 }

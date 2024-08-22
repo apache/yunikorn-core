@@ -240,16 +240,16 @@ func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resour
 }
 
 func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, placeholder bool, priority int32) *Allocation {
-	ask := &si.AllocationAsk{
-		AllocationKey: allocKey,
-		ApplicationID: appID,
-		PartitionName: "default",
-		ResourceAsk:   res.ToProto(),
-		TaskGroupName: taskGroup,
-		Placeholder:   placeholder,
-		Priority:      priority,
+	ask := &si.Allocation{
+		AllocationKey:    allocKey,
+		ApplicationID:    appID,
+		PartitionName:    "default",
+		ResourcePerAlloc: res.ToProto(),
+		TaskGroupName:    taskGroup,
+		Placeholder:      placeholder,
+		Priority:         priority,
 	}
-	return NewAllocationAskFromSI(ask)
+	return NewAllocationFromSI(ask)
 }
 
 func getTestUserGroup() security.UserGroup {

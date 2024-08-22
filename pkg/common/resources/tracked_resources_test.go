@@ -21,6 +21,8 @@ package resources
 import (
 	"fmt"
 	"reflect"
+	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,12 +39,12 @@ func CheckLenOfTrackedResource(res *TrackedResource, expected int) (bool, string
 	return true, ""
 }
 
-func CheckResourceValueOfTrackedResource(res *TrackedResource, expected map[string]map[string]int64) (bool, string) {
-	for instanceType, resources := range expected {
-		for key, value := range resources {
-			if got := res.TrackedResourceMap[instanceType][key]; got != value {
-				return false, fmt.Sprintf("instance type %s, resource %s, expected %d, got %d", instanceType, key, value, got)
-			}
+func CheckResourceValueOfTrackedResource(res *TrackedResource, expected map[string]map[string]Quantity) (bool, string) {
+	for instanceType, expected := range expected {
+		trackedRes := res.TrackedResourceMap[instanceType]
+		expectedRes := NewResourceFromMap(expected)
+		if !Equals(trackedRes, expectedRes) {
+			return false, fmt.Sprintf("instance type %s, expected %s, got %s", instanceType, trackedRes, expectedRes)
 		}
 	}
 	return true, ""
@@ -51,37 +53,37 @@ func CheckResourceValueOfTrackedResource(res *TrackedResource, expected map[stri
 func TestNewTrackedResourceFromMap(t *testing.T) {
 	type outputs struct {
 		length           int
-		trackedResources map[string]map[string]int64
+		trackedResources map[string]map[string]Quantity
 	}
 	var tests = []struct {
 		caseName string
-		input    map[string]map[string]int64
+		input    map[string]map[string]Quantity
 		expected outputs
 	}{
 		{
 			"nil",
 			nil,
-			outputs{0, map[string]map[string]int64{}},
+			outputs{0, map[string]map[string]Quantity{}},
 		},
 		{
 			"empty",
-			map[string]map[string]int64{},
-			outputs{0, map[string]map[string]int64{}},
+			map[string]map[string]Quantity{},
+			outputs{0, map[string]map[string]Quantity{}},
 		},
 		{
 			"tracked resources of one instance type",
-			map[string]map[string]int64{"instanceType1": {"first": 1}},
-			outputs{1, map[string]map[string]int64{"instanceType1": {"first": 1}}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 1}},
+			outputs{1, map[string]map[string]Quantity{"instanceType1": {"first": 1}}},
 		},
 		{
 			"tracked resources of two instance type",
-			map[string]map[string]int64{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}},
-			outputs{2, map[string]map[string]int64{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}},
+			outputs{2, map[string]map[string]Quantity{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}}},
 		},
 		{
 			"Multiple tracked resources for one instance type",
-			map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2, "third": 3}},
-			outputs{1, map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2, "third": 3}}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2, "third": 3}},
+			outputs{1, map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2, "third": 3}}},
 		},
 	}
 	for _, tt := range tests {
@@ -101,7 +103,7 @@ func TestNewTrackedResourceFromMap(t *testing.T) {
 func TestTrackedResourceClone(t *testing.T) {
 	var tests = []struct {
 		caseName string
-		input    map[string]map[string]int64
+		input    map[string]map[string]Quantity
 	}{
 		{
 			"Nil check",
@@ -109,11 +111,11 @@ func TestTrackedResourceClone(t *testing.T) {
 		},
 		{
 			"No Resources in TrackedResources",
-			map[string]map[string]int64{},
+			map[string]map[string]Quantity{},
 		},
 		{
 			"Proper TrackedResource mappings",
-			map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2}, "instanceType2": {"second": -2, "third": 3}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2}, "instanceType2": {"second": -2, "third": 3}},
 		},
 	}
 	for _, tt := range tests {
@@ -128,6 +130,11 @@ func TestTrackedResourceClone(t *testing.T) {
 			}
 		})
 	}
+
+	// case: tracked resource is nil
+	tr := (*TrackedResource)(nil)
+	cloned := tr.Clone()
+	assert.Assert(t, cloned == nil)
 }
 
 // TestTrackedResourceAggregateTrackedResource tests the AggregateTrackedResource function.
@@ -138,7 +145,7 @@ func TestTrackedResourceClone(t *testing.T) {
 // The likelihood of a test failure due to this should be extremely low.
 func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 	type inputs struct {
-		trackedResource map[string]map[string]int64
+		trackedResource map[string]map[string]Quantity
 		instType        string
 		otherResource   map[string]Quantity
 		bindTime        time.Time
@@ -147,57 +154,57 @@ func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 	var tests = []struct {
 		caseName                string
 		input                   inputs
-		expectedTrackedResource map[string]map[string]int64
+		expectedTrackedResource map[string]map[string]Quantity
 	}{
 		{
 			"Resource to be aggregated Nil Check",
 			inputs{
-				map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2}},
+				map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2}},
 				"instanceType1",
 				nil,
 				time.Now().Add(-time.Minute),
 			},
-			map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2}},
 		},
 		{
 			"Resource to be aggregated is Empty",
 			inputs{
-				map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2}},
+				map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2}},
 				"instanceType1",
 				map[string]Quantity{},
 				time.Now().Add(-time.Minute),
 			},
-			map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2}},
 		},
 		{
 			"TrackedResource is empty",
 			inputs{
-				map[string]map[string]int64{},
+				map[string]map[string]Quantity{},
 				"instanceType1",
 				map[string]Quantity{"first": 1, "second": 2},
 				time.Now().Add(-time.Minute),
 			},
-			map[string]map[string]int64{"instanceType1": {"first": 60, "second": 120}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 60, "second": 120}},
 		},
 		{
 			"With Negative Values Involved",
 			inputs{
-				map[string]map[string]int64{"instanceType1": {"first": 1, "second": -2}},
+				map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2}},
 				"instanceType1",
 				map[string]Quantity{"first": 1, "second": 2},
 				time.Now().Add(-time.Minute),
 			},
-			map[string]map[string]int64{"instanceType1": {"first": 61, "second": 118}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 61, "second": 118}},
 		},
 		{
 			"Multiple Instance Types",
 			inputs{
-				map[string]map[string]int64{"instanceType1": {"first": 1, "second": 2}, "instanceType2": {"third": 3, "four": 4}},
+				map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": 2}, "instanceType2": {"third": 3, "four": 4}},
 				"instanceType2",
 				map[string]Quantity{"first": 1, "second": 2},
 				time.Now().Add(-time.Minute),
 			},
-			map[string]map[string]int64{"instanceType1": {"first": 1, "second": 2}, "instanceType2": {"first": 60, "second": 120, "third": 3, "four": 4}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": 2}, "instanceType2": {"first": 60, "second": 120, "third": 3, "four": 4}},
 		},
 	}
 	for _, tt := range tests {
@@ -211,12 +218,17 @@ func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 			}
 		})
 	}
+
+	// case: resource is nil
+	tr := NewTrackedResourceFromMap(nil)
+	tr.AggregateTrackedResource("instanceType1", nil, time.Now().Add(-time.Minute))
+	assert.Assert(t, tr.TrackedResourceMap != nil && len(tr.TrackedResourceMap) == 0)
 }
 
 func TestEqualsTracked(t *testing.T) {
 	type inputs struct {
-		base    map[string]map[string]int64
-		compare map[string]map[string]int64
+		base    map[string]map[string]Quantity
+		compare map[string]map[string]Quantity
 	}
 	var tests = []struct {
 		caseName string
@@ -224,25 +236,25 @@ func TestEqualsTracked(t *testing.T) {
 		expected bool
 	}{
 		{"simple cases (nil checks)", inputs{nil, nil}, true},
-		{"simple cases (nil checks)", inputs{map[string]map[string]int64{}, nil}, false},
+		{"simple cases (nil checks)", inputs{map[string]map[string]Quantity{}, nil}, false},
 		{"same first and second level keys and different resource value",
-			inputs{map[string]map[string]int64{"first": {"val": 10}}, map[string]map[string]int64{"first": {"val": 0}}},
+			inputs{map[string]map[string]Quantity{"first": {"val": 10}}, map[string]map[string]Quantity{"first": {"val": 0}}},
 			false,
 		},
 		{"different first-level key, same second-level key, same resource value",
-			inputs{map[string]map[string]int64{"first": {"val": 10}}, map[string]map[string]int64{"second": {"val": 10}}},
+			inputs{map[string]map[string]Quantity{"first": {"val": 10}}, map[string]map[string]Quantity{"second": {"val": 10}}},
 			false},
 		{"same first-level key, different second-level key, same resource value",
-			inputs{map[string]map[string]int64{"first": {"val": 10}}, map[string]map[string]int64{"first": {"value": 10}}},
+			inputs{map[string]map[string]Quantity{"first": {"val": 10}}, map[string]map[string]Quantity{"first": {"value": 10}}},
 			false},
 		{"same first-level key, second has larger sub-level map",
-			inputs{map[string]map[string]int64{"first": {"val": 10}}, map[string]map[string]int64{"first": {"val": 10, "sum": 7}}},
+			inputs{map[string]map[string]Quantity{"first": {"val": 10}}, map[string]map[string]Quantity{"first": {"val": 10, "sum": 7}}},
 			false},
 		{"same first-level key, first has larger sub-level map",
-			inputs{map[string]map[string]int64{"first": {"val": 10, "sum": 7}}, map[string]map[string]int64{"first": {"val": 10}}},
+			inputs{map[string]map[string]Quantity{"first": {"val": 10, "sum": 7}}, map[string]map[string]Quantity{"first": {"val": 10}}},
 			false},
 		{"same keys and values",
-			inputs{map[string]map[string]int64{"x": {"val": 10, "sum": 7}}, map[string]map[string]int64{"x": {"val": 10, "sum": 7}}},
+			inputs{map[string]map[string]Quantity{"x": {"val": 10, "sum": 7}}, map[string]map[string]Quantity{"x": {"val": 10, "sum": 7}}},
 			true},
 	}
 	for _, tt := range tests {
@@ -262,4 +274,41 @@ func TestEqualsTracked(t *testing.T) {
 			assert.Assert(t, result == tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, compare, base)
 		})
 	}
+}
+
+func TestTrackedResourceString(t *testing.T) {
+	sortTrackedResourceString := func(s string) string {
+		s = strings.TrimPrefix(s, "TrackedResource{")
+		s = strings.TrimSuffix(s, "}")
+		parts := strings.Split(s, ",")
+		sort.Strings(parts)
+		return "TrackedResource{" + strings.Join(parts, ",") + "}"
+	}
+
+	// case: empty tracked resource
+	tr1 := NewTrackedResource()
+	expected := "TrackedResource{}"
+	assert.Equal(t, sortTrackedResourceString(expected), sortTrackedResourceString(tr1.String()))
+
+	// case: tracked resource with one instance type and one resource
+	tr2 := NewTrackedResourceFromMap(map[string]map[string]Quantity{
+		"instanceType1": {
+			"cpu": 10,
+		},
+	})
+	expected = "TrackedResource{instanceType1:cpu=10}"
+	assert.Equal(t, sortTrackedResourceString(expected), sortTrackedResourceString(tr2.String()))
+
+	// case: tracked resource with multiple instance types and resource
+	tr3 := NewTrackedResourceFromMap(map[string]map[string]Quantity{
+		"instanceType1": {
+			"cpu":    10,
+			"memory": 20,
+		},
+		"instanceType2": {
+			"memory": 15,
+		},
+	})
+	expected = "TrackedResource{instanceType1:cpu=10,instanceType1:memory=20,instanceType2:memory=15}"
+	assert.Equal(t, sortTrackedResourceString(expected), sortTrackedResourceString(tr3.String()))
 }

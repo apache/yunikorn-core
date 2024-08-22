@@ -235,10 +235,10 @@ func TestBasicScheduler(t *testing.T) {
 	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1a",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -248,7 +248,7 @@ func TestBasicScheduler(t *testing.T) {
 			},
 			{
 				AllocationKey: "alloc-1b",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -290,10 +290,10 @@ func TestBasicScheduler(t *testing.T) {
 
 	// ask for 4 more tasks
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-2a",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 50000000},
 						"vcore":  {Value: 5000},
@@ -303,7 +303,7 @@ func TestBasicScheduler(t *testing.T) {
 			},
 			{
 				AllocationKey: "alloc-2b",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 50000000},
 						"vcore":  {Value: 5000},
@@ -313,7 +313,7 @@ func TestBasicScheduler(t *testing.T) {
 			},
 			{
 				AllocationKey: "alloc-3a",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100000000},
 						"vcore":  {Value: 5000},
@@ -323,7 +323,7 @@ func TestBasicScheduler(t *testing.T) {
 			},
 			{
 				AllocationKey: "alloc-3b",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 100000000},
 						"vcore":  {Value: 5000},
@@ -395,7 +395,7 @@ func TestBasicScheduler(t *testing.T) {
 	// Release asks
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 		Releases: &si.AllocationReleasesRequest{
-			AllocationAsksToRelease: []*si.AllocationAskRelease{
+			AllocationsToRelease: []*si.AllocationRelease{
 				{
 					ApplicationID: appID1,
 					PartitionName: "default",
@@ -463,11 +463,11 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	asks := make([]*si.AllocationAsk, 20)
+	asks := make([]*si.Allocation, 20)
 	for i := 0; i < 20; i++ {
-		asks[i] = &si.AllocationAsk{
+		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
-			ResourceAsk: &si.Resource{
+			ResourcePerAlloc: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: 10000000},
 					"vcore":  {Value: 1000},
@@ -477,8 +477,8 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 		}
 	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: asks,
-		RmID: "rm:123",
+		Allocations: asks,
+		RmID:        "rm:123",
 	})
 
 	assert.NilError(t, err, "AllocationRequest 2 failed")
@@ -574,12 +574,12 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	asks := make([]*si.AllocationAsk, 40)
+	asks := make([]*si.Allocation, 40)
 	appIDs := []string{app1ID, app2ID}
 	for i := 0; i < 40; i++ {
-		asks[i] = &si.AllocationAsk{
+		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
-			ResourceAsk: &si.Resource{
+			ResourcePerAlloc: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: 10000000},
 					"vcore":  {Value: 1000},
@@ -589,8 +589,8 @@ partitions:
 		}
 	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: asks,
-		RmID: "rm:123",
+		Allocations: asks,
+		RmID:        "rm:123",
 	})
 
 	assert.NilError(t, err, "AllocationRequest 2 failed")
@@ -686,12 +686,12 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	asks := make([]*si.AllocationAsk, 40)
+	asks := make([]*si.Allocation, 40)
 	appIDs := []string{app1ID, app2ID}
 	for i := 0; i < 40; i++ {
-		asks[i] = &si.AllocationAsk{
+		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
-			ResourceAsk: &si.Resource{
+			ResourcePerAlloc: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: 10000000},
 					"vcore":  {Value: 1000},
@@ -701,8 +701,8 @@ partitions:
 		}
 	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: asks,
-		RmID: "rm:123",
+		Allocations: asks,
+		RmID:        "rm:123",
 	})
 
 	assert.NilError(t, err, "AllocationRequest 2 failed")
@@ -876,11 +876,11 @@ partitions:
 
 			ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 
-			asks := make([]*si.AllocationAsk, param.numOfAsk)
+			asks := make([]*si.Allocation, param.numOfAsk)
 			for i := int32(0); i < param.numOfAsk; i++ {
-				asks[i] = &si.AllocationAsk{
+				asks[i] = &si.Allocation{
 					AllocationKey: fmt.Sprintf("alloc-%d", i),
-					ResourceAsk: &si.Resource{
+					ResourcePerAlloc: &si.Resource{
 						Resources: map[string]*si.Quantity{
 							"memory": {Value: param.askMemory},
 							"vcore":  {Value: param.askCPU},
@@ -890,8 +890,8 @@ partitions:
 				}
 			}
 			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-				Asks: asks,
-				RmID: "rm:123",
+				Allocations: asks,
+				RmID:        "rm:123",
 			})
 
 			assert.NilError(t, err, "AllocationRequest 2 failed in run %s", param.name)
@@ -1127,12 +1127,12 @@ partitions:
 	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
-	asks := make([]*si.AllocationAsk, 40)
+	asks := make([]*si.Allocation, 40)
 	appIDs := []string{app1ID, app2ID}
 	for i := 0; i < 40; i++ {
-		asks[i] = &si.AllocationAsk{
+		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
-			ResourceAsk: &si.Resource{
+			ResourcePerAlloc: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: 10000000},
 					"vcore":  {Value: 1000},
@@ -1142,8 +1142,8 @@ partitions:
 		}
 	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: asks,
-		RmID: "rm:123",
+		Allocations: asks,
+		RmID:        "rm:123",
 	})
 
 	assert.NilError(t, err, "UpdateRequest 2 failed")
@@ -1237,11 +1237,11 @@ partitions:
 	}
 
 	// Request 20 allocations
-	asks := make([]*si.AllocationAsk, 20)
+	asks := make([]*si.Allocation, 20)
 	for i := 0; i < 20; i++ {
-		asks[i] = &si.AllocationAsk{
+		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
-			ResourceAsk: &si.Resource{
+			ResourcePerAlloc: &si.Resource{
 				Resources: map[string]*si.Quantity{
 					"memory": {Value: 10000000},
 					"vcore":  {Value: 1000},
@@ -1251,8 +1251,8 @@ partitions:
 		}
 	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: asks,
-		RmID: "rm:123",
+		Allocations: asks,
+		RmID:        "rm:123",
 	})
 
 	assert.NilError(t, err, "AllocationRequest failed")
@@ -1348,10 +1348,10 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 
 	// shim side creates a placeholder, and send the UpdateRequest
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -1382,10 +1382,10 @@ func TestDupReleasesInGangScheduling(t *testing.T) {
 
 	// shim submits the actual pod for scheduling
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -1544,10 +1544,10 @@ partitions:
 	assert.Equal(t, app01.CurrentState(), objects.New.String())
 
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-		Asks: []*si.AllocationAsk{
+		Allocations: []*si.Allocation{
 			{
 				AllocationKey: "alloc-1",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},
@@ -1557,7 +1557,7 @@ partitions:
 			},
 			{
 				AllocationKey: "alloc-2",
-				ResourceAsk: &si.Resource{
+				ResourcePerAlloc: &si.Resource{
 					Resources: map[string]*si.Quantity{
 						"memory": {Value: 10000000},
 						"vcore":  {Value: 1000},

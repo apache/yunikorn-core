@@ -60,10 +60,12 @@ const (
 	InvalidGroupName         = "Invalid group name"
 	UserDoesNotExists        = "User not found"
 	GroupDoesNotExists       = "Group not found"
-	UserNameMissing          = "User name is missing"
-	GroupNameMissing         = "Group name is missing"
 	ApplicationDoesNotExists = "Application not found"
 	NodeDoesNotExists        = "Node not found"
+
+	AppStateActive    = "active"
+	AppStateRejected  = "rejected"
+	AppStateCompleted = "completed"
 )
 
 var allowedActiveStatusMsg string
@@ -74,12 +76,12 @@ var maxRESTResponseSize atomic.Uint64
 func init() {
 	allowedAppActiveStatuses = make(map[string]bool)
 
-	allowedAppActiveStatuses["new"] = true
-	allowedAppActiveStatuses["accepted"] = true
-	allowedAppActiveStatuses["running"] = true
-	allowedAppActiveStatuses["completing"] = true
-	allowedAppActiveStatuses["failing"] = true
-	allowedAppActiveStatuses["resuming"] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.New.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Accepted.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Running.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Completing.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Failing.String())] = true
+	allowedAppActiveStatuses[strings.ToLower(objects.Resuming.String())] = true
 
 	var activeStatuses []string
 	for k := range allowedAppActiveStatuses {
@@ -800,7 +802,7 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	}
 	var appList []*objects.Application
 	switch appState {
-	case "active":
+	case AppStateActive:
 		if status := strings.ToLower(r.URL.Query().Get("status")); status != "" {
 			if !allowedAppActiveStatuses[status] {
 				buildJSONErrorResponse(w, allowedActiveStatusMsg, http.StatusBadRequest)
@@ -814,12 +816,12 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 		} else {
 			appList = partitionContext.GetApplications()
 		}
-	case "rejected":
+	case AppStateRejected:
 		appList = partitionContext.GetRejectedApplications()
-	case "completed":
+	case AppStateCompleted:
 		appList = partitionContext.GetCompletedApplications()
 	default:
-		buildJSONErrorResponse(w, "Only following application states are allowed: active, rejected, completed", http.StatusBadRequest)
+		buildJSONErrorResponse(w, fmt.Sprintf("Only following application states are allowed: %s, %s, %s", AppStateActive, AppStateRejected, AppStateCompleted), http.StatusBadRequest)
 		return
 	}
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(appList))
@@ -895,6 +897,61 @@ func getPartitionRules(w http.ResponseWriter, r *http.Request) {
 	}
 	rulesDao := partitionContext.GetPlacementRules()
 	if err := json.NewEncoder(w).Encode(rulesDao); err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
+	}
+}
+
+func getQueueApplicationsByState(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w)
+	vars := httprouter.ParamsFromContext(r.Context())
+	if vars == nil {
+		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
+		return
+	}
+
+	partition := vars.ByName("partition")
+	queueName := vars.ByName("queue")
+	appState := strings.ToLower(vars.ByName("state"))
+	status := strings.ToLower(r.URL.Query().Get("status"))
+
+	partitionContext := schedulerContext.Load().GetPartitionWithoutClusterID(partition)
+	if partitionContext == nil {
+		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
+		return
+	}
+	unescapedQueueName, err := url.QueryUnescape(queueName)
+	if err != nil {
+		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	queueErr := validateQueue(unescapedQueueName)
+	if queueErr != nil {
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+		return
+	}
+	queue := partitionContext.GetQueue(unescapedQueueName)
+	if queue == nil {
+		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
+		return
+	}
+	if appState != AppStateActive {
+		buildJSONErrorResponse(w, fmt.Sprintf("Only following application states are allowed: %s", AppStateActive), http.StatusBadRequest)
+		return
+	}
+	if status != "" && !allowedAppActiveStatuses[status] {
+		buildJSONErrorResponse(w, allowedActiveStatusMsg, http.StatusBadRequest)
+		return
+	}
+
+	appsDao := make([]*dao.ApplicationDAOInfo, 0)
+	for _, app := range queue.GetCopyOfApps() {
+		if status == "" || strings.ToLower(app.CurrentState()) == status {
+			summary := app.GetApplicationSummary(partitionContext.RmID)
+			appsDao = append(appsDao, getApplicationDAO(app, summary))
+		}
+	}
+
+	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -1103,10 +1160,6 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := vars.ByName("user")
-	if user == "" {
-		buildJSONErrorResponse(w, UserNameMissing, http.StatusBadRequest)
-		return
-	}
 	unescapedUser, err := url.QueryUnescape(user)
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
@@ -1148,10 +1201,6 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	group := vars.ByName("group")
-	if group == "" {
-		buildJSONErrorResponse(w, GroupNameMissing, http.StatusBadRequest)
-		return
-	}
 	unescapedGroupName, err := url.QueryUnescape(group)
 	if err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)

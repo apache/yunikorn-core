@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -190,7 +191,13 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.rmID = rmID
 	app.appEvents = schedEvt.NewApplicationEvents(events.GetEventSystem())
 	app.appEvents.SendNewApplicationEvent(app.ApplicationID)
+	app.setNewMetrics()
 	return app
+}
+
+func (sa *Application) setNewMetrics() {
+	metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
+	metrics.GetQueueMetrics(sa.GetQueuePath()).IncQueueApplicationsNew()
 }
 
 func (sa *Application) String() string {
@@ -450,7 +457,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
-		sa.notifyRMAllocationAskReleased(sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
+		sa.notifyRMAllocationReleased(sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
 		sa.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
 		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
 		sa.notifyRMAllocationReleased(sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
@@ -580,6 +587,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 			if !ask.IsAllocated() {
 				deltaPendingResource = ask.GetAllocatedResource()
 				sa.pending = resources.Sub(sa.pending, deltaPendingResource)
+				sa.pending.Prune()
 			}
 			delete(sa.requests, allocKey)
 			sa.sortedRequests.remove(ask)
@@ -647,6 +655,7 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	// Update total pending resource
 	delta.SubFrom(oldAskResource)
 	sa.pending = resources.Add(sa.pending, delta)
+	sa.pending.Prune()
 	sa.queue.incPendingResource(delta)
 
 	log.Log(log.SchedApplication).Info("ask added successfully to application",
@@ -725,10 +734,11 @@ func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error)
 		sa.updateAskMaxPriority()
 	}
 
-	delta := resources.Multiply(ask.GetAllocatedResource(), -1)
-	sa.pending = resources.Add(sa.pending, delta)
+	delta := ask.GetAllocatedResource()
+	sa.pending = resources.Sub(sa.pending, delta)
+	sa.pending.Prune()
 	// update the pending of the queue with the same delta
-	sa.queue.incPendingResource(delta)
+	sa.queue.decPendingResource(delta)
 
 	return delta, nil
 }
@@ -925,8 +935,8 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 				// if headroom is still enough for the resources
 				*total = append(*total, request)
 			}
-			headRoom.SubOnlyExisting(request.GetAllocatedResource())
-			userHeadRoom.SubOnlyExisting(request.GetAllocatedResource())
+			headRoom = resources.SubOnlyExisting(headRoom, request.GetAllocatedResource())
+			userHeadRoom = resources.SubOnlyExisting(userHeadRoom, request.GetAllocatedResource())
 		}
 	}
 }
@@ -1796,6 +1806,7 @@ func (sa *Application) removeAllocationInternal(allocationKey string, releaseTyp
 		// as and when every ph gets removed (for replacement), resource usage would be reduced.
 		// When real allocation happens as part of replacement, usage would be increased again with real alloc resource
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
+		sa.allocatedPlaceholder.Prune()
 
 		// if all the placeholders are replaced, clear the placeholder timer
 		if resources.IsZero(sa.allocatedPlaceholder) {
@@ -1820,6 +1831,7 @@ func (sa *Application) removeAllocationInternal(allocationKey string, releaseTyp
 		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, alloc.GetAllocatedResource())
+		sa.allocatedResource.Prune()
 
 		// Aggregate the resources used by this alloc to the application's resource tracker
 		sa.trackCompletedResource(alloc)
@@ -1983,30 +1995,6 @@ func (sa *Application) notifyRMAllocationReleased(released []*Allocation, termin
 	}
 }
 
-// notifyRMAllocationAskReleased send an ask release event to the RM to if the event handler is configured
-// and at least one ask has been released.
-// No locking must be called while holding the lock
-func (sa *Application) notifyRMAllocationAskReleased(released []*Allocation, terminationType si.TerminationType, message string) {
-	// only generate event if needed
-	if len(released) == 0 || sa.rmEventHandler == nil {
-		return
-	}
-	releaseEvent := &rmevent.RMReleaseAllocationAskEvent{
-		ReleasedAllocationAsks: make([]*si.AllocationAskRelease, 0),
-		RmID:                   sa.rmID,
-	}
-	for _, alloc := range released {
-		releaseEvent.ReleasedAllocationAsks = append(releaseEvent.ReleasedAllocationAsks, &si.AllocationAskRelease{
-			ApplicationID:   alloc.GetApplicationID(),
-			PartitionName:   common.GetPartitionNameWithoutClusterID(sa.Partition),
-			AllocationKey:   alloc.GetAllocationKey(),
-			TerminationType: terminationType,
-			Message:         message,
-		})
-	}
-	sa.rmEventHandler.HandleEvent(releaseEvent)
-}
-
 func (sa *Application) IsAllocationAssignedToApp(alloc *Allocation) bool {
 	sa.RLock()
 	defer sa.RUnlock()
@@ -2155,6 +2143,23 @@ func (sa *Application) GetGuaranteedResource() *resources.Resource {
 // GetMaxResource returns the max resource that is set in the application tags
 func (sa *Application) GetMaxResource() *resources.Resource {
 	return sa.getResourceFromTags(siCommon.AppTagNamespaceResourceQuota)
+}
+
+// GetMaxApps returns the max apps that is set in the application tags
+func (sa *Application) GetMaxApps() uint64 {
+	return sa.getUint64Tag(siCommon.AppTagNamespaceResourceMaxApps)
+}
+
+func (sa *Application) getUint64Tag(tag string) uint64 {
+	uintValue, err := strconv.ParseUint(sa.GetTag(tag), 10, 64)
+	if err != nil {
+		log.Log(log.SchedApplication).Warn("application tag conversion failure",
+			zap.String("tag", tag),
+			zap.String("json string", sa.GetTag(tag)),
+			zap.Error(err))
+		return 0
+	}
+	return uintValue
 }
 
 func (sa *Application) getResourceFromTags(tag string) *resources.Resource {

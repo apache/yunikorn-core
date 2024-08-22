@@ -1022,7 +1022,7 @@ func TestGetFairMaxResource(t *testing.T) {
 	}
 }
 
-func TestGetMaxUsage(t *testing.T) {
+func TestGetMaxResource(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -1072,14 +1072,14 @@ func TestGetMaxUsage(t *testing.T) {
 	resMap = map[string]string{"third": "2"}
 	parent, err = createManagedQueue(root, "parent2", true, resMap)
 	assert.NilError(t, err, "failed to create parent2 queue")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "0", "third": "0"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "5", "third": "2"})
 	assert.NilError(t, err, "failed to create resource")
 	maxUsage = parent.GetMaxResource()
 	assert.Assert(t, resources.Equals(res, maxUsage), "parent2 queue should have max from root set expected %v, got: %v", res, maxUsage)
 	resMap = map[string]string{"first": "5", "second": "10"}
 	leaf, err = createManagedQueue(parent, "leaf2", false, resMap)
 	assert.NilError(t, err, "failed to create leaf2 queue")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "0", "third": "0"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "5", "third": "2"})
 	assert.NilError(t, err, "failed to create resource")
 	maxUsage = leaf.GetMaxResource()
 	assert.Assert(t, resources.Equals(res, maxUsage), "leaf2 queue should have reset merged max set expected %v, got: %v", res, maxUsage)
@@ -1130,11 +1130,11 @@ func TestGetMaxQueueSet(t *testing.T) {
 	assert.Assert(t, resources.Equals(res, maxSet), "parent2 queue should have max excluding root expected %v, got: %v", res, maxSet)
 
 	// a leaf with max set on different resource than the parent.
-	// The parent has limit and root is ignored: expect the merged parent and leaf to be returned (0 for missing on either)
+	// The parent has limit and root is ignored: expect the merged parent and leaf to be returned
 	resMap = map[string]string{"first": "5", "second": "10"}
 	leaf, err = createManagedQueue(parent, "leaf2", false, resMap)
 	assert.NilError(t, err, "failed to create leaf2 queue")
-	res, err = resources.NewResourceFromConf(map[string]string{"first": "0", "second": "5", "third": "0"})
+	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "5", "third": "2"})
 	assert.NilError(t, err, "failed to create resource")
 	maxSet = leaf.GetMaxQueueSet()
 	assert.Assert(t, resources.Equals(res, maxSet), "leaf2 queue should have reset merged max set expected %v, got: %v", res, maxSet)
@@ -1205,60 +1205,58 @@ func TestIsEmpty(t *testing.T) {
 
 func TestGetOutstandingRequestMax(t *testing.T) {
 	// queue structure:
-	// root
+	// root (max.cpu = 5)
 	//   - queue1 (max.cpu = 10)
 	//   - queue2 (max.cpu = 5)
 	//
 	// submit app1 to root.queue1, app2 to root.queue2
 	// app1 asks for 20 1x1CPU requests, app2 asks for 20 1x1CPU requests
 	// verify the outstanding requests for each of the queue is up to its max capacity
+	// root max is irrelevant for the calculation
 	// root: 15, queue1: 10 and queue2: 5
 	// add an allocation for 5 CPU to queue1 and check the reduced numbers
 	// root: 10, queue1: 5 and queue2: 5
-	alloc, err := resources.NewResourceFromConf(map[string]string{"cpu": "1"})
-	assert.NilError(t, err, "failed to create basic resource")
-	var used *resources.Resource
-	used, err = resources.NewResourceFromConf(map[string]string{"cpu": "5"})
-	assert.NilError(t, err, "failed to create basic resource")
-	testOutstanding(t, alloc, used)
+	testOutstanding(t, map[string]string{"cpu": "1"}, map[string]string{"cpu": "5"})
 }
 
 func TestGetOutstandingUntracked(t *testing.T) {
 	// same test as TestGetOutstandingRequestMax but adding an unlimited resource to the
 	// allocations to make sure it does not affect the calculations
 	// queue structure:
-	// root
+	// root (max.cpu = 5, pods = 10)
 	//   - queue1 (max.cpu = 10)
 	//   - queue2 (max.cpu = 5)
 	//
 	// submit app1 to root.queue1, app2 to root.queue2
 	// app1 asks for 20 1x1CPU, 1xPOD requests, app2 asks for 20 1x1CPU, 1xPOD requests
 	// verify the outstanding requests for each of the queue is up to its max capacity
+	// root max is irrelevant for the calculation
 	// root: 15, queue1: 10 and queue2: 5
 	// add an allocation for 5 CPU to queue1 and check the reduced numbers
 	// root: 10, queue1: 5 and queue2: 5
-	alloc, err := resources.NewResourceFromConf(map[string]string{"cpu": "1", "pods": "2"})
-	assert.NilError(t, err, "failed to create basic resource")
-	var used *resources.Resource
-	used, err = resources.NewResourceFromConf(map[string]string{"cpu": "5", "pods": "10"})
-	assert.NilError(t, err, "failed to create basic resource")
-	testOutstanding(t, alloc, used)
+	testOutstanding(t, map[string]string{"cpu": "1", "pods": "2"}, map[string]string{"cpu": "5", "pods": "10"})
 }
 
-func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "failed to create root queue with limit")
+func testOutstanding(t *testing.T, allocMap, usedMap map[string]string) {
+	root, err := createRootQueue(usedMap)
 	var queue1, queue2 *Queue
+	assert.NilError(t, err, "failed to create root queue with limit")
 	queue1, err = createManagedQueue(root, "queue1", false, map[string]string{"cpu": "10"})
 	assert.NilError(t, err, "failed to create queue1 queue")
 	queue2, err = createManagedQueue(root, "queue2", false, map[string]string{"cpu": "5"})
 	assert.NilError(t, err, "failed to create queue2 queue")
 
+	var allocRes, usedRes *resources.Resource
+	allocRes, err = resources.NewResourceFromConf(allocMap)
+	assert.NilError(t, err, "failed to create basic resource")
+	usedRes, err = resources.NewResourceFromConf(usedMap)
+	assert.NilError(t, err, "failed to create basic resource")
+
 	app1 := newApplication(appID1, "default", "root.queue1")
 	app1.queue = queue1
 	queue1.AddApplication(app1)
 	for i := 0; i < 20; i++ {
-		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc)
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, allocRes)
 		ask.SetSchedulingAttempted(true)
 		err = app1.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
@@ -1268,7 +1266,7 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	app2.queue = queue2
 	queue2.AddApplication(app2)
 	for i := 0; i < 20; i++ {
-		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, alloc)
+		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, allocRes)
 		ask.SetSchedulingAttempted(true)
 		err = app2.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add allocation ask")
@@ -1288,8 +1286,7 @@ func testOutstanding(t *testing.T, alloc, used *resources.Resource) {
 	assert.Equal(t, len(queue2Total), 5)
 
 	// simulate queue1 has some allocated resources
-	// after allocation, the max available becomes to be 5
-	err = queue1.IncAllocatedResource(used, false)
+	err = queue1.IncAllocatedResource(usedRes, false)
 	assert.NilError(t, err, "failed to increment allocated resources")
 
 	queue1Total = make([]*Allocation, 0)
@@ -1319,7 +1316,7 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	// all outstanding pods use only an unlimited resource type
 	// max is set for a different resource type and fully allocated
 	// queue structure:
-	// root
+	// root (max.cpu = 10, pods: 10)
 	//   - queue1 (max.cpu = 10)
 	//
 	// submit app1 to root.queue1, app1 asks for 20 1xPOD requests
@@ -1329,10 +1326,11 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	alloc, err := resources.NewResourceFromConf(map[string]string{"pods": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
 	var used *resources.Resource
-	used, err = resources.NewResourceFromConf(map[string]string{"cpu": "10", "pods": "10"})
+	usedMap := map[string]string{"cpu": "10", "pods": "10"}
+	used, err = resources.NewResourceFromConf(usedMap)
 	assert.NilError(t, err, "failed to create basic resource")
 	var root, queue1 *Queue
-	root, err = createRootQueue(nil)
+	root, err = createRootQueue(usedMap)
 	assert.NilError(t, err, "failed to create root queue with limit")
 	queue1, err = createManagedQueue(root, "queue1", false, map[string]string{"cpu": "10"})
 	assert.NilError(t, err, "failed to create queue1 queue")
@@ -1420,14 +1418,20 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 }
 
 func TestAllocationCalcRoot(t *testing.T) {
-	// create the root
-	root, err := createRootQueue(nil)
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	// create the root: must set a max on the queue
+	root, err := createRootQueue(resMap)
 	assert.NilError(t, err, "failed to create basic root queue")
 	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+	res, err = resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create basic resource")
 	err = root.IncAllocatedResource(res, false)
 	assert.NilError(t, err, "root queue allocation failed on increment")
+	// increment again should fail
+	err = root.IncAllocatedResource(res, false)
+	if err == nil {
+		t.Error("root queue allocation should have failed to increment (max hit)")
+	}
 	err = root.DecAllocatedResource(res)
 	assert.NilError(t, err, "root queue allocation failed on decrement")
 	if !resources.IsZero(root.allocatedResource) {
@@ -1440,18 +1444,24 @@ func TestAllocationCalcRoot(t *testing.T) {
 }
 
 func TestAllocationCalcSub(t *testing.T) {
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
 	// create the root
-	root, err := createRootQueue(nil)
+	root, err := createRootQueue(resMap)
 	assert.NilError(t, err, "failed to create basic root queue")
 	var parent *Queue
 	parent, err = createManagedQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
 
 	var res *resources.Resource
-	res, err = resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+	res, err = resources.NewResourceFromConf(resMap)
 	assert.NilError(t, err, "failed to create basic resource")
 	err = parent.IncAllocatedResource(res, false)
 	assert.NilError(t, err, "parent queue allocation failed on increment")
+	// increment again should fail
+	err = parent.IncAllocatedResource(res, false)
+	if err == nil {
+		t.Error("parent queue allocation should have failed to increment (root max hit)")
+	}
 	err = parent.DecAllocatedResource(res)
 	assert.NilError(t, err, "parent queue allocation failed on decrement")
 	if !resources.IsZero(root.allocatedResource) {
@@ -2152,6 +2162,7 @@ func TestApplyConf(t *testing.T) {
 				Guaranteed: getResourceConf(),
 			},
 		},
+		MaxApplications: 100,
 	}
 
 	// case 0: leaf can't set template
@@ -2168,6 +2179,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, leaf.template == nil)
 	assert.Assert(t, leaf.maxResource != nil)
 	assert.Assert(t, leaf.guaranteedResource != nil)
+	assert.Equal(t, leaf.maxRunningApps, uint64(100))
 
 	// case 1-1: non-leaf queue can have template
 	queue, err := createManagedQueueWithProps(nil, "tmp", true, nil, nil)
@@ -2179,6 +2191,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, queue.template != nil)
 	assert.Assert(t, queue.maxResource != nil)
 	assert.Assert(t, queue.guaranteedResource != nil)
+	assert.Equal(t, queue.maxRunningApps, uint64(100))
 
 	// root can't set resources
 	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
@@ -2188,6 +2201,7 @@ func TestApplyConf(t *testing.T) {
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, root.maxResource == nil)
 	assert.Assert(t, root.guaranteedResource == nil)
+	assert.Equal(t, root.maxRunningApps, uint64(0))
 }
 
 func TestNewConfiguredQueue(t *testing.T) {
@@ -2710,7 +2724,7 @@ func isNewApplicationEvent(t *testing.T, app *Application, record *si.EventRecor
 	assert.Equal(t, si.EventRecord_APP_NEW, record.EventChangeDetail, "incorrect change detail, expected none")
 }
 
-func TestQueue_allocatedResFits(t *testing.T) {
+func TestQueue_allocatedResFits_Root(t *testing.T) {
 	const first = "first"
 	const second = "second"
 	root, err := createRootQueue(nil)
@@ -2724,13 +2738,15 @@ func TestQueue_allocatedResFits(t *testing.T) {
 		want   bool
 	}{
 		{"all nil", nil, nil, nil, true},
-		{"nil max no usage", nil, nil, map[string]string{first: "1"}, true},
-		{"nil max set usage", nil, map[string]string{first: "1"}, map[string]string{second: "1"}, true},
+		{"nil max no usage", nil, nil, map[string]string{first: "1"}, false},
+		{"nil max set usage", nil, map[string]string{first: "1"}, map[string]string{second: "1"}, false},
+		{"max = usage other in alloc", map[string]string{first: "1"}, map[string]string{first: "1"}, map[string]string{second: "1"}, false},
 		{"max = usage same in alloc", map[string]string{first: "1"}, map[string]string{first: "1"}, map[string]string{first: "1"}, false},
-		{"max = usage other in alloc", map[string]string{first: "1"}, map[string]string{first: "1"}, map[string]string{second: "1"}, true},
-		{"usage over max other in alloc", map[string]string{first: "1", second: "0"}, map[string]string{second: "1"}, map[string]string{first: "1"}, true},
-		{"usage over max same in alloc", map[string]string{first: "1", second: "0"}, map[string]string{second: "1"}, map[string]string{second: "1"}, false},
-		{"partial fit", map[string]string{first: "2", second: "0"}, map[string]string{first: "1", second: "1"}, map[string]string{first: "1", second: "1"}, false},
+		{"usage over undefined max other in alloc", map[string]string{first: "1"}, map[string]string{second: "1"}, map[string]string{first: "1"}, true},
+		{"usage over undefined max same in alloc", map[string]string{first: "1"}, map[string]string{second: "1"}, map[string]string{second: "1"}, false},
+		{"partial fit", map[string]string{first: "2"}, map[string]string{first: "1", second: "1"}, map[string]string{first: "1", second: "1"}, false},
+		{"all fit no usage", map[string]string{first: "2", second: "2"}, nil, map[string]string{first: "1", second: "1"}, true},
+		{"all fit with usage", map[string]string{first: "2", second: "2"}, map[string]string{first: "1", second: "1"}, map[string]string{first: "1", second: "1"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2744,6 +2760,64 @@ func TestQueue_allocatedResFits(t *testing.T) {
 			change, err = resources.NewResourceFromConf(tt.change)
 			assert.NilError(t, err, "failed to create basic resource: diff")
 			assert.Equal(t, root.allocatedResFits(change), tt.want, "allocatedResFits incorrect state returned")
+		})
+	}
+}
+
+func TestQueueSetMaxRunningApps(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue setMaxRunningApps")
+		}
+	}()
+	queue := &Queue{}
+	maxApps := uint64(10)
+
+	queue.SetMaxRunningApps(maxApps)
+	assert.Equal(t, maxApps, queue.maxRunningApps)
+
+	queue = nil
+	queue.SetMaxRunningApps(maxApps)
+}
+
+func TestQueue_allocatedResFits_Other(t *testing.T) {
+	const first = "first"
+	const second = "second"
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+
+	tests := []struct {
+		name   string
+		quota  map[string]string
+		used   map[string]string
+		change map[string]string
+		want   bool
+	}{
+		{"all nil", nil, nil, nil, true},
+		{"nil max no usage", nil, nil, map[string]string{first: "1"}, true},
+		{"nil max set usage", nil, map[string]string{first: "1"}, map[string]string{second: "1"}, true},
+		{"max = usage other in alloc", map[string]string{first: "1"}, map[string]string{first: "1"}, map[string]string{second: "1"}, true},
+		{"max = usage same in alloc", map[string]string{first: "1"}, map[string]string{first: "1"}, map[string]string{first: "1"}, false},
+		{"usage over zero max other in alloc", map[string]string{first: "1", second: "0"}, map[string]string{second: "1"}, map[string]string{first: "1"}, true},
+		{"usage over zero max same in alloc", map[string]string{first: "1", second: "0"}, map[string]string{second: "1"}, map[string]string{second: "1"}, false},
+		{"partial fit", map[string]string{first: "2", second: "1"}, map[string]string{first: "1", second: "1"}, map[string]string{first: "1", second: "1"}, false},
+		{"all fit no usage", map[string]string{first: "2", second: "2"}, nil, map[string]string{first: "1", second: "1"}, true},
+		{"all fit", map[string]string{first: "2", second: "2"}, map[string]string{first: "1", second: "1"}, map[string]string{first: "1", second: "1"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var quota, used, change *resources.Resource
+			quota, err = resources.NewResourceFromConf(tt.quota)
+			assert.NilError(t, err, "failed to create basic resource: quota")
+			leaf.maxResource = quota
+			used, err = resources.NewResourceFromConf(tt.used)
+			assert.NilError(t, err, "failed to create basic resource: used")
+			leaf.allocatedResource = used
+			change, err = resources.NewResourceFromConf(tt.change)
+			assert.NilError(t, err, "failed to create basic resource: diff")
+			assert.Equal(t, leaf.allocatedResFits(change), tt.want, "allocatedResFits incorrect state returned")
 		})
 	}
 }

@@ -933,6 +933,52 @@ func TestGetFairMaxResource(t *testing.T) {
 			Tier1Resource:    map[string]string{},
 			Tier1Expectation: map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
 		},
+
+		{
+			name:             "nil root resources( no nodes in cluster)",
+			RootResource:     nil,
+			ParentResource:   map[string]string{},
+			Tier0Resource:    map[string]string{},
+			Tier0Expectation: map[string]string{},
+			Tier1Resource:    map[string]string{},
+			Tier1Expectation: nil,
+		},
+		{
+			name:             "nil parent resources",
+			RootResource:     map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
+			ParentResource:   nil,
+			Tier0Resource:    map[string]string{"ephemeral-storage": "1000", "vcore": "0m"},
+			Tier0Expectation: map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "0m"},
+			Tier1Resource:    map[string]string{},
+			Tier1Expectation: map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
+		},
+		{
+			name:             "nil leaf resources",
+			RootResource:     map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
+			ParentResource:   map[string]string{},
+			Tier0Resource:    map[string]string{"ephemeral-storage": "1000", "vcore": "0m"},
+			Tier0Expectation: map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "0m"},
+			Tier1Resource:    nil,
+			Tier1Expectation: map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
+		},
+		{
+			name:             "parent max with type different than child",
+			RootResource:     map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
+			ParentResource:   map[string]string{"nvidia.com/gpu": "100"},
+			Tier0Resource:    map[string]string{"vcore": "800m"},
+			Tier0Expectation: map[string]string{"nvidia.com/gpu": "100", "ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "800m"},
+			Tier1Resource:    map[string]string{},
+			Tier1Expectation: map[string]string{"nvidia.com/gpu": "100", "ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
+		},
+		{
+			name:             "parent explicit 0 limit for type not set in child",
+			RootResource:     map[string]string{"ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
+			ParentResource:   map[string]string{"nvidia.com/gpu": "0"},
+			Tier0Resource:    map[string]string{"vcore": "800m"},
+			Tier0Expectation: map[string]string{"nvidia.com/gpu": "0", "ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "800m"},
+			Tier1Resource:    map[string]string{},
+			Tier1Expectation: map[string]string{"nvidia.com/gpu": "0", "ephemeral-storage": "1000", "memory": "1000", "pods": "1000", "vcore": "1000m"},
+		},
 	}
 
 	for _, tc := range tests {
@@ -968,7 +1014,7 @@ func TestGetFairMaxResource(t *testing.T) {
 				assert.NilError(t, err, "failed to create resource")
 
 				if !resources.Equals(expectedTier1Max, actualTier1Max) {
-					t.Errorf("root.parent.tier0 queue expected max %v, got: %v", expectedTier1Max, actualTier1Max)
+					t.Errorf("root.parent.tier1 queue expected max %v, got: %v", expectedTier1Max, actualTier1Max)
 				}
 			}
 		})

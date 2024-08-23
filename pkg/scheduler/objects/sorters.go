@@ -27,13 +27,13 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
-func sortQueue(queues []*Queue, sortType policies.SortPolicy, considerPriority bool) {
+func sortQueue(queues []*Queue, fairMaxResources []*resources.Resource, sortType policies.SortPolicy, considerPriority bool) {
 	sortingStart := time.Now()
 	if sortType == policies.FairSortPolicy {
 		if considerPriority {
-			sortQueuesByPriorityAndFairness(queues)
+			sortQueuesByPriorityAndFairness(queues, fairMaxResources)
 		} else {
-			sortQueuesByFairnessAndPriority(queues)
+			sortQueuesByFairnessAndPriority(queues, fairMaxResources)
 		}
 	} else {
 		if considerPriority {
@@ -53,7 +53,7 @@ func sortQueuesByPriority(queues []*Queue) {
 	})
 }
 
-func sortQueuesByPriorityAndFairness(queues []*Queue) {
+func sortQueuesByPriorityAndFairness(queues []*Queue, fairMaxResources []*resources.Resource) {
 	sort.SliceStable(queues, func(i, j int) bool {
 		l := queues[i]
 		r := queues[j]
@@ -66,8 +66,8 @@ func sortQueuesByPriorityAndFairness(queues []*Queue) {
 			return false
 		}
 
-		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(), l.GetFairMaxResource(),
-			r.GetAllocatedResource(), r.GetGuaranteedResource(), r.GetFairMaxResource())
+		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(), fairMaxResources[i],
+			r.GetAllocatedResource(), r.GetGuaranteedResource(), fairMaxResources[j])
 
 		if comp == 0 {
 			return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
@@ -76,13 +76,13 @@ func sortQueuesByPriorityAndFairness(queues []*Queue) {
 	})
 }
 
-func sortQueuesByFairnessAndPriority(queues []*Queue) {
+func sortQueuesByFairnessAndPriority(queues []*Queue, fairMaxResources []*resources.Resource) {
 	sort.SliceStable(queues, func(i, j int) bool {
 		l := queues[i]
 		r := queues[j]
 
-		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(), l.GetFairMaxResource(),
-			r.GetAllocatedResource(), r.GetGuaranteedResource(), r.GetFairMaxResource())
+		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(), fairMaxResources[i],
+			r.GetAllocatedResource(), r.GetGuaranteedResource(), fairMaxResources[j])
 		if comp == 0 {
 			lPriority := l.GetCurrentPriority()
 			rPriority := r.GetCurrentPriority()

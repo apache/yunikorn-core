@@ -1177,6 +1177,7 @@ func (sq *Queue) sortQueues() []*Queue {
 	}
 	// Create a list of the queues with pending resources
 	sortedQueues := make([]*Queue, 0)
+	sortedMaxFairResources := make([]*resources.Resource, 0)
 	for _, child := range sq.GetCopyOfChildren() {
 		// a stopped queue cannot be scheduled
 		if child.IsStopped() {
@@ -1185,10 +1186,11 @@ func (sq *Queue) sortQueues() []*Queue {
 		// queue must have pending resources to be considered for scheduling
 		if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
 			sortedQueues = append(sortedQueues, child)
+			sortedMaxFairResources = append(sortedMaxFairResources, child.GetFairMaxResource())
 		}
 	}
 	// Sort the queues
-	sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
+	sortQueue(sortedQueues, sortedMaxFairResources, sq.getSortType(), sq.IsPrioritySortEnabled())
 
 	return sortedQueues
 }

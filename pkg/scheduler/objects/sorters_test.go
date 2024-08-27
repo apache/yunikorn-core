@@ -30,13 +30,19 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
-// verify queue ordering is working
-func TestSortQueues(t *testing.T) {
+// verify queue ordering is working when explicity guarantees are provided
+func TestSortQueuesWithGuarantees(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 
 	var q0, q1, q2, q3 *Queue
 	var queues []*Queue
+	fairMaxResources := []*resources.Resource{resources.NewResourceFromMap(map[string]resources.Quantity{}),
+		resources.NewResourceFromMap(map[string]resources.Quantity{}),
+		resources.NewResourceFromMap(map[string]resources.Quantity{}),
+		resources.NewResourceFromMap(map[string]resources.Quantity{}),
+	}
+
 	q0, err = createManagedQueue(root, "q0", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	q0.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500, "vcore": 500})
@@ -63,49 +69,50 @@ func TestSortQueues(t *testing.T) {
 
 	// fifo
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FifoSortPolicy, false)
+
+	sortQueue(queues, fairMaxResources, policies.FifoSortPolicy, false)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q0, q1, q2, q3}), "fifo first")
 
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FifoSortPolicy, true)
+	sortQueue(queues, fairMaxResources, policies.FifoSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q1, q2}), "fifo first - priority")
 
 	// fifo - different starting order
 	queues = []*Queue{q1, q3, q0, q2}
-	sortQueue(queues, policies.FifoSortPolicy, false)
+	sortQueue(queues, fairMaxResources, policies.FifoSortPolicy, false)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q1, q3, q0, q2}), "fifo second")
 
 	queues = []*Queue{q1, q3, q0, q2}
-	sortQueue(queues, policies.FifoSortPolicy, true)
+	sortQueue(queues, fairMaxResources, policies.FifoSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q1, q0, q2}), "fifo second - priority")
 
 	// fairness ratios: q0:300/500=0.6, q1:200/300=0.67, q2:100/200=0.5, q3:100/200=0.5
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, false)
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, false)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair first")
 
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, true)
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair first - priority")
 
 	// fairness ratios: q0:200/500=0.4, q1:300/300=1, q2:100/200=0.5, q3:100/200=0.5
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, false)
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, false)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q0, q3, q2, q1}), "fair second")
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, true)
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q2, q1}), "fair second - priority")
 
 	// fairness ratios: q0:150/500=0.3, q1:120/300=0.4, q2:100/200=0.5, q3:100/200=0.5
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 150, "vcore": 150})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 120, "vcore": 120})
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, false)
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, false)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q0, q1, q3, q2}), "fair third")
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, true)
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q1, q2}), "fair third - priority")
 
 	// fairness ratios: q0:400/800=0.5, q1:200/400= 0.5, q2:100/200=0.5, q3:100/200=0.5
@@ -114,12 +121,12 @@ func TestSortQueues(t *testing.T) {
 	q1.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 400, "vcore": 300})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 150})
 	queues = []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, false)
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, false)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q0, q1, q2}), "fair - pending resource")
 }
 
 // queue guaranteed resource is not set (same as a zero resource)
-func TestNoQueueLimits(t *testing.T) {
+func TestSortQueuesNoGuarantees(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 
@@ -145,16 +152,24 @@ func TestNoQueueLimits(t *testing.T) {
 	q3.currentPriority = 3
 
 	queues := []*Queue{q0, q1, q2, q3}
-	sortQueue(queues, policies.FairSortPolicy, false)
-	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q1, q0}), "fair no limit first")
-	sortQueue(queues, policies.FairSortPolicy, true)
-	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit first - priority")
+	fairMaxResources := []*resources.Resource{resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "vcore": 1000}),
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "vcore": 1000}),
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "vcore": 1000}),
+		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "vcore": 1000}),
+	}
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q1, q0}), "fair no gaurantees first")
+
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, true)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no gaurantees first - priority")
 
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
-	sortQueue(queues, policies.FairSortPolicy, false)
-	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit second")
-	sortQueue(queues, policies.FairSortPolicy, true)
+
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, false)
+	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no gaurantees second")
+
+	sortQueue(queues, fairMaxResources, policies.FairSortPolicy, true)
 	assert.Equal(t, queueNames(queues), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit second - priority")
 }
 

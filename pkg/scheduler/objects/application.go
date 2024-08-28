@@ -1056,6 +1056,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 						// preemption occurred, and possibly reservation
 						return result
 					}
+					request.LogAllocationFailure(common.PreemptionDoesNotHelp, true)
 				}
 			}
 			request.LogAllocationFailure(NotEnoughQueueQuota, true) // error message MUST be constant!
@@ -1122,6 +1123,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 						return result
 					}
 				}
+				request.LogAllocationFailure(common.PreemptionDoesNotHelp, true)
 			}
 		}
 	}
@@ -1394,6 +1396,7 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 
 	// validate prerequisites for preemption of an ask and mark ask for preemption if successful
 	if !preemptor.CheckPreconditions() {
+		ask.LogAllocationFailure(common.PreemptionPreconditionsFailed, true)
 		return nil, false
 	}
 

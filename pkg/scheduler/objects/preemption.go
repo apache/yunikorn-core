@@ -20,6 +20,7 @@ package objects
 
 import (
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -826,6 +827,18 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 		// In case ask queue has guaranteed set, its own values carries higher precedence over the parent or ancestor
 		if qps.AskQueue.QueuePath == qps.QueuePath && !remainingGuaranteed.IsEmpty() {
 			return resources.MergeIfNotPresent(remainingGuaranteed, parent)
+		}
+		// Queue (potential victim queue path) being processed currently sharing common ancestors or parent with ask queue should not propagate its
+		// actual remaining guaranteed to rest of queue's in the queue hierarchy downwards to let them use their own remaining guaranteed only if guaranteed
+		// has been set. Otherwise, propagating the remaining guaranteed downwards would give wrong perception and those queues might not be chosen
+		// as victims for sibling ( who is under guaranteed and starving for resources) in the same level.
+		// Overall, this increases the chance of choosing victims for preemptor from siblings without causing preemption storm or loop.
+		askQueueRemainingGuaranteed := qps.AskQueue.GuaranteedResource.Clone()
+		askQueueUsed := qps.AskQueue.AllocatedResource.Clone()
+		askQueueUsed = resources.SubOnlyExisting(askQueueUsed, qps.AskQueue.PreemptingResource)
+		askQueueRemainingGuaranteed = resources.SubOnlyExisting(askQueueRemainingGuaranteed, askQueueUsed)
+		if !remainingGuaranteed.IsEmpty() && strings.HasPrefix(qps.AskQueue.QueuePath, qps.QueuePath) && !askQueueRemainingGuaranteed.IsEmpty() {
+			return nil
 		}
 	}
 	return resources.ComponentWiseMin(remainingGuaranteed, parent)

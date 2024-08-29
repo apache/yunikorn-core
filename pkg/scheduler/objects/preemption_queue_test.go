@@ -24,6 +24,35 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
+var smallestRes = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+var childRes = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
+var smallestResPlusChildRes = resources.Add(smallestRes, childRes)
+var smallestResDouble = resources.Multiply(smallestRes, 2)
+var smallestResDoublePlusChildRes = resources.Add(resources.Multiply(smallestRes, 2), childRes)
+var smallestResMultiplyByZero = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+var smallestResMultiplyByMinusOne = resources.Multiply(smallestRes, -1)
+var smallestResMultiplyByMinusOnePlusChildRes = resources.Add(resources.Multiply(smallestRes, -1), childRes)
+var childResMultiplyByZero = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 0})
+var childResMultiplyByMinusOne = resources.Multiply(childRes, -1)
+var childResDouble = resources.Multiply(childRes, 2)
+var smallestResDoublePlusChildResDouble = resources.Add(resources.Multiply(smallestRes, 2), childResDouble)
+var smallestResPlusChildResDouble = resources.Add(smallestRes, childResDouble)
+var smallestResMultiplyByZeroPluschildResMultiplyByZero = resources.Add(smallestResMultiplyByZero, childResMultiplyByZero)
+var smallestResMultiplyByZeroPluschildResMultiplyByMinusOne = resources.Add(smallestResMultiplyByZero, childResMultiplyByMinusOne)
+
+type resource struct {
+	root, parent, childQ1, childQ2 *resources.Resource
+}
+
+type assertMessage struct {
+	rootR, parentR, childQ1R, childQ2R string
+}
+
+type res struct {
+	guaranteed, allocated, remaining resource
+	assertMessages                   assertMessage
+}
+
 func TestGetPreemptableResource(t *testing.T) {
 	// no guaranteed and no usage. so nothing to preempt
 	rootQ, err := createRootQueue(map[string]string{"first": "20"})
@@ -122,119 +151,113 @@ func TestGetPreemptableResource(t *testing.T) {
 }
 
 func TestGetRemainingGuaranteedResource(t *testing.T) {
-	// no guaranteed and no usage. so no remaining
 	rootQ, parentQ, childQ1, childQ2, childQ3 := setup(t)
-	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
-	expectedSmallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3})
-	expectedSmallestRes1 := smallestRes.Clone()
-	expectedSmallestRes1.MultiplyTo(float64(0))
+	guaranteed1 := resource{resources.Multiply(smallestRes, 2), smallestRes, childRes, smallestRes}
+	guaranteed2 := resource{resources.Multiply(smallestRes, 2), smallestResPlusChildRes, childRes, smallestRes}
+	allocated1 := resource{nil, nil, nil, nil}
+	allocated2 := resource{smallestResDouble, smallestResDouble, nil, smallestRes}
+	allocated3 := resource{smallestResDoublePlusChildRes, smallestResPlusChildRes, childRes, smallestRes}
+	allocated4 := resource{smallestResDoublePlusChildResDouble, smallestResPlusChildResDouble, childResDouble, smallestRes}
+	allocated5 := resource{smallestResDoublePlusChildResDouble, smallestResPlusChildResDouble, childResDouble, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})}
+	assertMessage1 := "guaranteed set, but no usage. so all guaranteed should be in remaining"
+	assertMessage2 := "guaranteed set, but no usage. so all guaranteed + parent remaining guaranteed should be in remaining"
+	assertMessage3 := "guaranteed set, but no usage. so all its guaranteed (because it is lesser than parent's guaranteed) should be in remaining"
+	assertMessage4 := "guaranteed set, used completely. so all guaranteed should be in remaining"
+	assertMessage5 := "guaranteed set, used double than guaranteed. so remaining should be in -ve"
+	assertMessage6 := "guaranteed set, but no usage. However remaining should include its all guaranteed + parent remaining guaranteed"
+	assertMessage7 := "guaranteed set, used all guaranteed. remaining should be based on ask queue"
+	assertMessage8 := "guaranteed set, used completely. usage also has extra resource types. However, no remaining"
+	assertMessage9 := "guaranteed set, used completely. so, no remaining"
+	assertMessage10 := "guaranteed set, but no usage. Still, no remaining in guaranteed because of its parent queue"
+	assertMessage11 := "guaranteed set, one resource type used completely. usage also has another resource types which is used bit more. remaining should have zero for one resource type and -ve for another"
+	assertMessage12 := "guaranteed set, used bit lesser. parent's usage also has extra resource types. remaining should be based on ask queue"
+
+	assertMessageStruct1 := assertMessage{assertMessage1, assertMessage1, assertMessage1, assertMessage1}
+	assertMessageStruct2 := assertMessage{assertMessage1, assertMessage1, assertMessage2, assertMessage3}
+	assertMessageStruct3 := assertMessage{assertMessage4, assertMessage5, assertMessage6, assertMessage7}
+	assertMessageStruct4 := assertMessage{assertMessage8, assertMessage8, assertMessage9, assertMessage10}
+	assertMessageStruct5 := assertMessage{assertMessage8, assertMessage8, assertMessage5, assertMessage10}
+	assertMessageStruct6 := assertMessage{assertMessage8, assertMessage11, assertMessage5, assertMessage12}
+
+	// guaranteed set only for queue at specific levels but no usage.
+	// so remaining for queues without guaranteed quota inherits from parent queue based on min perm calculation
+	res1 := res{guaranteed: resource{resources.Multiply(smallestRes, 2), nil, childRes, nil},
+		allocated:      allocated1,
+		remaining:      resource{smallestResDouble, smallestResDouble, smallestResDoublePlusChildRes, smallestResDouble},
+		assertMessages: assertMessageStruct1,
+	}
 	var tests = []struct {
-		testName          string
-		askQueue          *Queue
-		childQ2Remaining  *resources.Resource
-		childQ2Remaining1 *resources.Resource
+		testName  string
+		askQueue  *Queue
+		resources []res
 	}{
-		{"UnderGuaranteedChildQueue_Under_OverGuaranteedParentQueue_Does_Not_Have_Higher_Precedence_When_AskQueue_Is_Different_From_UnderGuaranteedChildQueue", childQ3,
-			resources.Multiply(smallestRes, -1), resources.Add(expectedSmallestRes1, resources.Multiply(childRes, -1))},
-		{"UnderGuaranteedChildQueue_Under_OverGuaranteedParentQueue_Has_Higher_Precedence_When_AskQueue_Is_Same_As_UnderGuaranteedChildQueue", childQ2,
-			resources.Multiply(smallestRes, 0), resources.Add(expectedSmallestRes, resources.Multiply(childRes, -1))},
+		{testName: "UnderGuaranteedChildQueue_Under_OverGuaranteedParentQueue_Does_Not_Have_Higher_Precedence_When_AskQueue_Is_Different_From_UnderGuaranteedChildQueue",
+			// ask queue diverged from root itself, not sharing any common queue path with potential victim queue paths
+			askQueue: childQ3,
+			resources: []res{
+				res1,
+				// guaranteed set but no usage. so nothing to preempt
+				// clean start for the snapshot: whole hierarchy with guarantee
+				{guaranteed: guaranteed1, allocated: allocated1, remaining: resource{smallestResDouble, smallestRes, smallestResPlusChildRes, smallestRes}, assertMessages: assertMessageStruct2},
+				// clean start for the snapshot: all set guaranteed
+				// add usage to parent + root + child2 : use all guaranteed set
+				// child2 remaining behaviour changes based on the ask queue. Its remaining is min permissive of its own values and parent or ancestor values.
+				{guaranteed: guaranteed1, allocated: allocated2, remaining: resource{smallestResMultiplyByZero, smallestResMultiplyByMinusOne, smallestResMultiplyByMinusOnePlusChildRes, smallestResMultiplyByMinusOne}, assertMessages: assertMessageStruct3},
+				// clean start for the snapshot: all set guaranteed
+				// add usage for all: use exactly guaranteed at parent and child1 level
+				// parent guarantee used for one type child guarantee used for second type
+				{guaranteed: guaranteed1, allocated: allocated3, remaining: resource{smallestResMultiplyByZero, smallestResMultiplyByZero, smallestResMultiplyByZeroPluschildResMultiplyByZero, smallestResMultiplyByZero}, assertMessages: assertMessageStruct4},
+				// clean start for the snapshot: all set guaranteed
+				// add usage for root + parent: use exactly guaranteed at parent and child2 level
+				// add usage to child1: use double than guaranteed
+				// parent guarantee used for one type child guarantee used for second type
+				{guaranteed: guaranteed1, allocated: allocated4, remaining: resource{smallestResMultiplyByZero, smallestResMultiplyByZero, smallestResMultiplyByZeroPluschildResMultiplyByMinusOne, smallestResMultiplyByZero}, assertMessages: assertMessageStruct5},
+				// clean start for the snapshot: all set guaranteed
+				// add usage for root + parent: use exactly guaranteed for one resource and over guaranteed for another resource at parent level
+				// add usage to child1: use double than guaranteed
+				// add usage to child2: use lesser than guaranteed.
+				// child2 remaining behaviour changes based on the ask queue. Its remaining is min permissive of its own values and parent or ancestor values.
+				{guaranteed: guaranteed2, allocated: allocated5, remaining: resource{smallestResMultiplyByZero, smallestResMultiplyByZeroPluschildResMultiplyByMinusOne, smallestResMultiplyByZeroPluschildResMultiplyByMinusOne, smallestResMultiplyByZeroPluschildResMultiplyByMinusOne}, assertMessages: assertMessageStruct6},
+			},
+		},
+		{testName: "UnderGuaranteedChildQueue_Under_OverGuaranteedParentQueue_Has_Higher_Precedence_When_AskQueue_Is_Same_As_UnderGuaranteedChildQueue",
+			// ask queue shares common queue path with potential victim queue paths
+			askQueue: childQ2,
+			resources: []res{
+				res1,
+				// guaranteed set but no usage. so nothing to preempt
+				// clean start for the snapshot: whole hierarchy with guarantee
+				{guaranteed: guaranteed1, allocated: allocated1, remaining: resource{smallestResDouble, nil, childRes, smallestRes}, assertMessages: assertMessageStruct2},
+				// clean start for the snapshot: all set guaranteed
+				// add usage to parent + root + child2 : use all guaranteed set
+				// child2 remaining behaviour changes based on the ask queue. When ask queue is child2, its own values has higher precedence over the parent or ancestor for common resource types.
+				// for extra resources available in parent or ancestor, it can simply inherit.
+				{guaranteed: guaranteed1, allocated: allocated2, remaining: resource{smallestResMultiplyByZero, nil, childRes, smallestResMultiplyByZero}, assertMessages: assertMessageStruct3},
+				// clean start for the snapshot: all set guaranteed
+				// add usage for all: use exactly guaranteed at parent and child1 level
+				// parent guarantee used for one type child guarantee used for second type
+				{guaranteed: guaranteed1, allocated: allocated3, remaining: resource{smallestResMultiplyByZero, nil, childResMultiplyByZero, smallestResMultiplyByZero}, assertMessages: assertMessageStruct4},
+				// clean start for the snapshot: all set guaranteed
+				// add usage for root + parent: use exactly guaranteed at parent and child2 level
+				// add usage to child1: use double than guaranteed
+				// parent guarantee used for one type child guarantee used for second type
+				{guaranteed: guaranteed1, allocated: allocated4, remaining: resource{smallestResMultiplyByZero, nil, childResMultiplyByMinusOne, smallestResMultiplyByZero}, assertMessages: assertMessageStruct5},
+				// clean start for the snapshot: all set guaranteed
+				// add usage for root + parent: use exactly guaranteed for one resource and over guaranteed for another resource at parent level
+				// add usage to child1: use double than guaranteed
+				// add usage to child2: use lesser than guaranteed.
+				// child2 remaining behaviour changes based on the ask queue. Its own values has higher precedence over the parent or ancestor for common resource types.
+				// for extra resources available in parent or ancestor, it can simply inherit.
+				{guaranteed: guaranteed2, allocated: allocated5, remaining: resource{smallestResMultiplyByZero, nil, childResMultiplyByMinusOne, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3})}, assertMessages: assertMessageStruct6},
+			},
+		},
 	}
 	for _, tt := range tests {
-		var rootRemaining, pRemaining, cRemaining1, cRemaining2 *resources.Resource
-		resetQueueResources(rootQ, parentQ, childQ1, childQ2)
-		rootRemaining, pRemaining, cRemaining1, cRemaining2 = setAndGetRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2, map[string]*resources.Resource{rootQ.QueuePath: nil, parentQ.QueuePath: nil, childQ1.QueuePath: nil, childQ2.QueuePath: nil}, tt.askQueue)
-		assertZeroRemaining(t, rootRemaining, pRemaining, cRemaining1, cRemaining2)
-
-		// no guaranteed and no usage, but max res set. so min of guaranteed and max should be remaining
-		smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-		rootQ.maxResource = resources.Multiply(smallestRes, 4)
-		parentQ.maxResource = resources.Multiply(smallestRes, 2)
-		childQ1.maxResource = smallestRes
-		childQ2.maxResource = smallestRes
-		rootRemaining, pRemaining, cRemaining1, cRemaining2 = setAndGetRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2, map[string]*resources.Resource{rootQ.QueuePath: nil, parentQ.QueuePath: nil, childQ1.QueuePath: nil, childQ2.QueuePath: nil}, tt.askQueue)
-		assertZeroRemaining(t, rootRemaining, pRemaining, cRemaining1, cRemaining2)
-
-		// guaranteed set only for queue at specific levels but no usage.
-		// so remaining for queues without guaranteed quota inherits from parent queue based on min perm calculation
-		rootRemaining, pRemaining, cRemaining1, cRemaining2 = setAndGetRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2, map[string]*resources.Resource{rootQ.QueuePath: resources.Multiply(smallestRes, 2), parentQ.QueuePath: nil, childQ1.QueuePath: childRes, childQ2.QueuePath: nil}, tt.askQueue)
-		assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 2)), "guaranteed set, but no usage. so all guaranteed should be in remaining")
-		assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, 2)), "guaranteed not set, also no usage. However, parent's remaining should be used")
-		assert.Assert(t, resources.Equals(cRemaining1, resources.Add(resources.Multiply(smallestRes, 2), childRes)), "guaranteed not set, also no usage. However, parent's remaining should be used")
-		assert.Assert(t, resources.Equals(cRemaining2, resources.Multiply(smallestRes, 2)), "guaranteed not set, also no usage. However, parent's remaining should be used")
-
-		// guaranteed set but no usage. so nothing to preempt
-		// clean start for the snapshot: whole hierarchy with guarantee
-		queueRes := map[string]*resources.Resource{rootQ.QueuePath: resources.Multiply(smallestRes, 2), parentQ.QueuePath: smallestRes, childQ1.QueuePath: childRes, childQ2.QueuePath: smallestRes}
-		rootRemaining, pRemaining, cRemaining1, cRemaining2 = setAndGetRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2, queueRes, tt.askQueue)
-		assert.Assert(t, resources.Equals(rootRemaining, resources.Multiply(smallestRes, 2)), "guaranteed set, but no usage. so all guaranteed should be in remaining")
-		assert.Assert(t, resources.Equals(pRemaining, smallestRes), "guaranteed set, but no usage. so all guaranteed should be in remaining")
-		assert.Assert(t, resources.Equals(cRemaining1, resources.Add(smallestRes, childRes)), "guaranteed set, but no usage. so all guaranteed + parent remaining guaranteed should be in remaining")
-		assert.Assert(t, resources.Equals(cRemaining2, smallestRes), "guaranteed set, but no usage. so all its guaranteed (because it is lesser than parent's guaranteed) should be in remaining")
-
-		// clean start for the snapshot: all set guaranteed
-		// add usage to parent + root: use all guaranteed at parent level
-		// add usage to child2: use all guaranteed set
-		// child2 remaining behaviour changes based on the ask queue.
-		// When ask queue is child2, its own values has higher precedence over the parent or ancestor for common resource types.
-		// for extra resources available in parent or ancestor, it can simply inherit.
-		// When ask queue is child3 (diverged from very earlier branch, not sharing any common queue path), its remaining is min permissive of its own values and parent or ancestor values.
-		rootQ.allocatedResource = resources.Multiply(smallestRes, 2)
-		parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
-		childQ2.allocatedResource = resources.Multiply(smallestRes, 1)
-		rootRemaining, pRemaining, cRemaining1, cRemaining2 = setAndGetRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2, queueRes, tt.askQueue)
-		assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. so all guaranteed should be in remaining")
-		assert.Assert(t, resources.Equals(pRemaining, resources.Multiply(smallestRes, -1)), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
-		assert.Assert(t, resources.Equals(cRemaining1, resources.Add(resources.Multiply(smallestRes, -1), childRes)), "guaranteed set, but no usage. However remaining should include its all guaranteed + parent remaining guaranteed")
-		assert.Assert(t, resources.Equals(cRemaining2, tt.childQ2Remaining), "guaranteed set, used all guaranteed. remaining should be based on ask queue")
-
-		// clean start for the snapshot: all set guaranteed
-		// add usage for all: use exactly guaranteed at parent and child level
-		// parent guarantee used for one type child guarantee used for second type
-		bothRes := resources.Multiply(smallestRes, 2)
-		bothRes.AddTo(childRes)
-		rootQ.allocatedResource = bothRes
-		bothRes = resources.Add(smallestRes, childRes)
-		parentQ.allocatedResource = bothRes
-		childQ1.allocatedResource = childRes
-		childQ2.allocatedResource = smallestRes
-		rootRemaining, pRemaining, cRemaining1, cRemaining2 = setAndGetRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2, queueRes, tt.askQueue)
-		assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-		assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-		assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed set, used completely. so, no remaining")
-		assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed set, but no usage. Still, no remaining in guaranteed because of its parent queue")
-
-		// clean start for the snapshot: all set guaranteed
-		// add usage for root + parent: use exactly guaranteed at parent and child level
-		// add usage to child1: use double than guaranteed
-		// parent guarantee used for one type child guarantee used for second type
-		bothRes = resources.Multiply(smallestRes, 2)
-		bothRes.AddTo(resources.Multiply(childRes, 2))
-		rootQ.allocatedResource = bothRes
-		bothRes = resources.Add(smallestRes, resources.Multiply(childRes, 2))
-		parentQ.allocatedResource = bothRes
-		childQ1.allocatedResource = resources.Multiply(childRes, 2)
-		childQ2.allocatedResource = smallestRes
-		rootRemaining, pRemaining, cRemaining1, cRemaining2 = setAndGetRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2, queueRes, tt.askQueue)
-		assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-		assert.Assert(t, resources.IsZero(pRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-		assert.Assert(t, resources.Equals(cRemaining1, resources.Multiply(childRes, -1)), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
-		assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed set, but no usage. Still, no remaining in guaranteed because of its parent queue")
-
-		// clean start for the snapshot: all set guaranteed
-		// add usage for root + parent: use exactly guaranteed for one resource and over guaranteed for another resource at parent level
-		// add usage to child1: use double than guaranteed
-		// add usage to child2: use lesser than guaranteed.
-		// child2 remaining behaviour changes based on the ask queue.
-		// When ask queue is child2, its own values has higher precedence over the parent or ancestor for common resource types.
-		// for extra resources available in parent or ancestor, it can simply inherit.
-		// When ask queue is child3 (diverged from very earlier branch, not sharing any common queue path), its remaining is min permissive of its own values and parent or ancestor values.
-		childQ2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
-		rootRemaining, pRemaining, cRemaining1, cRemaining2 = setAndGetRemainingGuaranteed(rootQ, parentQ, childQ1, childQ2, map[string]*resources.Resource{rootQ.QueuePath: resources.Multiply(smallestRes, 2), parentQ.QueuePath: resources.Add(smallestRes, resources.Multiply(childRes, 1)), childQ1.QueuePath: childRes, childQ2.QueuePath: smallestRes}, tt.askQueue)
-		assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed set, used completely. usage also has extra resource types. However, no remaining")
-		assert.Assert(t, resources.DeepEquals(pRemaining, resources.Add(expectedSmallestRes1, resources.Multiply(childRes, -1))), "guaranteed set, one resource type used completely. usage also has another resource types which is used bit more. remaining should have zero for one resource type and -ve for another")
-		assert.Assert(t, resources.DeepEquals(cRemaining1, resources.Add(expectedSmallestRes1, resources.Multiply(childRes, -1))), "guaranteed set, used double than guaranteed. so remaining should be in -ve")
-		assert.Assert(t, resources.DeepEquals(cRemaining2, tt.childQ2Remaining1), "guaranteed set, used bit lesser. parent's usage also has extra resource types. remaining should be based on ask queue")
+		t.Run(tt.testName, func(t *testing.T) {
+			for _, res1 := range tt.resources {
+				assertRemaining(t, rootQ, parentQ, childQ2, childQ1, tt.askQueue, res1)
+			}
+		})
 	}
 }
 
@@ -255,11 +278,26 @@ func setup(t *testing.T) (rootQ, parentQ, childQ1, childQ2, childQ3 *Queue) {
 	return
 }
 
-func assertZeroRemaining(t *testing.T, rootRemaining *resources.Resource, pRemaining *resources.Resource, cRemaining1 *resources.Resource, cRemaining2 *resources.Resource) {
-	assert.Assert(t, resources.IsZero(rootRemaining), "guaranteed and max res not set, so no remaining")
-	assert.Assert(t, resources.IsZero(pRemaining), "guaranteed and max res not set, so no remaining")
-	assert.Assert(t, resources.IsZero(cRemaining1), "guaranteed and max res not set, so no remaining")
-	assert.Assert(t, resources.IsZero(cRemaining2), "guaranteed and max res not set, so no remaining")
+func assertRemaining(t *testing.T, rootQ *Queue, parentQ *Queue, childQ2 *Queue, childQ1 *Queue, askQueue *Queue, res1 res) {
+	var rootRemaining, pRemaining, cRemaining1, cRemaining2 *resources.Resource
+	resetQueueResources(rootQ, parentQ, childQ1, childQ2)
+	rootQ.guaranteedResource = res1.guaranteed.root
+	parentQ.guaranteedResource = res1.guaranteed.parent
+	childQ1.guaranteedResource = res1.guaranteed.childQ1
+	childQ2.guaranteedResource = res1.guaranteed.childQ2
+	rootQ.allocatedResource = res1.allocated.root
+	parentQ.allocatedResource = res1.allocated.parent
+	childQ1.allocatedResource = res1.allocated.childQ1
+	childQ2.allocatedResource = res1.allocated.childQ2
+	qpsRoot, qpsParent, qpsChild1, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2, askQueue)
+	rootRemaining = qpsRoot.GetRemainingGuaranteedResource()
+	pRemaining = qpsParent.GetRemainingGuaranteedResource()
+	cRemaining1 = qpsChild1.GetRemainingGuaranteedResource()
+	cRemaining2 = qpsChild2.GetRemainingGuaranteedResource()
+	assert.Assert(t, resources.DeepEquals(rootRemaining, res1.remaining.root), res1.assertMessages.rootR)
+	assert.Assert(t, resources.DeepEquals(pRemaining, res1.remaining.parent), res1.assertMessages.parentR)
+	assert.Assert(t, resources.DeepEquals(cRemaining1, res1.remaining.childQ1), res1.assertMessages.childQ1R)
+	assert.Assert(t, resources.DeepEquals(cRemaining2, res1.remaining.childQ2), res1.assertMessages.childQ2R)
 }
 
 func resetQueueResources(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue) {
@@ -295,19 +333,6 @@ func createQPSCache(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue
 	qpsChild1 := childQ1.createPreemptionSnapshot(cache, askQueuePath)
 	qpsChild2 := childQ2.createPreemptionSnapshot(cache, askQueuePath)
 	return qpsRoot, qpsParent, qpsChild1, qpsChild2
-}
-
-func setAndGetRemainingGuaranteed(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue, queueRes map[string]*resources.Resource, askQueue *Queue) (*resources.Resource, *resources.Resource, *resources.Resource, *resources.Resource) {
-	rootQ.guaranteedResource = queueRes[rootQ.QueuePath]
-	parentQ.guaranteedResource = queueRes[parentQ.QueuePath]
-	childQ2.guaranteedResource = queueRes[childQ2.QueuePath]
-	childQ1.guaranteedResource = queueRes[childQ1.QueuePath]
-	qpsRoot, qpsParent, qpsChild1, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2, askQueue)
-	rootRemaining := qpsRoot.GetRemainingGuaranteedResource()
-	pRemaining := qpsParent.GetRemainingGuaranteedResource()
-	cRemaining1 := qpsChild1.GetRemainingGuaranteedResource()
-	cRemaining2 := qpsChild2.GetRemainingGuaranteedResource()
-	return rootRemaining, pRemaining, cRemaining1, cRemaining2
 }
 
 func getPreemptableResource(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ2 *Queue) (*resources.Resource, *resources.Resource, *resources.Resource, *resources.Resource) {

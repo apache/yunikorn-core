@@ -262,8 +262,8 @@ func (sn *Node) GetAllocatedResource() *resources.Resource {
 
 // Get the available resource on this node.
 func (sn *Node) GetAvailableResource() *resources.Resource {
-	sn.Lock()
-	defer sn.Unlock()
+	sn.RLock()
+	defer sn.RUnlock()
 	return sn.availableResource.Clone()
 }
 

@@ -44,67 +44,84 @@ func createAllocationAsk(allocationKey string, app string, allowPreemption bool,
 	return ask
 }
 
+func createAllocation(allocationKey string, app string, nodeID string, allowPreemption bool, isOriginator bool, priority int32, res *resources.Resource) *Allocation {
+	tags := map[string]string{}
+	siAsk := &si.Allocation{
+		AllocationKey:    allocationKey,
+		ApplicationID:    app,
+		PartitionName:    "default",
+		Priority:         priority,
+		ResourcePerAlloc: res.ToProto(),
+		Originator:       isOriginator,
+		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: allowPreemption, AllowPreemptOther: true},
+		AllocationTags:   tags,
+		NodeID:           nodeID,
+	}
+	ask := NewAllocationFromSI(siAsk)
+	return ask
+}
+
 func prepareAllocationAsks(t *testing.T, node *Node) []*Allocation {
 	createTime := time.Now()
 
 	result := make([]*Allocation, 0)
 
 	// regular pods
-	ask1 := createAllocationAsk("ask1", "app1", true, false, 10,
+	alloc1 := createAllocation("ask1", "app1", node.NodeID, true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask1)))
-	result = append(result, ask1)
+	assert.Assert(t, node.TryAddAllocation(alloc1))
+	result = append(result, alloc1)
 
-	ask2 := createAllocationAsk("ask2", "app1", true, false, 10,
+	alloc2 := createAllocation("ask2", "app1", node.NodeID, true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
-	ask2.createTime = createTime
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask2)))
-	result = append(result, ask2)
+	alloc2.createTime = createTime
+	assert.Assert(t, node.TryAddAllocation(alloc2))
+	result = append(result, alloc2)
 
-	ask3 := createAllocationAsk("ask3", "app1", true, false, 15,
+	alloc3 := createAllocation("ask3", "app1", node.NodeID, true, false, 15,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask3)))
-	result = append(result, ask3)
+	assert.Assert(t, node.TryAddAllocation(alloc3))
+	result = append(result, alloc3)
 
-	ask4 := createAllocationAsk("ask4", "app1", true, false, 10,
+	alloc4 := createAllocation("ask4", "app1", node.NodeID, true, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	ask4.createTime = createTime
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask4)))
-	result = append(result, ask4)
+	alloc4.createTime = createTime
+	assert.Assert(t, node.TryAddAllocation(alloc4))
+	result = append(result, alloc4)
 
-	ask5 := createAllocationAsk("ask5", "app1", true, false, 5,
+	alloc5 := createAllocation("ask5", "app1", node.NodeID, true, false, 5,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask5)))
-	result = append(result, ask5)
+	assert.Assert(t, node.TryAddAllocation(alloc5))
+	result = append(result, alloc5)
 
 	// opted out pods
-	ask6 := createAllocationAsk("ask6", "app1", false, false, 10,
+	alloc6 := createAllocation("ask6", "app1", node.NodeID, false, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask6)))
-	result = append(result, ask6)
+	assert.Assert(t, node.TryAddAllocation(alloc6))
+	result = append(result, alloc6)
 
-	ask7 := createAllocationAsk("ask7", "app1", false, false, 10,
+	alloc7 := createAllocation("ask7", "app1", node.NodeID, false, false, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
-	ask7.createTime = createTime
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask7)))
-	result = append(result, ask7)
+	alloc7.createTime = createTime
+	assert.Assert(t, node.TryAddAllocation(alloc7))
+	result = append(result, alloc7)
 
-	ask8 := createAllocationAsk("ask8", "app1", false, false, 15,
+	alloc8 := createAllocation("ask8", "app1", node.NodeID, false, false, 15,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask8)))
-	result = append(result, ask8)
+	assert.Assert(t, node.TryAddAllocation(alloc8))
+	result = append(result, alloc8)
 
 	// driver/owner pods
-	ask9 := createAllocationAsk("ask9", "app1", false, true, 10,
+	alloc9 := createAllocation("ask9", "app1", node.NodeID, false, true, 10,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	ask9.createTime = createTime
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask9)))
-	result = append(result, ask9)
+	alloc9.createTime = createTime
+	assert.Assert(t, node.TryAddAllocation(alloc9))
+	result = append(result, alloc9)
 
-	ask10 := createAllocationAsk("ask10", "app1", true, true, 5,
+	alloc10 := createAllocation("ask10", "app1", node.NodeID, true, true, 5,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	assert.Assert(t, node.TryAddAllocation(markAllocated(node.NodeID, ask10)))
-	result = append(result, ask10)
+	assert.Assert(t, node.TryAddAllocation(alloc10))
+	result = append(result, alloc10)
 
 	return result
 }

@@ -212,19 +212,21 @@ func newProto(nodeID string, totalResource, occupiedResource *resources.Resource
 	return &proto
 }
 
-// Create a new Allocation with a random ask key
+// Create a new Allocation with a random allocation key
 func newAllocation(appID, nodeID string, res *resources.Resource) *Allocation {
-	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
-	ask := newAllocationAsk(askKey, appID, res)
-	return markAllocated(nodeID, ask)
+	allocKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
+	return newAllocationAll(allocKey, appID, nodeID, "", res, false, 0)
+}
+
+// Create a new Allocation with a specified allocation key
+func newAllocationWithKey(allocKey, appID, nodeID string, res *resources.Resource) *Allocation {
+	return newAllocationAll(allocKey, appID, nodeID, "", res, false, 0)
 }
 
 // Create a new Allocation with a random ask key
-func newPlaceholderAlloc(appID, nodeID string, res *resources.Resource) *Allocation {
-	askKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
-	ask := newAllocationAsk(askKey, appID, res)
-	ask.placeholder = true
-	return markAllocated(nodeID, ask)
+func newPlaceholderAlloc(appID, nodeID string, res *resources.Resource, taskGroup string) *Allocation {
+	allocKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
+	return newAllocationAll(allocKey, appID, nodeID, taskGroup, res, true, 0)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *Allocation {
@@ -250,6 +252,20 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 		Priority:         priority,
 	}
 	return NewAllocationFromSI(ask)
+}
+
+func newAllocationAll(allocKey, appID, nodeID, taskGroup string, res *resources.Resource, placeholder bool, priority int32) *Allocation {
+	alloc := &si.Allocation{
+		AllocationKey:    allocKey,
+		ApplicationID:    appID,
+		PartitionName:    "default",
+		ResourcePerAlloc: res.ToProto(),
+		TaskGroupName:    taskGroup,
+		Placeholder:      placeholder,
+		Priority:         priority,
+		NodeID:           nodeID,
+	}
+	return NewAllocationFromSI(alloc)
 }
 
 func getTestUserGroup() security.UserGroup {
@@ -289,10 +305,4 @@ func getNodeIteratorFn(nodes ...*Node) func() NodeIterator {
 			return tree
 		})
 	}
-}
-
-func markAllocated(nodeID string, alloc *Allocation) *Allocation {
-	alloc.SetBindTime(time.Now())
-	alloc.SetNodeID(nodeID)
-	return alloc
 }

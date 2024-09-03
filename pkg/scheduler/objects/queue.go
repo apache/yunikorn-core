@@ -1011,17 +1011,17 @@ func (sq *Queue) isRoot() bool {
 	return sq.parent == nil
 }
 
-// IncAllocatedResource increments the allocated resources for this queue (recursively).
+// TryIncAllocatedResource increments the allocated resources for this queue (recursively).
 // Guard against going over max resources if set
-func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bool) error {
+func (sq *Queue) TryIncAllocatedResource(alloc *resources.Resource) error {
 	// check this queue: failure stops checks if the allocation is not part of a node addition
-	if !nodeReported && !sq.allocatedResFits(alloc) {
+	if !sq.allocatedResFits(alloc) {
 		return fmt.Errorf("allocation (%v) puts queue '%s' over maximum allocation (%v), current usage (%v)",
 			alloc, sq.QueuePath, sq.maxResource, sq.allocatedResource)
 	}
 	// check the parent: need to pass before updating
 	if sq.parent != nil {
-		if err := sq.parent.IncAllocatedResource(alloc, nodeReported); err != nil {
+		if err := sq.parent.TryIncAllocatedResource(alloc); err != nil {
 			// only log the warning if we get to the leaf: otherwise we could spam the log with the same message
 			// each time we return from a recursive call. Worst case (hierarchy depth-1) times.
 			if sq.isLeaf {
@@ -1041,6 +1041,23 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, nodeReported bo
 	sq.allocatedResource = resources.Add(sq.allocatedResource, alloc)
 	sq.updateAllocatedResourceMetrics()
 	return nil
+}
+
+// IncAllocatedResource increments the allocated resources for this queue (recursively). No queue limits are checked.
+func (sq *Queue) IncAllocatedResource(alloc *resources.Resource) {
+	// fall through if nil
+	if sq == nil {
+		return
+	}
+
+	// update parent
+	sq.parent.IncAllocatedResource(alloc)
+
+	// update this queue
+	sq.Lock()
+	defer sq.Unlock()
+	sq.allocatedResource = resources.Add(sq.allocatedResource, alloc)
+	sq.updateAllocatedResourceMetrics()
 }
 
 // allocatedResFits adds the passed in resource to the allocatedResource of the queue and checks if it still fits in the
@@ -1839,7 +1856,7 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 		for _, app := range sq.GetCopyOfApps() {
 			for _, alloc := range app.GetAllAllocations() {
 				// at least any one of the ask resource type should match with potential victim
-				if !ask.GetAllocatedResource().MatchAny(alloc.allocatedResource) {
+				if !ask.GetAllocatedResource().MatchAny(alloc.GetAllocatedResource()) {
 					continue
 				}
 

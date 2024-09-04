@@ -3522,10 +3522,78 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), res)
 }
 
+func TestUpdateAllocation(t *testing.T) {
+	setupUGM()
+	partition := createQueuesNodes(t)
+	_, allocCreated, err := partition.UpdateAllocation(nil)
+	assert.NilError(t, err, "nil alloc should not return an error")
+	assert.Check(t, !allocCreated, "alloc should not have been created")
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&si.Allocation{}))
+	if err == nil {
+		t.Fatal("empty alloc should have returned application not found error")
+	}
+	assert.Check(t, !allocCreated, "alloc should not have been created")
+
+	// add the app to add an ask to
+	app := newApplication(appID1, "default", "root.leaf")
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+	// a simple alloc
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+	alloc := si.Allocation{
+		AllocationKey:    "ask-key-1",
+		ApplicationID:    appID1,
+		NodeID:           nodeID1,
+		ResourcePerAlloc: res.ToProto(),
+	}
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	assert.NilError(t, err, "failed to add alloc to app")
+	assert.Check(t, allocCreated, "alloc should have been created")
+	if !resources.Equals(app.GetAllocatedResource(), res) {
+		t.Fatal("app not updated by adding alloc, no error thrown")
+	}
+	// update to existing alloc with missing existing node
+	partition.GetApplication(appID1).GetAllocationAsk("ask-key-1").SetNodeID("invalid")
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	if err == nil {
+		t.Fatal("update of alloc on non-existing node should have failed")
+	}
+	assert.Check(t, !allocCreated, "alloc should not have been created")
+	partition.GetApplication(appID1).GetAllocationAsk("ask-key-1").SetNodeID(nodeID1)
+	// update to existing alloc with changed resources
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "5"})
+	assert.NilError(t, err, "failed to create resource")
+	alloc = si.Allocation{
+		AllocationKey:    "ask-key-1",
+		ApplicationID:    appID1,
+		NodeID:           nodeID1,
+		ResourcePerAlloc: res.ToProto(),
+	}
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	assert.NilError(t, err, "failed to update alloc on app")
+	assert.Check(t, !allocCreated, "alloc should not have been created")
+	if !resources.Equals(app.GetAllocatedResource(), res) {
+		t.Fatal("app not updated with new resources")
+	}
+	// check invalid node
+	alloc = si.Allocation{
+		AllocationKey:    "ask-key-2",
+		ApplicationID:    appID1,
+		NodeID:           "missing",
+		ResourcePerAlloc: res.ToProto(),
+	}
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	if err == nil {
+		t.Fatal("alloc on non-existing node should have failed")
+	}
+	assert.Check(t, !allocCreated, "alloc should not have been created")
+}
+
 func TestUpdateAllocationWithAsk(t *testing.T) {
 	setupUGM()
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
+	partition := createQueuesNodes(t)
 	askCreated, _, err := partition.UpdateAllocation(nil)
 	assert.NilError(t, err, "nil ask should not return an error")
 	assert.Check(t, !askCreated, "ask should not have been created")
@@ -3536,16 +3604,15 @@ func TestUpdateAllocationWithAsk(t *testing.T) {
 	assert.Check(t, !askCreated, "ask should not have been creatd")
 
 	// add the app to add an ask to
-	app := newApplication(appID1, "default", "root.default")
+	app := newApplication(appID1, "default", "root.leaf")
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
-	// a simple ask (no repeat should fail)
+	// a simple ask
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
-	askKey := "ask-key-1"
 	ask := si.Allocation{
-		AllocationKey:    askKey,
+		AllocationKey:    "ask-key-1",
 		ApplicationID:    appID1,
 		ResourcePerAlloc: res.ToProto(),
 	}
@@ -3556,6 +3623,42 @@ func TestUpdateAllocationWithAsk(t *testing.T) {
 		t.Fatal("app not updated by adding ask, no error thrown")
 	}
 	assertLimits(t, getTestUserGroup(), nil)
+	// transition to allocated
+	alloc := si.Allocation{
+		AllocationKey:    "ask-key-1",
+		ApplicationID:    appID1,
+		NodeID:           nodeID1,
+		ResourcePerAlloc: res.ToProto(),
+	}
+	askCreated, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	assert.NilError(t, err, "failed to transition ask to allocated")
+	assert.Check(t, !askCreated, "ask should not have been created")
+	assert.Check(t, allocCreated, "alloc should have been created")
+	if !resources.Equals(app.GetAllocatedResource(), res) {
+		t.Fatal("app resources not updated")
+	}
+	// ask with zero resources should fail
+	ask = si.Allocation{
+		AllocationKey:    "ask-key-2",
+		ApplicationID:    appID1,
+		ResourcePerAlloc: resources.NewResource().ToProto(),
+	}
+	askCreated, _, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&ask))
+	if err == nil {
+		t.Fatal("ask with no resources should fail")
+	}
+	assert.Check(t, !askCreated, "ask should not have been created")
+	// ask with negative resources should fail
+	ask = si.Allocation{
+		AllocationKey:    "ask-key-3",
+		ApplicationID:    appID1,
+		ResourcePerAlloc: resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": -10}).ToProto(),
+	}
+	askCreated, _, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&ask))
+	if err == nil {
+		t.Fatal("ask with no resources should fail")
+	}
+	assert.Check(t, !askCreated, "ask should not have been created")
 }
 
 func TestRemoveAllocationAsk(t *testing.T) {

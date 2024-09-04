@@ -775,7 +775,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	alloc := newAlloc("alloc-1", "app", node1.NodeID, resAlloc)
 	assert.Assert(t, node1.TryAddAllocation(alloc), "unexpected failure adding allocation to node")
 	rootQ := partition.GetQueue("root")
-	err = rootQ.IncAllocatedResource(resAlloc, false)
+	err = rootQ.TryIncAllocatedResource(resAlloc)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
 	// get nodes utilization
 	resp = &MockResponseWriter{}
@@ -791,7 +791,7 @@ func TestGetNodeUtilisation(t *testing.T) {
 	resAlloc = resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
 	alloc = newAlloc("alloc-2", "app", node2.NodeID, resAlloc)
 	assert.Assert(t, node2.TryAddAllocation(alloc), "unexpected failure adding allocation to node")
-	err = rootQ.IncAllocatedResource(resAlloc, false)
+	err = rootQ.TryIncAllocatedResource(resAlloc)
 	assert.NilError(t, err, "unexpected error returned setting allocated resource on queue")
 	// get nodes utilization
 	resp = &MockResponseWriter{}

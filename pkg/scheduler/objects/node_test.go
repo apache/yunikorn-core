@@ -519,7 +519,7 @@ func TestNodeReplaceAllocation(t *testing.T) {
 
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
-	ph := newPlaceholderAlloc(appID1, nodeID1, half)
+	ph := newPlaceholderAlloc(appID1, nodeID1, half, "tg")
 	node.AddAllocation(ph)
 	assert.Assert(t, node.GetAllocation(ph.GetAllocationKey()) != nil, "failed to add placeholder allocation")
 	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), half), "allocated resource not set correctly %v got %v", half, node.GetAllocatedResource())
@@ -540,6 +540,20 @@ func TestNodeReplaceAllocation(t *testing.T) {
 	assert.Assert(t, node.RemoveAllocation(alloc.GetAllocationKey()) != nil, "allocation should have been removed but was not")
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "allocated resource not updated correctly")
 	assert.Assert(t, resources.Equals(node.GetAvailableResource(), node.GetCapacity()), "available resource not set correctly %v got %v", node.GetCapacity(), node.GetAvailableResource())
+}
+
+func TestNodeUpdateAllocatedResource(t *testing.T) {
+	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
+	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "failed to initialize node")
+	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
+	alloc := newAllocation(appID1, nodeID1, piece)
+	node.AddAllocation(alloc)
+	assert.Assert(t, resources.Equals(piece, node.GetAllocatedResource()), "node resources not set correctly")
+
+	delta := resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10, "second": 10})
+	diff := resources.Add(piece, delta)
+	node.UpdateAllocatedResource(delta)
+	assert.Assert(t, resources.Equals(diff, node.GetAllocatedResource()), "node resources not updated correctly")
 }
 
 func TestGetAllocation(t *testing.T) {

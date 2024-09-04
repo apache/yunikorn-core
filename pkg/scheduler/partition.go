@@ -706,7 +706,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 					// The reverse case is handled during allocation.
 					if delta.HasNegativeValue() {
 						// this looks incorrect but the delta is negative and the result will be a real decrease
-						err := queue.IncAllocatedResource(delta, false)
+						err := queue.TryIncAllocatedResource(delta)
 						// this should not happen as we really decrease the value
 						if err != nil {
 							log.Log(log.SchedPartition).Warn("unexpected failure during queue update: replacing placeholder",
@@ -1156,12 +1156,22 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 		}
 	}
 
+	res := alloc.GetAllocatedResource()
+	if resources.IsZero(res) {
+		metrics.GetSchedulerMetrics().IncSchedulingError()
+		return false, false, fmt.Errorf("allocation contains no resources")
+	}
+	if !resources.StrictlyGreaterThanZero(res) {
+		metrics.GetSchedulerMetrics().IncSchedulingError()
+		return false, false, fmt.Errorf("allocation contains negative resources")
+	}
+
 	// check to see if allocation exists already on app
 	existing := app.GetAllocationAsk(allocationKey)
 
-	// CASE 1/2: no existing allocation
+	// handle new allocation
 	if existing == nil {
-		// CASE 1: new request
+		// new request
 		if node == nil {
 			log.Log(log.SchedPartition).Info("handling new request",
 				zap.String("partitionName", pc.Name),
@@ -1184,20 +1194,13 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 			return true, false, nil
 		}
 
-		// CASE 2: new allocation already assigned
+		// new allocation already assigned
 		log.Log(log.SchedPartition).Info("handling existing allocation",
 			zap.String("partitionName", pc.Name),
 			zap.String("appID", applicationID),
 			zap.String("allocationKey", allocationKey))
 
-		// Do not check if the new allocation goes beyond the queue's max resource (recursive).
-		// still handle a returned error but they should never happen.
-		if err := queue.IncAllocatedResource(alloc.GetAllocatedResource(), true); err != nil {
-			metrics.GetSchedulerMetrics().IncSchedulingError()
-			return false, false, fmt.Errorf("cannot allocate resource from application %s: %v ",
-				alloc.GetApplicationID(), err)
-		}
-
+		queue.IncAllocatedResource(res)
 		metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 		node.AddAllocation(alloc)
 		alloc.SetInstanceType(node.GetInstanceType())
@@ -1216,18 +1219,36 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 		return false, true, nil
 	}
 
-	// CASE 3: updating an existing allocation
+	var existingNode *objects.Node = nil
 	if existing.IsAllocated() {
-		// this is a placeholder for eventual resource updates; nothing to do yet
-		log.Log(log.SchedPartition).Info("handling allocation update",
-			zap.String("partitionName", pc.Name),
-			zap.String("appID", applicationID),
-			zap.String("allocationKey", allocationKey))
-		return false, false, nil
+		existingNode = pc.GetNode(existing.GetNodeID())
+		if existingNode == nil {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return false, false, fmt.Errorf("failed to find node %s", existing.GetNodeID())
+		}
 	}
 
-	// CASE 4: transitioning from requested to allocated
-	if allocated {
+	// since this is an update, check for resource change and process that first
+	existingResource := existing.GetAllocatedResource().Clone()
+	newResource := res.Clone()
+	delta := resources.Sub(newResource, existingResource)
+	delta.Prune()
+	if !resources.IsZero(delta) && !resources.IsZero(newResource) {
+		// resources have changed, update them on application, which also handles queue and user tracker updates
+		if err := app.UpdateAllocationResources(alloc); err != nil {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return false, false, fmt.Errorf("cannot update alloc resources on application %s: %v ",
+				alloc.GetApplicationID(), err)
+		}
+
+		// update node if allocation was previously allocated
+		if existingNode != nil {
+			existingNode.UpdateAllocatedResource(delta)
+		}
+	}
+
+	// transitioning from requested to allocated
+	if !existing.IsAllocated() && allocated {
 		log.Log(log.SchedPartition).Info("handling allocation placement",
 			zap.String("partitionName", pc.Name),
 			zap.String("appID", applicationID),
@@ -1244,14 +1265,7 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 			return false, false, err
 		}
 
-		// Do not check if the new allocation goes beyond the queue's max resource (recursive).
-		// still handle a returned error but they should never happen.
-		if err := queue.IncAllocatedResource(alloc.GetAllocatedResource(), true); err != nil {
-			metrics.GetSchedulerMetrics().IncSchedulingError()
-			return false, false, fmt.Errorf("cannot allocate resource from application %s: %v ",
-				alloc.GetApplicationID(), err)
-		}
-
+		queue.IncAllocatedResource(alloc.GetAllocatedResource())
 		metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 		node.AddAllocation(existing)
 		existing.SetInstanceType(node.GetInstanceType())
@@ -1269,13 +1283,6 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 		return false, true, nil
 	}
 
-	// CASE 5: updating existing request
-	log.Log(log.SchedPartition).Info("handling request update",
-		zap.String("partitionName", pc.Name),
-		zap.String("appID", applicationID),
-		zap.String("allocationKey", allocationKey))
-
-	// this is a placeholder for eventual resource updates; nothing to do yet
 	return false, false, nil
 }
 

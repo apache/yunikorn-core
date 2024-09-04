@@ -48,18 +48,17 @@ type Allocation struct {
 	allowPreemptOther bool
 	originator        bool
 	tags              map[string]string
-	allocatedResource *resources.Resource
 	resKeyWithoutNode string // the reservation key without node
 
 	// Mutable fields which need protection
-	allocated           bool
-	allocLog            map[string]*AllocationLogEntry
-	preemptionTriggered bool
-	preemptCheckTime    time.Time
-	schedulingAttempted bool              // whether scheduler core has tried to schedule this allocation
-	scaleUpTriggered    bool              // whether this aloocation has triggered autoscaling or not
-	resKeyPerNode       map[string]string // reservation key for a given node
-
+	allocated            bool
+	allocLog             map[string]*AllocationLogEntry
+	preemptionTriggered  bool
+	preemptCheckTime     time.Time
+	schedulingAttempted  bool              // whether scheduler core has tried to schedule this allocation
+	scaleUpTriggered     bool              // whether this aloocation has triggered autoscaling or not
+	resKeyPerNode        map[string]string // reservation key for a given node
+	allocatedResource    *resources.Resource
 	askEvents            *schedEvt.AskEvents
 	userQuotaCheckFailed bool
 	headroomCheckFailed  bool
@@ -165,7 +164,7 @@ func (a *Allocation) String() string {
 	if a == nil {
 		return "nil allocation"
 	}
-	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, Allocated %t", a.allocationKey, a.applicationID, a.allocatedResource, a.IsAllocated())
+	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, Allocated %t", a.allocationKey, a.applicationID, a.GetAllocatedResource(), a.IsAllocated())
 }
 
 // GetAllocationKey returns the allocation key for this allocation.
@@ -322,7 +321,16 @@ func (a *Allocation) HasRelease() bool {
 
 // GetAllocatedResource returns a reference to the allocated resources for this allocation. This must be treated as read-only.
 func (a *Allocation) GetAllocatedResource() *resources.Resource {
+	a.RLock()
+	defer a.RUnlock()
 	return a.allocatedResource
+}
+
+// SetAllocatedResource updates the allocated resources for this allocation.
+func (a *Allocation) SetAllocatedResource(allocatedResource *resources.Resource) {
+	a.Lock()
+	defer a.Unlock()
+	a.allocatedResource = allocatedResource
 }
 
 // MarkPreempted marks the allocation as preempted.

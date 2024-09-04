@@ -561,7 +561,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
 		for _, ask := range sa.requests {
-			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.allocatedResource, detail)
+			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.GetAllocatedResource(), detail)
 		}
 		sa.requests = make(map[string]*Allocation)
 		sa.sortedRequests = sortedRequests{}
@@ -591,7 +591,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 			}
 			delete(sa.requests, allocKey)
 			sa.sortedRequests.remove(ask)
-			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.allocatedResource, detail)
+			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.GetAllocatedResource(), detail)
 			if priority := ask.GetPriority(); priority >= sa.askMaxPriority {
 				sa.updateAskMaxPriority()
 			}
@@ -665,8 +665,69 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 		zap.Bool("placeholder", ask.IsPlaceholder()),
 		zap.Stringer("pendingDelta", delta))
 	sa.sortedRequests.insert(ask)
-	sa.appEvents.SendNewAskEvent(sa.ApplicationID, ask.allocationKey, ask.allocatedResource)
+	sa.appEvents.SendNewAskEvent(sa.ApplicationID, ask.allocationKey, ask.GetAllocatedResource())
 
+	return nil
+}
+
+// UpdateAllocationResources updates the app, queue, and user tracker with deltas for an allocation.
+// If an existing allocation cannot be found or alloc is invalid, an error is returned.
+func (sa *Application) UpdateAllocationResources(alloc *Allocation) error {
+	sa.Lock()
+	defer sa.Unlock()
+	if alloc == nil {
+		return fmt.Errorf("alloc cannot be nil when updating resources for app %s", sa.ApplicationID)
+	}
+	if resources.IsZero(alloc.GetAllocatedResource()) {
+		return fmt.Errorf("cannot update alloc with zero resources on app %s: %v", sa.ApplicationID, alloc)
+	}
+	existing := sa.requests[alloc.GetAllocationKey()]
+	if existing == nil {
+		return fmt.Errorf("existing alloc not found when updating resources on app %s: %v", sa.ApplicationID, alloc)
+	}
+
+	newResource := alloc.GetAllocatedResource().Clone()
+	existingResource := existing.GetAllocatedResource().Clone()
+	delta := resources.Sub(newResource, existingResource)
+	if resources.IsZero(delta) {
+		return nil
+	}
+	delta.Prune()
+
+	if existing.IsAllocated() {
+		// update allocated resources
+		sa.allocatedResource = resources.Add(sa.allocatedResource, delta)
+		sa.allocatedResource.Prune()
+		sa.queue.IncAllocatedResource(delta)
+
+		// update user usage
+		sa.incUserResourceUsage(delta)
+
+		log.Log(log.SchedApplication).Info("updated allocated resources for application",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("user", sa.user.User),
+			zap.String("alloc", existing.GetAllocationKey()),
+			zap.Bool("placeholder", existing.IsPlaceholder()),
+			zap.Stringer("existingResources", existingResource),
+			zap.Stringer("updatedResources", newResource),
+			zap.Stringer("delta", delta))
+	} else {
+		// update pending resources
+		sa.pending = resources.Add(sa.pending, delta)
+		sa.pending.Prune()
+		sa.queue.incPendingResource(delta)
+		log.Log(log.SchedApplication).Info("updated pending resources for application",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("user", sa.user.User),
+			zap.String("alloc", existing.GetAllocationKey()),
+			zap.Bool("placeholder", existing.IsPlaceholder()),
+			zap.Stringer("existingResources", existingResource),
+			zap.Stringer("updatedResources", newResource),
+			zap.Stringer("delta", delta))
+	}
+
+	// update the allocation itself
+	existing.SetAllocatedResource(newResource)
 	return nil
 }
 
@@ -1156,7 +1217,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				// release the placeholder and tell the RM
 				ph.SetReleased(true)
 				sa.notifyRMAllocationReleased([]*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
-				sa.appEvents.SendPlaceholderLargerEvent(ph.taskGroupName, sa.ApplicationID, ph.allocationKey, request.allocatedResource, ph.allocatedResource)
+				sa.appEvents.SendPlaceholderLargerEvent(ph.taskGroupName, sa.ApplicationID, ph.allocationKey, request.GetAllocatedResource(), ph.GetAllocatedResource())
 				continue
 			}
 			// placeholder is the same or larger continue processing and difference is handled when the placeholder
@@ -1530,7 +1591,7 @@ func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, 
 
 	// everything OK really allocate
 	if node.TryAddAllocation(ask) {
-		if err := sa.queue.IncAllocatedResource(ask.GetAllocatedResource(), false); err != nil {
+		if err := sa.queue.TryIncAllocatedResource(ask.GetAllocatedResource()); err != nil {
 			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
@@ -1696,7 +1757,7 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		sa.allocatedResource = resources.Add(sa.allocatedResource, alloc.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
-	sa.appEvents.SendNewAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.allocatedResource)
+	sa.appEvents.SendNewAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.GetAllocatedResource())
 	sa.allocations[alloc.GetAllocationKey()] = alloc
 }
 
@@ -1853,7 +1914,7 @@ func (sa *Application) removeAllocationInternal(allocationKey string, releaseTyp
 		}
 	}
 	delete(sa.allocations, allocationKey)
-	sa.appEvents.SendRemoveAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.allocatedResource, releaseType)
+	sa.appEvents.SendRemoveAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.GetAllocatedResource(), releaseType)
 	return alloc
 }
 
@@ -1884,7 +1945,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 		allocationsToRelease = append(allocationsToRelease, alloc)
 		// Aggregate the resources used by this alloc to the application's user resource tracker
 		sa.trackCompletedResource(alloc)
-		sa.appEvents.SendRemoveAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.allocatedResource, si.TerminationType_STOPPED_BY_RM)
+		sa.appEvents.SendRemoveAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.GetAllocatedResource(), si.TerminationType_STOPPED_BY_RM)
 	}
 
 	// if an app doesn't have any allocations and the user doesn't have other applications,
@@ -2151,11 +2212,15 @@ func (sa *Application) GetMaxApps() uint64 {
 }
 
 func (sa *Application) getUint64Tag(tag string) uint64 {
-	uintValue, err := strconv.ParseUint(sa.GetTag(tag), 10, 64)
+	value := sa.GetTag(tag)
+	if value == "" {
+		return 0
+	}
+	uintValue, err := strconv.ParseUint(value, 10, 64)
 	if err != nil {
 		log.Log(log.SchedApplication).Warn("application tag conversion failure",
 			zap.String("tag", tag),
-			zap.String("json string", sa.GetTag(tag)),
+			zap.String("json string", value),
 			zap.Error(err))
 		return 0
 	}

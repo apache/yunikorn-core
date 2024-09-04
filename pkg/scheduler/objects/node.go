@@ -183,6 +183,14 @@ func (sn *Node) GetOccupiedResource() *resources.Resource {
 	return sn.occupiedResource.Clone()
 }
 
+func (sn *Node) UpdateAllocatedResource(delta *resources.Resource) {
+	sn.Lock()
+	defer sn.Unlock()
+	sn.allocatedResource.AddTo(delta)
+	sn.allocatedResource.Prune()
+	sn.refreshAvailableResource()
+}
+
 func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
 	defer sn.notifyListeners()
 	sn.Lock()
@@ -314,7 +322,7 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 		sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
 		sn.allocatedResource.Prune()
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
-		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.allocatedResource)
+		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.GetAllocatedResource())
 		return alloc
 	}
 

@@ -855,9 +855,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var app *objects.Application
-	if len(unescapedQueueName) == 0 {
-		app = partitionContext.GetApplication(application)
-	} else {
+	else {
 		queueErr := validateQueue(unescapedQueueName)
 		if queueErr != nil {
 			buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)

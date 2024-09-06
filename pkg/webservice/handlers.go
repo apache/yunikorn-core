@@ -855,21 +855,18 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var app *objects.Application
-	if len(unescapedQueueName) == 0 {
-		app = partitionContext.GetApplication(application)
-	} else {
-		queueErr := validateQueue(unescapedQueueName)
-		if queueErr != nil {
-			buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
-			return
-		}
-		queue := partitionContext.GetQueue(unescapedQueueName)
-		if queue == nil {
-			buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
-			return
-		}
-		app = queue.GetApplication(application)
+	queueErr := validateQueue(unescapedQueueName)
+	if queueErr != nil {
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+		return
 	}
+	queue := partitionContext.GetQueue(unescapedQueueName)
+	if queue == nil {
+		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
+		return
+	}
+	app = queue.GetApplication(application)
+
 	if app == nil {
 		buildJSONErrorResponse(w, ApplicationDoesNotExists, http.StatusNotFound)
 		return

@@ -841,6 +841,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
 		return
 	}
+	
 	partition := vars.ByName("partition")
 	queueName := vars.ByName("queue")
 	unescapedQueueName, err := url.QueryUnescape(queueName)
@@ -848,26 +849,27 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	
 	application := vars.ByName("application")
 	partitionContext := schedulerContext.Load().GetPartitionWithoutClusterID(partition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusNotFound)
 		return
 	}
-	var app *objects.Application
-	else {
-		queueErr := validateQueue(unescapedQueueName)
-		if queueErr != nil {
-			buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
-			return
-		}
-		queue := partitionContext.GetQueue(unescapedQueueName)
-		if queue == nil {
-			buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
-			return
-		}
-		app = queue.GetApplication(application)
+	
+	queueErr := validateQueue(unescapedQueueName)
+	if queueErr != nil {
+		buildJSONErrorResponse(w, queueErr.Error(), http.StatusBadRequest)
+		return
 	}
+
+	queue := partitionContext.GetQueue(unescapedQueueName)
+	if queue == nil {
+		buildJSONErrorResponse(w, QueueDoesNotExists, http.StatusNotFound)
+		return
+	}
+
+	app := queue.GetApplication(application)
 	if app == nil {
 		buildJSONErrorResponse(w, ApplicationDoesNotExists, http.StatusNotFound)
 		return
@@ -875,6 +877,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 
 	summary := app.GetApplicationSummary(partitionContext.RmID)
 	appDao := getApplicationDAO(app, summary)
+
 	if err := json.NewEncoder(w).Encode(appDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

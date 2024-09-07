@@ -1741,6 +1741,9 @@ func TestGetApplicationHandler(t *testing.T) {
 	getApplication(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, appsDao.ApplicationID, "app-1")
+	assert.Equal(t, appsDao.Partition, "default")
+	assert.Equal(t, appsDao.QueueName, "root.default")
 
 	if !appsDao.HasReserved {
 		assert.Equal(t, len(appsDao.Reservations), 0)
@@ -1781,6 +1784,15 @@ func TestGetApplicationHandler(t *testing.T) {
 	getApplication(resp4, req4)
 	err = json.Unmarshal(resp4.outputBytes, &appsDao4)
 	assert.NilError(t, err, unmarshalError)
+	assert.Assert(t, appsDao4 != nil)
+	assert.Equal(t, appsDao4.ApplicationID, "app-1")
+	assert.Equal(t, appsDao4.Partition, "default")
+	assert.Equal(t, appsDao4.QueueName, "root.default")
+	if !appsDao4.HasReserved {
+		assert.Equal(t, len(appsDao4.Reservations), 0)
+	} else {
+		assert.Check(t, len(appsDao4.Reservations) > 0, "app should have at least 1 reservation")
+	}
 
 	// test invalid queue name
 	var req5 *http.Request

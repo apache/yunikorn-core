@@ -110,7 +110,7 @@ func (m *PreemptionPredicatePlugin) PreemptionPredicates(args *si.PreemptionPred
 		result.Index = preemption.index
 		return result
 	}
-	m.errHolder.err = fmt.Errorf("mo match found allocationKey=%s, nodeID=%s", args.AllocationKey, args.NodeID)
+	m.errHolder.err = fmt.Errorf("no match found, allocationKey=%s, nodeID=%s", args.AllocationKey, args.NodeID)
 	return result
 }
 

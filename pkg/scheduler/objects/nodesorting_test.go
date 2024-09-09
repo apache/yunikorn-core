@@ -75,10 +75,20 @@ partitions:
 	if !ok {
 		t.Fatal("Didn't get expected policy")
 	}
+	resourceWeights := policy.ResourceWeights()
+	assert.Equal(t, 2, len(resourceWeights), "Wrong size of resourceWeights")
+	assert.Equal(t, resourceWeights["vcore"], 1.0, "Wrong weight for vcore")
+	assert.Equal(t, resourceWeights["memory"], 1.0, "Wrong weight for memory")
 
-	assert.Equal(t, 2, len(policy.resourceWeights), "Wrong size of resourceWeights")
-	assert.Equal(t, policy.resourceWeights["vcore"], 1.0, "Wrong weight for vcore")
-	assert.Equal(t, policy.resourceWeights["memory"], 1.0, "Wrong weight for memory")
+	// case: bin packing policy
+	binPackingPolicy, ok := NewNodeSortingPolicy("binpacking", weights).(binPackingNodeSortingPolicy)
+	if !ok {
+		t.Fatal("Didn't get expected policy")
+	}
+	resourceWeights = binPackingPolicy.ResourceWeights()
+	assert.Equal(t, 2, len(resourceWeights), "Wrong size of resourceWeights")
+	assert.Equal(t, resourceWeights["vcore"], 1.0, "Wrong weight for vcore")
+	assert.Equal(t, resourceWeights["memory"], 1.0, "Wrong weight for memory")
 }
 
 func TestInvalidResourceWeightsFromConfig(t *testing.T) {
@@ -286,4 +296,34 @@ func TestSortPolicy(t *testing.T) {
 	assert.Equal(t, 2, len(nodes), "node length != 2")
 	assert.Equal(t, node1.NodeID, nodes[0].NodeID, "wrong initial node (fair, node2 half-filled)")
 	assert.Equal(t, node2.NodeID, nodes[1].NodeID, "wrong second node (binpacking, node2 half-filled")
+}
+
+func TestAbsResourceUsage(t *testing.T) {
+	// case: zero weight & NaN shares
+	nc := NewNodeCollection("test")
+	weights := map[string]float64{
+		"vcore":  4.0,
+		"memory": 0,
+	}
+	fair, ok := NewNodeSortingPolicy("fair", weights).(fairnessNodeSortingPolicy)
+	if !ok {
+		t.Fatal("Didn't get fair policy")
+	}
+
+	nc.SetNodeSortingPolicy(fair)
+	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 0, "memory": 16000})
+
+	proto1 := newProto("test1", totalRes, nil, map[string]string{})
+	node1 := NewNode(proto1)
+	if err := nc.AddNode(node1); err != nil {
+		t.Fatal("Failed to add node1")
+	}
+
+	// add allocations
+	res1 := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 0, "memory": 12000})
+	alloc1 := newAllocation("test-app-1", "test1", res1)
+	node1.AddAllocation(alloc1)
+
+	// node1 w/ fair: 400% vcore, 0% memory => ((0 * 4) + (.75 * NaN)) / 0 = 0
+	assert.Equal(t, 0.0, fair.ScoreNode(node1), "Wrong fair score for node1")
 }

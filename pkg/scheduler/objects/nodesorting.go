@@ -131,10 +131,6 @@ func NewNodeSortingPolicy(policyType string, resourceWeights map[string]float64)
 		sp = fairnessNodeSortingPolicy{
 			resourceWeights: weights,
 		}
-	default:
-		sp = fairnessNodeSortingPolicy{
-			resourceWeights: weights,
-		}
 	}
 
 	log.Log(log.SchedNode).Debug("new node sorting policy added",

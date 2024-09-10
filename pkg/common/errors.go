@@ -20,8 +20,10 @@ package common
 
 import "errors"
 
-// Common errors
-var (
-	// InvalidQueueName returned when queue name is invalid
-	InvalidQueueName = errors.New("invalid queue name, max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed")
-)
+// InvalidQueueName returned when queue name is invalid
+var InvalidQueueName = errors.New("invalid queue name, max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed")
+
+const PreemptionPreconditionsFailed = "Preemption preconditions failed"
+const PreemptionDoesNotGuarantee = "Preemption queue guarantees check failed"
+const PreemptionShortfall = "Preemption helped but short of resources"
+const PreemptionDoesNotHelp = "Preemption does not help"

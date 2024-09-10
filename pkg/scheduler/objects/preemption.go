@@ -26,6 +26,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/plugins"
@@ -203,7 +204,6 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 			}
 		}
 	}
-
 	return false
 }
 
@@ -558,6 +558,7 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	// validate that sufficient capacity can be freed
 	if !p.checkPreemptionQueueGuarantees() {
+		p.ask.LogAllocationFailure(common.PreemptionDoesNotGuarantee, true)
 		return nil, false
 	}
 
@@ -615,6 +616,7 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 
 	if p.ask.GetAllocatedResource().StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
 		// there is shortfall, so preemption doesn't help
+		p.ask.LogAllocationFailure(common.PreemptionShortfall, true)
 		return nil, false
 	}
 

@@ -25,6 +25,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
@@ -85,6 +86,13 @@ func TestCheckPreconditions(t *testing.T) {
 	// verify that recently checked ask is disqualified
 	ask.preemptCheckTime = time.Now()
 	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded with recently tried ask")
+	getNode := func(nodeID string) *Node {
+		return node
+	}
+	preemptionAttemptsRemaining := 1
+	result := app.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}), true, 1*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Check(t, result == nil, "unexpected result")
+	assertAllocationLog(t, ask)
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)
 	assert.Assert(t, preemptor.CheckPreconditions(), "preconditions failed")
 	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded on successive run")
@@ -106,6 +114,7 @@ func TestCheckPreemptionQueueGuarantees(t *testing.T) {
 	childQ1.applications[appID1] = app1
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
+
 	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc1 := newAllocationWithKey("alloc1", appID1, "node1", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
@@ -129,6 +138,9 @@ func TestCheckPreemptionQueueGuarantees(t *testing.T) {
 	// verify too large of a resource will not succeed
 	ask3.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25})
 	assert.Assert(t, !preemptor.checkPreemptionQueueGuarantees(), "queue guarantees did not fail")
+	result, _ := preemptor.TryPreemption()
+	assert.Assert(t, result == nil, "no result")
+	assert.Equal(t, ask3.GetAllocationLog()[0].Message, common.PreemptionDoesNotGuarantee)
 }
 
 func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
@@ -178,7 +190,16 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 			childQ2.incPendingResource(ask3.GetAllocatedResource())
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
-			assert.Equal(t, tt.expected, preemptor.checkPreemptionQueueGuarantees(), "unexpected resultType")
+			result, ok := preemptor.TryPreemption()
+			assert.Equal(t, tt.expected, ok, "unexpected resultType")
+			if tt.expected {
+				assert.Equal(t, result != nil, true, "unexpected resultType")
+				assert.Equal(t, len(ask3.GetAllocationLog()), 0)
+			} else {
+				assert.Equal(t, result == nil, true, "unexpected resultType")
+				assert.Equal(t, len(ask3.GetAllocationLog()), 1)
+				assert.Equal(t, ask3.GetAllocationLog()[0].Message, common.PreemptionDoesNotGuarantee)
+			}
 		})
 	}
 }
@@ -236,6 +257,7 @@ func TestTryPreemption(t *testing.T) {
 	assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
 	assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemptionOnNode Test try preemption on node with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -301,6 +323,7 @@ func TestTryPreemptionOnNode(t *testing.T) {
 	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_NodeWithCapacityLesserThanAsk Test try preemption on node whose capacity is lesser than ask resource requirements with simple queue hierarchy. Since Node won't accommodate the ask even after preempting all allocations, there is no use in considering the node.
@@ -355,6 +378,7 @@ func TestTryPreemption_NodeWithCapacityLesserThanAsk(t *testing.T) {
 	assert.Equal(t, ok, false, "no victims found")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemptionOnNodeWithOGParentAndUGPreemptor Test try preemption on node with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -422,6 +446,7 @@ func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
 	assert.Equal(t, "alloc7", result.Request.allocationKey, "wrong alloc")
 	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
 	assert.Check(t, node2.GetAllocation("alloc1").IsPreempted(), "alloc1 preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemptionOnQueue Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
@@ -486,6 +511,7 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_VictimsAvailable_InsufficientResource Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
@@ -541,6 +567,8 @@ func TestTryPreemption_VictimsAvailable_InsufficientResource(t *testing.T) {
 	assert.Equal(t, ok, false, "no victims found")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	log := ask3.GetAllocationLog()
+	assert.Equal(t, log[0].Message, common.PreemptionShortfall)
 }
 
 // TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -606,6 +634,8 @@ func TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource(t *testing.T
 	assert.Equal(t, ok, false, "no victims found")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	log := ask3.GetAllocationLog()
+	assert.Equal(t, log[0].Message, common.PreemptionShortfall)
 }
 
 // TestTryPreemption_VictimsAvailableOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -670,6 +700,8 @@ func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 	assert.Equal(t, ok, false, "no victims found")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	log := ask3.GetAllocationLog()
+	assert.Equal(t, log[0].Message, common.PreemptionShortfall)
 }
 
 // TestTryPreemption_OnQueue_VictimsOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.xw
@@ -758,6 +790,7 @@ func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, alloc4.IsPreempted(), "alloc2 not preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.
@@ -847,6 +880,7 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, !alloc4.IsPreempted(), "alloc4 preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy.
@@ -919,6 +953,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *test
 	assert.Equal(t, nodeID1, alloc2.nodeID, "wrong node")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -990,6 +1025,7 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(
 	assert.Equal(t, nodeID1, alloc2.nodeID, "wrong node")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy.
@@ -1023,17 +1059,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSid
 	assert.NilError(t, err)
 	_, err = createManagedQueueGuaranteed(parentQ2, "child3", false, nil, nil)
 	assert.NilError(t, err)
-
-	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
-	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
-	app2 := newApplication(appID2, "default", "root.parent.parent2.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
-	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
-
+	app1, app2, app3 := createVictimApplications(childQ2)
 	for i := 5; i < 8; i++ {
 		askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"mem": 100}))
 		askN.createTime = time.Now().Add(-2 * time.Minute)
@@ -1098,6 +1124,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSid
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 not preempted")
+	assert.Equal(t, len(ask4.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -1129,17 +1156,7 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreem
 	assert.NilError(t, err)
 	_, err = createManagedQueueGuaranteed(parentQ2, "child3", false, nil, nil)
 	assert.NilError(t, err)
-
-	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
-	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
-	app2 := newApplication(appID2, "default", "root.parent.parent2.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
-	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
-
+	app1, app2, app3 := createVictimApplications(childQ2)
 	for i := 5; i < 8; i++ {
 		askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"mem": 100}))
 		askN.createTime = time.Now().Add(-2 * time.Minute)
@@ -1203,6 +1220,20 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreem
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 not preempted")
+	assert.Equal(t, len(ask4.GetAllocationLog()), 0)
+}
+
+func createVictimApplications(childQ2 *Queue) (*Application, *Application, *Application) {
+	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
+	app1.SetQueue(childQ2)
+	childQ2.applications[appID1] = app1
+	app2 := newApplication(appID2, "default", "root.parent.parent2.child2")
+	app2.SetQueue(childQ2)
+	childQ2.applications[appID2] = app2
+	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
+	app3.SetQueue(childQ2)
+	childQ2.applications[appID3] = app3
+	return app1, app2, app3
 }
 
 // TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy.  Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -1236,17 +1267,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T
 	assert.NilError(t, err)
 	_, err = createManagedQueueGuaranteed(parentQ2, "child3", false, nil, nil)
 	assert.NilError(t, err)
-
-	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
-	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
-	app2 := newApplication(appID2, "default", "root.parent.parent2.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
-	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
-
+	app1, app2, app3 := createVictimApplications(childQ2)
 	for i := 5; i < 8; i++ {
 		askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 		askN.createTime = time.Now().Add(-2 * time.Minute)
@@ -1311,6 +1332,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 not preempted")
+	assert.Equal(t, len(ask4.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -1342,17 +1364,7 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *te
 	assert.NilError(t, err)
 	_, err = createManagedQueueGuaranteed(parentQ2, "child3", false, nil, nil)
 	assert.NilError(t, err)
-
-	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
-	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
-	app2 := newApplication(appID2, "default", "root.parent.parent2.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
-	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
-
+	app1, app2, app3 := createVictimApplications(childQ2)
 	for i := 5; i < 8; i++ {
 		askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 		askN.createTime = time.Now().Add(-2 * time.Minute)
@@ -1416,6 +1428,7 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *te
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 not preempted")
+	assert.Equal(t, len(ask4.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy.
@@ -1449,17 +1462,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t 
 	assert.NilError(t, err)
 	_, err = createManagedQueueGuaranteed(parentQ2, "child3", false, nil, nil)
 	assert.NilError(t, err)
-
-	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
-	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
-	app2 := newApplication(appID2, "default", "root.parent.parent2.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
-	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
-
+	app1, app2, app3 := createVictimApplications(childQ2)
 	for i := 5; i < 8; i++ {
 		askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 		askN.createTime = time.Now().Add(-2 * time.Minute)
@@ -1525,6 +1528,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t 
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 not preempted")
+	assert.Equal(t, len(ask4.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -1556,17 +1560,7 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorS
 	assert.NilError(t, err)
 	_, err = createManagedQueueGuaranteed(parentQ2, "child3", false, nil, nil)
 	assert.NilError(t, err)
-
-	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
-	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
-	app2 := newApplication(appID2, "default", "root.parent.parent2.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
-	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
-
+	app1, app2, app3 := createVictimApplications(childQ2)
 	for i := 5; i < 8; i++ {
 		askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 		askN.createTime = time.Now().Add(-2 * time.Minute)
@@ -1631,6 +1625,7 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorS
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, alloc3.IsPreempted(), "alloc3 not preempted")
+	assert.Equal(t, len(ask4.GetAllocationLog()), 0)
 }
 
 // TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChild_As_Siblings Test try preemption with 2 level queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.

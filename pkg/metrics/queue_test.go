@@ -19,7 +19,6 @@
 package metrics
 
 import (
-	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"strings"
 	"testing"
 
@@ -27,6 +26,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
 var qm *QueueMetrics

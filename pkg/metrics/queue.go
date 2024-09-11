@@ -19,11 +19,11 @@
 package metrics
 
 import (
-	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 

@@ -19,13 +19,12 @@
 package metrics
 
 import (
-	"sync"
-
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -62,7 +61,7 @@ type QueueMetrics struct {
 	resourceMetricsSubsystem *prometheus.GaugeVec
 	// Track known resource types
 	knownResourceTypes map[string]struct{}
-	lock               sync.Mutex
+	lock               locking.RWMutex
 }
 
 // InitQueueMetrics to initialize queue metrics
@@ -149,6 +148,8 @@ func (m *QueueMetrics) setQueueResource(state string, resourceName string, value
 }
 
 func (m *QueueMetrics) Reset() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	m.appMetricsLabel.Reset()
 	m.appMetricsSubsystem.Reset()
 	m.resourceMetricsLabel.Reset()

@@ -19,6 +19,8 @@
 package metrics
 
 import (
+	"sync"
+
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
@@ -58,8 +60,9 @@ type QueueMetrics struct {
 	resourceMetricsLabel *prometheus.GaugeVec
 	// Deprecated - To be removed in 1.7.0. Replaced with queue label Metrics
 	resourceMetricsSubsystem *prometheus.GaugeVec
-	// Track known resource types.
+	// Track known resource types
 	knownResourceTypes map[string]struct{}
+	lock               sync.Mutex
 }
 
 // InitQueueMetrics to initialize queue metrics
@@ -307,14 +310,16 @@ func (m *QueueMetrics) AddReleasedContainers(value int) {
 }
 
 func (m *QueueMetrics) UpdateQueueResourceMetrics(state string, newResources map[string]resources.Quantity) {
-	// Iterate over new resource types and set their values.
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	// Iterate over new resource types and set their values
 	for resourceName, value := range newResources {
 		m.setQueueResource(state, resourceName, float64(value))
 		// Add new resources to the known list
 		m.knownResourceTypes[resourceName] = struct{}{}
 	}
 
-	// Emit old resource types that are missing in the new collection with zero.
+	// Emit old resource types that are missing in the new collection with zero
 	for resourceName := range m.knownResourceTypes {
 		if _, exists := newResources[resourceName]; !exists {
 			m.setQueueResource(state, resourceName, float64(0))

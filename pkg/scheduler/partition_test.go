@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/metrics"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -838,6 +839,13 @@ func TestAddApp(t *testing.T) {
 	app := newApplication(appID1, "default", defQueue)
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
+	queueApplicationsNew, err := metrics.GetQueueMetrics(defQueue).GetQueueApplicationsNew()
+	assert.NilError(t, err, "get queue metrics failed")
+	assert.Equal(t, queueApplicationsNew, 1)
+	scheduleApplicationsNew, err := metrics.GetSchedulerMetrics().GetTotalApplicationsNew()
+	assert.NilError(t, err, "get scheduler metrics failed")
+	assert.Equal(t, scheduleApplicationsNew, 1)
+
 	// add the same app
 	err = partition.AddApplication(app)
 	if err == nil {
@@ -853,6 +861,12 @@ func TestAddApp(t *testing.T) {
 	if err == nil || partition.getApplication(appID2) != nil {
 		t.Errorf("add application on stopped partition should have failed but did not")
 	}
+	queueApplicationsNew, err = metrics.GetQueueMetrics(defQueue).GetQueueApplicationsNew()
+	assert.NilError(t, err, "get queue metrics failed")
+	assert.Equal(t, queueApplicationsNew, 1)
+	scheduleApplicationsNew, err = metrics.GetSchedulerMetrics().GetTotalApplicationsNew()
+	assert.NilError(t, err, "get scheduler metrics failed")
+	assert.Equal(t, scheduleApplicationsNew, 1)
 
 	// mark partition for deletion, no new application can be added
 	partition.stateMachine.SetState(objects.Active.String())
@@ -863,6 +877,12 @@ func TestAddApp(t *testing.T) {
 	if err == nil || partition.getApplication(appID3) != nil {
 		t.Errorf("add application on draining partition should have failed but did not")
 	}
+	queueApplicationsNew, err = metrics.GetQueueMetrics(defQueue).GetQueueApplicationsNew()
+	assert.NilError(t, err, "get queue metrics failed")
+	assert.Equal(t, queueApplicationsNew, 1)
+	scheduleApplicationsNew, err = metrics.GetSchedulerMetrics().GetTotalApplicationsNew()
+	assert.NilError(t, err, "get scheduler metrics failed")
+	assert.Equal(t, scheduleApplicationsNew, 1)
 }
 
 func TestAddAppForced(t *testing.T) {

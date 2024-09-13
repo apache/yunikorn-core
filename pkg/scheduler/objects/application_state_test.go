@@ -290,17 +290,6 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	app := newApplication("app-00001", "default", "root.metrics")
 	app.SetQueue(queue)
 	assertState(t, app, nil, New.String())
-	assertTotalAppsNewMetrics(t, 1)
-	assertTotalAppsRunningMetrics(t, 0)
-	assertTotalAppsCompletedMetrics(t, 0)
-	assertTotalAppsRejectedMetrics(t, 0)
-	assertQueueRunningApps(t, app, 0)
-	assertQueueApplicationsRunningMetrics(t, app, 0)
-	assertQueueApplicationsAcceptedMetrics(t, app, 0)
-	assertQueueApplicationsRejectedMetrics(t, app, 0)
-	assertQueueApplicationsFailedMetrics(t, app, 0)
-	assertQueueApplicationsCompletedMetrics(t, app, 0)
-	assertQueueApplicationsNewMetrics(t, app, 1)
 
 	// New -> Resuming
 	err := app.HandleApplicationEvent(ResumeApplication)

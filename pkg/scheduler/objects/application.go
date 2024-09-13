@@ -52,7 +52,7 @@ var (
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
-
+var once sync.Once
 var initAppLogOnce sync.Once
 var rateLimitedAppLog *log.RateLimitedLogger
 
@@ -195,8 +195,11 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 }
 
 func (sa *Application) SetNewMetrics() {
-	metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
-	metrics.GetQueueMetrics(sa.GetQueuePath()).IncQueueApplicationsNew()
+	// ensure the queue is set before calling this function
+	if sa.GetQueuePath() != "" {
+		metrics.GetQueueMetrics(sa.GetQueuePath()).IncQueueApplicationsNew()
+		metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
+	}
 }
 
 func (sa *Application) String() string {

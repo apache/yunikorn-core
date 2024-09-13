@@ -52,7 +52,6 @@ var (
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
-var once sync.Once
 var initAppLogOnce sync.Once
 var rateLimitedAppLog *log.RateLimitedLogger
 

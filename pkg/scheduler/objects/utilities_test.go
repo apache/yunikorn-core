@@ -23,7 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/google/btree"
 	"gotest.tools/v3/assert"
 
@@ -32,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
+	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"

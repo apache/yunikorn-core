@@ -31,7 +31,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
 	"github.com/apache/yunikorn-core/pkg/events"
-	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
@@ -116,9 +115,6 @@ func createDynamicQueue(parentSQ *Queue, name string, parent bool) (*Queue, erro
 // Create application with minimal info
 func newApplication(appID, partition, queueName string) *Application {
 	tags := make(map[string]string)
-	// Add for testing, because we now set the new metrics after we can define the queue
-	metrics.GetQueueMetrics(queueName).IncQueueApplicationsNew()
-	metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
 	return newApplicationWithTags(appID, partition, queueName, tags)
 }
 

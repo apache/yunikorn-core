@@ -290,6 +290,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	// app-00001: New -> Resuming -> Accepted --> Running -> Completing-> Completed
 	app := newApplication("app-00001", "default", "root.metrics")
 	app.SetQueue(queue)
+	app.SetNewMetrics()
 	assertState(t, app, nil, New.String())
 	assertTotalAppsNewMetrics(t, 1)
 	assertTotalAppsRunningMetrics(t, 0)
@@ -398,6 +399,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	// app-00002: New -> Accepted -> Completing -> Running -> Failing-> Failed
 	app = newApplication("app-00002", "default", "root.metrics")
 	app.SetQueue(queue)
+	app.SetNewMetrics()
 	assertState(t, app, nil, New.String())
 	// New -> Accepted
 	err = app.HandleApplicationEvent(RunApplication)
@@ -432,6 +434,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	// app-00003: New -> Accepted -> Running -> Failing -> Failed
 	app = newApplication("app-00003", "default", "root.metrics")
 	app.SetQueue(queue)
+	app.SetNewMetrics()
 	assertState(t, app, nil, New.String())
 	// New -> Accepted
 	err = app.HandleApplicationEvent(RunApplication)
@@ -460,6 +463,7 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	// app-00004: New -> Rejected
 	app = newApplication("app-00004", "default", "root.metrics")
 	app.SetQueue(queue)
+	app.SetNewMetrics()
 	assertState(t, app, nil, New.String())
 	// New -> Rejected
 	err = app.HandleApplicationEvent(RejectApplication)
@@ -476,6 +480,13 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertQueueApplicationsRejectedMetrics(t, app, 1)
 	assertQueueApplicationsFailedMetrics(t, app, 2)
 	assertQueueApplicationsCompletedMetrics(t, app, 1)
+
+	// app-00005: the queuePath is empty, it will happen for dynamic queue when it before the queue is created
+	app = newApplication("app-00005", "default", "")
+	app.SetNewMetrics()
+	assertState(t, app, nil, New.String())
+	assertQueueApplicationsNewMetrics(t, app, 0)
+	assertTotalAppsNewMetrics(t, 4)
 }
 
 func assertState(t testing.TB, app *Application, err error, expected string) {

@@ -379,6 +379,9 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	queue.AddApplication(app)
 	pc.applications[appID] = app
 
+	// here we can make sure the queue is not empty
+	app.SetNewMetrics()
+
 	return nil
 }
 

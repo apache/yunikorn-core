@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/google/btree"
 	"gotest.tools/v3/assert"
 
@@ -115,6 +116,9 @@ func createDynamicQueue(parentSQ *Queue, name string, parent bool) (*Queue, erro
 // Create application with minimal info
 func newApplication(appID, partition, queueName string) *Application {
 	tags := make(map[string]string)
+	// Add for testing, because we now set the new metrics after we can define the queue
+	metrics.GetQueueMetrics(queueName).IncQueueApplicationsNew()
+	metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
 	return newApplicationWithTags(appID, partition, queueName, tags)
 }
 

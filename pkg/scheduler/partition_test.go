@@ -247,6 +247,9 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 
+	defer metrics.GetSchedulerMetrics().Reset()
+	defer metrics.GetQueueMetrics(defQueue).Reset()
+
 	// add a new app
 	app := newApplication(appID1, "default", defQueue)
 	err = partition.AddApplication(app)
@@ -293,6 +296,9 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+
+	defer metrics.GetSchedulerMetrics().Reset()
+	defer metrics.GetQueueMetrics(defQueue).Reset()
 
 	// add a new app
 	app := newApplication(appID1, "default", defQueue)
@@ -395,6 +401,9 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+
+	defer metrics.GetSchedulerMetrics().Reset()
+	defer metrics.GetQueueMetrics(defQueue).Reset()
 
 	// add a new app1
 	app1, _ := newApplicationWithHandler(appID1, "default", defQueue)
@@ -523,6 +532,9 @@ func TestPlaceholderDataWithNodeRemoval(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 
+	defer metrics.GetSchedulerMetrics().Reset()
+	defer metrics.GetQueueMetrics(defQueue).Reset()
+
 	// add a new app1
 	app1, _ := newApplicationWithHandler(appID1, "default", defQueue)
 	err = partition.AddApplication(app1)
@@ -605,6 +617,9 @@ func TestPlaceholderDataWithRemoval(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+
+	defer metrics.GetSchedulerMetrics().Reset()
+	defer metrics.GetQueueMetrics(defQueue).Reset()
 
 	// add a new app1
 	app1, _ := newApplicationWithHandler(appID1, "default", defQueue)
@@ -699,6 +714,8 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 
+	defer metrics.GetSchedulerMetrics().Reset()
+	defer metrics.GetQueueMetrics(defQueue).Reset()
 	// add a new app
 	app := newApplication(appID1, "default", defQueue)
 	err = partition.AddApplication(app)
@@ -771,6 +788,9 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 
+	defer metrics.GetSchedulerMetrics().Reset()
+	defer metrics.GetQueueMetrics(defQueue).Reset()
+
 	// add a new app
 	app := newApplication(appID1, "default", defQueue)
 	err = partition.AddApplication(app)
@@ -832,6 +852,8 @@ func TestRemoveNodeWithReal(t *testing.T) {
 }
 
 func TestAddApp(t *testing.T) {
+	defer metrics.GetSchedulerMetrics().Reset()
+	defer metrics.GetQueueMetrics(defQueue).Reset()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 

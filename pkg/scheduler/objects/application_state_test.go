@@ -286,6 +286,7 @@ func TestAppStateTransitionEvents(t *testing.T) {
 func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	queue := createQueue(t, "metrics")
 	metrics.GetSchedulerMetrics().Reset()
+	metrics.GetQueueMetrics("root.metrics").Reset()
 	// app-00001: New -> Resuming -> Accepted --> Running -> Completing-> Completed
 	app := newApplication("app-00001", "default", "root.metrics")
 	app.SetQueue(queue)

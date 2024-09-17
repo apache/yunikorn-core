@@ -17,7 +17,7 @@
  -->
 # Apache YuniKorn - A Universal Scheduler
 
-[![Build Status](https://github.com/apache/yunikorn-core/actions/workflows/main.yml/badge.svg)](https://github.com/apache/yunikorn-core/actions)
+[![Build Status](https://github.com/apache/yunikorn-core/actions/workflows/push-master.yml/badge.svg)](https://github.com/apache/yunikorn-core/actions)
 [![codecov](https://codecov.io/gh/apache/yunikorn-core/branch/master/graph/badge.svg)](https://codecov.io/gh/apache/yunikorn-core)
 [![Go Report Card](https://goreportcard.com/badge/github.com/apache/yunikorn-core)](https://goreportcard.com/report/github.com/apache/yunikorn-core)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)

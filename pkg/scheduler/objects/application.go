@@ -193,14 +193,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	return app
 }
 
-func (sa *Application) SetNewMetrics() {
-	// ensure the queue is set before calling this function
-	if sa.GetQueuePath() != "" {
-		metrics.GetQueueMetrics(sa.GetQueuePath()).IncQueueApplicationsNew()
-		metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
-	}
-}
-
 func (sa *Application) String() string {
 	if sa == nil {
 		return "application is nil"
@@ -1642,6 +1634,9 @@ func (sa *Application) SetQueue(queue *Queue) {
 	defer sa.Unlock()
 	sa.queuePath = queue.QueuePath
 	sa.queue = queue
+	// here we can make sure the queue is not empty
+	metrics.GetQueueMetrics(queue.QueuePath).IncQueueApplicationsNew()
+	metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
 }
 
 // remove the leaf queue the application runs in, used when completing the app

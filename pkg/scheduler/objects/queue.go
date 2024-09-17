@@ -1657,20 +1657,22 @@ func (sq *Queue) SupportTaskGroup() bool {
 
 // updateGuaranteedResourceMetrics updates guaranteed resource metrics.
 func (sq *Queue) updateGuaranteedResourceMetrics() {
+	queueMetrics := metrics.GetQueueMetrics(sq.QueuePath)
+	resourcesToUpdate := map[string]resources.Quantity{}
 	if sq.guaranteedResource != nil {
-		for k, v := range sq.guaranteedResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueueGuaranteedResourceMetrics(k, float64(v))
-		}
+		resourcesToUpdate = sq.guaranteedResource.Resources
 	}
+	queueMetrics.UpdateQueueResourceMetrics(metrics.QueueGuaranteed, resourcesToUpdate)
 }
 
 // updateMaxResourceMetrics updates max resource metrics.
 func (sq *Queue) updateMaxResourceMetrics() {
+	queueMetrics := metrics.GetQueueMetrics(sq.QueuePath)
+	resourcesToUpdate := map[string]resources.Quantity{}
 	if sq.maxResource != nil {
-		for k, v := range sq.maxResource.Resources {
-			metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxResourceMetrics(k, float64(v))
-		}
+		resourcesToUpdate = sq.maxResource.Resources
 	}
+	queueMetrics.UpdateQueueResourceMetrics(metrics.QueueMax, resourcesToUpdate)
 }
 
 // updateAllocatedResourceMetrics updates allocated resource metrics for all queue types.

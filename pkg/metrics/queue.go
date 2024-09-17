@@ -23,6 +23,8 @@ import (
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
@@ -57,6 +59,9 @@ type QueueMetrics struct {
 	resourceMetricsLabel *prometheus.GaugeVec
 	// Deprecated - To be removed in 1.7.0. Replaced with queue label Metrics
 	resourceMetricsSubsystem *prometheus.GaugeVec
+	// Track known resource types
+	knownResourceTypes map[string]struct{}
+	lock               locking.Mutex
 }
 
 // InitQueueMetrics to initialize queue metrics
@@ -123,6 +128,7 @@ func InitQueueMetrics(name string) *QueueMetrics {
 		}
 	}
 
+	q.knownResourceTypes = make(map[string]struct{})
 	return q
 }
 
@@ -142,10 +148,13 @@ func (m *QueueMetrics) setQueueResource(state string, resourceName string, value
 }
 
 func (m *QueueMetrics) Reset() {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	m.appMetricsLabel.Reset()
 	m.appMetricsSubsystem.Reset()
 	m.resourceMetricsLabel.Reset()
 	m.resourceMetricsSubsystem.Reset()
+	m.knownResourceTypes = make(map[string]struct{})
 }
 
 func (m *QueueMetrics) IncQueueApplicationsRunning() {
@@ -301,12 +310,22 @@ func (m *QueueMetrics) AddReleasedContainers(value int) {
 	m.containerMetrics.WithLabelValues(ContainerReleased).Add(float64(value))
 }
 
-func (m *QueueMetrics) SetQueueGuaranteedResourceMetrics(resourceName string, value float64) {
-	m.setQueueResource(QueueGuaranteed, resourceName, value)
-}
+func (m *QueueMetrics) UpdateQueueResourceMetrics(state string, newResources map[string]resources.Quantity) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	// Iterate over new resource types and set their values
+	for resourceName, value := range newResources {
+		m.setQueueResource(state, resourceName, float64(value))
+		// Add new resources to the known list
+		m.knownResourceTypes[resourceName] = struct{}{}
+	}
 
-func (m *QueueMetrics) SetQueueMaxResourceMetrics(resourceName string, value float64) {
-	m.setQueueResource(QueueMax, resourceName, value)
+	// Emit old resource types that are missing in the new collection with zero
+	for resourceName := range m.knownResourceTypes {
+		if _, exists := newResources[resourceName]; !exists {
+			m.setQueueResource(state, resourceName, float64(0))
+		}
+	}
 }
 
 func (m *QueueMetrics) SetQueueAllocatedResourceMetrics(resourceName string, value float64) {

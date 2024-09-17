@@ -26,6 +26,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
 var qm *QueueMetrics
@@ -196,16 +198,28 @@ func TestQueueGuaranteedResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
 	defer unregisterQueueMetrics()
 
-	qm.SetQueueGuaranteedResourceMetrics("cpu", 1)
+	qm.UpdateQueueResourceMetrics("guaranteed", map[string]resources.Quantity{
+		"cpu": 1,
+	})
 	verifyResourceMetrics(t, "guaranteed", "cpu")
+	assert.DeepEqual(t, qm.knownResourceTypes, map[string]struct{}{"cpu": {}})
+
+	qm.UpdateQueueResourceMetrics("guaranteed", map[string]resources.Quantity{"memory": 1})
+	assert.DeepEqual(t, qm.knownResourceTypes, map[string]struct{}{"cpu": {}, "memory": {}})
 }
 
 func TestQueueMaxResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
 	defer unregisterQueueMetrics()
 
-	qm.SetQueueMaxResourceMetrics("cpu", 1)
+	qm.UpdateQueueResourceMetrics("max", map[string]resources.Quantity{
+		"cpu": 1,
+	})
 	verifyResourceMetrics(t, "max", "cpu")
+	assert.DeepEqual(t, qm.knownResourceTypes, map[string]struct{}{"cpu": {}})
+
+	qm.UpdateQueueResourceMetrics("max", map[string]resources.Quantity{"memory": 1})
+	assert.DeepEqual(t, qm.knownResourceTypes, map[string]struct{}{"cpu": {}, "memory": {}})
 }
 
 func TestQueueAllocatedResourceMetrics(t *testing.T) {
@@ -364,4 +378,5 @@ func unregisterQueueMetrics() {
 	prometheus.Unregister(qm.containerMetrics)
 	prometheus.Unregister(qm.resourceMetricsLabel)
 	prometheus.Unregister(qm.resourceMetricsSubsystem)
+	qm.knownResourceTypes = make(map[string]struct{})
 }

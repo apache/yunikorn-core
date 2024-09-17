@@ -61,7 +61,7 @@ type QueueMetrics struct {
 	resourceMetricsSubsystem *prometheus.GaugeVec
 	// Track known resource types
 	knownResourceTypes map[string]struct{}
-	lock               locking.RWMutex
+	lock               locking.Mutex
 }
 
 // InitQueueMetrics to initialize queue metrics

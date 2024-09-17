@@ -52,7 +52,6 @@ var (
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
-
 var initAppLogOnce sync.Once
 var rateLimitedAppLog *log.RateLimitedLogger
 
@@ -191,13 +190,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app.rmID = rmID
 	app.appEvents = schedEvt.NewApplicationEvents(events.GetEventSystem())
 	app.appEvents.SendNewApplicationEvent(app.ApplicationID)
-	app.setNewMetrics()
 	return app
-}
-
-func (sa *Application) setNewMetrics() {
-	metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
-	metrics.GetQueueMetrics(sa.GetQueuePath()).IncQueueApplicationsNew()
 }
 
 func (sa *Application) String() string {
@@ -1641,6 +1634,9 @@ func (sa *Application) SetQueue(queue *Queue) {
 	defer sa.Unlock()
 	sa.queuePath = queue.QueuePath
 	sa.queue = queue
+	// here we can make sure the queue is not empty
+	metrics.GetQueueMetrics(queue.QueuePath).IncQueueApplicationsNew()
+	metrics.GetSchedulerMetrics().IncTotalApplicationsNew()
 }
 
 // remove the leaf queue the application runs in, used when completing the app

@@ -286,6 +286,7 @@ func TestAppStateTransitionEvents(t *testing.T) {
 func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	queue := createQueue(t, "metrics")
 	metrics.GetSchedulerMetrics().Reset()
+	metrics.GetQueueMetrics("root.metrics").Reset()
 	// app-00001: New -> Resuming -> Accepted --> Running -> Completing-> Completed
 	app := newApplication("app-00001", "default", "root.metrics")
 	app.SetQueue(queue)
@@ -475,6 +476,12 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertQueueApplicationsRejectedMetrics(t, app, 1)
 	assertQueueApplicationsFailedMetrics(t, app, 2)
 	assertQueueApplicationsCompletedMetrics(t, app, 1)
+
+	// app-00005: the queuePath is empty, it will happen for dynamic queue when it before the queue is created
+	app = newApplication("app-00005", "default", "")
+	assertState(t, app, nil, New.String())
+	assertQueueApplicationsNewMetrics(t, app, 0)
+	assertTotalAppsNewMetrics(t, 4)
 }
 
 func assertState(t testing.TB, app *Application, err error, expected string) {

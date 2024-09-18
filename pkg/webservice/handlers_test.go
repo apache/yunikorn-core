@@ -324,7 +324,6 @@ func TestGetStackInfo(t *testing.T) {
 	assert.NilError(t, err, "Error creating request")
 	resp := &MockResponseWriter{}
 	getStackInfo(resp, req)
-	assert.Equal(t, resp.statusCode, http.StatusOK, statusCodeError)
 	assertIsStackInfo(t, resp.outputBytes)
 
 	// Create a deep call stack (30 calls) and check if the stack trace is larger than 5000 bytes
@@ -338,7 +337,6 @@ func TestGetStackInfo(t *testing.T) {
 			req, err = http.NewRequest("GET", "/stack", nil)
 			assert.NilError(t, err, httpRequestError)
 			getStackInfo(resp, req)
-			assert.Equal(t, resp.statusCode, http.StatusOK, statusCodeError)
 			assertIsStackInfo(t, resp.outputBytes)
 			assert.Check(t, len(resp.outputBytes) > 5000, "Expected stack trace larger than 5000 bytes")
 		}

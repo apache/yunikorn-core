@@ -326,8 +326,8 @@ func TestGetStackInfo(t *testing.T) {
 	getStackInfo(resp, req)
 	assertIsStackInfo(t, resp.outputBytes)
 
-	// Create a deep call stack (30 calls) and check if the stack trace is larger than 1024 bytes
-	// assuming RAM is not less than 1024 bytes
+	// Create a deep call stack (30 calls) and check if the stack trace is larger than 5000 bytes
+	// assuming RAM is not less than 5000 bytes
 	var deepFunction func(int)
 	deepFunction = func(depth int) {
 		if depth > 0 {
@@ -338,7 +338,7 @@ func TestGetStackInfo(t *testing.T) {
 			assert.NilError(t, err, httpRequestError)
 			getStackInfo(resp, req)
 			assertIsStackInfo(t, resp.outputBytes)
-			assert.Check(t, len(resp.outputBytes) > 1024, "Expected stack trace larger than 1024 bytes")
+			assert.Check(t, len(resp.outputBytes) > 5000, "Expected stack trace larger than 5000 bytes")
 		}
 	}
 	deepFunction(30)

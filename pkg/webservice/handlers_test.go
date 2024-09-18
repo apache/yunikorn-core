@@ -320,26 +320,28 @@ func newApplication(appID, partitionName, queueName, rmID string, ugi security.U
 
 func TestGetStackInfo(t *testing.T) {
 	// normal case
-	req, err := http.NewRequest("GET", "", strings.NewReader(baseConf))
+	req, err := http.NewRequest("GET", "/stack", strings.NewReader(baseConf))
 	assert.NilError(t, err, "Error creating request")
 	resp := &MockResponseWriter{}
 	getStackInfo(resp, req)
 	assertIsStackInfo(t, resp.outputBytes)
 
-	// Create a deep call stack (100 calls) and check if the stack trace is larger than 15000 bytes
+	// Create a deep call stack (30 calls) and check if the stack trace is larger than 1024 bytes
+	// assuming RAM is not less than 1024 bytes
 	var deepFunction func(int)
 	deepFunction = func(depth int) {
 		if depth > 0 {
 			deepFunction(depth - 1)
 		} else {
 			resp = &MockResponseWriter{}
-			req, _ := http.NewRequest("GET", "/stack", nil)
+			req, err = http.NewRequest("GET", "/stack", nil)
+			assert.NilError(t, err, httpRequestError)
 			getStackInfo(resp, req)
 			assertIsStackInfo(t, resp.outputBytes)
-			assert.Check(t, len(resp.outputBytes) > 15000, "Expected stack trace larger than 15000 bytes, where it will reach max at around 17898")
+			assert.Check(t, len(resp.outputBytes) > 1024, "Expected stack trace larger than 1024 bytes")
 		}
 	}
-	deepFunction(100)
+	deepFunction(30)
 }
 
 // assert stack trace

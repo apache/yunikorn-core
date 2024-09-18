@@ -318,6 +318,39 @@ func newApplication(appID, partitionName, queueName, rmID string, ugi security.U
 	return objects.NewApplication(siApp, userGroup, nil, rmID)
 }
 
+func TestGetStackInfo(t *testing.T) {
+	// normal case
+	req, err := http.NewRequest("GET", "/stack", strings.NewReader(baseConf))
+	assert.NilError(t, err, "Error creating request")
+	resp := &MockResponseWriter{}
+	getStackInfo(resp, req)
+	assertIsStackInfo(t, resp.outputBytes)
+
+	// Create a deep call stack (30 calls) and check if the stack trace is larger than 5000 bytes
+	// assuming RAM is not less than 5000 bytes
+	var deepFunction func(int)
+	deepFunction = func(depth int) {
+		if depth > 0 {
+			deepFunction(depth - 1)
+		} else {
+			resp = &MockResponseWriter{}
+			req, err = http.NewRequest("GET", "/stack", nil)
+			assert.NilError(t, err, httpRequestError)
+			getStackInfo(resp, req)
+			assertIsStackInfo(t, resp.outputBytes)
+			assert.Check(t, len(resp.outputBytes) > 5000, "Expected stack trace larger than 5000 bytes")
+		}
+	}
+	deepFunction(30)
+}
+
+// assert stack trace
+func assertIsStackInfo(t *testing.T, outputBytes []byte) {
+	assert.Assert(t, strings.Contains(string(outputBytes), "goroutine"), "Stack trace should be present in the response")
+	assert.Assert(t, strings.Contains(string(outputBytes), "test"), "Stack trace should be present in the response")
+	assert.Assert(t, strings.Contains(string(outputBytes), "github.com/apache/yunikorn-core/pkg/webservice.getStackInfo"), "Stack trace should be present in the response")
+}
+
 func TestValidateConf(t *testing.T) {
 	confTests := []struct {
 		content          string
@@ -1332,23 +1365,17 @@ func TestGetPartitionNodes(t *testing.T) {
 		}
 
 		if node.NodeID == node1ID {
-			assert.Equal(t, node.NodeID, node1ID)
-			assert.Equal(t, "alloc-1", node.Allocations[0].AllocationKey)
-			assert.DeepEqual(t, attributesOfnode1, node.Attributes)
-			assert.DeepEqual(t, map[string]int64{"memory": 50, "vcore": 30}, node.Utilized)
+			assertNodeInfo(t, node, node1ID, "alloc-1", attributesOfnode1, map[string]int64{"memory": 50, "vcore": 30})
 		} else {
-			assert.Equal(t, node.NodeID, node2ID)
-			assert.Equal(t, "alloc-2", node.Allocations[0].AllocationKey)
-			assert.DeepEqual(t, attributesOfnode2, node.Attributes)
-			assert.DeepEqual(t, map[string]int64{"memory": 30, "vcore": 50}, node.Utilized)
+			assertNodeInfo(t, node, node2ID, "alloc-2", attributesOfnode2, map[string]int64{"memory": 30, "vcore": 50})
 		}
 	}
 
 	req, err = createRequest(t, "/ws/v1/partition/default/nodes", map[string]string{"partition": "notexists"})
 	assert.NilError(t, err, "Get Nodes for PartitionNodes Handler request failed")
-	resp1 := &MockResponseWriter{}
-	getPartitionNodes(resp1, req)
-	assertPartitionNotExists(t, resp1)
+	resp = &MockResponseWriter{}
+	getPartitionNodes(resp, req)
+	assertPartitionNotExists(t, resp)
 
 	// test params name missing
 	req, err = http.NewRequest("GET", "/ws/v1/partition/default/nodes", strings.NewReader(""))
@@ -1356,19 +1383,85 @@ func TestGetPartitionNodes(t *testing.T) {
 	resp = &MockResponseWriter{}
 	getPartitionNodes(resp, req)
 	assertParamsMissing(t, resp)
+}
 
+func TestGetPartitionNode(t *testing.T) {
+	partition := setup(t, configDefault, 1)
+
+	// create test application
+	appID := "app-1"
+	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
+	err := partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+
+	// create test nodes
+	attributesOfnode1 := map[string]string{"Disk": "SSD"}
+	attributesOfnode2 := map[string]string{"Devices": "camera"}
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
+	node1ID := "node_1"
+	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, Attributes: attributesOfnode1, SchedulableResource: nodeRes})
+	node2ID := "node_2"
+	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, Attributes: attributesOfnode2, SchedulableResource: nodeRes})
+
+	// create test allocations
+	resAlloc1 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 500, siCommon.CPU: 300})
+	resAlloc2 := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 300, siCommon.CPU: 500})
+	alloc1 := newAlloc("alloc-1", appID, node1ID, resAlloc1)
+	allocs := []*objects.Allocation{alloc1}
+	err = partition.AddNode(node1)
+	assert.NilError(t, err, "add node to partition should not have failed")
+	_, allocCreated, err := partition.UpdateAllocation(allocs[0])
+	assert.NilError(t, err, "add alloc-1 should not have failed")
+	assert.Check(t, allocCreated)
+
+	alloc2 := newAlloc("alloc-2", appID, node2ID, resAlloc2)
+	allocs = []*objects.Allocation{alloc2}
+	err = partition.AddNode(node2)
+	assert.NilError(t, err, "add node to partition should not have failed")
+	_, allocCreated, err = partition.UpdateAllocation(allocs[0])
+	assert.NilError(t, err, "add alloc-2 should not have failed")
+	assert.Check(t, allocCreated)
+
+	NewWebApp(schedulerContext.Load(), nil)
+
+	var req *http.Request
 	// Test specific node
-	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"node": "node-1"})
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node_1", map[string]string{"partition": "default", "node": "node_1"})
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
-	resp = &MockResponseWriter{}
+	resp := &MockResponseWriter{}
 	getPartitionNode(resp, req)
+	var nodeInfo dao.NodeDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &nodeInfo)
+	assert.NilError(t, err, unmarshalError)
+	assertNodeInfo(t, &nodeInfo, node1ID, "alloc-1", attributesOfnode1, map[string]int64{"memory": 50, "vcore": 30})
 
 	// Test node id is missing
-	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"partition": "default", "node": ""})
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node_1", map[string]string{"partition": "default", "node": ""})
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
 	assertNodeIDNotExists(t, resp)
+
+	// Test param missing
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/node", strings.NewReader(""))
+	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionNode(resp, req)
+	assertParamsMissing(t, resp)
+
+	// Test partition does not exist
+	req, err = createRequest(t, "/ws/v1/partition/notexists/node/node_1", map[string]string{"partition": "notexists"})
+	assert.NilError(t, err, "Get Nodes for PartitionNode Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionNodes(resp, req)
+	assertPartitionNotExists(t, resp)
+}
+
+func assertNodeInfo(t *testing.T, node *dao.NodeDAOInfo, expectedID string, expectedAllocationKey string, expectedAttibute map[string]string, expectedUtilized map[string]int64) {
+	assert.Equal(t, expectedID, node.NodeID)
+	assert.Equal(t, expectedAllocationKey, node.Allocations[0].AllocationKey)
+	assert.DeepEqual(t, expectedAttibute, node.Attributes)
+	assert.DeepEqual(t, expectedUtilized, node.Utilized)
 }
 
 // addApp Add app to the given partition and assert the app count, state etc

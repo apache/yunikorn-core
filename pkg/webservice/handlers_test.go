@@ -1389,7 +1389,7 @@ func TestGetPartitionNode(t *testing.T) {
 	partition := setup(t, configDefault, 1)
 
 	// create test application
-	appID := "app1"
+	appID := "app-1"
 	app := newApplication(appID, partition.Name, queueName, rmID, security.UserGroup{User: "testuser", Groups: []string{"testgroup"}})
 	err := partition.AddApplication(app)
 	assert.NilError(t, err, "add application to partition should not have failed")
@@ -1398,9 +1398,9 @@ func TestGetPartitionNode(t *testing.T) {
 	attributesOfnode1 := map[string]string{"Disk": "SSD"}
 	attributesOfnode2 := map[string]string{"Devices": "camera"}
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 1000, siCommon.CPU: 1000}).ToProto()
-	node1ID := "node-1"
+	node1ID := "node_1"
 	node1 := objects.NewNode(&si.NodeInfo{NodeID: node1ID, Attributes: attributesOfnode1, SchedulableResource: nodeRes})
-	node2ID := "node-2"
+	node2ID := "node_2"
 	node2 := objects.NewNode(&si.NodeInfo{NodeID: node2ID, Attributes: attributesOfnode2, SchedulableResource: nodeRes})
 
 	// create test allocations
@@ -1426,7 +1426,7 @@ func TestGetPartitionNode(t *testing.T) {
 
 	var req *http.Request
 	// Test specific node
-	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"partition": "default", "node": "node-1"})
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node_1", map[string]string{"partition": "default", "node": "node_1"})
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp := &MockResponseWriter{}
 	getPartitionNode(resp, req)
@@ -1436,7 +1436,7 @@ func TestGetPartitionNode(t *testing.T) {
 	assertNodeInfo(t, &nodeInfo, node1ID, "alloc-1", attributesOfnode1, map[string]int64{"memory": 50, "vcore": 30})
 
 	// Test node id is missing
-	req, err = createRequest(t, "/ws/v1/partition/default/node/node-1", map[string]string{"partition": "default", "node": ""})
+	req, err = createRequest(t, "/ws/v1/partition/default/node/node_1", map[string]string{"partition": "default", "node": ""})
 	assert.NilError(t, err, "Get Node for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNode(resp, req)
@@ -1450,7 +1450,7 @@ func TestGetPartitionNode(t *testing.T) {
 	assertParamsMissing(t, resp)
 
 	// Test partition does not exist
-	req, err = createRequest(t, "/ws/v1/partition/notexists/node/node-1", map[string]string{"partition": "notexists"})
+	req, err = createRequest(t, "/ws/v1/partition/notexists/node/node_1", map[string]string{"partition": "notexists"})
 	assert.NilError(t, err, "Get Nodes for PartitionNode Handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitionNodes(resp, req)

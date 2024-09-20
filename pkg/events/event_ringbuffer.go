@@ -203,7 +203,7 @@ func newEventRingBuffer(capacity uint64) *eventRingBuffer {
 }
 
 // called from Resize(), this function updates the lowest event id available in the buffer
-func (e *eventRingBuffer) updateLowestId(beginSize, endSize uint64) {
+func (e *eventRingBuffer) updateLowestID(beginSize, endSize uint64) {
 	// if buffer size is increasing, lowestId stays the same
 	if beginSize < endSize {
 		return
@@ -238,7 +238,7 @@ func (e *eventRingBuffer) Resize(newSize uint64) {
 	endIndex := (startIndex + numEventsToCopy - 1) % e.capacity
 
 	prevLowestId := e.getLowestID()
-	e.updateLowestId(initialSize, newSize)
+	e.updateLowestID(initialSize, newSize)
 	newLowestId := e.getLowestID()
 
 	if prevLowestId != newLowestId {

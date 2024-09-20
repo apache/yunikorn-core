@@ -410,11 +410,7 @@ func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trac
 func (qt *QueueTracker) canBeRemoved() bool {
 	for _, childQT := range qt.childQueueTrackers {
 		// quick check to avoid further traversal
-		if childQT.canBeRemovedInternal() {
-			if !childQT.canBeRemoved() {
-				return false
-			}
-		} else {
+		if !childQT.canBeRemovedInternal() {
 			return false
 		}
 	}

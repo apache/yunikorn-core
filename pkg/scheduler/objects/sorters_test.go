@@ -236,15 +236,15 @@ func TestSortAppsFifo(t *testing.T) {
 
 	input["app-1"].askMaxPriority = 3
 	input["app-3"].askMaxPriority = 5
-	input["app-2"].SubmissionTime = input["app-3"].SubmissionTime
+	input["app-2"].SubmissionTime = input["app-3"].SubmissionTime.Add(time.Nanosecond * -5)
 	input["app-1"].SubmissionTime = input["app-3"].SubmissionTime
 	list = sortApplications(input, policies.FifoSortPolicy, false, nil)
 	/*
 	* apps order: 0, 3, 1, 2
-	* the resultType of app index is [0, 2, 3, 1]
-	* app0 with index 0, app1 with index 2, app2 with index 3 and app3 with index 1
+	* the resultType of app index is [0, 3, 1, 2]
+	* app0 with index 0, app1 with index 3, app2 with index 1 and app3 with index 2
 	 */
-	assertAppList(t, list, []int{0, 2, 3, 1}, "fifo first, priority second")
+	assertAppList(t, list, []int{0, 3, 1, 2}, "fifo first, priority second")
 }
 
 func TestSortAppsPriorityFifo(t *testing.T) {

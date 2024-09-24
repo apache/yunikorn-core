@@ -35,7 +35,7 @@ var logFile string
 
 var iterations = 100000
 
-func TestLoggerIds(t *testing.T) {
+func TestLoggerIDs(t *testing.T) {
 	_ = Log(Test)
 
 	// validate logger count

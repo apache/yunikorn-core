@@ -100,17 +100,15 @@ func sortQueuesByFairnessAndPriority(queues []*Queue, fairMaxResources []*resour
 
 func sortApplications(apps map[string]*Application, sortType policies.SortPolicy, considerPriority bool, globalResource *resources.Resource) []*Application {
 	sortingStart := time.Now()
-	var sortedApps []*Application
+	sortedApps := filterOnPendingResources(apps)
 	switch sortType {
 	case policies.FairSortPolicy:
-		sortedApps = filterOnPendingResources(apps)
 		if considerPriority {
 			sortApplicationsByPriorityAndFairness(sortedApps, globalResource)
 		} else {
 			sortApplicationsByFairnessAndPriority(sortedApps, globalResource)
 		}
 	case policies.FifoSortPolicy:
-		sortedApps = filterOnPendingResources(apps)
 		if considerPriority {
 			sortApplicationsByPriorityAndSubmissionTime(sortedApps)
 		} else {

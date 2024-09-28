@@ -156,14 +156,6 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	}
 }
 
-// NewAllocationFromSIAllocated creates an Allocation where the "allocated" flag is always true,
-// regardless whehether the NodeID if empty or not. Used for testing.
-func NewAllocationFromSIAllocated(siAlloc *si.Allocation) *Allocation {
-	alloc := NewAllocationFromSI(siAlloc)
-	alloc.allocated = true
-	return alloc
-}
-
 // NewSIFromAllocation converts the Allocation into a SI object. This is a limited set of values that gets copied into
 // the SI. This is only used to communicate *back* to the RM. All other fields are considered incoming fields from
 // the RM into the core. The limited set of fields link the Allocation to an Application and Node.

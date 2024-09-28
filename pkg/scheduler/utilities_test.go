@@ -611,12 +611,22 @@ func newForeignRequest(allocKey string) *objects.Allocation {
 }
 
 func newForeignAllocation(allocKey, nodeID string) *objects.Allocation {
-	alloc := objects.NewAllocationFromSIAllocated(&si.Allocation{
+	var alloc *objects.Allocation
+	defer func() {
+		if nodeID == "" {
+			alloc.SetNodeID("")
+		}
+	}()
+	id := nodeID
+	if nodeID == "" {
+		id = "tmp" // set a temporary value to force allocated = true
+	}
+	alloc = objects.NewAllocationFromSI(&si.Allocation{
 		AllocationKey: allocKey,
 		AllocationTags: map[string]string{
 			siCommon.Foreign: siCommon.AllocTypeDefault,
 		},
-		NodeID: nodeID,
+		NodeID: id,
 	})
 	return alloc
 }

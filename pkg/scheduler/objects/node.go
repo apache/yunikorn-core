@@ -260,7 +260,7 @@ func (sn *Node) GetForeignAllocations() []*Allocation {
 func (sn *Node) getAllocations(foreign bool) []*Allocation {
 	arr := make([]*Allocation, 0)
 	for _, v := range sn.allocations {
-		if (v.IsForeign() && foreign) || (!v.IsForeign() && !foreign) {
+		if v.IsForeign() == foreign {
 			arr = append(arr, v)
 		}
 	}

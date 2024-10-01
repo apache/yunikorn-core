@@ -1594,12 +1594,24 @@ func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, 
 			node.RemoveAllocation(ask.GetAllocationKey())
 			return nil, nil
 		}
+
 		// mark this ask as allocated
+		// If the allocation already exists, we should not add it to the node again, it will potentially cause the orphan allocation issue.
 		_, err := sa.allocateAsk(ask)
 		if err != nil {
 			log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
 				zap.Error(err))
+			// revert the node update
+			node.RemoveAllocation(ask.GetAllocationKey())
+			// revert the queue update
+			err = sa.queue.DecAllocatedResource(ask.GetAllocatedResource())
+			if err != nil {
+				log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
+					zap.Error(err))
+			}
+			return nil, nil
 		}
+
 		// all is OK, last update for the app
 		result := newAllocatedAllocationResult(node.NodeID, ask)
 		sa.addAllocationInternal(result.ResultType, ask)

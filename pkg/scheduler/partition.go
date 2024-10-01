@@ -1550,7 +1550,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 func (pc *PartitionContext) removeForeignAllocation(allocID string) {
 	nodeID := pc.foreignAllocs[allocID]
 	if nodeID == "" {
-		log.Log(log.SchedPartition).Warn("Tried to remove a non-existing foreign allocation",
+		log.Log(log.SchedPartition).Debug("Tried to remove a non-existing foreign allocation",
 			zap.String("allocationID", allocID),
 			zap.String("nodeID", nodeID))
 		return
@@ -1558,7 +1558,7 @@ func (pc *PartitionContext) removeForeignAllocation(allocID string) {
 	delete(pc.foreignAllocs, allocID)
 	node := pc.GetNode(nodeID)
 	if node == nil {
-		log.Log(log.SchedPartition).Warn("Node not found for foreign allocation",
+		log.Log(log.SchedPartition).Debug("Node not found for foreign allocation",
 			zap.String("allocationID", allocID),
 			zap.String("nodeID", nodeID))
 		return

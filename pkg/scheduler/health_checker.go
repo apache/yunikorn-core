@@ -330,7 +330,7 @@ func checkAppAllocations(app *objects.Application, nodes objects.NodeCollection)
 
 func checkNodeAllocations(node *objects.Node, partitionContext *PartitionContext) []*objects.Allocation {
 	orphanAllocationsOnNode := make([]*objects.Allocation, 0)
-	for _, alloc := range node.GetAllAllocations() {
+	for _, alloc := range node.GetYunikornAllocations() {
 		if app := partitionContext.getApplication(alloc.GetApplicationID()); app != nil {
 			if !app.IsAllocationAssignedToApp(alloc) {
 				orphanAllocationsOnNode = append(orphanAllocationsOnNode, alloc)

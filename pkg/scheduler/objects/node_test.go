@@ -414,23 +414,54 @@ func TestAddAllocation(t *testing.T) {
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "removal of half allocation should return to zero %v, got %v", node, node.GetAllocatedResource())
 }
 
-func TestTryAddAllocation(t *testing.T) {
+func TestAddForeignAllocation(t *testing.T) {
 	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
 	if !resources.IsZero(node.GetAllocatedResource()) {
 		t.Fatal("Failed to initialize resource")
 	}
 
+	// check foreign alloc that is over quota
+	large := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 200})
+	falloc1 := newForeignAllocation("foreign-1", "node-123", large)
+	node.AddAllocation(falloc1)
+	assert.Assert(t, resources.Equals(large, node.GetOccupiedResource()), "invalid occupied resource - expected %v got %v",
+		large, node.GetOccupiedResource())
+	assert.Assert(t, resources.Equals(resources.Zero, node.GetAllocatedResource()), "allocated resource is not zero: %v", node.GetAllocatedResource())
+	assert.Assert(t, resources.Equals(resources.Zero, node.GetUtilizedResource()), "utilized resource is not zero: %v", node.GetUtilizedResource())
+	node.RemoveAllocation("foreign-1")
+
+	// check foreign alloc that is below quota
+	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
+	falloc2 := newForeignAllocation("foreign-2", "node-123", half)
+	node.AddAllocation(falloc2)
+	assert.Assert(t, resources.Equals(half, node.GetOccupiedResource()), "invalid occupied resource - expected %v got %v",
+		large, node.GetOccupiedResource())
+	assert.Assert(t, resources.Equals(resources.Zero, node.GetAllocatedResource()), "allocated resource is not zero: %v", node.GetAllocatedResource())
+	assert.Assert(t, resources.Equals(resources.Zero, node.GetUtilizedResource()), "utilized resource is not zero: %v", node.GetUtilizedResource())
+}
+
+func TestTryAddAllocation(t *testing.T) {
+	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
+	if !resources.IsZero(node.GetAllocatedResource()) {
+		t.Fatal("Failed to initialize resource")
+	}
+	listener := &testListener{}
+	node.AddListener(listener)
+
 	// check nil alloc
 	assert.Assert(t, !node.TryAddAllocation(nil), "nil allocation should not have been added: %v", node)
+	assert.Equal(t, 0, listener.updateCount, "unexpected listener update")
 	// check alloc that does not match
 	unknown := resources.NewResourceFromMap(map[string]resources.Quantity{"unknown": 1})
 	alloc := newAllocation(appID1, nodeID1, unknown)
 	assert.Assert(t, !node.TryAddAllocation(alloc), "unmatched resource type in allocation should not have been added: %v", node)
+	assert.Equal(t, 0, listener.updateCount, "unexpected listener update")
 
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
 	alloc = newAllocation(appID1, nodeID1, half)
 	assert.Assert(t, node.TryAddAllocation(alloc), "add allocation 1 should not have failed")
+	assert.Equal(t, 1, listener.updateCount, "listener update expected")
 	if node.GetAllocation(alloc.GetAllocationKey()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -448,6 +479,7 @@ func TestTryAddAllocation(t *testing.T) {
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
 	alloc = newAllocation(appID1, nodeID1, piece)
 	assert.Assert(t, node.TryAddAllocation(alloc), "add allocation 2 should not have failed")
+	assert.Equal(t, 2, listener.updateCount, "listener update expected")
 	if node.GetAllocation(alloc.GetAllocationKey()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -465,16 +497,59 @@ func TestTryAddAllocation(t *testing.T) {
 	}
 }
 
+func TestTryAddForeignAllocation(t *testing.T) {
+	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
+	if !resources.IsZero(node.GetAllocatedResource()) {
+		t.Fatal("Failed to initialize resource")
+	}
+	listener := &testListener{}
+	node.AddListener(listener)
+
+	// first allocation - doesn't fit
+	fRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 200, "second": 200})
+	fAlloc1 := newForeignAllocation("foreign-1", "node-123", fRes)
+	assert.Assert(t, !node.TryAddAllocation(fAlloc1), "add allocation should have failed")
+	assert.Equal(t, 0, listener.updateCount, "unexpected listener update")
+	assert.Assert(t, resources.Equals(node.GetOccupiedResource(), resources.Zero), "occupied resource is not zero: %v", node.GetOccupiedResource())
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), resources.Zero), "allocated resource is not zero: %v", node.GetAllocatedResource())
+	assert.Assert(t, resources.Equals(node.GetUtilizedResource(), resources.Zero), "utilized resource is not zero: %v", node.GetUtilizedResource())
+
+	// second allocation - fits
+	fRes = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20, "second": 20})
+	fAlloc2 := newForeignAllocation("foreign-2", "node-123", fRes)
+	assert.Assert(t, node.TryAddAllocation(fAlloc2), "add allocation should have succeeded")
+	assert.Equal(t, 0, listener.updateCount, "unexpected listener update")
+	assert.Assert(t, node.GetAllocation("foreign-2") != nil, "failed to add allocations: allocation foreign-2 not returned")
+	assert.Assert(t, resources.Equals(node.GetOccupiedResource(), fRes), "occupied resource is not zero: %v", node.GetOccupiedResource())
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), resources.Zero), "allocated resource is not zero: %v", node.GetAllocatedResource())
+	assert.Assert(t, resources.Equals(node.GetUtilizedResource(), resources.Zero), "utilized resource is not zero: %v", node.GetUtilizedResource())
+
+	// third allocation - fits
+	fRes = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 35})
+	fAlloc3 := newForeignAllocation("foreign-3", "node-123", fRes)
+	assert.Assert(t, node.TryAddAllocation(fAlloc3), "add allocation should have succeeded")
+	assert.Equal(t, 0, listener.updateCount, "unexpected listener update")
+	assert.Assert(t, node.GetAllocation("foreign-3") != nil, "failed to add allocations: allocation foreign-2 not returned")
+	expectedOccupied := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 45, "second": 55})
+	assert.Assert(t, resources.Equals(node.GetOccupiedResource(), expectedOccupied), "occupied resource calculation is invalid - expected %v got %v",
+		expectedOccupied, node.GetOccupiedResource())
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), resources.Zero), "allocated resource is not zero: %v", node.GetAllocatedResource())
+	assert.Assert(t, resources.Equals(node.GetUtilizedResource(), resources.Zero), "utilized resource is not zero: %v", node.GetUtilizedResource())
+}
+
 func TestRemoveAllocation(t *testing.T) {
 	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
 	if !resources.IsZero(node.GetAllocatedResource()) {
 		t.Fatal("Failed to initialize resource")
 	}
+	listener := &testListener{}
+	node.AddListener(listener)
 
 	// allocate half of the resources available and check the calculation
 	half := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "second": 100})
 	alloc1 := newAllocation(appID1, nodeID1, half)
 	node.AddAllocation(alloc1)
+	assert.Equal(t, 1, listener.updateCount, "listener update expected")
 	if node.GetAllocation(alloc1.GetAllocationKey()) == nil {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
@@ -488,6 +563,8 @@ func TestRemoveAllocation(t *testing.T) {
 	if !resources.Equals(node.GetAllocatedResource(), half) {
 		t.Errorf("allocated resource not set correctly %v got %v", half, node.GetAllocatedResource())
 	}
+	assert.Equal(t, 1, listener.updateCount, "unexpected listener update for removal")
+	listener.updateCount = 0
 
 	// add second alloc and remove first check calculation
 	piece := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25, "second": 50})
@@ -497,6 +574,8 @@ func TestRemoveAllocation(t *testing.T) {
 		t.Fatal("failed to add allocations: allocation not returned")
 	}
 	alloc := node.RemoveAllocation(alloc1.GetAllocationKey())
+	assert.Equal(t, 2, listener.updateCount, "update expected for add+removal")
+	listener.updateCount = 0
 	if alloc == nil {
 		t.Error("allocation should have been removed but was not")
 	}
@@ -511,6 +590,36 @@ func TestRemoveAllocation(t *testing.T) {
 	if !resources.Equals(node.GetUtilizedResource(), expectedUtilizedResource) {
 		t.Errorf("failed to get utilized resources expected %v, got %v", expectedUtilizedResource, node.GetUtilizedResource())
 	}
+	_ = node.RemoveAllocation(alloc2.GetAllocationKey())
+	assert.Equal(t, 1, listener.updateCount, "update expected for removal")
+	listener.updateCount = 0
+}
+
+func TestRemoveForeignAllocation(t *testing.T) {
+	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
+	if !resources.IsZero(node.GetAllocatedResource()) {
+		t.Fatal("Failed to initialize resource")
+	}
+	listener := &testListener{}
+	node.AddListener(listener)
+
+	fRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11, "second": 11})
+	fAlloc1 := newForeignAllocation("foreign-1", "node-123", fRes)
+	node.AddAllocation(fAlloc1)
+	assert.Assert(t, node.GetAllocation("foreign-1") != nil, "failed to add allocations: allocation foreign-1 not returned")
+	fAlloc2 := newForeignAllocation("foreign-2", "node-123", fRes)
+	node.AddAllocation(fAlloc2)
+	assert.Assert(t, node.GetAllocation("foreign-2") != nil, "failed to add allocations: allocation foreign-2 not returned")
+	node.RemoveAllocation("foreign-1")
+	assert.Equal(t, 0, listener.updateCount, "no update expected for foreign allocation add+removal")
+	expectedOccupied := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11, "second": 11})
+	assert.Assert(t, resources.Equals(node.GetOccupiedResource(), expectedOccupied), "occupied resource calculation is invalid - expected %v got %v",
+		expectedOccupied, node.GetOccupiedResource())
+	expectedAvailable := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 89, "second": 189})
+	assert.Assert(t, resources.Equals(node.GetAvailableResource(), expectedAvailable), "available resource calculation is invalid - expected %v got %v",
+		expectedAvailable, node.GetAvailableResource())
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), resources.Zero), "allocated resource calculation is invalid - expected zero got %v",
+		node.GetAllocatedResource())
 }
 
 func TestNodeReplaceAllocation(t *testing.T) {
@@ -579,7 +688,7 @@ func TestGetAllocation(t *testing.T) {
 	}
 }
 
-func TestGetAllocations(t *testing.T) {
+func TestGetAllAllocations(t *testing.T) {
 	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
 	if !resources.IsZero(node.GetAllocatedResource()) {
 		t.Fatal("Failed to initialize resource")
@@ -838,4 +947,42 @@ func TestPreconditions(t *testing.T) {
 	err = node.preConditions(ask, true)
 	assert.NilError(t, err)
 	assert.Equal(t, 1, len(ask.allocLog))
+}
+
+func TestGetAllocations(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 100, "second": 200})
+	allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 20})
+
+	// no allocations
+	assert.Equal(t, 0, len(node.GetForeignAllocations()))
+	assert.Equal(t, 0, len(node.GetYunikornAllocations()))
+
+	alloc1 := newAllocationWithKey(aKey, appID1, nodeID1, nil)
+	alloc2 := newAllocationWithKey(aKey2, appID1, nodeID1, nil)
+	alloc3 := newForeignAllocation(foreignAlloc1, nodeID1, allocRes)
+	alloc4 := newForeignAllocation(foreignAlloc2, nodeID1, allocRes)
+	node.AddAllocation(alloc1)
+	node.AddAllocation(alloc2)
+	node.AddAllocation(alloc3)
+	node.AddAllocation(alloc4)
+
+	t.Run("GetYunikornAllocations", func(t *testing.T) {
+		allocs := node.GetYunikornAllocations()
+		assert.Equal(t, 2, len(allocs))
+		m := map[string]bool{}
+		m[allocs[0].allocationKey] = true
+		m[allocs[1].allocationKey] = true
+		assert.Assert(t, m[aKey])
+		assert.Assert(t, m[aKey2])
+	})
+
+	t.Run("GetForeignAllocations", func(t *testing.T) {
+		allocs := node.GetForeignAllocations()
+		assert.Equal(t, 2, len(allocs))
+		m := map[string]bool{}
+		m[allocs[0].allocationKey] = true
+		m[allocs[1].allocationKey] = true
+		assert.Assert(t, m[foreignAlloc1])
+		assert.Assert(t, m[foreignAlloc2])
+	})
 }

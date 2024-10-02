@@ -49,6 +49,8 @@ type Allocation struct {
 	originator        bool
 	tags              map[string]string
 	resKeyWithoutNode string // the reservation key without node
+	foreign           bool
+	preemptable       bool
 
 	// Mutable fields which need protection
 	allocated            bool
@@ -106,6 +108,20 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		createTime = time.Unix(siCreationTime, 0)
 	}
 
+	foreign := false
+	preemptable := true
+	if foreignType, ok := alloc.AllocationTags[siCommon.Foreign]; ok {
+		foreign = true
+		switch foreignType {
+		case siCommon.AllocTypeStatic:
+			preemptable = false
+		case siCommon.AllocTypeDefault:
+		default:
+			log.Log(log.SchedAllocation).Warn("Foreign tag has illegal value, using default",
+				zap.String("value", foreignType))
+		}
+	}
+
 	var allocated bool
 	var nodeID string
 	var bindTime time.Time
@@ -135,6 +151,8 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		allocated:         allocated,
 		nodeID:            nodeID,
 		bindTime:          bindTime,
+		foreign:           foreign,
+		preemptable:       preemptable,
 	}
 }
 
@@ -572,4 +590,12 @@ func (a *Allocation) setUserQuotaCheckPassed() {
 		a.userQuotaCheckFailed = false
 		a.askEvents.SendRequestFitsInUserQuota(a.allocationKey, a.applicationID, a.allocatedResource)
 	}
+}
+
+func (a *Allocation) IsForeign() bool {
+	return a.foreign
+}
+
+func (a *Allocation) IsPreemptable() bool {
+	return a.preemptable
 }

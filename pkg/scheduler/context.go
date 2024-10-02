@@ -759,7 +759,7 @@ func (cc *ClusterContext) processAllocations(request *si.AllocationRequest) {
 			continue
 		}
 		// at some point, we may need to handle new requests as well
-		if newAlloc {
+		if newAlloc && !alloc.IsForeign() {
 			cc.notifyRMNewAllocation(request.RmID, alloc)
 		}
 	}

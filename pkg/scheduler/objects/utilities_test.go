@@ -34,20 +34,23 @@ import (
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const (
-	appID0    = "app-0"
-	appID1    = "app-1"
-	appID2    = "app-2"
-	appID3    = "app-3"
-	aKey      = "alloc-1"
-	aKey2     = "alloc-2"
-	nodeID1   = "node-1"
-	nodeID2   = "node-2"
-	instType1 = "itype-1"
-	testgroup = "testgroup"
+	appID0        = "app-0"
+	appID1        = "app-1"
+	appID2        = "app-2"
+	appID3        = "app-3"
+	aKey          = "alloc-1"
+	aKey2         = "alloc-2"
+	nodeID1       = "node-1"
+	nodeID2       = "node-2"
+	instType1     = "itype-1"
+	testgroup     = "testgroup"
+	foreignAlloc1 = "foreign-1"
+	foreignAlloc2 = "foreign-2"
 )
 
 // Create the root queue, base for all testing
@@ -222,6 +225,18 @@ func newAllocation(appID, nodeID string, res *resources.Resource) *Allocation {
 // Create a new Allocation with a specified allocation key
 func newAllocationWithKey(allocKey, appID, nodeID string, res *resources.Resource) *Allocation {
 	return newAllocationAll(allocKey, appID, nodeID, "", res, false, 0)
+}
+
+// Create a new foreign Allocation with a specified allocation key
+func newForeignAllocation(allocKey, nodeID string, res *resources.Resource) *Allocation {
+	return NewAllocationFromSI(&si.Allocation{
+		AllocationKey: allocKey,
+		AllocationTags: map[string]string{
+			siCommon.Foreign: siCommon.AllocTypeDefault,
+		},
+		ResourcePerAlloc: res.ToProto(),
+		NodeID:           nodeID,
+	})
 }
 
 // Create a new Allocation with a random ask key

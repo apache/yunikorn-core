@@ -31,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -52,6 +53,7 @@ const (
 	allocKey3       = "alloc-3"
 	maxresources    = "maxresources"
 	maxapplications = "maxapplications"
+	foreignAlloc1   = "foreign-alloc-1"
 )
 
 func newBasePartitionNoRootDefault() (*PartitionContext, error) {
@@ -599,6 +601,36 @@ func newAllocationAll(allocKey, appID, nodeID, taskGroup string, res *resources.
 	})
 }
 
+func newForeignRequest(allocKey string) *objects.Allocation {
+	return objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey: allocKey,
+		AllocationTags: map[string]string{
+			siCommon.Foreign: siCommon.AllocTypeDefault,
+		},
+	})
+}
+
+func newForeignAllocation(allocKey, nodeID string) *objects.Allocation {
+	var alloc *objects.Allocation
+	defer func() {
+		if nodeID == "" {
+			alloc.SetNodeID("")
+		}
+	}()
+	id := nodeID
+	if nodeID == "" {
+		id = "tmp" // set a temporary value to force allocated = true
+	}
+	alloc = objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey: allocKey,
+		AllocationTags: map[string]string{
+			siCommon.Foreign: siCommon.AllocTypeDefault,
+		},
+		NodeID: id,
+	})
+	return alloc
+}
+
 func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.Resource) *objects.Allocation {
 	return objects.NewAllocationFromSI(&si.Allocation{
 		AllocationKey:    allocKey,
@@ -614,6 +646,7 @@ func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.
 		},
 	})
 }
+
 func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
 	proto := &si.NodeInfo{
 		NodeID:              nodeID,

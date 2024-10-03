@@ -298,8 +298,8 @@ func TestSchedulerRecovery(t *testing.T) {
 	// verify nodes
 	assert.Equal(t, 2, part.GetTotalNodeCount(), "incorrect recovered node count")
 
-	assert.Equal(t, len(node1Allocations), len(part.GetNode("node-1:1234").GetAllAllocations()), "allocations on node-1 not as expected")
-	assert.Equal(t, len(node2Allocations), len(part.GetNode("node-2:1234").GetAllAllocations()), "allocations on node-1 not as expected")
+	assert.Equal(t, len(node1Allocations), len(part.GetNode("node-1:1234").GetYunikornAllocations()), "allocations on node-1 not as expected")
+	assert.Equal(t, len(node2Allocations), len(part.GetNode("node-2:1234").GetYunikornAllocations()), "allocations on node-1 not as expected")
 
 	node1AllocatedMemory := part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.Memory]
 	node2AllocatedMemory := part.GetNode("node-2:1234").GetAllocatedResource().Resources[common.Memory]

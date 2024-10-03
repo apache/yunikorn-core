@@ -267,7 +267,7 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Check(t, allocCreated)
 	// get what was allocated
-	allocated := node.GetAllAllocations()
+	allocated := node.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly")
 	assertLimits(t, getTestUserGroup(), appRes)
 
@@ -316,7 +316,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Check(t, allocCreated)
 	// get what was allocated
-	allocated := node1.GetAllAllocations()
+	allocated := node1.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1 expected 1 got: %v", allocated)
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
 	assertLimits(t, getTestUserGroup(), appRes)
@@ -432,7 +432,7 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 	assert.Check(t, allocCreated)
 
 	// get what was allocated
-	allocated := node1.GetAllAllocations()
+	allocated := node1.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1")
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
 
@@ -561,7 +561,7 @@ func TestPlaceholderDataWithNodeRemoval(t *testing.T) {
 	assert.Check(t, allocCreated)
 
 	// get what was allocated
-	allocated := node1.GetAllAllocations()
+	allocated := node1.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1")
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
 
@@ -648,7 +648,7 @@ func TestPlaceholderDataWithRemoval(t *testing.T) {
 	assert.Check(t, allocCreated)
 
 	// get what was allocated
-	allocated := node1.GetAllAllocations()
+	allocated := node1.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1")
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
 
@@ -733,7 +733,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Check(t, allocCreated)
 
 	// get what was allocated
-	allocated := node1.GetAllAllocations()
+	allocated := node1.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1")
 	assertLimits(t, getTestUserGroup(), appRes)
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
@@ -753,7 +753,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	alloc := newAllocationAll(allocKey, appID1, nodeID2, taskGroup, appRes, 1, false)
 	alloc.SetRelease(ph)
 	node2.AddAllocation(alloc)
-	allocated = node2.GetAllAllocations()
+	allocated = node2.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node2")
 	assert.Assert(t, resources.Equals(node2.GetAllocatedResource(), appRes), "allocation not added correctly to node2 (resource count)")
 	assertLimits(t, getTestUserGroup(), appRes)
@@ -768,7 +768,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	// remove the node with the placeholder
 	released, confirmed := partition.removeNode(nodeID1)
 	assert.Equal(t, 1, partition.GetTotalNodeCount(), "node list was not updated, node was not removed")
-	assert.Equal(t, 1, len(node2.GetAllAllocations()), "remaining node should have allocation")
+	assert.Equal(t, 1, len(node2.GetYunikornAllocations()), "remaining node should have allocation")
 	assert.Equal(t, 1, len(released), "node removal did not release correct allocation")
 	assert.Equal(t, 1, len(confirmed), "node removal did not confirm correct allocation")
 	assert.Equal(t, ph.GetAllocationKey(), released[0].GetAllocationKey(), "allocationKey returned by release not the same as the placeholder")
@@ -807,7 +807,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Check(t, allocCreated)
 	// get what was allocated
-	allocated := node1.GetAllAllocations()
+	allocated := node1.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node1")
 	assert.Assert(t, resources.Equals(node1.GetAllocatedResource(), appRes), "allocation not added correctly to node1")
 	assertLimits(t, getTestUserGroup(), appRes)
@@ -827,7 +827,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	alloc := newAllocationAll(allocKey, appID1, nodeID2, taskGroup, appRes, 1, false)
 	alloc.SetRelease(ph)
 	node2.AddAllocation(alloc)
-	allocated = node2.GetAllAllocations()
+	allocated = node2.GetYunikornAllocations()
 	assert.Equal(t, 1, len(allocated), "allocation not added correctly to node2")
 	assert.Assert(t, resources.Equals(node2.GetAllocatedResource(), appRes), "allocation not added correctly to node2 (resource count)")
 	assertLimits(t, getTestUserGroup(), appRes)
@@ -4729,7 +4729,7 @@ func TestForeignAllocation(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, 1, len(partition.foreignAllocs))
 	assert.Equal(t, nodeID1, partition.foreignAllocs[foreignAlloc1])
-	assert.Equal(t, 1, len(node1.GetAllAllocations()))
+	assert.Equal(t, 0, len(node1.GetYunikornAllocations()))
 	assert.Assert(t, node1.GetAllocation(foreignAlloc1) != nil)
 
 	// remove allocation
@@ -4739,6 +4739,6 @@ func TestForeignAllocation(t *testing.T) {
 	assert.Assert(t, released == nil)
 	assert.Assert(t, confirmed == nil)
 	assert.Equal(t, 0, len(partition.foreignAllocs))
-	assert.Equal(t, 0, len(node1.GetAllAllocations()))
+	assert.Equal(t, 0, len(node1.GetYunikornAllocations()))
 	assert.Assert(t, node1.GetAllocation(foreignAlloc1) == nil)
 }

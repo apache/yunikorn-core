@@ -230,19 +230,6 @@ func (sn *Node) GetAllocation(allocationKey string) *Allocation {
 	return sn.allocations[allocationKey]
 }
 
-// Get a copy of the allocations on this node
-func (sn *Node) GetAllAllocations() []*Allocation {
-	sn.RLock()
-	defer sn.RUnlock()
-
-	arr := make([]*Allocation, 0)
-	for _, v := range sn.allocations {
-		arr = append(arr, v)
-	}
-
-	return arr
-}
-
 // GetYunikornAllocations returns a copy of Yunikorn allocations on this node
 func (sn *Node) GetYunikornAllocations() []*Allocation {
 	sn.RLock()

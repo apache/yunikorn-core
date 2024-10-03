@@ -45,7 +45,7 @@ func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation) *PreemptionCo
 func (p *PreemptionContext) filterAllocations() {
 	p.Lock()
 	defer p.Unlock()
-	for _, allocation := range p.node.GetAllAllocations() {
+	for _, allocation := range p.node.GetYunikornAllocations() {
 		// skip daemon set pods and higher priority allocation
 		if allocation.GetRequiredNode() != "" || allocation.GetPriority() > p.requiredAsk.GetPriority() {
 			continue

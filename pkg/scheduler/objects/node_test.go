@@ -688,29 +688,6 @@ func TestGetAllocation(t *testing.T) {
 	}
 }
 
-func TestGetAllAllocations(t *testing.T) {
-	node := newNode("node-123", map[string]resources.Quantity{"first": 100, "second": 200})
-	if !resources.IsZero(node.GetAllocatedResource()) {
-		t.Fatal("Failed to initialize resource")
-	}
-
-	// nothing allocated get an empty list
-	allocs := node.GetAllAllocations()
-	if allocs == nil || len(allocs) != 0 {
-		t.Fatalf("allocation length should be 0 on new node")
-	}
-	alloc1 := newAllocation(appID1, nodeID1, nil)
-	alloc2 := newAllocation(appID1, nodeID1, nil)
-
-	// allocate
-	node.AddAllocation(alloc1)
-	node.AddAllocation(alloc2)
-	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
-	// This should not happen in real code just making sure the code does do what is expected
-	node.AddAllocation(alloc2)
-	assert.Equal(t, 2, len(node.GetAllAllocations()), "allocation length mismatch")
-}
-
 func TestSchedulingState(t *testing.T) {
 	node := newNode("node-123", nil)
 	if !node.IsSchedulable() {

@@ -225,6 +225,15 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.HealthChecks[7].Succeeded, "The orphan allocation check on the node should be successful")
 	assert.Assert(t, !healthInfo.HealthChecks[8].Succeeded, "The orphan allocation check on the app should not be successful")
+	part.removeApplication("appID")
+	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, healthInfo.HealthChecks[8].Succeeded, "The orphan allocation check on the app still fails after removing the app")
+
+	// check that foreign allocation does not interfere with health check
+	falloc := newForeignAllocation("foreign-1", "node")
+	node.AddAllocation(falloc)
+	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
+	assert.Assert(t, healthInfo.HealthChecks[7].Succeeded, "Foreign allocation was detected as orphan")
 }
 
 func TestGetSchedulerHealthStatusMetrics(t *testing.T) {

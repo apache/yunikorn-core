@@ -672,7 +672,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 	released := make([]*objects.Allocation, 0)
 	confirmed := make([]*objects.Allocation, 0)
 	// walk over all allocations still registered for this node
-	for _, alloc := range node.GetAllAllocations() {
+	for _, alloc := range node.GetYunikornAllocations() {
 		allocationKey := alloc.GetAllocationKey()
 		// since we are not locking the node and or application we could have had an update while processing
 		// note that we do not return the allocation if the app or allocation is not found and assume that it

@@ -340,6 +340,26 @@ func TestCanBeRemoved(t *testing.T) {
 	removeQT := root.decreaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, usage1, true)
 	assert.Assert(t, removeQT)
 	assert.Assert(t, root.canBeRemoved())
+
+	// case: child can not be removed
+	usage2, err := resources.NewResourceFromConf(map[string]string{"mem": "0", "vcore": "0"})
+	assert.NilError(t, err)
+
+	root.increaseTrackedResource(strings.Split(queuePath1, configs.DOT), TestApp1, user, usage2)
+	parentQ = root.childQueueTrackers["parent"]
+	childQ = parentQ.childQueueTrackers["child1"]
+	assert.Assert(t, !root.canBeRemoved())
+	assert.Assert(t, !parentQ.canBeRemoved())
+	assert.Assert(t, !childQ.canBeRemoved())
+
+	removeQT = root.decreaseTrackedResource(strings.Split(path5, configs.DOT), TestApp1, usage2, true)
+	parentQ = root.childQueueTrackers["parent"]
+	childQ = parentQ.childQueueTrackers["child1"]
+
+	assert.Assert(t, !removeQT)
+	assert.Assert(t, !root.canBeRemoved())
+	assert.Assert(t, !parentQ.canBeRemoved())
+	assert.Assert(t, !childQ.canBeRemoved())
 }
 
 func TestGetResourceUsageDAOInfo(t *testing.T) {
@@ -450,4 +470,10 @@ func getQTResource(qt *QueueTracker) map[string]*resources.Resource {
 	resources := make(map[string]*resources.Resource)
 	usage := qt.getResourceUsageDAOInfo("")
 	return internalGetResource(usage, resources)
+}
+
+func TestString(t *testing.T) {
+	assert.Equal(t, none.String(), "none")
+	assert.Equal(t, user.String(), "user")
+	assert.Equal(t, group.String(), "group")
 }

@@ -140,8 +140,8 @@ func (cc *ClusterContext) schedule() bool {
 				result = psc.tryAllocate()
 			}
 		}
+		metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 		if result != nil {
-			metrics.GetSchedulerMetrics().ObserveSchedulingLatency(schedulingStart)
 			if result.ResultType == objects.Replaced {
 				// communicate the removal to the RM
 				cc.notifyRMAllocationReleased(psc.RmID, psc.Name, []*objects.Allocation{result.Request.GetRelease()}, si.TerminationType_PLACEHOLDER_REPLACED, "replacing allocationKey: "+result.Request.GetAllocationKey())

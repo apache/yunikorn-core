@@ -66,6 +66,7 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: k8shim/.go_version
+          cache-dependency-path: "**/go.sum"
       - name: Set hugepage
         run: |
           echo "vm.nr_hugepages = 1024" | sudo tee -a /etc/sysctl.conf

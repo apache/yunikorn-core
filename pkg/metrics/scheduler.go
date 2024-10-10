@@ -113,8 +113,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "scheduling_latency_milliseconds",
-			Help:      "Latency of the main scheduling routine, in milliseconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), // start from 0.1ms
+			Help:      "Latency of the main scheduling routine, in seconds.",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8), // start from 0.1ms
 		},
 	)
 	s.sortingLatency = prometheus.NewHistogramVec(
@@ -122,8 +122,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "node_sorting_latency_milliseconds",
-			Help:      "Latency of all nodes sorting, in milliseconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6), // start from 0.1ms
+			Help:      "Latency of all nodes sorting, in seconds.",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8), // start from 0.1ms
 		}, []string{"level"})
 
 	s.tryNodeLatency = prometheus.NewHistogram(
@@ -131,8 +131,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "trynode_latency_milliseconds",
-			Help:      "Latency of node condition checks for container allocations, such as placement constraints, in milliseconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6),
+			Help:      "Latency of node condition checks for container allocations, such as placement constraints, in seconds.",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8),
 		},
 	)
 
@@ -141,8 +141,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "trypreemption_latency_milliseconds",
-			Help:      "Latency of preemption condition checks for container allocations, in milliseconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 6),
+			Help:      "Latency of preemption condition checks for container allocations, in seconds.",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8),
 		},
 	)
 

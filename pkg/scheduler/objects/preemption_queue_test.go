@@ -259,11 +259,11 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 				// child2 remaining behaviour changes based on the ask queue. Its remaining is min permissive of its own values and parent or ancestor values.
 				{guaranteed: guaranteed1, allocated: allocated2, remaining: resource{smallestResMultiplyByZero, smallestResMultiplyByMinusOne, smallestResMultiplyByMinusOnePlusChildRes, smallestResMultiplyByMinusOne}, assertMessages: assertMessageStruct3},
 				// clean start for the snapshot: all set guaranteed
-				// add usage for all: use exactly guaranteed at parent and child level
+				// add usage for all: use exactly guaranteed at parent and child1 level
 				// parent guarantee used for one type child guarantee used for second type
 				{guaranteed: guaranteed1, allocated: allocated3, remaining: resource{smallestResMultiplyByZero, smallestResMultiplyByZero, smallestResMultiplyByZeroPluschildResMultiplyByZero, smallestResMultiplyByZero}, assertMessages: assertMessageStruct4},
 				// clean start for the snapshot: all set guaranteed
-				// add usage for root + parent: use exactly guaranteed at parent and child level
+				// add usage for root + parent: use exactly guaranteed at parent and child2 level
 				// add usage to child1: use double than guaranteed
 				// parent guarantee used for one type child guarantee used for second type
 				{guaranteed: guaranteed1, allocated: allocated4, remaining: resource{smallestResMultiplyByZero, smallestResMultiplyByZero, smallestResMultiplyByZeroPluschildResMultiplyByMinusOne, smallestResMultiplyByZero}, assertMessages: assertMessageStruct5},
@@ -289,11 +289,11 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 				// for extra resources available in parent or ancestor, it can simply inherit.
 				{guaranteed: guaranteed1, allocated: allocated2, remaining: resource{smallestResMultiplyByZero, nil, childRes, smallestResMultiplyByZero}, assertMessages: assertMessageStruct3},
 				// clean start for the snapshot: all set guaranteed
-				// add usage for all: use exactly guaranteed at parent and child level
+				// add usage for all: use exactly guaranteed at parent and child1 level
 				// parent guarantee used for one type child guarantee used for second type
 				{guaranteed: guaranteed1, allocated: allocated3, remaining: resource{smallestResMultiplyByZero, nil, childResMultiplyByZero, smallestResMultiplyByZero}, assertMessages: assertMessageStruct4},
 				// clean start for the snapshot: all set guaranteed
-				// add usage for root + parent: use exactly guaranteed at parent and child level
+				// add usage for root + parent: use exactly guaranteed at parent and child2 level
 				// add usage to child1: use double than guaranteed
 				// parent guarantee used for one type child guarantee used for second type
 				{guaranteed: guaranteed1, allocated: allocated4, remaining: resource{smallestResMultiplyByZero, nil, childResMultiplyByMinusOne, smallestResMultiplyByZero}, assertMessages: assertMessageStruct5},

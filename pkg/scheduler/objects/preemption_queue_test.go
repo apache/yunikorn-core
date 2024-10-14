@@ -53,73 +53,113 @@ type res struct {
 	assertMessages                   assertMessage
 }
 
-func TestGetPreemptableResource(t *testing.T) {
-	// no guaranteed and no usage. so nothing to preempt
+func setupQueueStructure(t *testing.T) (*Queue, *Queue, *Queue, *Queue) {
 	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
-	var parentQ, childQ1, childQ2 *Queue
-	parentQ, err = createManagedQueue(rootQ, "parent", true, map[string]string{"first": "15"})
+	parentQ, err := createManagedQueue(rootQ, "parent", true, map[string]string{"first": "15"})
 	assert.NilError(t, err)
-	childQ1, err = createManagedQueue(parentQ, "child1", false, map[string]string{"first": "10"})
+	childQ1, err := createManagedQueue(parentQ, "child1", false, map[string]string{"first": "10"})
 	assert.NilError(t, err)
-	childQ2, err = createManagedQueue(parentQ, "child2", false, map[string]string{"first": "5"})
+	childQ2, err := createManagedQueue(parentQ, "child2", false, map[string]string{"first": "5"})
 	assert.NilError(t, err)
+	return rootQ, parentQ, childQ1, childQ2
+}
+
+// no guaranteed set and no usage
+func TestGetPreemptableResourceNoGuaranteedNoUsage(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
 
 	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+
 	assert.Assert(t, rootPreemptable.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
 	assert.Assert(t, pPreemptable.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
 	assert.Assert(t, cPreemptable1.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
 	assert.Assert(t, cPreemptable2.IsEmpty(), "nothing to preempt as no guaranteed set and no usage")
+}
 
-	// guaranteed set but no usage. so nothing to preempt
-	// clean start for the snapshot: whole hierarchy with guarantee
+// garenteed set but no allocated resource
+func TestGetPreemptableResourceWithNoAllocatedResource(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
 	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-
-	// clean start for the snapshot: all set guaranteed - new tests
-	// add usage to parent + root: use all guaranteed at parent level
-	// add usage to child2: use double than guaranteed
-	parentQ.guaranteedResource = smallestRes
-	rootQ.allocatedResource = resources.Multiply(smallestRes, 2)
-	parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
-	childQ2.allocatedResource = resources.Multiply(smallestRes, 2)
-	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
-	assert.Assert(t, resources.Equals(rootPreemptable, resources.Multiply(smallestRes, 2)), "usage is equal to guaranteed in root queue. so nothing to preempt")
-	assert.Assert(t, resources.Equals(pPreemptable, smallestRes), "usage has exceeded twice than guaranteed in parent queue. preemtable resource should be equal to guaranteed res")
-	assert.Assert(t, resources.IsZero(cPreemptable1), "nothing to preempt as no usage in child1 queue")
-	assert.Assert(t, resources.Equals(cPreemptable2, smallestRes), "usage has exceeded twice than guaranteed in child2 queue. preemtable resource should be equal to guaranteed res")
 
 	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
 	parentQ.guaranteedResource = smallestRes
 	childQ2.guaranteedResource = smallestRes
-	rootQ.allocatedResource = nil
-	parentQ.allocatedResource = nil
-	childQ2.allocatedResource = nil
-	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
-	childQ1.guaranteedResource = childRes
-	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+	childQ1.guaranteedResource = smallestRes
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+
 	assert.Assert(t, rootPreemptable.IsEmpty(), "nothing to preempt as no usage")
 	assert.Assert(t, pPreemptable.IsEmpty(), "nothing to preempt as no usage")
 	assert.Assert(t, cPreemptable1.IsEmpty(), "nothing to preempt as no usage")
 	assert.Assert(t, cPreemptable2.IsEmpty(), "nothing to preempt as no usage")
+}
 
-	// clean start for the snapshot: all set guaranteed
-	// add usage to parent + root: use all guaranteed at parent level
-	// add usage to child2: use double than guaranteed
-	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
+func TestGetPreemptableResourceWithGuaranteedAndUsage(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
+	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
 	parentQ.guaranteedResource = smallestRes
-	childQ2.guaranteedResource = smallestRes
 	rootQ.allocatedResource = resources.Multiply(smallestRes, 2)
 	parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
 	childQ2.allocatedResource = resources.Multiply(smallestRes, 2)
-	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+
+	assert.Assert(t, resources.Equals(rootPreemptable, resources.Multiply(smallestRes, 2)), "usage is equal to guaranteed in root queue. so nothing to preempt")
+	assert.Assert(t, resources.Equals(pPreemptable, smallestRes), "usage has exceeded twice than guaranteed in parent queue. preemtable resource should be equal to guaranteed res")
+	assert.Assert(t, resources.IsZero(cPreemptable1), "nothing to preempt as no usage in child1 queue")
+	assert.Assert(t, resources.Equals(cPreemptable2, smallestRes), "usage has exceeded twice than guaranteed in child2 queue. preemtable resource should be equal to guaranteed res")
+}
+
+func TestGetPreemptableResourceWithGuaranteedAndUsageWithNoAllocatedResource(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
+	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
+
+	parentQ.guaranteedResource = smallestRes
+	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
+	childQ1.guaranteedResource = childRes
+	childQ2.guaranteedResource = smallestRes
+
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+
+	assert.Assert(t, rootPreemptable.IsEmpty(), "nothing to preempt as no usage")
+	assert.Assert(t, pPreemptable.IsEmpty(), "nothing to preempt as no usage")
+	assert.Assert(t, cPreemptable1.IsEmpty(), "nothing to preempt as no usage")
+	assert.Assert(t, cPreemptable2.IsEmpty(), "nothing to preempt as no usage")
+}
+
+// childQ2 has double allocation than guaranteed
+func TestGetPreemptableResourceWithAllocationDoubleThanGuaranteed(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
+	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 3})
+
+	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
+	parentQ.guaranteedResource = smallestRes
+	childQ2.guaranteedResource = childRes
+	rootQ.allocatedResource = resources.Multiply(smallestRes, 2)
+	parentQ.allocatedResource = resources.Multiply(smallestRes, 2)
+	childQ2.allocatedResource = resources.Multiply(smallestRes, 2)
+
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+
 	assert.Assert(t, resources.IsZero(rootPreemptable), "usage is equal to guaranteed in root queue. so nothing to preempt")
 	assert.Assert(t, resources.Equals(pPreemptable, smallestRes), "usage has exceeded twice than guaranteed in parent queue. preemtable resource should be equal to guaranteed res")
 	assert.Assert(t, resources.IsZero(cPreemptable1), "nothing to preempt as no usage in child1 queue")
 	assert.Assert(t, resources.Equals(cPreemptable2, smallestRes), "usage has exceeded twice than guaranteed in child2 queue. preemtable resource should be equal to guaranteed res")
+}
 
-	// clean start for the snapshot: all set guaranteed
-	// add usage for all: use exactly guaranteed at parent and child level
-	// parent guarantee used for one type child guarantee used for second type
+func TestGetPreemptableResourceWithMixedResourceTypes(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
+	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
+
+	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
+	parentQ.guaranteedResource = smallestRes
+	childQ2.guaranteedResource = smallestRes
+	childQ1.guaranteedResource = childRes
+
 	bothRes := resources.Multiply(smallestRes, 2)
 	bothRes.AddTo(childRes)
 	rootQ.allocatedResource = bothRes
@@ -127,23 +167,32 @@ func TestGetPreemptableResource(t *testing.T) {
 	parentQ.allocatedResource = bothRes
 	childQ1.allocatedResource = childRes
 	childQ2.allocatedResource = smallestRes
-	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+
 	assert.Assert(t, resources.Equals(rootPreemptable, resources.Multiply(childRes, 1)), "usage in root queue has extra resource type not defined as part of guaranteed res. So, that extra resource type should be preempted")
 	assert.Assert(t, resources.Equals(pPreemptable, resources.Multiply(childRes, 1)), "usage in parent1 queue has extra resource type not defined as part of guaranteed res. So, that extra resource type should be preempted")
 	assert.Assert(t, resources.IsZero(cPreemptable1), "usage in child1 queue is equal to guaranteed res. so nothing to preempt")
 	assert.Assert(t, resources.IsZero(cPreemptable2), "nothing to preempt as no usage in child2 queue")
+}
 
-	// clean start for the snapshot: all set guaranteed
-	// add usage for root + parent: use exactly guaranteed at parent and child level
-	// add usage to child1: use double than guaranteed
-	// parent guarantee used for one type child guarantee used for second type
-	bothRes = resources.Multiply(smallestRes, 2)
+func TestGetPreemptableResourceWithMixedResourceTypesAllocationDoubleThanGuaranteed(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
+	smallestRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	childRes := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
+	rootQ.guaranteedResource = resources.Multiply(smallestRes, 2)
+	parentQ.guaranteedResource = smallestRes
+	childQ2.guaranteedResource = smallestRes
+	childQ1.guaranteedResource = childRes
+
+	bothRes := resources.Multiply(smallestRes, 2)
 	bothRes.AddTo(resources.Multiply(childRes, 2))
 	rootQ.allocatedResource = bothRes
 	bothRes = resources.Add(smallestRes, resources.Multiply(childRes, 2))
 	parentQ.allocatedResource = bothRes
 	childQ1.allocatedResource = resources.Multiply(childRes, 2)
-	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 = getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
+	childQ2.allocatedResource = smallestRes
+	rootPreemptable, pPreemptable, cPreemptable1, cPreemptable2 := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
 	assert.Assert(t, resources.Equals(rootPreemptable, resources.Multiply(childRes, 2)), "usage in root queue has extra resource type not defined as part of guaranteed res. So, that extra resource type should be preempted")
 	assert.Assert(t, resources.Equals(pPreemptable, resources.Multiply(childRes, 2)), "usage in parent1 queue has extra resource type not defined as part of guaranteed res. So, that extra resource type should be preempted")
 	assert.Assert(t, resources.Equals(cPreemptable1, childRes), "usage has exceeded twice than guaranteed in child1 queue. cPreemptable1 resource should be equal to guaranteed res")

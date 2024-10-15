@@ -188,7 +188,7 @@ func newNodeInternal(nodeID string, total, occupied *resources.Resource) *Node {
 	return sn
 }
 
-func newProto(nodeID string, totalResource, occupiedResource *resources.Resource, attributes map[string]string) *si.NodeInfo {
+func newProto(nodeID string, totalResource *resources.Resource, attributes map[string]string) *si.NodeInfo {
 	proto := si.NodeInfo{
 		NodeID:     nodeID,
 		Attributes: attributes,
@@ -204,15 +204,6 @@ func newProto(nodeID string, totalResource, occupiedResource *resources.Resource
 		}
 	}
 
-	if occupiedResource != nil {
-		proto.OccupiedResource = &si.Resource{
-			Resources: map[string]*si.Quantity{},
-		}
-		for name, value := range occupiedResource.Resources {
-			quantity := si.Quantity{Value: int64(value)}
-			proto.OccupiedResource.Resources[name] = &quantity
-		}
-	}
 	return &proto
 }
 

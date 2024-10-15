@@ -647,18 +647,13 @@ func newAllocationAskPreempt(allocKey, appID string, prio int32, res *resources.
 	})
 }
 
-func newNodeWithResources(nodeID string, max, occupied *resources.Resource) *objects.Node {
+func newNodeMaxResource(nodeID string, max *resources.Resource) *objects.Node {
 	proto := &si.NodeInfo{
 		NodeID:              nodeID,
 		Attributes:          map[string]string{},
 		SchedulableResource: max.ToProto(),
-		OccupiedResource:    occupied.ToProto(),
 	}
 	return objects.NewNode(proto)
-}
-
-func newNodeMaxResource(nodeID string, max *resources.Resource) *objects.Node {
-	return newNodeWithResources(nodeID, max, nil)
 }
 
 // partition with an expected basic queue hierarchy

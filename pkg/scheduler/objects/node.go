@@ -73,7 +73,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 		reservations:      make(map[string]*reservation),
 		totalResource:     resources.NewResourceFromProto(proto.SchedulableResource),
 		allocatedResource: resources.NewResource(),
-		occupiedResource:  resources.NewResourceFromProto(proto.OccupiedResource),
+		occupiedResource:  resources.NewResource(),
 		allocations:       make(map[string]*Allocation),
 		schedulable:       true,
 		listeners:         make([]NodeListener, 0),

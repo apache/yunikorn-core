@@ -206,7 +206,7 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 
 
 // setupQueues sets up the queue hierarchy for the test cases, passing custom maxRes and guarRes.
-func setupQueues(testCase string, rootMaxRex, parentMaxRes, parentGuarRes, childQ1MaxRes, childQ1GuarRes, childQ2MaxRes, childQ2GuarRes map[string]string) (rootQ, parentQ, childQ1, childQ2 *Queue, err error) {
+func setupQueues(rootMaxRex, parentMaxRes, parentGuarRes, childQ1MaxRes, childQ1GuarRes, childQ2MaxRes, childQ2GuarRes map[string]string) (rootQ, parentQ, childQ1, childQ2 *Queue, err error) {
 	// Create root queue
 	rootQ, err = createRootQueue(rootMaxRex)
 	if err != nil {
@@ -238,7 +238,7 @@ func TestTryPreemptionMerge(t *testing.T) {
 	var tests = []struct {
 		testCase         string
 		nodes            []*Node
-		iterator         func() NodeIterator
+		// iterator         func() NodeIterator
 		rootMaxRes       map[string]string
 		parentMaxRes     map[string]string
 		parentGuarRes    map[string]string
@@ -260,11 +260,11 @@ func TestTryPreemptionMerge(t *testing.T) {
 			[]*Node{
 				newNode("node1", map[string]resources.Quantity{"first": 10, "pods": 5}),
 			},
-			func() NodeIterator {
-				return getNodeIteratorFn(
-					newNode("node1", map[string]resources.Quantity{"first": 10, "pods": 5}),
-				)()
-			},
+			// func() NodeIterator {
+			// 	return getNodeIteratorFn(
+			// 		newNode("node1", map[string]resources.Quantity{"first": 10, "pods": 5}),
+			// 	)()
+			// },
 			map[string]string{"first": "20", "pods": "5"}, //rootMaxRes
 			map[string]string{"first": "20"}, // parentMaxRes
 			map[string]string{"first": "10"}, // parentGuarRes
@@ -287,12 +287,12 @@ func TestTryPreemptionMerge(t *testing.T) {
 				newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1}),
 				newNode(nodeID2, map[string]resources.Quantity{"first": 5, "pods": 1}),
 			},
-			func() NodeIterator {
-				return getNodeIteratorFn(
-					newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1}),
-					newNode(nodeID2, map[string]resources.Quantity{"first": 5, "pods": 1}),
-				)()
-			},
+			// func() NodeIterator {
+			// 	return getNodeIteratorFn(
+			// 		newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1}),
+			// 		newNode(nodeID2, map[string]resources.Quantity{"first": 5, "pods": 1}),
+			// 	)()
+			// },
 			map[string]string{"first": "10", "pods": "2"}, //rootMaxRes
 			map[string]string{"first": "20"}, // parentMaxRes
 			map[string]string{"first": "10"}, // parentGuarRes
@@ -312,15 +312,15 @@ func TestTryPreemptionMerge(t *testing.T) {
 		{
 			"TestTryPreemption_NodeWithCapacityLesserThanAsk",
 			[]*Node{
-				newNode("nodeID1", map[string]resources.Quantity{"first": 5, "pods": 1}),
-				newNode("nodeID2", map[string]resources.Quantity{"first": 5, "pods": 1}),
+				newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1}),
+				newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1}),
 			},
-			func() NodeIterator {
-				return getNodeIteratorFn(
-					newNode("nodeID1", map[string]resources.Quantity{"first": 5, "pods": 1}),
-					newNode("nodeID2", map[string]resources.Quantity{"first": 5, "pods": 1}),
-				)()
-			},
+			// func() NodeIterator {
+			// 	return getNodeIteratorFn(
+			// 		newNode("nodeID1", map[string]resources.Quantity{"first": 5, "pods": 1}),
+			// 		newNode("nodeID2", map[string]resources.Quantity{"first": 5, "pods": 1}),
+			// 	)()
+			// },
 			map[string]string{"first": "10", "pods": "2"}, //rootMaxRes
 			map[string]string{"first": "20"}, // parentMaxRes
 			map[string]string{"first": "10"}, // parentGuarRes
@@ -342,8 +342,14 @@ func TestTryPreemptionMerge(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.testCase, func(t *testing.T) {
 			// Step 1: Set up queues
+			var iterator func() NodeIterator
+			if tt.nodeSetup == "singleNode" {
+				iterator = getNodeIteratorFn(tt.nodes[0])
+			} else {
+				iterator = getNodeIteratorFn(tt.nodes[0],tt.nodes[1])
+			}
 			_, _, childQ1, childQ2, err := setupQueues(
-				tt.testCase, tt.rootMaxRes, tt.parentMaxRes, tt.parentGuarRes, 
+				tt.rootMaxRes, tt.parentMaxRes, tt.parentGuarRes, 
 				tt.childQ1MaxRes, tt.childQ1GuarRes, tt.childQ2MaxRes, tt.childQ2GuarRes)
 			assert.NilError(t, err)
 
@@ -396,7 +402,7 @@ func TestTryPreemptionMerge(t *testing.T) {
 
 			// Step 5: Set up headRoom, Preemptor, and optional predicate handler
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
-			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, tt.iterator(), false)
+			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
 			
 			if tt.preemptions != nil {

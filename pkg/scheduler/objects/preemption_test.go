@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -342,12 +343,13 @@ func TestTryPreemptionMerge(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.testCase, func(t *testing.T) {
 			// Step 1: Set up queues
-			var iterator func() NodeIterator
-			if tt.nodeSetup == "singleNode" {
-				iterator = getNodeIteratorFn(tt.nodes[0])
-			} else {
-				iterator = getNodeIteratorFn(tt.nodes[0],tt.nodes[1])
-			}
+			// var iterator func() NodeIterator
+			// if tt.nodeSetup == "singleNode" {
+			// 	iterator = getNodeIteratorFn(tt.nodes[0])
+			// } else {
+			// 	iterator = getNodeIteratorFn(tt.nodes[0],tt.nodes[1])
+			// }
+			iterator := getNodeIteratorFn(tt.nodes...)
 			_, _, childQ1, childQ2, err := setupQueues(
 				tt.rootMaxRes, tt.parentMaxRes, tt.parentGuarRes, 
 				tt.childQ1MaxRes, tt.childQ1GuarRes, tt.childQ2MaxRes, tt.childQ2GuarRes)
@@ -404,7 +406,7 @@ func TestTryPreemptionMerge(t *testing.T) {
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
-			
+			fmt.Printf("Headroom: %v, Requested resources: %v, Preemptions: %v\n", headRoom, ask3.GetAllocatedResource(), tt.preemptions)
 			if tt.preemptions != nil {
 				plugin := mock.NewPreemptionPredicatePlugin(nil, nil, tt.preemptions)
 				plugins.RegisterSchedulerPlugin(plugin)
@@ -418,11 +420,21 @@ func TestTryPreemptionMerge(t *testing.T) {
 			// Step 6: Check preemption results
 			result, ok := preemptor.TryPreemption()
 			if tt.preemptions != nil {
-				assert.Assert(t, result != nil, "no result")
-				assert.Assert(t, ok, "no victims found")
-				assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
-				if tt.testCase == "TestTryPreemptionOnNode" {
-					assert.Equal(t, nodeID2, result.NodeID, "wrong node")
+				// assert.Assert(t, result != nil, "no result")
+				// assert.Assert(t, ok, "no victims found")
+				// assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
+				// if tt.testCase == "TestTryPreemptionOnNode" {
+				// 	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
+				// }
+				if result == nil {
+					t.Errorf("Preemption failed: expected result, but got nil. Preemptions: %v", tt.preemptions)
+				} else {
+					assert.Assert(t, result != nil, "no result")
+					assert.Assert(t, ok, "no victims found")
+					assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
+					if tt.testCase == "TestTryPreemptionOnNode" {
+						assert.Equal(t, nodeID2, result.NodeID, "wrong node")
+					}
 				}
 			} else {
 				assert.Assert(t, result == nil, "unexpected result")
@@ -430,8 +442,105 @@ func TestTryPreemptionMerge(t *testing.T) {
 			}
 
 			// Step 7: Final preemption checks
+			fmt.Printf("Preemption result: %v, alloc1 preempted: %v, alloc2 preempted: %v\n", result, alloc1.IsPreempted(), alloc2.IsPreempted())
+
 			assert.Check(t, alloc1.IsPreempted() == tt.alloc1Preempted, tt.alloc1Msg)
 			assert.Check(t, alloc2.IsPreempted() == tt.alloc2Preempted, tt.alloc2Msg)
+			assert.Equal(t, len(ask3.GetAllocationLog()), 0)
+		})
+	}
+}
+
+
+func TestTryPreemptionMerge2(t *testing.T) {
+	var tests = []struct {
+		testCase         string
+		childQ2GuarRes   map[string]string
+		app2Res          map[string]resources.Quantity
+	}{
+		{
+			"TestTryPreemptionOnNode",
+			map[string]string{"first": "5"},  // childQ2GuarRes
+			map[string]resources.Quantity{"first": 5, "pods": 1},
+		},
+		{
+			"TestTryPreemption_NodeWithCapacityLesserThanAsk",
+			map[string]string{"first": "6"},  // childQ2GuarRes
+			map[string]resources.Quantity{"first": 6, "pods": 1},
+		},
+	}
+    
+	for _, tt := range tests {
+		t.Run(tt.testCase, func(t *testing.T) {
+			// Step 1: Set up queues
+			node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5, "pods": 1})
+			node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5, "pods": 1})
+			iterator := getNodeIteratorFn(node1, node2)
+			_, _, childQ1, childQ2, err := setupQueues(
+				map[string]string{"first": "10", "pods": "2"}, map[string]string{"first": "20"}, map[string]string{"first": "10"}, 
+				map[string]string{"first": "10"}, map[string]string{"first": "5"}, map[string]string{"first": "10"}, tt.childQ2GuarRes)
+			assert.NilError(t, err)
+
+			// Step 2: Set up app1 with ask1 and ask2
+			app1 := newApplication(appID1, "default", "root.parent.child1")
+			app1.SetQueue(childQ1)
+			childQ1.applications[appID1] = app1
+			ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+			ask1.createTime = time.Now().Add(-1 * time.Minute)
+			assert.NilError(t, app1.AddAllocationAsk(ask1))
+			ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+			ask2.createTime = time.Now()
+			assert.NilError(t, app1.AddAllocationAsk(ask2))
+
+			// Step3: Allocate resources based on node setup
+			
+			alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+			alloc1.createTime = ask1.createTime
+			app1.AddAllocation(alloc1)
+			assert.Check(t, node1.TryAddAllocation(alloc1), "node alloc1 failed")
+			alloc2 := newAllocationWithKey("alloc2", appID1, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+			alloc2.createTime = ask2.createTime
+			app1.AddAllocation(alloc2)
+			assert.Check(t, node2.TryAddAllocation(alloc2), "node alloc2 failed")
+		
+			assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
+			assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
+
+			// Step 4: Set up app2
+			app2 := newApplication(appID2, "default", "root.parent.child2")
+			app2.SetQueue(childQ2)
+			childQ2.applications[appID2] = app2
+			ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(tt.app2Res))
+			assert.NilError(t, app2.AddAllocationAsk(ask3))
+
+			// Step 5: Set up headRoom, Preemptor, and optional predicate handler
+			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+			
+			if tt.testCase == "TestTryPreemptionOnNode" {
+				// register predicate handler
+				preemptions := []mock.Preemption{
+					mock.NewPreemption(true, "alloc3", nodeID2, []string{"alloc2"}, 0, 0),
+				}
+				plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+				plugins.RegisterSchedulerPlugin(plugin)
+				defer plugins.UnregisterSchedulerPlugins()
+			}
+
+			result, ok := preemptor.TryPreemption()
+			if tt.testCase == "TestTryPreemptionOnNode" {
+				assert.Assert(t, result != nil, "no result")
+				assert.Assert(t, ok, "no victims found")
+				assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
+				assert.Equal(t, nodeID2, result.NodeID, "wrong node")
+				assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
+				assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+			} else {
+				assert.Assert(t, result == nil, "unexpected result")
+				assert.Equal(t, ok, false, "no victims found")
+				assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
+				assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+			}
 			assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 		})
 	}

@@ -204,6 +204,19 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 	}
 }
 
+// TestTryPreemption TestCase try preemption on single node with simple queue hierarchy.
+// TestTryPreemptionOnNode TestCase try preemption on node with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
+// TestTryPreemption_NodeWithCapacityLesserThanAsk TestCase try preemption on node whose capacity is lesser than ask resource requirements with simple queue hierarchy. Since Node won't accommodate the ask even after preempting all allocations, there is no use in considering the node.
+// Guaranteed and Max resource set on both victim queue path and preemptor queue path in 2 levels. victim and preemptor queue are siblings.
+// Request (Preemptor) resource type matches with all resource types of the victim. But Guaranteed set only on specific resource type. 2 Victims are available, but 1 should be preempted because further preemption would make usage go below the guaranteed quota
+// Setup:
+// Nodes are Node1 and Node2. Nodes are full. No space to accommodate the ask.
+// root.parent. Guaranteed set on parent, first: 10
+// root.parent.child1. Guaranteed set, first: 5. 2 Allocations (belongs to single app) are running. Each Allocation usage is first:5, pods: 1. Total usage is first:10, pods: 2.
+// for TestTryPreemptionOnNode TestCase: root.parent.child2. Guaranteed set, first: 5. Request of first:5 is waiting for resources 
+// 1 Allocation on root.parent.child1 should be preempted to free up resources for ask arrived in root.parent.child2.
+// for TestTryPreemption_NodeWithCapacityLesserThanAsk TestCase: root.parent.child2. Guaranteed set, first: 6. Request of first:6 is waiting for resources 
+// Nome of the node would be considered for preemption as ask requirements is higher than the node capacity. Hence, no results.
 func TestTryPreemptionMerge(t *testing.T) {
 	var tests = []struct {
 		testCase         string

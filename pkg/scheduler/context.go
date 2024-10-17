@@ -661,9 +661,6 @@ func (cc *ClusterContext) updateNode(nodeInfo *si.NodeInfo) {
 		if sr := nodeInfo.SchedulableResource; sr != nil {
 			partition.updatePartitionResource(node.SetCapacity(resources.NewResourceFromProto(sr)))
 		}
-		if or := nodeInfo.OccupiedResource; or != nil {
-			node.SetOccupiedResource(resources.NewResourceFromProto(or))
-		}
 	case si.NodeInfo_DRAIN_NODE:
 		if node.IsSchedulable() {
 			// set the state to not schedulable

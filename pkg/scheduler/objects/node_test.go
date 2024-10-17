@@ -41,14 +41,14 @@ func TestNewNode(t *testing.T) {
 	if node != nil {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
-	proto := newProto(testNode, nil, nil, nil)
+	proto := newProto(testNode, nil, nil)
 	node = NewNode(proto)
 	if node == nil || node.NodeID != testNode {
 		t.Error("node not returned correctly: node is nul or incorrect name")
 	}
 
 	totalRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
-	proto = newProto(testNode, totalRes, nil, map[string]string{})
+	proto = newProto(testNode, totalRes, map[string]string{})
 	node = NewNode(proto)
 	if node == nil || node.NodeID != testNode {
 		t.Fatal("node not returned correctly: node is nul or incorrect name")
@@ -74,24 +74,19 @@ func TestNewNode(t *testing.T) {
 	assert.Equal(t, "rack1", node.Rackname)
 	assert.Equal(t, "partition1", node.Partition)
 
-	// test capacity/available/occupied resources
+	// test capacity/available resources
 	totalResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100})
-	occupiedResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 30, "second": 20})
 	availableResources := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 70, "second": 80})
-	proto = newProto(testNode, totalResources, occupiedResources, map[string]string{})
+	proto = newProto(testNode, totalResources, map[string]string{})
 	node = NewNode(proto)
 	assert.Equal(t, node.NodeID, testNode, "node not returned correctly: node is nul or incorrect name")
 	if !resources.Equals(node.GetCapacity(), totalResources) {
 		t.Errorf("node total resources not set correctly: %v expected got %v",
 			totalResources, node.GetCapacity())
 	}
-	if !resources.Equals(node.GetAvailableResource(), availableResources) {
+	if !resources.Equals(node.GetAvailableResource(), totalResources) {
 		t.Errorf("node available resources not set correctly: %v expected got %v",
 			availableResources, node.GetAvailableResource())
-	}
-	if !resources.Equals(node.GetOccupiedResource(), occupiedResources) {
-		t.Errorf("node occupied resources not set correctly: %v expected got %v",
-			occupiedResources, node.GetOccupiedResource())
 	}
 }
 
@@ -328,7 +323,7 @@ func TestAttributes(t *testing.T) {
 		testname := fmt.Sprintf("Attributes in the node %d", index)
 		t.Run(testname, func(t *testing.T) {
 			nodename := fmt.Sprintf("%s-%d", testNode, index)
-			node := NewNode(newProto(nodename, nil, nil, tt.inputs))
+			node := NewNode(newProto(nodename, nil, tt.inputs))
 			if node == nil || node.NodeID != nodename {
 				t.Error("node not returned correctly: node is nul or incorrect name")
 			}
@@ -363,7 +358,7 @@ func TestAttributes(t *testing.T) {
 }
 
 func TestGetInstanceType(t *testing.T) {
-	proto := newProto(testNode, nil, nil, map[string]string{
+	proto := newProto(testNode, nil, map[string]string{
 		common.NodePartition: "partition1",
 		"label1":             "key1",
 		"label2":             "key2",
@@ -789,8 +784,7 @@ func TestAddRemoveListener(t *testing.T) {
 func TestNodeEvents(t *testing.T) {
 	mockEvents := evtMock.NewEventSystem()
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
-	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
-	proto := newProto(testNode, total, occupied, map[string]string{
+	proto := newProto(testNode, total, map[string]string{
 		"ready": "true",
 	})
 	node := NewNode(proto)
@@ -905,8 +899,7 @@ func TestPreconditions(t *testing.T) {
 
 	plugins.RegisterSchedulerPlugin(mock.NewPredicatePlugin(true, map[string]int{}))
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
-	occupied := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 10, "memory": 10})
-	proto := newProto(testNode, total, occupied, map[string]string{
+	proto := newProto(testNode, total, map[string]string{
 		"ready": "true",
 	})
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})

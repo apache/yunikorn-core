@@ -986,6 +986,7 @@ func (sq *Queue) RemoveQueue() bool {
 		return false
 	}
 	log.Log(log.SchedQueue).Info("removing queue", zap.String("queue", sq.QueuePath))
+	sq.removeMetrics()
 	// root is always managed and is the only queue with a nil parent: no need to guard
 	sq.parent.removeChildQueue(sq.Name)
 	sq.queueEvents.SendRemoveQueueEvent(sq.QueuePath, sq.isManaged)
@@ -1694,6 +1695,10 @@ func (sq *Queue) updatePreemptingResourceMetrics() {
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}
+}
+
+func (sq *Queue) removeMetrics() {
+	metrics.RemoveQueueMetrics(sq.QueuePath)
 }
 
 func (sq *Queue) String() string {

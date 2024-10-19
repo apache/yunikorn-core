@@ -402,7 +402,7 @@ func (sa *Application) clearPlaceholderTimer() {
 }
 
 // timeoutPlaceholderProcessing cleans up all placeholder asks and allocations that are not used after the timeout.
-// If the application has started processing, Starting state or further, the application keeps on processing without
+// If the application has started processing, Running state or further, the application keeps on processing without
 // being able to use the placeholders.
 // If the application is in New or Accepted state we clean up and take followup action based on the gang scheduling
 // style.
@@ -422,17 +422,14 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			}
 			alloc.SetReleased(true)
 			toRelease = append(toRelease, alloc)
-			// mark as timeout out in the tracking data
-			if _, ok := sa.placeholderData[alloc.GetTaskGroup()]; ok {
-				sa.placeholderData[alloc.GetTaskGroup()].TimedOut++
-			}
 		}
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing placeholders",
 			zap.String("AppID", sa.ApplicationID),
 			zap.Int("placeholders being replaced", replacing),
 			zap.Int("releasing placeholders", len(toRelease)))
+		// trigger the release of the placeholders: accounting updates when the release is done
 		sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
-	// Case 2: in every other case fail the application, and notify the context about the expired placeholder asks
+	// Case 2: in every other case progress the application, and notify the context about the expired placeholder asks
 	default:
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing asks and placeholders",
 			zap.String("AppID", sa.ApplicationID),

@@ -254,7 +254,6 @@ func TestTryPreemptionCombined(t *testing.T) {
 			node1 := newNode(nodeID1, tt.totalMap)
 			node2 := newNode(nodeID2, tt.totalMap)
 			iterator := getNodeIteratorFn(node1, node2)
-
 			rootQ, err := createRootQueue(tt.rootMaxRes)
 			assert.NilError(t, err)
 			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
@@ -264,7 +263,7 @@ func TestTryPreemptionCombined(t *testing.T) {
 			childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, tt.childQ2GuarRes)
 			assert.NilError(t, err)
 
-			// Step 2: Set up app1 with ask1 and ask2
+			// Step 2: Set up app1
 			app1 := newApplication(appID1, "default", "root.parent.child1")
 			app1.SetQueue(childQ1)
 			childQ1.applications[appID1] = app1
@@ -274,8 +273,6 @@ func TestTryPreemptionCombined(t *testing.T) {
 			ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
 			ask2.createTime = time.Now()
 			assert.NilError(t, app1.AddAllocationAsk(ask2))
-
-			// Step3: Allocate resources based on node setup
 			alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
 			alloc1.createTime = ask1.createTime
 			app1.AddAllocation(alloc1)
@@ -287,34 +284,41 @@ func TestTryPreemptionCombined(t *testing.T) {
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 
-			// Step 4: Set up app2
+			// Step 3: Set up app2
 			app2 := newApplication(appID2, "default", "root.parent.child2")
 			app2.SetQueue(childQ2)
 			childQ2.applications[appID2] = app2
 			ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(tt.app2Res))
 			assert.NilError(t, app2.AddAllocationAsk(ask3))
 
-			// Step 5: Set up headRoom, Preemptor, and optional predicate handler
+			// Step 4: Set up headRoom, preemptor and preemption
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
-			if tt.testCase == "TestTryPreemptionOnNode" {
-				// register predicate handler
+			switch tt.testCase {
+			case "TestTryPreemptionOnNode":
+				// Check preemption when the node lacks sufficient resources
+				t.Log("Testing preemption due to node resource constraints")
 				preemptions := []mock.Preemption{
 					mock.NewPreemption(true, "alloc3", nodeID2, []string{"alloc2"}, 0, 0),
 				}
 				plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
 				plugins.RegisterSchedulerPlugin(plugin)
 				defer plugins.UnregisterSchedulerPlugins()
-			} else if tt.testCase == "TestTryPreemptionOnQueue" {
+			case "TestTryPreemption_NodeWithCapacityLesserThanAsk":
+				// Checks when the node's capacity is smaller than the request, so no preemption.
+				t.Log("Testing preemption when the node capacity is too small to fulfill the request")
+			case "TestTryPreemptionOnQueue":
+				// Check preemption due to queue resource constraints
+				t.Log("Testing preemption due to queue resource constraints")
 				allocs := map[string]string{}
 				allocs["alloc3"] = nodeID2
-
 				plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
 				plugins.RegisterSchedulerPlugin(plugin)
 				defer plugins.UnregisterSchedulerPlugins()
 			}
 
+			// Step 5: Validate preemption results based on the test case
 			result, ok := preemptor.TryPreemption()
 			if tt.testCase == "TestTryPreemptionOnNode" || tt.testCase == "TestTryPreemptionOnQueue" {
 				assert.Assert(t, result != nil, "no result")

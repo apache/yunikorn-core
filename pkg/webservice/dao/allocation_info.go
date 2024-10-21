@@ -36,10 +36,11 @@ type AllocationDAOInfo struct {
 }
 
 type ForeignAllocationDAOInfo struct {
-	AllocationKey    string           `json:"allocationKey"` // no omitempty, allocation key should not be empty
-	AllocationTime   int64            `json:"allocationTime,omitempty"`
-	ResourcePerAlloc map[string]int64 `json:"resource,omitempty"`
-	Priority         string           `json:"priority,omitempty"`
-	NodeID           string           `json:"nodeId,omitempty"`
-	Preemptable      bool             `json:"preemptable,omitempty"`
+	AllocationKey    string            `json:"allocationKey"` // no omitempty, allocation key should not be empty
+	AllocationTags   map[string]string `json:"allocationTags,omitempty"`
+	AllocationTime   int64             `json:"allocationTime,omitempty"`
+	ResourcePerAlloc map[string]int64  `json:"resource,omitempty"`
+	Priority         string            `json:"priority,omitempty"`
+	NodeID           string            `json:"nodeId,omitempty"`
+	Preemptable      bool              `json:"preemptable,omitempty"`
 }

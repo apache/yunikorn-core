@@ -1490,6 +1490,12 @@ func assertForeignAllocation(t *testing.T, key, priority, nodeID string, expecte
 	resFromInfo := resources.NewResourceFromMap(resMap)
 	assert.Assert(t, resources.Equals(resFromInfo, expectedRes))
 	assert.Equal(t, preemptable, info.Preemptable)
+	assert.Equal(t, 1, len(info.AllocationTags))
+	if info.AllocationKey == "foreign-1" {
+		assert.Equal(t, siCommon.AllocTypeDefault, info.AllocationTags[siCommon.Foreign])
+	} else {
+		assert.Equal(t, siCommon.AllocTypeStatic, info.AllocationTags[siCommon.Foreign])
+	}
 }
 
 // addApp Add app to the given partition and assert the app count, state etc

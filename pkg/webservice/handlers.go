@@ -258,6 +258,7 @@ func getForeignAllocationDAO(alloc *objects.Allocation) *dao.ForeignAllocationDA
 	allocTime := alloc.GetCreateTime().UnixNano()
 	allocDAO := &dao.ForeignAllocationDAOInfo{
 		AllocationKey:    alloc.GetAllocationKey(),
+		AllocationTags:   alloc.GetTagsClone(),
 		AllocationTime:   allocTime,
 		ResourcePerAlloc: alloc.GetAllocatedResource().DAOMap(),
 		Priority:         strconv.Itoa(int(alloc.GetPriority())),

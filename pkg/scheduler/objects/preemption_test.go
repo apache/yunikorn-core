@@ -35,6 +35,75 @@ import (
 
 const alloc = "alloc"
 
+// helper functions
+func creatApp1(
+	childQ1 *Queue,
+	node1 *Node,
+	node2 *Node,
+) (*Allocation, *Allocation, error) {
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+	ask1.createTime = time.Now().Add(-1 * time.Minute)
+	if err := app1.AddAllocationAsk(ask1); err != nil {
+		return nil, nil, err
+	}
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+	ask2.createTime = time.Now()
+	if err := app1.AddAllocationAsk(ask2); err != nil {
+		return nil, nil, err
+	}
+
+	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+	alloc1.createTime = ask1.createTime
+	app1.AddAllocation(alloc1)
+	if !node1.TryAddAllocation(alloc1) {
+		return nil, nil, fmt.Errorf("node alloc1 failed")
+	}
+	var alloc2 *Allocation
+	if node2 != nil {
+		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+		alloc2.createTime = ask2.createTime
+		app1.AddAllocation(alloc2)
+		if !node2.TryAddAllocation(alloc2) {
+			return nil, nil, fmt.Errorf("node alloc2 failed")
+		}
+	} else {
+		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+		alloc2.createTime = ask2.createTime
+		if !node1.TryAddAllocation(alloc2) {
+			return nil, nil, fmt.Errorf("node alloc2 failed")
+		}
+	}
+
+	if err := childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()); err != nil {
+		return nil, nil, err
+	}
+	if err := childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()); err != nil {
+		return nil, nil, err
+	}
+
+	return alloc1, alloc2, nil
+}
+
+func creatApp2(
+	childQ2 *Queue,
+	ask3Res map[string]resources.Quantity,
+	allocID string,
+) (*Application, *Allocation, error) {
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.applications[appID2] = app2
+	ask3 := newAllocationAsk(allocID, appID2, resources.NewResourceFromMap(ask3Res))
+	if err := app2.AddAllocationAsk(ask3); err != nil {
+		return nil, nil, err
+	}
+
+	return app2, ask3, nil
+}
+
 func TestCheckPreconditions(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 5})
 	iterator := getNodeIteratorFn(node)
@@ -124,11 +193,10 @@ func TestCheckPreemptionQueueGuarantees(t *testing.T) {
 	app1.AddAllocation(alloc2)
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
-	app2 := newApplication(appID2, "default", "root.parent.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	assert.NilError(t, app2.AddAllocationAsk(ask3))
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3")
+	assert.NilError(t, err)
+
 	childQ2.incPendingResource(ask3.GetAllocatedResource())
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
@@ -183,11 +251,10 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 			app1.AddAllocation(alloc2)
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
-			app2 := newApplication(appID2, "default", "root.parent.child2")
-			app2.SetQueue(childQ2)
-			childQ2.applications[appID2] = app2
-			ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-			assert.NilError(t, app2.AddAllocationAsk(ask3))
+
+			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3")
+			assert.NilError(t, err)
+
 			childQ2.incPendingResource(ask3.GetAllocatedResource())
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
@@ -205,74 +272,6 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 	}
 }
 
-// helper functions
-func creatApp1(
-	childQ1 *Queue,
-	node1 *Node,
-	node2 *Node,
-) (*Allocation, *Allocation, error) {
-	app1 := newApplication(appID1, "default", "root.parent.child1")
-	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
-
-	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
-	ask1.createTime = time.Now().Add(-1 * time.Minute)
-	if err := app1.AddAllocationAsk(ask1); err != nil {
-		return nil, nil, err
-	}
-	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
-	ask2.createTime = time.Now()
-	if err := app1.AddAllocationAsk(ask2); err != nil {
-		return nil, nil, err
-	}
-
-	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
-	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
-	if !node1.TryAddAllocation(alloc1) {
-		return nil, nil, fmt.Errorf("node alloc1 failed")
-	}
-	var alloc2 *Allocation
-	if node2 != nil {
-		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
-		alloc2.createTime = ask2.createTime
-		app1.AddAllocation(alloc2)
-		if !node2.TryAddAllocation(alloc2) {
-			return nil, nil, fmt.Errorf("node alloc2 failed")
-		}
-	} else {
-		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
-		alloc2.createTime = ask2.createTime
-		if !node1.TryAddAllocation(alloc2) {
-			return nil, nil, fmt.Errorf("node alloc2 failed")
-		}
-	}
-
-	if err := childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()); err != nil {
-		return nil, nil, err
-	}
-	if err := childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()); err != nil {
-		return nil, nil, err
-	}
-
-	return alloc1, alloc2, nil
-}
-
-func creatApp2(
-	childQ2 *Queue,
-	ask3Res map[string]resources.Quantity,
-) (*Application, *Allocation, error) {
-	app2 := newApplication(appID2, "default", "root.parent.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(ask3Res))
-	if err := app2.AddAllocationAsk(ask3); err != nil {
-		return nil, nil, err
-	}
-
-	return app2, ask3, nil
-}
-
 func TestTryPreemption(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "pods": 5})
 	iterator := getNodeIteratorFn(node)
@@ -288,7 +287,7 @@ func TestTryPreemption(t *testing.T) {
 	alloc1, alloc2, err := creatApp1(childQ1, node, nil)
 	assert.NilError(t, err)
 
-	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1})
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3")
 	assert.NilError(t, err)
 	childQ2.incPendingResource(ask3.GetAllocatedResource())
 
@@ -338,7 +337,7 @@ func TestTryPreemptionOnNode(t *testing.T) {
 	alloc1, alloc2, err := creatApp1(childQ1, node1, node2)
 	assert.NilError(t, err)
 
-	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1})
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3")
 	assert.NilError(t, err)
 
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
@@ -387,7 +386,7 @@ func TestTryPreemption_NodeWithCapacityLesserThanAsk(t *testing.T) {
 	alloc1, alloc2, err := creatApp1(childQ1, node1, node2)
 	assert.NilError(t, err)
 
-	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 6, "pods": 1})
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 6, "pods": 1}, "alloc3")
 	assert.NilError(t, err)
 
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
@@ -443,11 +442,10 @@ func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 		}
 	}
-	app2 := newApplication(appID2, "default", "root.parent.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc7", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
-	assert.NilError(t, app2.AddAllocationAsk(ask3))
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 1}, "alloc7")
+	assert.NilError(t, err)
+
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
@@ -493,7 +491,7 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 	alloc1, alloc2, err := creatApp1(childQ1, node1, node2)
 	assert.NilError(t, err)
 
-	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1})
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3")
 	assert.NilError(t, err)
 
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
@@ -556,11 +554,10 @@ func TestTryPreemption_VictimsAvailable_InsufficientResource(t *testing.T) {
 	assert.Check(t, node2.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
-	app2 := newApplication(appID2, "default", "root.parent.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	assert.NilError(t, app2.AddAllocationAsk(ask3))
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3")
+	assert.NilError(t, err)
+
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
@@ -613,11 +610,10 @@ func TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource(t *testing.T
 	assert.Check(t, node2.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
-	app2 := newApplication(appID2, "default", "root.parent.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	assert.NilError(t, app2.AddAllocationAsk(ask3))
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3")
+	assert.NilError(t, err)
+
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
@@ -680,11 +676,10 @@ func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 	assert.Check(t, node2.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
-	app2 := newApplication(appID2, "default", "root.parent.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	assert.NilError(t, app2.AddAllocationAsk(ask3))
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3")
+	assert.NilError(t, err)
+
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
@@ -766,11 +761,9 @@ func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 	assert.Check(t, node2.TryAddAllocation(alloc4), "node alloc2 failed")
 	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
 
-	app2 := newApplication(appID2, "default", "root.parent.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	assert.NilError(t, app2.AddAllocationAsk(ask3))
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 10}, "alloc3")
+	assert.NilError(t, err)
+
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
@@ -856,11 +849,9 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	assert.Check(t, node2.TryAddAllocation(alloc4), "node alloc2 failed")
 	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
 
-	app2 := newApplication(appID2, "default", "root.parent.child2")
-	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
-	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
-	assert.NilError(t, app2.AddAllocationAsk(ask3))
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 10}, "alloc3")
+	assert.NilError(t, err)
+
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 

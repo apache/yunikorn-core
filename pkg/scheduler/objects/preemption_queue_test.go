@@ -74,6 +74,7 @@ func TestGetPreemptableResource(t *testing.T) {
 		assertMsgs assertMessage
 	}{
 		{
+			// no guaranteed and no usage. so nothing to preempt
 			testName:   "NoGuaranteedNoUsage",
 			guaranteed: resource{nil, nil, nil, nil},
 			allocated:  resource{nil, nil, nil, nil},
@@ -104,6 +105,9 @@ func TestGetPreemptableResource(t *testing.T) {
 			},
 		},
 		{
+			// add usage to parent + root: use all guaranteed at parent level
+			// add usage to child2: use double than guaranteed
+			// usage has exceeded guaranteed for some queues, preemptable resources should be as expected
 			testName:   "GuaranteedSetUsageExceeded1",
 			guaranteed: resource{nil, smallestRes, nil, nil},
 			allocated: resource{
@@ -126,6 +130,9 @@ func TestGetPreemptableResource(t *testing.T) {
 			},
 		},
 		{
+			// add usage to parent + root: use all guaranteed at parent level
+			// add usage to child2: use double than guaranteed
+			// usage has exceeded guaranteed for some queues, preemptable resources should be as expected
 			testName: "GuaranteedSetUsageExceeded2",
 			guaranteed: resource{
 				root:    resources.Multiply(smallestRes, 2),
@@ -153,6 +160,8 @@ func TestGetPreemptableResource(t *testing.T) {
 			},
 		},
 		{
+			// add usage for all: use exactly guaranteed at parent and child level
+			// parent guarantee used for one type child guarantee used for second type
 			testName: "GuaranteedSetExactUsage",
 			guaranteed: resource{
 				root:    resources.Multiply(smallestRes, 2),
@@ -180,6 +189,9 @@ func TestGetPreemptableResource(t *testing.T) {
 			},
 		},
 		{
+			// add usage for root + parent: use exactly guaranteed at parent and child level
+			// add usage to child1: use double than guaranteed
+			// parent guarantee used for one type child guarantee used for second type
 			testName: "GuaranteedSetMixedUsage",
 			guaranteed: resource{
 				root:    resources.Multiply(smallestRes, 2),

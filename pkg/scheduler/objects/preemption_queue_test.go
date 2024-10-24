@@ -65,6 +65,7 @@ func setupQueueStructure(t *testing.T) (*Queue, *Queue, *Queue, *Queue) {
 	return rootQ, parentQ, childQ1, childQ2
 }
 
+//nolint:funlen
 func TestGetPreemptableResource(t *testing.T) {
 	tests := []struct {
 		testName   string

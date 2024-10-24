@@ -236,10 +236,8 @@ func TestGetPreemptableResource(t *testing.T) {
 			childQ1.allocatedResource = tt.allocated.childQ1
 			childQ2.allocatedResource = tt.allocated.childQ2
 
-			// Get preemptable resources
 			rootPreemptable, parentPreemptable, child1Preemptable, child2Preemptable := getPreemptableResource(rootQ, parentQ, childQ1, childQ2)
 
-			// Assert preemptable resources
 			if tt.remaining.root != nil {
 				assert.Assert(t, resources.Equals(rootPreemptable, tt.remaining.root), tt.assertMsgs.rootR)
 			} else {

@@ -106,7 +106,7 @@ func TestGetPreemptableResource(t *testing.T) {
 		},
 		{
 			// add usage to parent + root: use all guaranteed at parent level
-			// add usage to child2: use double than guaranteed
+			// add usage to child2: while guaranteed no resource
 			// usage has exceeded guaranteed for some queues, preemptable resources should be as expected
 			testName:   "GuaranteedSetUsageExceeded1",
 			guaranteed: resource{nil, smallestRes, nil, nil},

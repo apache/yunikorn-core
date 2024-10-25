@@ -246,6 +246,23 @@ func TestQueuePreemptingResourceMetrics(t *testing.T) {
 	verifyResourceMetrics(t, "preempting", "cpu")
 }
 
+func TestRemoveQueueMetrics(t *testing.T) {
+	testQueueName := "root.test"
+	qm = GetQueueMetrics(testQueueName)
+	defer unregisterQueueMetrics()
+
+	qm.SetQueueAllocatedResourceMetrics("cpu", 1)
+	assert.Assert(t, m.queues[testQueueName] != nil)
+	qm.SetQueueAllocatedResourceMetrics("cpu", 1)
+	RemoveQueueMetrics(testQueueName)
+	assert.Assert(t, m.queues[testQueueName] == nil)
+	metrics, _ := prometheus.DefaultGatherer.Gather()
+	for _, metric := range metrics {
+		assert.Assert(t, metric.GetName() != "yunikorn_queue_resource",
+			"Metric is not cleaned up")
+	}
+}
+
 func getQueueMetrics() *QueueMetrics {
 	return InitQueueMetrics("root.test")
 }

@@ -956,3 +956,27 @@ func TestGetAllocations(t *testing.T) {
 		assert.Assert(t, m[foreignAlloc2])
 	})
 }
+
+func TestUpdateForeignAllocation(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 100, "second": 200})
+	allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 20})
+	alloc := newForeignAllocation(foreignAlloc1, nodeID1, allocRes)
+	node.AddAllocation(alloc)
+
+	// update existing allocation
+	updatedRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15, "second": 0})
+	allocUpd := newForeignAllocation(foreignAlloc1, nodeID1, updatedRes)
+	prev := node.UpdateForeignAllocation(allocUpd)
+	expectedOccupied := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
+	expectedAvailable := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 85, "second": 200})
+	assert.Assert(t, prev == alloc, "returned previous allocation is different")
+	assert.Assert(t, resources.Equals(node.GetOccupiedResource(), expectedOccupied), "occupied resource has been updated incorrectly")
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), resources.Zero), "allocated resource has changed")
+	assert.Assert(t, resources.Equals(node.GetAvailableResource(), expectedAvailable), "avaiable resource has been updated incorrectly")
+
+	// update non-existing allocation
+	alloc2 := newForeignAllocation(foreignAlloc2, nodeID1, allocRes)
+	prev = node.UpdateForeignAllocation(alloc2)
+	assert.Assert(t, prev == nil, "unexpected previous allocation returned")
+	assert.Assert(t, node.GetAllocation(foreignAlloc2) == alloc2, "foreign allocation not found")
+}

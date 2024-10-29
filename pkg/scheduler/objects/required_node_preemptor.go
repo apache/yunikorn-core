@@ -22,15 +22,12 @@ import (
 	"sort"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/locking"
 )
 
 type PreemptionContext struct {
 	node        *Node
 	requiredAsk *Allocation
 	allocations []*Allocation
-
-	locking.RWMutex
 }
 
 func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation) *PreemptionContext {
@@ -43,8 +40,6 @@ func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation) *PreemptionCo
 }
 
 func (p *PreemptionContext) filterAllocations() {
-	p.Lock()
-	defer p.Unlock()
 	for _, allocation := range p.node.GetYunikornAllocations() {
 		// skip daemon set pods and higher priority allocation
 		if allocation.GetRequiredNode() != "" || allocation.GetPriority() > p.requiredAsk.GetPriority() {
@@ -76,8 +71,6 @@ func (p *PreemptionContext) filterAllocations() {
 // 3. By Create time or age of the ask (younger ask placed first),
 // 4. By resource (ask with lesser allocated resources placed first)
 func (p *PreemptionContext) sortAllocations() {
-	p.Lock()
-	defer p.Unlock()
 	sort.SliceStable(p.allocations, func(i, j int) bool {
 		l := p.allocations[i]
 		r := p.allocations[j]
@@ -129,8 +122,6 @@ func (p *PreemptionContext) sortAllocations() {
 }
 
 func (p *PreemptionContext) GetVictims() []*Allocation {
-	p.RLock()
-	defer p.RUnlock()
 	var victims []*Allocation
 	var currentResource = resources.NewResource()
 	for _, allocation := range p.allocations {
@@ -152,7 +143,5 @@ func (p *PreemptionContext) GetVictims() []*Allocation {
 
 // for test only
 func (p *PreemptionContext) getAllocations() []*Allocation {
-	p.RLock()
-	defer p.RUnlock()
 	return p.allocations
 }

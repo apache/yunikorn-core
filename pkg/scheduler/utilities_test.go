@@ -54,6 +54,7 @@ const (
 	maxresources    = "maxresources"
 	maxapplications = "maxapplications"
 	foreignAlloc1   = "foreign-alloc-1"
+	foreignAlloc2   = "foreign-alloc-2"
 )
 
 func newBasePartitionNoRootDefault() (*PartitionContext, error) {
@@ -610,7 +611,7 @@ func newForeignRequest(allocKey string) *objects.Allocation {
 	})
 }
 
-func newForeignAllocation(allocKey, nodeID string) *objects.Allocation {
+func newForeignAllocation(allocKey, nodeID string, allocated *resources.Resource) *objects.Allocation {
 	var alloc *objects.Allocation
 	defer func() {
 		if nodeID == "" {
@@ -626,7 +627,8 @@ func newForeignAllocation(allocKey, nodeID string) *objects.Allocation {
 		AllocationTags: map[string]string{
 			siCommon.Foreign: siCommon.AllocTypeDefault,
 		},
-		NodeID: id,
+		NodeID:           id,
+		ResourcePerAlloc: allocated.ToProto(),
 	})
 	return alloc
 }

@@ -364,6 +364,31 @@ func (sn *Node) AddAllocation(alloc *Allocation) {
 	_ = sn.addAllocationInternal(alloc, true)
 }
 
+// UpdateForeignAllocation updates a foreign allocation and re-calculates the available/occupied resources
+func (sn *Node) UpdateForeignAllocation(alloc *Allocation) *Allocation {
+	sn.Lock()
+	defer sn.Unlock()
+	key := alloc.GetAllocationKey()
+	existing := sn.allocations[key]
+	sn.allocations[key] = alloc
+	if existing == nil {
+		log.Log(log.SchedNode).Debug("unknown allocation to update",
+			zap.String("allocationKey", key))
+		return nil
+	}
+
+	existingResource := existing.GetAllocatedResource().Clone()
+	newResource := alloc.GetAllocatedResource().Clone()
+	delta := resources.Sub(newResource, existingResource)
+	delta.Prune()
+
+	sn.occupiedResource.AddTo(delta)
+	sn.occupiedResource.Prune()
+	sn.refreshAvailableResource()
+
+	return existing
+}
+
 func (sn *Node) addAllocationInternal(alloc *Allocation, force bool) bool {
 	if alloc == nil {
 		return false

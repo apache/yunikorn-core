@@ -4706,13 +4706,13 @@ func TestPlaceholderAllocationAndReplacementAfterRecovery(t *testing.T) {
 	assert.Equal(t, "tg-1", confirmed.GetTaskGroup())
 }
 
-func TestForeignAllocation(t *testing.T) {
+func TestForeignAllocation(t *testing.T) { //nolint:funlen
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	node1 := newNodeMaxResource(nodeID1, nodeRes)
-	err = partition.AddNode(node1)
+	node := newNodeMaxResource(nodeID1, nodeRes)
+	err = partition.AddNode(node)
 	assert.NilError(t, err)
 
 	// error: adding request (non-allocation)
@@ -4721,16 +4721,18 @@ func TestForeignAllocation(t *testing.T) {
 	assert.Assert(t, !reqCreated)
 	assert.Assert(t, !allocCreated)
 	assert.Error(t, err, "trying to add a foreign request (non-allocation) foreign-nonalloc")
+	assert.Equal(t, 0, len(partition.foreignAllocs))
 
 	// error: empty node ID
-	req = newForeignAllocation(foreignAlloc1, "")
+	req = newForeignAllocation(foreignAlloc1, "", resources.Zero)
 	reqCreated, allocCreated, err = partition.UpdateAllocation(req)
 	assert.Assert(t, !reqCreated)
 	assert.Assert(t, !allocCreated)
 	assert.Error(t, err, "node ID is empty for allocation foreign-alloc-1")
+	assert.Equal(t, 0, len(partition.foreignAllocs))
 
 	// error: no node found
-	req = newForeignAllocation(foreignAlloc1, nodeID2)
+	req = newForeignAllocation(foreignAlloc1, nodeID2, resources.Zero)
 	reqCreated, allocCreated, err = partition.UpdateAllocation(req)
 	assert.Assert(t, !reqCreated)
 	assert.Assert(t, !allocCreated)
@@ -4738,15 +4740,49 @@ func TestForeignAllocation(t *testing.T) {
 	assert.Equal(t, 0, len(partition.foreignAllocs))
 
 	// add new allocation
-	req = newForeignAllocation(foreignAlloc1, nodeID1)
+	allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	req = newForeignAllocation(foreignAlloc1, nodeID1, allocRes)
 	reqCreated, allocCreated, err = partition.UpdateAllocation(req)
 	assert.Assert(t, !reqCreated)
 	assert.Assert(t, allocCreated)
 	assert.NilError(t, err)
 	assert.Equal(t, 1, len(partition.foreignAllocs))
-	assert.Equal(t, nodeID1, partition.foreignAllocs[foreignAlloc1])
-	assert.Equal(t, 0, len(node1.GetYunikornAllocations()))
-	assert.Assert(t, node1.GetAllocation(foreignAlloc1) != nil)
+	assert.Equal(t, 0, len(node.GetYunikornAllocations()))
+	assert.Assert(t, node.GetAllocation(foreignAlloc1) != nil)
+	occupied := node.GetOccupiedResource().Clone()
+	available := node.GetAvailableResource().Clone()
+	allocated := node.GetAllocatedResource().Clone()
+	assert.Assert(t, resources.Equals(occupied, allocRes), "occupied resources has been calculated incorrectly")
+	assert.Assert(t, resources.Equals(allocated, resources.Zero), "allocated resources has changed")
+	expectedAvailable := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9})
+	assert.Assert(t, resources.Equals(available, expectedAvailable), "available resources has been calculated incorrectly")
+
+	// update resources
+	updatedRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
+	update := newForeignAllocation(foreignAlloc1, nodeID1, updatedRes)
+	reqCreated, allocCreated, err = partition.UpdateAllocation(update)
+	assert.Assert(t, !reqCreated)
+	assert.Assert(t, !allocCreated)
+	assert.NilError(t, err)
+	updatedOccupied := node.GetOccupiedResource().Clone()
+	updatedAvailable := node.GetAvailableResource().Clone()
+	updatedAllocated := node.GetAllocatedResource().Clone()
+	assert.Assert(t, resources.Equals(updatedOccupied, updatedRes), "occupied resources has been updated incorrectly")
+	assert.Assert(t, resources.Equals(updatedAllocated, resources.Zero), "allocated resources has changed")
+	expectedAvailable = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})
+	assert.Assert(t, resources.Equals(updatedAvailable, expectedAvailable), "available resources has been updated incorrectly")
+
+	// simulate update error
+	node.RemoveAllocation(foreignAlloc1)
+	reqCreated, allocCreated, err = partition.UpdateAllocation(update) // should re-add alloc object to the node
+	assert.Assert(t, !reqCreated)
+	assert.Assert(t, !allocCreated)
+	assert.NilError(t, err)
+	assert.Assert(t, node.GetAllocation(foreignAlloc1) != nil)
+	assert.Assert(t, resources.Equals(updatedOccupied, updatedRes), "occupied resources has been updated incorrectly")
+	assert.Assert(t, resources.Equals(updatedAllocated, resources.Zero), "allocated resources has changed")
+	expectedAvailable = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})
+	assert.Assert(t, resources.Equals(updatedAvailable, expectedAvailable), "available resources has been updated incorrectly")
 
 	// remove allocation
 	released, confirmed := partition.removeAllocation(&si.AllocationRelease{
@@ -4755,6 +4791,21 @@ func TestForeignAllocation(t *testing.T) {
 	assert.Assert(t, released == nil)
 	assert.Assert(t, confirmed == nil)
 	assert.Equal(t, 0, len(partition.foreignAllocs))
-	assert.Equal(t, 0, len(node1.GetYunikornAllocations()))
-	assert.Assert(t, node1.GetAllocation(foreignAlloc1) == nil)
+	assert.Equal(t, 0, len(node.GetYunikornAllocations()))
+	assert.Assert(t, node.GetAllocation(foreignAlloc1) == nil)
+
+	// add + simulate removal failure
+	req = newForeignAllocation(foreignAlloc2, nodeID1, allocRes)
+	reqCreated, allocCreated, err = partition.UpdateAllocation(req)
+	assert.NilError(t, err)
+	assert.Assert(t, !reqCreated)
+	assert.Assert(t, allocCreated)
+	partition.nodes.RemoveNode("node-1") // node gets removed
+	released, confirmed = partition.removeAllocation(&si.AllocationRelease{
+		AllocationKey: foreignAlloc2,
+	})
+	assert.Assert(t, released == nil)
+	assert.Assert(t, confirmed == nil)
+	assert.Equal(t, 0, len(partition.foreignAllocs))
+	assert.Equal(t, 0, len(node.GetYunikornAllocations()))
 }

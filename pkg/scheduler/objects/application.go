@@ -416,9 +416,8 @@ func (sa *Application) clearPlaceholderTimer() {
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
-	switch {
-	// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
-	case (sa.IsRunning() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder):
+	if (sa.IsRunning() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder) {
+		// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
 		var toRelease []*Allocation
 		replacing := 0
 		for _, alloc := range sa.getPlaceholderAllocations() {
@@ -430,19 +429,14 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			alloc.SetReleased(true)
 			toRelease = append(toRelease, alloc)
 		}
-		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing placeholders",
+		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing allocated placeholders",
 			zap.String("AppID", sa.ApplicationID),
 			zap.Int("placeholders being replaced", replacing),
 			zap.Int("releasing placeholders", len(toRelease)))
 		// trigger the release of the placeholders: accounting updates when the release is done
 		sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
-	// Case 2: in every other case progress the application, and notify the context about the expired placeholder asks
-	default:
-		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing asks and placeholders",
-			zap.String("AppID", sa.ApplicationID),
-			zap.Int("releasing placeholders", len(sa.allocations)),
-			zap.Int("releasing asks", len(sa.requests)),
-			zap.String("gang scheduling style", sa.gangSchedulingStyle))
+	} else {
+		// Case 2: in every other case progress the application, and notify the context about the expired placeholders
 		// change the status of the app based on gang style: soft resume normal allocations, hard fail the app
 		event := ResumeApplication
 		if sa.gangSchedulingStyle == Hard {
@@ -454,14 +448,30 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))
 		}
-		sa.notifyRMAllocationReleased(sa.getAllRequestsInternal(), si.TerminationType_TIMEOUT, "releasing placeholders asks on placeholder timeout")
-		sa.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
-		// all allocations are placeholders but GetAllAllocations is locked and cannot be used
-		sa.notifyRMAllocationReleased(sa.getPlaceholderAllocations(), si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
-		// we are in an accepted or new state so nothing can be replaced yet: mark everything as timedout
-		for _, phData := range sa.placeholderData {
-			phData.TimedOut = phData.Count
+		// all allocations are placeholders release them all
+		var toRelease, pendingRelease []*Allocation
+		for _, alloc := range sa.allocations {
+			alloc.SetReleased(true)
+			toRelease = append(toRelease, alloc)
 		}
+		// get all open requests and remove them all filter out already allocated as they are already released
+		for _, alloc := range sa.requests {
+			if !alloc.IsAllocated() {
+				alloc.SetReleased(true)
+				pendingRelease = append(pendingRelease, alloc)
+				sa.placeholderData[alloc.taskGroupName].TimedOut++
+			}
+		}
+		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing allocated and pending placeholders",
+			zap.String("AppID", sa.ApplicationID),
+			zap.Int("releasing placeholders", len(toRelease)),
+			zap.Int("pending placeholders", len(pendingRelease)),
+			zap.String("gang scheduling style", sa.gangSchedulingStyle))
+		sa.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
+		// trigger the release of the allocated placeholders: accounting updates when the release is done
+		sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
+		// trigger the release of the pending placeholders: accounting has been done
+		sa.notifyRMAllocationReleased(pendingRelease, si.TerminationType_TIMEOUT, "releasing pending placeholders on placeholder timeout")
 	}
 	sa.clearPlaceholderTimer()
 }
@@ -1890,7 +1900,7 @@ func (sa *Application) removeAllocationInternal(allocationKey string, releaseTyp
 		if sa.hasZeroAllocations() {
 			removeApp = true
 			event = CompleteApplication
-			eventWarning = "Application state not changed to Waiting while removing an allocation"
+			eventWarning = "Application state not changed to Completing while removing an allocation"
 		}
 		sa.decUserResourceUsage(alloc.GetAllocatedResource(), removeApp)
 	}

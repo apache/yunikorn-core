@@ -1491,14 +1491,14 @@ func TestReplaceAllocationTracking(t *testing.T) {
 }
 
 func TestTimeoutPlaceholderSoft(t *testing.T) {
-	runTimeoutPlaceholderTest(t, Resuming.String(), Soft, []int{1, 2})
+	runTimeoutPlaceholderTest(t, Resuming.String(), Soft)
 }
 
 func TestTimeoutPlaceholderHard(t *testing.T) {
-	runTimeoutPlaceholderTest(t, Failing.String(), Hard, []int{1, 2})
+	runTimeoutPlaceholderTest(t, Failing.String(), Hard)
 }
 
-func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string, expectedReleases []int) {
+func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
 	const (
 		tg1 = "tg-1"
 		tg2 = "tg-2"
@@ -1530,16 +1530,16 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
 
 	// add the placeholder to the app
-	ph := newPlaceholderAlloc(appID1, nodeID1, res, tg2)
-	app.AddAllocation(ph)
-	app.addPlaceholderDataWithLocking(ph)
+	ph1 := newPlaceholderAlloc(appID1, nodeID1, res, tg2)
+	app.AddAllocation(ph1)
+	app.addPlaceholderDataWithLocking(ph1)
 	assertPlaceholderData(t, app, tg2, 1, 0, 0, res)
 	assertUserGroupResource(t, getTestUserGroup(), res)
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the first placeholder allocation")
 	// add a second one to check the filter
-	ph = newPlaceholderAlloc(appID1, nodeID1, res, tg2)
-	app.AddAllocation(ph)
-	app.addPlaceholderDataWithLocking(ph)
+	ph2 := newPlaceholderAlloc(appID1, nodeID1, res, tg2)
+	app.AddAllocation(ph2)
+	app.addPlaceholderDataWithLocking(ph2)
 	assertPlaceholderData(t, app, tg2, 2, 0, 0, res)
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
@@ -1549,11 +1549,22 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 		return app.placeholderTimer == nil
 	})
 	assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
-	// When the app was in the accepted state, timeout should equal to count
+	// pending updates immediately
 	assertPlaceholderData(t, app, tg1, 1, 1, 0, res)
-	assertPlaceholderData(t, app, tg2, 2, 2, 0, res)
+	// No changes until the removals are confirmed
+	assertPlaceholderData(t, app, tg2, 2, 0, 0, res)
+
 	assert.Equal(t, app.stateMachine.Current(), expectedState, "Application did not progress into expected state")
+	log := app.GetStateLog()
+	assert.Equal(t, len(log), 2, "wrong number of app events")
+	assert.Equal(t, log[0].ApplicationState, Accepted.String())
+	assert.Equal(t, log[1].ApplicationState, expectedState)
+
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
+	// ordering of events is based on the order in which we call the release in the application
+	// first are the allocated placeholders then the pending placeholders, always same values
+	// See the timeoutPlaceholderProcessing() function
+	expectedReleases := []int{2, 1}
 	events := testHandler.GetEvents()
 	var found int
 	idx := 0
@@ -1572,10 +1583,15 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(res, 2)), "Unexpected placeholder resources for the app")
 	assertUserGroupResource(t, getTestUserGroup(), resources.Multiply(res, 2))
 
-	log := app.GetStateLog()
-	assert.Equal(t, len(log), 2, "wrong number of app events")
-	assert.Equal(t, log[0].ApplicationState, Accepted.String())
-	assert.Equal(t, log[1].ApplicationState, expectedState)
+	removed := app.RemoveAllocation(ph1.allocationKey, si.TerminationType_TIMEOUT)
+	assert.Assert(t, removed != nil, "expected allocation got nil")
+	assert.Equal(t, ph1.allocationKey, removed.allocationKey, "expected placeholder to be returned")
+	removed = app.RemoveAllocation(ph2.allocationKey, si.TerminationType_TIMEOUT)
+	assert.Assert(t, removed != nil, "expected allocation got nil")
+	assert.Equal(t, ph2.allocationKey, removed.allocationKey, "expected placeholder to be returned")
+
+	// Removals are confirmed: timeout should equal to count
+	assertPlaceholderData(t, app, tg2, 2, 2, 0, res)
 }
 
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {

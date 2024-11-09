@@ -40,40 +40,26 @@ var webRoutes = routes{
 		"/ws/v1/clusters",
 		getClusterInfo,
 	},
-
-	// endpoint to retrieve goroutines info
 	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/stack",
-		getStackInfo,
-	},
-
-	// endpoint to retrieve server metrics
-	route{
-		"Scheduler",
+		"Cluster",
 		"GET",
 		"/ws/v1/metrics",
 		getMetrics,
 	},
-
-	// endpoint to retrieve the current conf
 	route{
-		"Scheduler",
+		"Cluster",
 		"GET",
 		"/ws/v1/config",
 		getClusterConfig,
 	},
-
-	// endpoint to validate conf
 	route{
-		"Scheduler",
+		"Cluster",
 		"POST",
 		"/ws/v1/validate-conf",
 		validateConf,
 	},
 
-	// endpoint to retrieve historical data
+	// endpoints to retrieve
 	route{
 		"Scheduler",
 		"GET",
@@ -87,7 +73,7 @@ var webRoutes = routes{
 		getContainerHistory,
 	},
 	route{
-		"Partitions",
+		"Scheduler",
 		"GET",
 		"/ws/v1/partitions",
 		getPartitions,
@@ -179,12 +165,6 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
-		"/ws/v1/fullstatedump",
-		getFullStateDump,
-	},
-	route{
-		"Scheduler",
-		"GET",
 		"/ws/v1/events/batch",
 		getEvents,
 	},
@@ -194,10 +174,31 @@ var webRoutes = routes{
 		"/ws/v1/events/stream",
 		getStream,
 	},
-	// endpoint to retrieve CPU, Memory profiling data,
-	// this works with pprof tool. By default, pprof endpoints
-	// are only registered to http.DefaultServeMux. Here, we
-	// need to explicitly register all handlers.
+	route{
+		"Scheduler",
+		"GET",
+		"/ws/v1/scheduler/node-utilizations",
+		getNodeUtilisations,
+	},
+
+	// endpoints to retrieve debug info
+	//
+	// These endpoints are not to be proxied by the web server. The content is not for general consumption.
+	// The content is not considered stable and can change from release to release.
+	// All pprof endpoints provide profiling data in the format expected by the pprof visualization tool.
+	// We need to explicitly register all handlers as we do not use the DefaultServeMux
+	route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/stack",
+		HandlerFunc: getStackInfo,
+	},
+	route{
+		Name:        "System",
+		Method:      "GET",
+		Pattern:     "/debug/fullstatedump",
+		HandlerFunc: getFullStateDump,
+	},
 	route{
 		Name:        "System",
 		Method:      "GET",
@@ -264,24 +265,31 @@ var webRoutes = routes{
 		Pattern:     "/debug/pprof/trace",
 		HandlerFunc: pprof.Trace,
 	},
-	// endpoint to check health status
+
+	// Deprecated REST calls
+	//
+	// Replaced with /ws/v1/scheduler/node-utilizations
+	// Remove as part of YuniKorn 1.10
 	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/scheduler/healthcheck",
-		checkHealthStatus,
+		Name:        "Scheduler",
+		Method:      "GET",
+		Pattern:     "/ws/v1/scheduler/node-utilization",
+		HandlerFunc: getNodeUtilisation,
 	},
-	// Deprecated - To be removed in next major release. Replaced with /ws/v1/scheduler/node-utilizations
+	// Permanently moved to the debug endpoint as part of YuniKorn 1.7
+	// Remove redirect in YuniKorn 1.10
 	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/scheduler/node-utilization",
-		getNodeUtilisation,
+		Name:        "Scheduler",
+		Method:      "GET",
+		Pattern:     "/ws/v1/stack",
+		HandlerFunc: redirectDebug,
 	},
+	// Permanently moved to the debug endpoint as part of YuniKorn 1.7
+	// Remove redirect in YuniKorn 1.10
 	route{
-		"Scheduler",
-		"GET",
-		"/ws/v1/scheduler/node-utilizations",
-		getNodeUtilisations,
+		Name:        "Scheduler",
+		Method:      "GET",
+		Pattern:     "/ws/v1/fullstatedump",
+		HandlerFunc: redirectDebug,
 	},
 }

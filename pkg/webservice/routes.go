@@ -59,7 +59,7 @@ var webRoutes = routes{
 		validateConf,
 	},
 
-	// endpoints to retrieve
+	// endpoints to retrieve general scheduler info
 	route{
 		"Scheduler",
 		"GET",
@@ -177,6 +177,12 @@ var webRoutes = routes{
 	route{
 		"Scheduler",
 		"GET",
+		"/ws/v1/scheduler/healthcheck",
+		checkHealthStatus,
+	},
+	route{
+		"Scheduler",
+		"GET",
 		"/ws/v1/scheduler/node-utilizations",
 		getNodeUtilisations,
 	},
@@ -268,8 +274,8 @@ var webRoutes = routes{
 
 	// Deprecated REST calls
 	//
-	// Replaced with /ws/v1/scheduler/node-utilizations
-	// Remove as part of YuniKorn 1.10
+	// Replaced with /ws/v1/scheduler/node-utilizations as part of YuniKorn 1.5
+	// Remove as part of YuniKorn 1.8
 	route{
 		Name:        "Scheduler",
 		Method:      "GET",

@@ -2960,6 +2960,33 @@ func TestGetPartitionRuleHandler(t *testing.T) {
 	assert.Equal(t, partitionRules[3].Name, types.Recovery)
 }
 
+func TestRedirectDebugHandler(t *testing.T) {
+	NewWebApp(&scheduler.ClusterContext{}, nil)
+	base := "http://yunikorn.host.com:9080"
+	code := http.StatusMovedPermanently
+	tests := []struct {
+		name     string
+		reqURL   string
+		redirect string
+	}{
+		{"statedump", "/ws/v1/fullstatedump", "/debug/fullstatedump"},
+		{"stacks", "/ws/v1/stack", "/debug/stack"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := createRequest(t, base+tt.reqURL, map[string]string{})
+			assert.NilError(t, err, httpRequestError)
+			resp := &MockResponseWriter{}
+			redirectDebug(resp, req)
+			assert.Equal(t, resp.statusCode, code, "expected moved permanently status")
+			loc := resp.Header().Get("Location")
+			assert.Assert(t, loc != "", "expected redirect header to be set")
+			assert.Assert(t, strings.HasSuffix(loc, tt.redirect), "expected redirect to debug")
+			assert.Assert(t, strings.Contains(string(resp.outputBytes), http.StatusText(code)))
+		})
+	}
+}
+
 func TestSetMaxRESTResponseSize(t *testing.T) {
 	current := configs.GetConfigMap()
 	defer configs.SetConfigMap(current)

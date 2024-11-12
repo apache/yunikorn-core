@@ -66,6 +66,9 @@ const (
 	AppStateActive    = "active"
 	AppStateRejected  = "rejected"
 	AppStateCompleted = "completed"
+
+	WSBase    = "/ws/v1"
+	DebugBase = "/debug"
 )
 
 var allowedActiveStatusMsg string
@@ -106,6 +109,21 @@ func init() {
 		maxRESTResponseSize.Store(newSize)
 	})
 	maxRESTResponseSize.Store(configs.DefaultRESTResponseSize)
+}
+
+// redirectDebug redirect calls that used to be part of "/ws/v1" to "/debug"
+// Moving the URl permanently for requests that should not have been part of the standard list
+func redirectDebug(w http.ResponseWriter, r *http.Request) {
+	code := http.StatusMovedPermanently
+	// replace the path: we know we have the right URL as the router would not have called this
+	r.URL.Path = strings.Replace(r.URL.Path, WSBase, DebugBase, 1)
+	redirect := r.URL.String()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Location", redirect)
+	w.WriteHeader(code)
+	// do as recommended in the RFC 7321, 6.4.2
+	body := "<a href=\"" + redirect + "\">" + http.StatusText(code) + "</a>.\n"
+	_, _ = fmt.Fprintln(w, body)
 }
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {

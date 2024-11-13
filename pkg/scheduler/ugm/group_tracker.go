@@ -21,7 +21,6 @@ package ugm
 import (
 	"strings"
 
-	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/locking"
@@ -92,43 +91,46 @@ func (gt *GroupTracker) clearLimits(queuePath string) {
 	gt.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), nil, 0, false, group, false)
 }
 
-// Note: headroom of queue tracker is not read-only, it also traverses the queue hierarchy and creates childQueueTracker if it does not exist.
+// headroom calculate the resource headroom for the group in the hierarchy defined
+// Note: headroom of queue tracker is not read-only.
+// It traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
 func (gt *GroupTracker) headroom(hierarchy []string) *resources.Resource {
 	gt.Lock()
 	defer gt.Unlock()
 	return gt.queueTracker.headroom(hierarchy, group)
 }
 
-func (gt *GroupTracker) GetGroupResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {
+// GetResourceUsageDAOInfo returns the DAO object used in the REST API for this group tracker
+func (gt *GroupTracker) GetResourceUsageDAOInfo() *dao.GroupResourceUsageDAOInfo {
 	gt.RLock()
 	defer gt.RUnlock()
-	groupResourceUsage := &dao.GroupResourceUsageDAOInfo{
-		Applications: []string{},
-	}
-	groupResourceUsage.GroupName = gt.groupName
+	var apps []string
 	for app := range gt.applications {
-		groupResourceUsage.Applications = append(groupResourceUsage.Applications, app)
+		apps = append(apps, app)
 	}
-	groupResourceUsage.Queues = gt.queueTracker.getResourceUsageDAOInfo(common.Empty)
-	return groupResourceUsage
+	return &dao.GroupResourceUsageDAOInfo{
+		Applications: apps,
+		GroupName:    gt.groupName,
+		Queues:       gt.queueTracker.getResourceUsageDAOInfo(),
+	}
 }
 
-func (gt *GroupTracker) IsQueuePathTrackedCompletely(hierarchy []string) bool {
+func (gt *GroupTracker) isQueuePathTrackedCompletely(hierarchy []string) bool {
 	gt.RLock()
 	defer gt.RUnlock()
-	return gt.queueTracker.IsQueuePathTrackedCompletely(hierarchy)
+	return gt.queueTracker.isQueuePathTrackedCompletely(hierarchy)
 }
 
-func (gt *GroupTracker) IsUnlinkRequired(hierarchy []string) bool {
+func (gt *GroupTracker) isUnlinkRequired(hierarchy []string) bool {
 	gt.RLock()
 	defer gt.RUnlock()
-	return gt.queueTracker.IsUnlinkRequired(hierarchy)
+	return gt.queueTracker.isUnlinkRequired(hierarchy)
 }
 
-func (gt *GroupTracker) UnlinkQT(hierarchy []string) bool {
+func (gt *GroupTracker) unlinkQT(hierarchy []string) bool {
 	gt.Lock()
 	defer gt.Unlock()
-	return gt.queueTracker.UnlinkQT(hierarchy)
+	return gt.queueTracker.unlink(hierarchy)
 }
 
 func (gt *GroupTracker) canBeRemoved() bool {
@@ -153,9 +155,38 @@ func (gt *GroupTracker) decreaseAllTrackedResourceUsage(hierarchy []string) map[
 	return removedApplications
 }
 
-// Note: canRunApp of queue tracker is not read-only, it also traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
+// canRunApp checks if the group is allowed to run the application in the queue defined in hierarchy.
+// Note: canRunApp of queue tracker is not read-only,
+// It traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
 func (gt *GroupTracker) canRunApp(hierarchy []string, applicationID string) bool {
 	gt.Lock()
 	defer gt.Unlock()
 	return gt.queueTracker.canRunApp(hierarchy, applicationID, group)
+}
+
+// GetMaxResources returns a map of the maxResources for all queues registered under this group tracker.
+// The key into the map is the queue path.
+// This should only be used in test
+func (gt *GroupTracker) GetMaxResources() map[string]*resources.Resource {
+	gt.RLock()
+	defer gt.RUnlock()
+	return gt.queueTracker.getMaxResources()
+}
+
+// GetMaxApplications returns a map of the maxRunningApps for all queues registered under this group tracker.
+// The key into the map is the queue path.
+// This should only be used in test
+func (gt *GroupTracker) GetMaxApplications() map[string]uint64 {
+	gt.RLock()
+	defer gt.RUnlock()
+	return gt.queueTracker.getMaxApplications()
+}
+
+// getUsedResources returns a map of the usedResources for all queues registered under this group tracker.
+// The key into the map is the queue path.
+// This should only be used in test
+func (gt *GroupTracker) getUsedResources() map[string]*resources.Resource {
+	gt.RLock()
+	defer gt.RUnlock()
+	return gt.queueTracker.getUsedResources()
 }

@@ -121,45 +121,49 @@ func (ut *UserTracker) clearLimits(queuePath string, doWildCardCheck bool) {
 	ut.queueTracker.setLimit(strings.Split(queuePath, configs.DOT), nil, 0, false, user, doWildCardCheck)
 }
 
-// Note: headroom of queue tracker is not read-only, it also traverses the queue hierarchy and creates childQueueTracker if it does not exist.
+// headroom calculate the resource headroom for the user in the hierarchy defined
+// Note: headroom of queue tracker is not read-only.
+// It traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
 func (ut *UserTracker) headroom(hierarchy []string) *resources.Resource {
 	ut.Lock()
 	defer ut.Unlock()
 	return ut.queueTracker.headroom(hierarchy, user)
 }
 
-func (ut *UserTracker) GetUserResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {
+// GetResourceUsageDAOInfo returns the DAO object used in the REST API for this user tracker
+func (ut *UserTracker) GetResourceUsageDAOInfo() *dao.UserResourceUsageDAOInfo {
 	ut.RLock()
 	defer ut.RUnlock()
-	userResourceUsage := &dao.UserResourceUsageDAOInfo{
-		Groups: make(map[string]string),
-	}
-	userResourceUsage.UserName = ut.userName
+	groups := make(map[string]string, len(ut.appGroupTrackers))
 	for app, gt := range ut.appGroupTrackers {
 		if gt != nil {
-			userResourceUsage.Groups[app] = gt.groupName
+			groups[app] = gt.groupName
 		}
 	}
-	userResourceUsage.Queues = ut.queueTracker.getResourceUsageDAOInfo(common.Empty)
-	return userResourceUsage
+
+	return &dao.UserResourceUsageDAOInfo{
+		Groups:   groups,
+		UserName: ut.userName,
+		Queues:   ut.queueTracker.getResourceUsageDAOInfo(),
+	}
 }
 
-func (ut *UserTracker) IsQueuePathTrackedCompletely(hierarchy []string) bool {
+func (ut *UserTracker) isQueuePathTrackedCompletely(hierarchy []string) bool {
 	ut.RLock()
 	defer ut.RUnlock()
-	return ut.queueTracker.IsQueuePathTrackedCompletely(hierarchy)
+	return ut.queueTracker.isQueuePathTrackedCompletely(hierarchy)
 }
 
-func (ut *UserTracker) IsUnlinkRequired(hierarchy []string) bool {
+func (ut *UserTracker) isUnlinkRequired(hierarchy []string) bool {
 	ut.RLock()
 	defer ut.RUnlock()
-	return ut.queueTracker.IsUnlinkRequired(hierarchy)
+	return ut.queueTracker.isUnlinkRequired(hierarchy)
 }
 
-func (ut *UserTracker) UnlinkQT(hierarchy []string) bool {
+func (ut *UserTracker) unlinkQT(hierarchy []string) bool {
 	ut.Lock()
 	defer ut.Unlock()
-	return ut.queueTracker.UnlinkQT(hierarchy)
+	return ut.queueTracker.unlink(hierarchy)
 }
 
 func (ut *UserTracker) canBeRemoved() bool {
@@ -168,9 +172,38 @@ func (ut *UserTracker) canBeRemoved() bool {
 	return ut.queueTracker.canBeRemoved()
 }
 
-// Note: canRunApp of queue tracker is not read-only, it also traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
+// canRunApp checks if the user is allowed to run the application in the queue defined in hierarchy.
+// Note: canRunApp of queue tracker is not read-only.
+// It traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
 func (ut *UserTracker) canRunApp(hierarchy []string, applicationID string) bool {
 	ut.Lock()
 	defer ut.Unlock()
 	return ut.queueTracker.canRunApp(hierarchy, applicationID, user)
+}
+
+// GetMaxResources returns a map of the maxResources for all queues registered under this user tracker.
+// The key into the map is the queue path.
+// This should only be used in test
+func (ut *UserTracker) GetMaxResources() map[string]*resources.Resource {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.getMaxResources()
+}
+
+// GetMaxApplications returns a map of the maxRunningApps for all queues registered under this user tracker.
+// The key into the map is the queue path.
+// This should only be used in test
+func (ut *UserTracker) GetMaxApplications() map[string]uint64 {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.getMaxApplications()
+}
+
+// getUsedResources returns a map of the usedResources for all queues registered under this user tracker.
+// The key into the map is the queue path.
+// This should only be used in test
+func (ut *UserTracker) getUsedResources() map[string]*resources.Resource {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.getUsedResources()
 }

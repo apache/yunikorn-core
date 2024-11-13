@@ -2149,12 +2149,12 @@ func TestSpecificUserResourceUsage(t *testing.T) {
 			Groups:   map[string]string{"app-1": "testgroup"},
 			Queues: &dao.ResourceUsageDAOInfo{
 				QueuePath:           "root",
-				ResourceUsage:       resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}),
+				ResourceUsage:       map[string]int64{"vcore": 1},
 				RunningApplications: []string{"app-1"},
 				Children: []*dao.ResourceUsageDAOInfo{
 					{
 						QueuePath:           "root.default",
-						ResourceUsage:       resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}),
+						ResourceUsage:       map[string]int64{"vcore": 1},
 						RunningApplications: []string{"app-1"},
 					},
 				},
@@ -2220,13 +2220,13 @@ func TestSpecificGroupResourceUsage(t *testing.T) {
 			Applications: []string{"app-1"},
 			Queues: &dao.ResourceUsageDAOInfo{
 				QueuePath:           "root",
-				ResourceUsage:       resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}),
+				ResourceUsage:       map[string]int64{"vcore": 1},
 				RunningApplications: []string{"app-1"},
 				Children: []*dao.ResourceUsageDAOInfo{
 					{
 						QueuePath:           "root.default",
-						ResourceUsage:       resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}),
-						MaxResources:        resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 200}),
+						ResourceUsage:       map[string]int64{"vcore": 1},
+						MaxResources:        map[string]int64{"cpu": 200},
 						RunningApplications: []string{"app-1"},
 					},
 				},
@@ -2283,8 +2283,8 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	getUsersResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &usersResourceUsageDao)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, usersResourceUsageDao[0].Queues.ResourceUsage.String(),
-		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+	assert.DeepEqual(t, usersResourceUsageDao[0].Queues.ResourceUsage,
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).DAOMap())
 
 	// Assert existing users
 	assert.Equal(t, len(usersResourceUsageDao), 1)
@@ -2298,8 +2298,8 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	getGroupsResourceUsage(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &groupsResourceUsageDao)
 	assert.NilError(t, err, unmarshalError)
-	assert.Equal(t, groupsResourceUsageDao[0].Queues.ResourceUsage.String(),
-		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).String())
+	assert.DeepEqual(t, groupsResourceUsageDao[0].Queues.ResourceUsage,
+		resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.CPU: 1}).DAOMap())
 
 	// Assert existing groups
 	assert.Equal(t, len(groupsResourceUsageDao), 1)

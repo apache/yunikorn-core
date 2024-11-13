@@ -194,7 +194,7 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	manager.IncreaseTrackedResource("", "", usage1, user)
 	manager.IncreaseTrackedResource(queuePath1, TestApp1, usage1, user)
 
-	groupTrackers := manager.GetGroupsResources()
+	groupTrackers := manager.GetGroupTrackers()
 	assert.Equal(t, len(groupTrackers), 0)
 	assertUGM(t, user, usage1, 1)
 	assert.Equal(t, user.User, manager.GetUserTracker(user.User).userName)
@@ -213,19 +213,19 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	assert.Equal(t, user.User, manager.GetUserTracker(user.User).userName)
 	assert.Equal(t, user1.User, manager.GetUserTracker(user1.User).userName)
 
-	assert.Equal(t, true, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
-	assert.Equal(t, true, manager.GetUserTracker(user1.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
-	assert.Equal(t, false, manager.GetUserTracker(user1.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
-	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
-	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath3, configs.DOT)))
-	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath4, configs.DOT)))
+	assert.Equal(t, true, manager.GetUserTracker(user.User).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
+	assert.Equal(t, true, manager.GetUserTracker(user1.User).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user1.User).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath3, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.User).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath4, configs.DOT)))
 
-	assert.Equal(t, true, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
-	assert.Equal(t, true, manager.GetUserTracker(user1.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
-	assert.Equal(t, false, manager.GetUserTracker(user1.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
-	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
-	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath3, configs.DOT)))
-	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.IsQueuePathTrackedCompletely(strings.Split(queuePath4, configs.DOT)))
+	assert.Equal(t, true, manager.GetUserTracker(user.Groups[0]).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
+	assert.Equal(t, true, manager.GetUserTracker(user1.Groups[0]).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user1.Groups[0]).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath1, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath2, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath3, configs.DOT)))
+	assert.Equal(t, false, manager.GetUserTracker(user.Groups[0]).queueTracker.isQueuePathTrackedCompletely(strings.Split(queuePath4, configs.DOT)))
 
 	usage3, err := resources.NewResourceFromConf(map[string]string{"mem": "5M", "vcore": "5"})
 	if err != nil {
@@ -237,12 +237,12 @@ func TestAddRemoveUserAndGroups(t *testing.T) {
 	assertUGM(t, user, usage1, 2)
 
 	manager.DecreaseTrackedResource(queuePath1, TestApp1, usage3, user, true)
-	assert.Equal(t, 1, len(manager.GetUsersResources()), "userTrackers count should be 1")
-	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 0")
+	assert.Equal(t, 1, len(manager.GetUserTrackers()), "userTrackers count should be 1")
+	assert.Equal(t, 0, len(manager.GetGroupTrackers()), "groupTrackers count should be 0")
 
 	manager.DecreaseTrackedResource(queuePath2, TestApp2, usage2, user1, true)
-	assert.Equal(t, 0, len(manager.GetUsersResources()), "userTrackers count should be 0")
-	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be 0")
+	assert.Equal(t, 0, len(manager.GetUserTrackers()), "userTrackers count should be 0")
+	assert.Equal(t, 0, len(manager.GetGroupTrackers()), "groupTrackers count should be 0")
 
 	assert.Assert(t, manager.GetUserTracker(user.User) == nil)
 	assert.Assert(t, manager.GetGroupTracker(user.Groups[0]) == nil)
@@ -1979,12 +1979,13 @@ func setupUGM() {
 
 func assertUGM(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, usersCount int) {
 	manager := GetUserManager()
-	assert.Equal(t, usersCount, len(manager.GetUsersResources()), "userTrackers count should be "+strconv.Itoa(usersCount))
-	assert.Equal(t, 0, len(manager.GetGroupsResources()), "groupTrackers count should be "+strconv.Itoa(0))
-	userRes := manager.GetUserResources(userGroup)
-	assert.Equal(t, resources.Equals(userRes, expected), true)
-	groupRes := manager.GetGroupResources(userGroup.Groups[0])
-	assert.Equal(t, resources.Equals(groupRes, nil), true)
+	assert.Equal(t, usersCount, len(manager.GetUserTrackers()), "userTrackers count not as expected")
+	assert.Equal(t, 0, len(manager.GetGroupTrackers()), "groupTrackers count should be 0")
+	userTR := manager.GetUserTracker(userGroup.User)
+	assert.Assert(t, userTR != nil, "user tracker should be defined")
+	assert.Assert(t, resources.Equals(userTR.queueTracker.resourceUsage, expected), "user max resource for root not correct")
+	groupTR := manager.GetGroupTracker(userGroup.Groups[0])
+	assert.Assert(t, groupTR == nil, "group tracker should not be defined")
 }
 
 func assertMaxLimits(t *testing.T, userGroup security.UserGroup, expectedResource *resources.Resource, expectedMaxApps int) {

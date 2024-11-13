@@ -1165,10 +1165,10 @@ func getMetrics(w http.ResponseWriter, r *http.Request) {
 func getUsersResourceUsage(w http.ResponseWriter, _ *http.Request) {
 	writeHeaders(w)
 	userManager := ugm.GetUserManager()
-	usersResources := userManager.GetUsersResources()
-	result := make([]*dao.UserResourceUsageDAOInfo, len(usersResources))
-	for i, tracker := range usersResources {
-		result[i] = tracker.GetUserResourceUsageDAOInfo()
+	trackers := userManager.GetUserTrackers()
+	result := make([]*dao.UserResourceUsageDAOInfo, len(trackers))
+	for i, tracker := range trackers {
+		result[i] = tracker.GetResourceUsageDAOInfo()
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -1197,8 +1197,8 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, UserDoesNotExists, http.StatusNotFound)
 		return
 	}
-	var result = userTracker.GetUserResourceUsageDAOInfo()
-	if err := json.NewEncoder(w).Encode(result); err != nil {
+	result := userTracker.GetResourceUsageDAOInfo()
+	if err = json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -1206,10 +1206,10 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	userManager := ugm.GetUserManager()
-	groupsResources := userManager.GetGroupsResources()
-	result := make([]*dao.GroupResourceUsageDAOInfo, len(groupsResources))
-	for i, tracker := range groupsResources {
-		result[i] = tracker.GetGroupResourceUsageDAOInfo()
+	trackers := userManager.GetGroupTrackers()
+	result := make([]*dao.GroupResourceUsageDAOInfo, len(trackers))
+	for i, tracker := range trackers {
+		result[i] = tracker.GetResourceUsageDAOInfo()
 	}
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -1238,8 +1238,8 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 		buildJSONErrorResponse(w, GroupDoesNotExists, http.StatusNotFound)
 		return
 	}
-	var result = groupTracker.GetGroupResourceUsageDAOInfo()
-	if err := json.NewEncoder(w).Encode(result); err != nil {
+	result := groupTracker.GetResourceUsageDAOInfo()
+	if err = json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
 }

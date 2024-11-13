@@ -60,7 +60,7 @@ func TestQTIncreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 	queueTracker.increaseTrackedResource(strings.Split(queuePath4, configs.DOT), TestApp4, user, usage4)
-	actualResources := getQTResource(queueTracker)
+	actualResources := queueTracker.getUsedResources()
 
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root.parent"].String(), "wrong resource")
@@ -90,7 +90,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
 	queueTracker.increaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp2, user, usage2)
-	actualResources := getQTResource(queueTracker)
+	actualResources := queueTracker.getUsedResources()
 
 	assert.Equal(t, 2, len(queueTracker.runningApplications))
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root"].String(), "wrong resource")
@@ -107,7 +107,7 @@ func TestQTDecreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 
 	removeQT = queueTracker.decreaseTrackedResource(strings.Split(queuePath2, configs.DOT), TestApp2, usage3, false)
-	actualResources1 := getQTResource(queueTracker)
+	actualResources1 := queueTracker.getUsedResources()
 
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root"].String(), "wrong resource")
@@ -361,33 +361,39 @@ func TestGetResourceUsageDAOInfo(t *testing.T) {
 	childQ.maxResources = maxRes.Clone()
 	parentQ.maxRunningApps = 3
 
-	rootDao := root.getResourceUsageDAOInfo("")
-	assert.Assert(t, resources.Equals(usage1, rootDao.ResourceUsage))
+	rootDao := root.getResourceUsageDAOInfo()
+	assert.DeepEqual(t, usage1.DAOMap(), rootDao.ResourceUsage)
 	assert.Equal(t, "root", rootDao.QueuePath)
 	assert.Equal(t, 1, len(rootDao.RunningApplications))
 	assert.Equal(t, TestApp1, rootDao.RunningApplications[0])
 	assert.Equal(t, 1, len(rootDao.Children))
 	assert.Equal(t, uint64(0), rootDao.MaxApplications)
-	assert.Assert(t, rootDao.MaxResources == nil)
+	assert.Assert(t, len(rootDao.MaxResources) == 0, "expected empty max resource")
 	parentDao := rootDao.Children[0]
-	assert.Assert(t, resources.Equals(usage1, parentDao.ResourceUsage))
+	assert.DeepEqual(t, usage1.DAOMap(), parentDao.ResourceUsage)
 	assert.Equal(t, "root.parent", parentDao.QueuePath)
 	assert.Equal(t, 1, len(parentDao.RunningApplications))
 	assert.Equal(t, TestApp1, parentDao.RunningApplications[0])
 	assert.Equal(t, uint64(3), parentDao.MaxApplications)
-	assert.Assert(t, parentDao.MaxResources == nil)
+	assert.Assert(t, len(parentDao.MaxResources) == 0, "expected empty max resource")
 	assert.Equal(t, 1, len(parentDao.Children))
 	childDao := parentDao.Children[0]
-	assert.Assert(t, resources.Equals(usage1, childDao.ResourceUsage))
+	assert.DeepEqual(t, usage1.DAOMap(), childDao.ResourceUsage)
 	assert.Equal(t, "root.parent.child1", childDao.QueuePath)
 	assert.Equal(t, 1, len(childDao.RunningApplications))
 	assert.Equal(t, TestApp1, childDao.RunningApplications[0])
 	assert.Equal(t, uint64(2), childDao.MaxApplications)
-	assert.Assert(t, resources.Equals(maxRes, childDao.MaxResources))
+	assert.DeepEqual(t, maxRes.DAOMap(), childDao.MaxResources)
 	assert.Equal(t, 0, len(childDao.Children))
 
+	// final nil check for receiver
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("getResourceUsageDAOInfo panic on nil receiver")
+		}
+	}()
 	root = nil
-	rootDao = root.getResourceUsageDAOInfo("")
+	rootDao = root.getResourceUsageDAOInfo()
 	assert.DeepEqual(t, rootDao, &dao.ResourceUsageDAOInfo{})
 }
 
@@ -444,10 +450,4 @@ func TestSetLimit(t *testing.T) {
 	assert.Assert(t, !childQ.useWildCard)
 	assert.Assert(t, resources.Equals(newLimit, childQ.maxResources))
 	assert.Equal(t, uint64(5), childQ.maxRunningApps)
-}
-
-func getQTResource(qt *QueueTracker) map[string]*resources.Resource {
-	resources := make(map[string]*resources.Resource)
-	usage := qt.getResourceUsageDAOInfo("")
-	return internalGetResource(usage, resources)
 }

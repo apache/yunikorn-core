@@ -284,19 +284,23 @@ func getUserGroup(userName string, groupNameList []string) security.UserGroup {
 }
 
 func assertUserGroupResource(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
-	ugm := ugm.GetUserManager()
-	userResource := ugm.GetUserResources(userGroup)
-	groupResource := ugm.GetGroupResources(userGroup.Groups[0])
-	assert.Equal(t, resources.Equals(userResource, expected), true)
-	assert.Equal(t, resources.Equals(groupResource, nil), true)
+	assertUserResourcesAndGroupResources(t, userGroup, expected, nil, 0)
 }
 
 func assertUserResourcesAndGroupResources(t *testing.T, userGroup security.UserGroup, expectedUserResources *resources.Resource, expectedGroupResources *resources.Resource, i int) {
-	ugm := ugm.GetUserManager()
-	userResource := ugm.GetUserResources(userGroup)
-	groupResource := ugm.GetGroupResources(userGroup.Groups[i])
-	assert.Equal(t, resources.Equals(userResource, expectedUserResources), true)
-	assert.Equal(t, resources.Equals(groupResource, expectedGroupResources), true)
+	m := ugm.GetUserManager()
+	userResource := m.GetUserResources(userGroup.User)
+	if expectedUserResources == nil {
+		assert.Assert(t, userResource.IsEmpty(), "expected empty resource in user tracker")
+	} else {
+		assert.Assert(t, resources.Equals(userResource, expectedUserResources), "user value '%s' not equal to expected '%s'", userResource.String(), expectedUserResources.String())
+	}
+	groupResource := m.GetGroupResources(userGroup.Groups[i])
+	if expectedGroupResources == nil {
+		assert.Assert(t, groupResource.IsEmpty(), "expected empty resource in group tracker")
+	} else {
+		assert.Assert(t, resources.Equals(groupResource, expectedGroupResources), "group value '%s' not equal to expected '%s'", groupResource.String(), expectedGroupResources.String())
+	}
 }
 
 func assertAllocationLog(t *testing.T, ask *Allocation) {

@@ -20,6 +20,7 @@ package ugm
 
 import (
 	"go.uber.org/zap"
+	"golang.org/x/exp/maps"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -230,41 +231,86 @@ func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *re
 	return resources.ComponentWiseMin(headroom, childHeadroom)
 }
 
+// getResourceUsageDAOInfo returns the REST representation of the queue tracker
 // Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
-func (qt *QueueTracker) getResourceUsageDAOInfo(parentQueuePath string) *dao.ResourceUsageDAOInfo {
+func (qt *QueueTracker) getResourceUsageDAOInfo() *dao.ResourceUsageDAOInfo {
 	if qt == nil {
 		return &dao.ResourceUsageDAOInfo{}
 	}
-	fullQueuePath := parentQueuePath + "." + qt.queueName
-	if parentQueuePath == common.Empty {
-		fullQueuePath = qt.queueName
-	}
-	usage := &dao.ResourceUsageDAOInfo{
-		QueuePath:     fullQueuePath,
-		ResourceUsage: qt.resourceUsage.Clone(),
-	}
+	apps := make([]string, len(qt.runningApplications))
+	i := 0
 	for app := range qt.runningApplications {
-		usage.RunningApplications = append(usage.RunningApplications, app)
+		apps[i] = app
+		i++
 	}
-	usage.MaxResources = qt.maxResources
-	usage.MaxApplications = qt.maxRunningApps
+	children := make([]*dao.ResourceUsageDAOInfo, len(qt.childQueueTrackers))
+	i = 0
 	for _, cqt := range qt.childQueueTrackers {
-		childUsage := cqt.getResourceUsageDAOInfo(fullQueuePath)
-		usage.Children = append(usage.Children, childUsage)
+		children[i] = cqt.getResourceUsageDAOInfo()
+		i++
 	}
-	return usage
+	return &dao.ResourceUsageDAOInfo{
+		QueuePath:           qt.queuePath,
+		ResourceUsage:       qt.resourceUsage.DAOMap(),
+		MaxResources:        qt.maxResources.DAOMap(),
+		MaxApplications:     qt.maxRunningApps,
+		RunningApplications: apps,
+		Children:            children,
+	}
 }
 
-// IsQueuePathTrackedCompletely Traverse queue path upto the end queue through its linkage
+// getMaxResources returns a map of all maxResources defined in the queue hierarchy.
+// Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
+func (qt *QueueTracker) getMaxResources() map[string]*resources.Resource {
+	if qt == nil {
+		return nil
+	}
+	maxRes := map[string]*resources.Resource{qt.queuePath: qt.maxResources}
+	for _, cqt := range qt.childQueueTrackers {
+		childUsage := cqt.getMaxResources()
+		maps.Copy(maxRes, childUsage)
+	}
+	return maxRes
+}
+
+// getMaxApplications returns a map of all maxRunningApps defined in the queue hierarchy.
+// Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
+func (qt *QueueTracker) getMaxApplications() map[string]uint64 {
+	if qt == nil {
+		return nil
+	}
+	maxApps := map[string]uint64{qt.queuePath: qt.maxRunningApps}
+	for _, cqt := range qt.childQueueTrackers {
+		childApps := cqt.getMaxApplications()
+		maps.Copy(maxApps, childApps)
+	}
+	return maxApps
+}
+
+// getUsedResources returns a map of all resourceUsage defined in the queue hierarchy.
+// Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
+func (qt *QueueTracker) getUsedResources() map[string]*resources.Resource {
+	if qt == nil {
+		return nil
+	}
+	maxRes := map[string]*resources.Resource{qt.queuePath: qt.resourceUsage}
+	for _, cqt := range qt.childQueueTrackers {
+		childUsage := cqt.getUsedResources()
+		maps.Copy(maxRes, childUsage)
+	}
+	return maxRes
+}
+
+// isQueuePathTrackedCompletely Traverse queue path upto the end queue through its linkage
 // to confirm entire queuePath has been tracked completely or not
 // Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
-func (qt *QueueTracker) IsQueuePathTrackedCompletely(hierarchy []string) bool {
+func (qt *QueueTracker) isQueuePathTrackedCompletely(hierarchy []string) bool {
 	// depth first: all the way to the leaf, ignore if not exists
 	// more than 1 in the slice means we need to recurse down
 	if len(hierarchy) > 1 {
 		childName := hierarchy[1]
 		if qt.childQueueTrackers[childName] != nil {
-			return qt.childQueueTrackers[childName].IsQueuePathTrackedCompletely(hierarchy[1:])
+			return qt.childQueueTrackers[childName].isQueuePathTrackedCompletely(hierarchy[1:])
 		}
 	} else if len(hierarchy) == 1 {
 		// reach end of hierarchy
@@ -275,18 +321,18 @@ func (qt *QueueTracker) IsQueuePathTrackedCompletely(hierarchy []string) bool {
 	return false
 }
 
-// IsUnlinkRequired Traverse queue path upto the leaf queue and decide whether
+// isUnlinkRequired Traverse queue path upto the leaf queue and decide whether
 // linkage needs to be removed or not based on the running applications.
 // If there are any running applications in end leaf queue, we should remove the linkage between
-// the leaf and its parent queue using UnlinkQT method. Otherwise, we should leave as it is.
+// the leaf and its parent queue using unlink method. Otherwise, we should leave as it is.
 // Note: Lock free call. The RLock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
-func (qt *QueueTracker) IsUnlinkRequired(hierarchy []string) bool {
+func (qt *QueueTracker) isUnlinkRequired(hierarchy []string) bool {
 	// depth first: all the way to the leaf, ignore if not exists
 	// more than 1 in the slice means we need to recurse down
 	if len(hierarchy) > 1 {
 		childName := hierarchy[1]
 		if qt.childQueueTrackers[childName] != nil {
-			return qt.childQueueTrackers[childName].IsUnlinkRequired(hierarchy[1:])
+			return qt.childQueueTrackers[childName].isUnlinkRequired(hierarchy[1:])
 		}
 	} else if len(hierarchy) == 1 {
 		// reach end of hierarchy
@@ -302,10 +348,10 @@ func (qt *QueueTracker) IsUnlinkRequired(hierarchy []string) bool {
 	return false
 }
 
-// UnlinkQT Traverse queue path upto the end queue. If end queue has any more child queue trackers,
+// unlink Traverse queue path upto the end queue. If end queue has any more child queue trackers,
 // then goes upto each child queue and removes the linkage with its immediate parent
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
-func (qt *QueueTracker) UnlinkQT(hierarchy []string) bool {
+func (qt *QueueTracker) unlink(hierarchy []string) bool {
 	log.Log(log.SchedUGM).Debug("Unlinking current queue tracker from its parent",
 		zap.String("current queue ", qt.queueName),
 		zap.String("queue path", qt.queuePath),
@@ -316,7 +362,7 @@ func (qt *QueueTracker) UnlinkQT(hierarchy []string) bool {
 	if len(hierarchy) > 1 {
 		childName := hierarchy[1]
 		if qt.childQueueTrackers[childName] != nil {
-			if qt.childQueueTrackers[childName].UnlinkQT(hierarchy[1:]) {
+			if qt.childQueueTrackers[childName].unlink(hierarchy[1:]) {
 				delete(qt.childQueueTrackers, childName)
 				// returning false, so that it comes out when end queue detach itself from its immediate parent.
 				// i.e., once leaf detached from root.parent for root.parent.leaf queue path.
@@ -327,7 +373,7 @@ func (qt *QueueTracker) UnlinkQT(hierarchy []string) bool {
 	} else if len(hierarchy) <= 1 {
 		// reach end of hierarchy, unlink all queues under this queue
 		for childName, childQT := range qt.childQueueTrackers {
-			if childQT.UnlinkQT([]string{childName}) {
+			if childQT.unlink([]string{childName}) {
 				delete(qt.childQueueTrackers, childName)
 			}
 		}

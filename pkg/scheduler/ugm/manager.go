@@ -188,7 +188,7 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 	}
 }
 
-func (m *Manager) GetUsersResources() []*UserTracker {
+func (m *Manager) GetUserTrackers() []*UserTracker {
 	m.RLock()
 	defer m.RUnlock()
 	var userTrackers []*UserTracker
@@ -205,7 +205,7 @@ func (m *Manager) GetUserTracker(user string) *UserTracker {
 	return m.userTrackers[user]
 }
 
-func (m *Manager) GetGroupsResources() []*GroupTracker {
+func (m *Manager) GetGroupTrackers() []*GroupTracker {
 	m.RLock()
 	defer m.RUnlock()
 	var groupTrackers []*GroupTracker
@@ -496,14 +496,14 @@ func (m *Manager) clearEarlierSetUserLimits(newUserLimits map[string]map[string]
 func (m *Manager) resetUserEarlierUsage(ut *UserTracker, queuePath string) {
 	// Is this user already tracked for the queue path?
 	hierarchy := strings.Split(queuePath, configs.DOT)
-	if ut.IsQueuePathTrackedCompletely(hierarchy) {
+	if ut.isQueuePathTrackedCompletely(hierarchy) {
 		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for user",
 			zap.String("user", ut.userName),
 			zap.Strings("queue path", hierarchy))
 		ut.clearLimits(queuePath, false)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
-		if ut.IsUnlinkRequired(hierarchy) {
-			ut.UnlinkQT(hierarchy)
+		if ut.isUnlinkRequired(hierarchy) {
+			ut.unlinkQT(hierarchy)
 		}
 		log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for user",
 			zap.String("user", ut.userName),
@@ -544,7 +544,7 @@ func (m *Manager) clearEarlierSetGroupLimits(newGroupLimits map[string]map[strin
 // eventually remove group tracker object itself from ugm if it can be removed.
 func (m *Manager) resetGroupEarlierUsage(gt *GroupTracker, queuePath string) {
 	hierarchy := strings.Split(queuePath, configs.DOT)
-	if gt.IsQueuePathTrackedCompletely(hierarchy) {
+	if gt.isQueuePathTrackedCompletely(hierarchy) {
 		log.Log(log.SchedUGM).Debug("Need to clear earlier set configs for group",
 			zap.String("group", gt.groupName),
 			zap.Strings("queue path", hierarchy))
@@ -555,8 +555,8 @@ func (m *Manager) resetGroupEarlierUsage(gt *GroupTracker, queuePath string) {
 		}
 		gt.clearLimits(queuePath)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
-		if gt.IsUnlinkRequired(hierarchy) {
-			gt.UnlinkQT(hierarchy)
+		if gt.isUnlinkRequired(hierarchy) {
+			gt.unlinkQT(hierarchy)
 		}
 		log.Log(log.SchedUGM).Debug("Cleared earlier set limit configs for group",
 			zap.String("group", gt.groupName),
@@ -710,24 +710,26 @@ func (m *Manager) ClearConfigLimits() {
 	m.groupLimits = make(map[string]map[string]*LimitConfig)
 }
 
-// GetUserResources only for tests
-func (m *Manager) GetUserResources(user security.UserGroup) *resources.Resource {
+// GetUserResources returns the root queue maxResources for the user
+// Should only be used in tests
+func (m *Manager) GetUserResources(user string) *resources.Resource {
 	m.RLock()
 	defer m.RUnlock()
-	ut := m.userTrackers[user.User]
-	if ut != nil && ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage != nil && len(ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
-		return ut.GetUserResourceUsageDAOInfo().Queues.ResourceUsage
+	ut := m.userTrackers[user]
+	if ut == nil {
+		return nil
 	}
-	return nil
+	return ut.queueTracker.resourceUsage.Clone()
 }
 
-// GetGroupResources only for tests
+// GetGroupResources returns the root queue maxResources
+// Should only be used in tests
 func (m *Manager) GetGroupResources(group string) *resources.Resource {
 	m.RLock()
 	defer m.RUnlock()
 	gt := m.groupTrackers[group]
-	if gt != nil && gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage != nil && len(gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage.Resources) > 0 {
-		return gt.GetGroupResourceUsageDAOInfo().Queues.ResourceUsage
+	if gt == nil {
+		return nil
 	}
-	return nil
+	return gt.queueTracker.resourceUsage.Clone()
 }

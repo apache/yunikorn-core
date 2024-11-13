@@ -69,8 +69,8 @@ func TestGTIncreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
 	groupTracker.increaseTrackedResource(path4, TestApp4, usage4, user.User)
-	actualResources := getGroupResource(groupTracker)
 
+	actualResources := groupTracker.queueTracker.getUsedResources()
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:40000000 vcore:40000]", actualResources["root.parent.child1"].String(), "wrong resource")
@@ -104,9 +104,9 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
 	groupTracker.increaseTrackedResource(path2, TestApp2, usage2, user.User)
-	actualResources := getGroupResource(groupTracker)
 
 	assert.Equal(t, 2, len(groupTracker.getTrackedApplications()))
+	actualResources := groupTracker.getUsedResources()
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources["root.parent.child1"].String(), "wrong resource")
@@ -126,8 +126,7 @@ func TestGTDecreaseTrackedResource(t *testing.T) {
 	removeQT = groupTracker.decreaseTrackedResource(path2, TestApp2, usage3, false)
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
 
-	actualResources1 := getGroupResource(groupTracker)
-
+	actualResources1 := groupTracker.getUsedResources()
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:60000000 vcore:60000]", actualResources1["root.parent.child1"].String(), "wrong resource")
@@ -281,10 +280,4 @@ func TestGTCanRunApp(t *testing.T) {
 	}), user.User)
 	assert.Assert(t, groupTracker.canRunApp(hierarchy1, TestApp1))
 	assert.Assert(t, !groupTracker.canRunApp(hierarchy1, TestApp2))
-}
-
-func getGroupResource(gt *GroupTracker) map[string]*resources.Resource {
-	resources := make(map[string]*resources.Resource)
-	usage := gt.GetGroupResourceUsageDAOInfo()
-	return internalGetResource(usage.Queues, resources)
 }

@@ -18,8 +18,6 @@
 
 package dao
 
-import "github.com/apache/yunikorn-core/pkg/common/resources"
-
 type UserResourceUsageDAOInfo struct {
 	UserName string                `json:"userName"` // no omitempty, user name should not be empty
 	Groups   map[string]string     `json:"groups,omitempty"`
@@ -34,9 +32,9 @@ type GroupResourceUsageDAOInfo struct {
 
 type ResourceUsageDAOInfo struct {
 	QueuePath           string                  `json:"queuePath"` // no omitempty, queue path should not be empty
-	ResourceUsage       *resources.Resource     `json:"resourceUsage,omitempty"`
+	ResourceUsage       map[string]int64        `json:"resourceUsage,omitempty"`
 	RunningApplications []string                `json:"runningApplications,omitempty"`
-	MaxResources        *resources.Resource     `json:"maxResources,omitempty"`
+	MaxResources        map[string]int64        `json:"maxResources,omitempty"`
 	MaxApplications     uint64                  `json:"maxApplications,omitempty"`
 	Children            []*ResourceUsageDAOInfo `json:"children,omitempty"`
 }

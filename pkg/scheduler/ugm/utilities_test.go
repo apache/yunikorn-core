@@ -22,20 +22,7 @@ import (
 	"testing"
 
 	"gotest.tools/v3/assert"
-
-	"github.com/apache/yunikorn-core/pkg/common/resources"
-	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
-
-func internalGetResource(usage *dao.ResourceUsageDAOInfo, resources map[string]*resources.Resource) map[string]*resources.Resource {
-	resources[usage.QueuePath] = usage.ResourceUsage
-	if len(usage.Children) > 0 {
-		for _, resourceUsage := range usage.Children {
-			internalGetResource(resourceUsage, resources)
-		}
-	}
-	return resources
-}
 
 func TestGetParentQueuePath(t *testing.T) {
 	assert.Equal(t, getParentPath(""), "")

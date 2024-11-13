@@ -30,7 +30,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
-	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -714,20 +713,24 @@ func assertLimits(t *testing.T, userGroup security.UserGroup, expected *resource
 
 func assertUserGroupResourceMaxLimits(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, expectedQueuesMaxLimits map[string]map[string]interface{}) {
 	manager := ugm.GetUserManager()
-	userResource := manager.GetUserResources(userGroup)
+	userResource := manager.GetUserResources(userGroup.User)
 	groupResource := manager.GetGroupResources(userGroup.Groups[0])
+	if expected == nil {
+		assert.Assert(t, userResource.IsEmpty(), "expected empty resource in user tracker")
+		assert.Assert(t, groupResource.IsEmpty(), "expected empty resource in group tracker")
+	} else {
+		assert.Assert(t, resources.Equals(userResource, expected), "user value '%s' not equal to expected '%s'", userResource.String(), expected.String())
+		assert.Assert(t, resources.Equals(groupResource, expected), "group value '%s' not equal to expected '%s'", groupResource.String(), expected.String())
+	}
 	ut := manager.GetUserTracker(userGroup.User)
 	if ut != nil {
-		maxResources := make(map[string]*resources.Resource)
-		usage := ut.GetUserResourceUsageDAOInfo()
-		getMaxResource(usage.Queues, maxResources)
+		maxResources := ut.GetMaxResources()
 		for q, qMaxLimits := range expectedQueuesMaxLimits {
 			if qRes, ok := maxResources[q]; ok {
 				assert.Equal(t, resources.Equals(qRes, qMaxLimits[maxresources].(*resources.Resource)), true)
 			}
 		}
-		maxApplications := make(map[string]uint64)
-		getMaxApplications(usage.Queues, maxApplications)
+		maxApplications := ut.GetMaxApplications()
 		for q, qMaxLimits := range expectedQueuesMaxLimits {
 			if qApps, ok := maxApplications[q]; ok {
 				assert.Equal(t, qApps, qMaxLimits[maxapplications].(uint64), "queue path is "+q+" actual: "+strconv.Itoa(int(qApps))+", expected: "+strconv.Itoa(int(qMaxLimits[maxapplications].(uint64))))
@@ -735,44 +738,19 @@ func assertUserGroupResourceMaxLimits(t *testing.T, userGroup security.UserGroup
 		}
 	}
 
-	gt := manager.GetUserTracker(userGroup.User)
+	gt := manager.GetGroupTracker(userGroup.Groups[0])
 	if gt != nil {
-		gMaxResources := make(map[string]*resources.Resource)
-		gUsage := gt.GetUserResourceUsageDAOInfo()
-		getMaxResource(gUsage.Queues, gMaxResources)
+		gMaxResources := gt.GetMaxResources()
 		for q, qMaxLimits := range expectedQueuesMaxLimits {
 			if qRes, ok := gMaxResources[q]; ok {
 				assert.Equal(t, resources.Equals(qRes, qMaxLimits[maxresources].(*resources.Resource)), true)
 			}
 		}
-		gMaxApps := make(map[string]uint64)
-		getMaxApplications(gUsage.Queues, gMaxApps)
+		gMaxApps := gt.GetMaxApplications()
 		for q, qMaxLimits := range expectedQueuesMaxLimits {
 			if qApps, ok := gMaxApps[q]; ok {
 				assert.Equal(t, qApps, qMaxLimits[maxapplications].(uint64))
 			}
 		}
 	}
-	assert.Equal(t, resources.Equals(userResource, expected), true)
-	assert.Equal(t, resources.Equals(groupResource, expected), true)
-}
-
-func getMaxResource(usage *dao.ResourceUsageDAOInfo, maxResources map[string]*resources.Resource) map[string]*resources.Resource {
-	maxResources[usage.QueuePath] = usage.MaxResources
-	if len(usage.Children) > 0 {
-		for _, resourceUsage := range usage.Children {
-			getMaxResource(resourceUsage, maxResources)
-		}
-	}
-	return maxResources
-}
-
-func getMaxApplications(usage *dao.ResourceUsageDAOInfo, maxApplications map[string]uint64) map[string]uint64 {
-	maxApplications[usage.QueuePath] = usage.MaxApplications
-	if len(usage.Children) > 0 {
-		for _, resourceUsage := range usage.Children {
-			getMaxApplications(resourceUsage, maxApplications)
-		}
-	}
-	return maxApplications
 }

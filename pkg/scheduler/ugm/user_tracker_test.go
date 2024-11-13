@@ -99,7 +99,7 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	userTracker.increaseTrackedResource(path4, TestApp4, usage4)
 	userTracker.setGroupForApp(TestApp4, groupTracker)
 
-	actualResources := getUserResource(userTracker)
+	actualResources := userTracker.getUsedResources()
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:80000000 vcore:80000]", actualResources["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:40000000 vcore:40000]", actualResources["root.parent.child1"].String(), "wrong resource")
@@ -134,8 +134,8 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	}
 	userTracker.increaseTrackedResource(path2, TestApp2, usage2)
 	userTracker.setGroupForApp(TestApp2, groupTracker)
-	actualResources := getUserResource(userTracker)
 
+	actualResources := userTracker.getUsedResources()
 	assert.Equal(t, 2, len(userTracker.getTrackedApplications()))
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:90000000 vcore:90000]", actualResources["root.parent"].String(), "wrong resource")
@@ -153,9 +153,9 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
 
 	removeQT = userTracker.decreaseTrackedResource(path2, TestApp2, usage3, false)
-	actualResources1 := getUserResource(userTracker)
-
 	assert.Equal(t, removeQT, false, "wrong remove queue tracker value")
+
+	actualResources1 := userTracker.getUsedResources()
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:70000000 vcore:70000]", actualResources1["root.parent"].String(), "wrong resource")
 	assert.Equal(t, "map[mem:60000000 vcore:60000]", actualResources1["root.parent.child1"].String(), "wrong resource")
@@ -288,10 +288,4 @@ func TestUTCanRunApp(t *testing.T) {
 	}))
 	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp1))
 	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp2))
-}
-
-func getUserResource(ut *UserTracker) map[string]*resources.Resource {
-	resources := make(map[string]*resources.Resource)
-	usage := ut.GetUserResourceUsageDAOInfo()
-	return internalGetResource(usage.Queues, resources)
 }

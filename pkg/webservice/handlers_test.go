@@ -1285,16 +1285,18 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 func TestGetClusterInfo(t *testing.T) {
 	schedulerContext.Store(&scheduler.ClusterContext{})
 	resp := &MockResponseWriter{}
-	getClusterInfo(resp, nil)
+	req, err := http.NewRequest("GET", "/ws/v1/clusters", strings.NewReader(""))
+	assert.NilError(t, err, "error while creating http request")
+	getClusterInfo(resp, req)
 	var data []*dao.ClusterDAOInfo
-	err := json.Unmarshal(resp.outputBytes, &data)
+	err = json.Unmarshal(resp.outputBytes, &data)
 	assert.NilError(t, err)
 	assert.Equal(t, 0, len(data))
 
 	setup(t, configTwoLevelQueues, 2)
 
 	resp = &MockResponseWriter{}
-	getClusterInfo(resp, nil)
+	getClusterInfo(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &data)
 	assert.NilError(t, err)
 	assert.Equal(t, 2, len(data))
@@ -1412,11 +1414,11 @@ func TestGetPartitionNode(t *testing.T) {
 	_, allocCreated, err := partition.UpdateAllocation(alloc1)
 	assert.NilError(t, err, "add alloc-1 should not have failed")
 	assert.Check(t, allocCreated)
-	falloc1 := newForeignAlloc("foreign-1", "", node1ID, resAlloc1, siCommon.AllocTypeDefault, 0)
+	falloc1 := newForeignAlloc("foreign-1", node1ID, resAlloc1, siCommon.AllocTypeDefault, 0)
 	_, allocCreated, err = partition.UpdateAllocation(falloc1)
 	assert.NilError(t, err, "add falloc-1 should not have failed")
 	assert.Check(t, allocCreated)
-	falloc2 := newForeignAlloc("foreign-2", "", node1ID, resAlloc2, siCommon.AllocTypeStatic, 123)
+	falloc2 := newForeignAlloc("foreign-2", node1ID, resAlloc2, siCommon.AllocTypeStatic, 123)
 	_, allocCreated, err = partition.UpdateAllocation(falloc2)
 	assert.NilError(t, err, "add falloc-2 should not have failed")
 	assert.Check(t, allocCreated)
@@ -1746,6 +1748,7 @@ func checkGetQueueAppByState(t *testing.T, partition, queue, state, status strin
 		url = fmt.Sprintf("/ws/v1/partition/%s/queue/%s/applications/%s?status=%s", partition, queue, state, status)
 	}
 	req, err := http.NewRequest("GET", url, strings.NewReader(""))
+	assert.NilError(t, err, "unexpected error creating request")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partition},
 		httprouter.Param{Key: "queue", Value: queue},
@@ -1780,6 +1783,7 @@ func checkGetQueueAppByIllegalStateOrStatus(t *testing.T, partition, queue, stat
 		url = fmt.Sprintf("/ws/v1/partition/%s/queue/%s/applications/%s?status=%s", partition, queue, state, status)
 	}
 	req, err := http.NewRequest("GET", url, strings.NewReader(""))
+	assert.NilError(t, err, "unexpected error creating request")
 	req = req.WithContext(context.WithValue(req.Context(), httprouter.ParamsKey, httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partition},
 		httprouter.Param{Key: "queue", Value: queue},
@@ -2115,9 +2119,9 @@ func TestFullStateDumpPath(t *testing.T) {
 	prepareSchedulerContext(t)
 
 	partitionContext := schedulerContext.Load().GetPartitionMapClone()
-	context := partitionContext[normalizedPartitionName]
+	ctx := partitionContext[normalizedPartitionName]
 	app := newApplication("appID", normalizedPartitionName, "root.default", rmID, security.UserGroup{})
-	err := context.AddApplication(app)
+	err := ctx.AddApplication(app)
 	assert.NilError(t, err, "failed to add Application to partition")
 
 	imHistory = history.NewInternalMetricsHistory(5)
@@ -3053,7 +3057,7 @@ func newAlloc(allocationKey string, appID string, nodeID string, resAlloc *resou
 	})
 }
 
-func newForeignAlloc(allocationKey string, appID string, nodeID string, resAlloc *resources.Resource, fType string, priority int32) *objects.Allocation {
+func newForeignAlloc(allocationKey string, nodeID string, resAlloc *resources.Resource, fType string, priority int32) *objects.Allocation {
 	return objects.NewAllocationFromSI(&si.Allocation{
 		AllocationKey:    allocationKey,
 		NodeID:           nodeID,

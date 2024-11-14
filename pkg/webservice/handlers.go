@@ -127,7 +127,7 @@ func redirectDebug(w http.ResponseWriter, r *http.Request) {
 }
 
 func getStackInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	var stack = func() []byte {
 		buf := make([]byte, 1024)
 		for {
@@ -145,7 +145,7 @@ func getStackInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func getClusterInfo(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 
 	lists := schedulerContext.Load().GetPartitionMapClone()
 	clustersInfo := getClusterDAO(lists)
@@ -167,7 +167,7 @@ func validateQueue(queuePath string) error {
 }
 
 func validateConf(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	requestBytes, err := io.ReadAll(r.Body)
 	if err == nil {
 		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
@@ -184,11 +184,14 @@ func validateConf(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func writeHeaders(w http.ResponseWriter) {
+func writeHeaders(w http.ResponseWriter, method string) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	w.Header().Set("Access-Control-Allow-Methods", "GET,POST,HEAD,OPTIONS")
+	methods := "GET, OPTIONS"
+	if method == http.MethodPost {
+		methods = "OPTIONS, POST"
+	}
+	w.Header().Set("Access-Control-Allow-Methods", methods)
 	w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With,Content-Type,Accept,Origin")
 }
 
@@ -233,7 +236,7 @@ func getClusterUtilJSON(partition *scheduler.PartitionContext) []*dao.ClusterUti
 			}
 			utils = append(utils, utilization)
 		}
-	} else if !getResource {
+	} else {
 		utilization := &dao.ClusterUtilDAOInfo{
 			ResourceType: "N/A",
 			Total:        int64(-1),
@@ -446,7 +449,7 @@ func getNodesDAO(entries []*objects.Node) []*dao.NodeDAOInfo {
 // Only check the default partition
 // Deprecated - To be removed in next major release. Replaced with getNodesUtilisations
 func getNodeUtilisation(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	partitionContext := schedulerContext.Load().GetPartitionWithoutClusterID(configs.DefaultPartition)
 	if partitionContext == nil {
 		buildJSONErrorResponse(w, PartitionDoesNotExists, http.StatusInternalServerError)
@@ -510,7 +513,7 @@ func getNodesUtilJSON(partition *scheduler.PartitionContext, name string) *dao.N
 }
 
 func getNodeUtilisations(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	var result []*dao.PartitionNodesUtilDAOInfo
 	for _, part := range schedulerContext.Load().GetPartitionMapClone() {
 		result = append(result, getPartitionNodesUtilJSON(part))
@@ -583,7 +586,7 @@ func getPartitionNodesUtilJSON(partition *scheduler.PartitionContext) *dao.Parti
 }
 
 func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 
 	// There is nothing to return but we did not really encounter a problem
 	if imHistory == nil {
@@ -600,7 +603,7 @@ func getApplicationHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func getContainerHistory(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 
 	// There is nothing to return but we did not really encounter a problem
 	if imHistory == nil {
@@ -617,7 +620,7 @@ func getContainerHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 func getClusterConfig(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 
 	var marshalledConf []byte
 	var err error
@@ -653,7 +656,7 @@ func getClusterConfigDAO() *dao.ConfigDAOInfo {
 }
 
 func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 
 	// Fetch last healthCheck result
 	result := schedulerContext.Load().GetLastHealthCheckResult()
@@ -675,8 +678,8 @@ func checkHealthStatus(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func getPartitions(w http.ResponseWriter, _ *http.Request) {
-	writeHeaders(w)
+func getPartitions(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w, r.Method)
 
 	lists := schedulerContext.Load().GetPartitionMapClone()
 	partitionsInfo := getPartitionInfoDAO(lists)
@@ -686,7 +689,7 @@ func getPartitions(w http.ResponseWriter, _ *http.Request) {
 }
 
 func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -707,7 +710,7 @@ func getPartitionQueues(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -742,7 +745,7 @@ func getPartitionQueue(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -761,7 +764,7 @@ func getPartitionNodes(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionNode(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -786,7 +789,7 @@ func getPartitionNode(w http.ResponseWriter, r *http.Request) {
 }
 
 func getQueueApplications(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -827,7 +830,7 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -876,7 +879,7 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 }
 
 func getApplication(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -924,7 +927,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 }
 
 func getPartitionRules(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -943,7 +946,7 @@ func getPartitionRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func getQueueApplicationsByState(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -1180,8 +1183,8 @@ func getMetrics(w http.ResponseWriter, r *http.Request) {
 	promhttp.Handler().ServeHTTP(w, r)
 }
 
-func getUsersResourceUsage(w http.ResponseWriter, _ *http.Request) {
-	writeHeaders(w)
+func getUsersResourceUsage(w http.ResponseWriter, r *http.Request) {
+	writeHeaders(w, r.Method)
 	userManager := ugm.GetUserManager()
 	trackers := userManager.GetUserTrackers()
 	result := make([]*dao.UserResourceUsageDAOInfo, len(trackers))
@@ -1194,7 +1197,7 @@ func getUsersResourceUsage(w http.ResponseWriter, _ *http.Request) {
 }
 
 func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -1222,7 +1225,7 @@ func getUserResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	userManager := ugm.GetUserManager()
 	trackers := userManager.GetGroupTrackers()
 	result := make([]*dao.GroupResourceUsageDAOInfo, len(trackers))
@@ -1235,7 +1238,7 @@ func getGroupsResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	vars := httprouter.ParamsFromContext(r.Context())
 	if vars == nil {
 		buildJSONErrorResponse(w, MissingParamsName, http.StatusBadRequest)
@@ -1263,7 +1266,7 @@ func getGroupResourceUsage(w http.ResponseWriter, r *http.Request) {
 }
 
 func getEvents(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	eventSystem := events.GetEventSystem()
 	if !eventSystem.IsEventTrackingEnabled() {
 		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusInternalServerError)
@@ -1311,7 +1314,7 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func getStream(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	eventSystem := events.GetEventSystem()
 	if !eventSystem.IsEventTrackingEnabled() {
 		buildJSONErrorResponse(w, "Event tracking is disabled", http.StatusInternalServerError)

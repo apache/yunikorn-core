@@ -116,16 +116,37 @@ func Test_HeaderChecks(t *testing.T) {
 		}
 	}(s)
 	client := http.DefaultClient
-	// OPTIONS requests are handled by default via httpdrouter, not defined in the routes
-	req, err := http.NewRequest("OPTIONS", base+"/ws/v1/clusters", nil)
-	assert.NilError(t, err, "unexpected error creating request")
-	var resp *http.Response
-	resp, err = client.Do(req)
-	assert.NilError(t, err, "unexpected error executing request")
-	assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")
-	var body []byte
-	body, err = io.ReadAll(resp.Body)
-	_ = resp.Body.Close()
-	assert.NilError(t, err, "unexpected error reading body")
-	assert.Assert(t, body != nil, "expected body with status text")
+	tests := []struct {
+		name     string
+		reqURL   string
+		method   string
+		expected string
+	}{
+		{"get options", "/ws/v1/clusters", http.MethodOptions, "GET, OPTIONS"},
+		{"get", "/ws/v1/clusters", http.MethodGet, "GET, OPTIONS"},
+		{"post options", "/ws/v1/validate-conf", http.MethodOptions, "OPTIONS, POST"},
+		{"post", "/ws/v1/validate-conf", http.MethodPost, "OPTIONS, POST"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, err := http.NewRequest(tt.method, base+tt.reqURL, nil)
+			assert.NilError(t, err, "unexpected error creating request")
+			var resp *http.Response
+			resp, err = client.Do(req)
+			assert.NilError(t, err, "unexpected error executing request")
+			assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")
+			switch tt.method {
+			case http.MethodGet, http.MethodPost:
+				assert.Equal(t, resp.Header.Get("Access-Control-Allow-Methods"), tt.expected, "wrong methods returned")
+			case http.MethodOptions:
+				// OPTIONS requests are handled by default via httpdrouter, not defined in the routes
+				assert.Equal(t, resp.Header.Get("Allow"), tt.expected, "expected only get and options to be returned")
+			}
+			var body []byte
+			body, err = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			assert.NilError(t, err, "unexpected error reading body")
+			assert.Assert(t, body != nil, "expected body with status text")
+		})
+	}
 }

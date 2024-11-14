@@ -187,9 +187,9 @@ func validateConf(w http.ResponseWriter, r *http.Request) {
 func writeHeaders(w http.ResponseWriter, method string) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	methods := "GET,OPTIONS"
+	methods := "GET, OPTIONS"
 	if method == http.MethodPost {
-		methods = "POST,OPTIONS"
+		methods = "OPTIONS, POST"
 	}
 	w.Header().Set("Access-Control-Allow-Methods", methods)
 	w.Header().Set("Access-Control-Allow-Headers", "X-Requested-With,Content-Type,Accept,Origin")

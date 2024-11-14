@@ -30,6 +30,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 )
 
+const base = "http://localhost:9080"
+
 func Test_RedirectDebugHandler(t *testing.T) {
 	defer ResetIMHistory()
 	s := NewWebApp(&scheduler.ClusterContext{}, history.NewInternalMetricsHistory(5))
@@ -40,7 +42,6 @@ func Test_RedirectDebugHandler(t *testing.T) {
 			t.Fatal("failed to stop webapp")
 		}
 	}(s)
-	base := "http://localhost:9080"
 	tests := []struct {
 		name     string
 		reqURL   string
@@ -76,7 +77,6 @@ func Test_RouterHandling(t *testing.T) {
 			t.Fatal("failed to stop webapp")
 		}
 	}(s)
-	base := "http://localhost:9080"
 	client := &http.Client{}
 	// unsupported POST
 	resp, err := client.Post(base+"/ws/v1/clusters", "application/json; charset=UTF-8", nil)
@@ -104,4 +104,28 @@ func Test_RouterHandling(t *testing.T) {
 	assert.NilError(t, err, "unexpected error returned")
 	_ = resp.Body.Close()
 	assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")
+}
+
+func Test_HeaderChecks(t *testing.T) {
+	s := NewWebApp(&scheduler.ClusterContext{}, nil)
+	s.StartWebApp()
+	defer func(s *WebService) {
+		err := s.StopWebApp()
+		if err != nil {
+			t.Fatal("failed to stop webapp")
+		}
+	}(s)
+	client := http.DefaultClient
+	// OPTIONS requests are handled by default via httpdrouter, not defined in the routes
+	req, err := http.NewRequest("OPTIONS", base+"/ws/v1/clusters", nil)
+	assert.NilError(t, err, "unexpected error creating request")
+	var resp *http.Response
+	resp, err = client.Do(req)
+	assert.NilError(t, err, "unexpected error executing request")
+	assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")
+	var body []byte
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	assert.NilError(t, err, "unexpected error reading body")
+	assert.Assert(t, body != nil, "expected body with status text")
 }

@@ -54,7 +54,7 @@ type AggregatedStateInfo struct {
 }
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {
-	writeHeaders(w)
+	writeHeaders(w, r.Method)
 	if err := doStateDump(w); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}

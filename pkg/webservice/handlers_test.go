@@ -116,71 +116,62 @@ partitions:
 
 const configMultiPartitions = `
 partitions: 
-  - 
-    name: gpu
+  - name: gpu
+    preemption:
+      enabled: false
     queues: 
-      - 
-        name: root
-  - 
-    name: default
+    - name: root
+  - name: default
     nodesortpolicy:
         type: fair
     queues: 
-      - 
-        name: root
-        queues: 
-          - 
-            name: default
-            submitacl: "*"
+    - name: root
+      queues: 
+      - name: default
+        submitacl: "*"
 `
 
 const configTwoLevelQueues = `
 partitions: 
-  - 
-    name: gpu
+  - name: gpu
     queues: 
-      - 
-        name: root
-  - 
-    name: default
+    - name: root
+  - name: default
     nodesortpolicy: 
       type: binpacking
     queues: 
-      - 
-        name: root
+    - name: root
+      properties:
+        application.sort.policy: fifo
+      childtemplate:
+        maxapplications: 10
         properties:
           application.sort.policy: fifo
-        childtemplate:
-          maxapplications: 10
+        resources:
+          guaranteed:
+            memory: 400000
+          max:
+            memory: 600000
+      queues: 
+      - name: a
+        queues: 
+        - name: a1
           properties:
             application.sort.policy: fifo
-          resources:
-            guaranteed:
-              memory: 400000
-            max:
-              memory: 600000
-        queues: 
-          - 
-            name: a
-            queues: 
-              - 
-                name: a1
-                properties:
-                  application.sort.policy: fifo
-                resources: 
-                  guaranteed: 
-                    memory: 500000
-                    vcore: 50000
-                  max: 
-                    memory: 800000
-                    vcore: 80000
-            resources: 
-              guaranteed: 
-                memory: 500000
-                vcore: 50000
-              max: 
-                memory: 800000
-                vcore: 80000
+          resources: 
+            guaranteed: 
+              memory: 500000
+              vcore: 50000
+            max: 
+              memory: 800000
+              vcore: 80000
+        resources: 
+          guaranteed: 
+            memory: 500000
+            vcore: 50000
+          max: 
+            memory: 800000
+            vcore: 80000
 `
 
 const userGroupLimitsConfig = `
@@ -1092,6 +1083,7 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	assert.DeepEqual(t, cs["default"].Capacity.UsedCapacity, map[string]int64{"memory": 300, "vcore": 700})
 	assert.DeepEqual(t, cs["default"].Capacity.Utilization, map[string]int64{"memory": 30, "vcore": 70})
 	assert.Equal(t, cs["default"].State, "Active")
+	assert.Assert(t, cs["default"].PreemptionEnabled, "preemption should be enabled on default")
 
 	assert.Assert(t, cs["gpu"] != nil)
 	assert.Equal(t, cs["gpu"].ClusterID, "rm-123")
@@ -1100,6 +1092,7 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
 	assert.Equal(t, cs["gpu"].Applications["total"], 0)
+	assert.Assert(t, !cs["gpu"].PreemptionEnabled, "preemption should be disabled on gpu")
 }
 
 func TestMetricsNotEmpty(t *testing.T) {

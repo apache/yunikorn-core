@@ -15,6 +15,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package dao
 
 type TemplateInfo struct {
@@ -27,7 +28,7 @@ type TemplateInfo struct {
 type PartitionQueueDAOInfo struct {
 	QueueName              string                  `json:"queuename"` // no omitempty, queue name should not be empty
 	Status                 string                  `json:"status,omitempty"`
-	Partition              string                  `json:"partition"` // no omitempty, queue name should not be empty
+	Partition              string                  `json:"partition"` // no omitempty, partition name should not be empty
 	PendingResource        map[string]int64        `json:"pendingResource,omitempty"`
 	MaxResource            map[string]int64        `json:"maxResource,omitempty"`
 	GuaranteedResource     map[string]int64        `json:"guaranteedResource,omitempty"`
@@ -46,4 +47,11 @@ type PartitionQueueDAOInfo struct {
 	RunningApps            uint64                  `json:"runningApps,omitempty"`
 	CurrentPriority        int32                   `json:"currentPriority"` // no omitempty, as the current priority value may be 0, which is a valid priority level
 	AllocatingAcceptedApps []string                `json:"allocatingAcceptedApps,omitempty"`
+	SortingPolicy          string                  `json:"sortingPolicy,omitempty"`
+	PrioritySorting        bool                    `json:"prioritySorting"`   // no omitempty, false shows priority sorting status better
+	PreemptionEnabled      bool                    `json:"preemptionEnabled"` // no omitempty, false shows preemption status better
+	IsPreemptionFence      bool                    `json:"isPreemptionFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
+	PreemptionDelay        string                  `json:"preemptionDelay,omitempty"`
+	IsPriorityFence        bool                    `json:"isPriorityFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
+	PriorityOffset         int32                   `json:"priorityOffset,omitempty"`
 }

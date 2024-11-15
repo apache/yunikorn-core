@@ -807,7 +807,7 @@ func (pc *PartitionContext) tryAllocate() *objects.AllocationResult {
 		return nil
 	}
 	// try allocating from the root down
-	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.isPreemptionEnabled())
+	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.IsPreemptionEnabled())
 	if result != nil {
 		return pc.allocate(result)
 	}
@@ -1598,7 +1598,7 @@ func (pc *PartitionContext) GetNodeSortingResourceWeights() map[string]float64 {
 	return policy.ResourceWeights()
 }
 
-func (pc *PartitionContext) isPreemptionEnabled() bool {
+func (pc *PartitionContext) IsPreemptionEnabled() bool {
 	pc.RLock()
 	defer pc.RUnlock()
 	return pc.preemptionEnabled

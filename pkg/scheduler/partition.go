@@ -869,21 +869,23 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 	// find the node make sure it still exists
 	// if the node was passed in use that ID instead of the one from the allocation
 	// the node ID is set when a reservation is allocated on a non-reserved node
-	var nodeID string
 	alloc := result.Request
+	targetNodeID := result.NodeID
+	var srcNodeID string
 	if result.ReservedNodeID == "" {
-		nodeID = result.NodeID
+		srcNodeID = result.NodeID
 	} else {
-		nodeID = result.ReservedNodeID
+		srcNodeID = result.ReservedNodeID
 		log.Log(log.SchedPartition).Debug("Reservation allocated on different node",
 			zap.String("current node", result.NodeID),
-			zap.String("reserved node", nodeID),
+			zap.String("reserved node", srcNodeID),
 			zap.String("appID", appID))
 	}
-	node := pc.GetNode(nodeID)
-	if node == nil {
-		log.Log(log.SchedPartition).Info("Node was removed while allocating",
-			zap.String("nodeID", nodeID),
+
+	targetNode := pc.GetNode(targetNodeID)
+	if targetNode == nil {
+		log.Log(log.SchedPartition).Info("Target node was removed while allocating",
+			zap.String("nodeID", targetNodeID),
 			zap.String("appID", appID))
 
 		// attempt to deallocate
@@ -891,7 +893,7 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 			allocKey := alloc.GetAllocationKey()
 			if _, err := app.DeallocateAsk(allocKey); err != nil {
 				log.Log(log.SchedPartition).Warn("Failed to unwind allocation",
-					zap.String("nodeID", nodeID),
+					zap.String("nodeID", targetNodeID),
 					zap.String("appID", appID),
 					zap.String("allocationKey", allocKey),
 					zap.Error(err))
@@ -899,14 +901,22 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 		}
 		return nil
 	}
+
 	// reservation
 	if result.ResultType == objects.Reserved {
-		pc.reserve(app, node, result.Request)
+		pc.reserve(app, targetNode, result.Request)
 		return nil
 	}
 	// unreserve
 	if result.ResultType == objects.Unreserved || result.ResultType == objects.AllocatedReserved {
-		pc.unReserve(app, node, result.Request)
+		srcNode := pc.GetNode(srcNodeID)
+		if srcNode != nil {
+			pc.unReserve(app, srcNode, result.Request)
+		} else {
+			log.Log(log.SchedPartition).Info("Source node was removed while allocating",
+				zap.String("nodeID", srcNodeID),
+				zap.String("appID", appID))
+		}
 		if result.ResultType == objects.Unreserved {
 			return nil
 		}
@@ -915,8 +925,8 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 	}
 
 	alloc.SetBindTime(time.Now())
-	alloc.SetNodeID(nodeID)
-	alloc.SetInstanceType(node.GetInstanceType())
+	alloc.SetNodeID(targetNodeID)
+	alloc.SetInstanceType(targetNode.GetInstanceType())
 
 	// track the number of allocations
 	pc.updateAllocationCount(1)
@@ -929,7 +939,7 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 		zap.String("allocationKey", result.Request.GetAllocationKey()),
 		zap.Stringer("allocatedResource", result.Request.GetAllocatedResource()),
 		zap.Bool("placeholder", result.Request.IsPlaceholder()),
-		zap.String("targetNode", alloc.GetNodeID()))
+		zap.String("targetNode", targetNodeID))
 	// pass the allocation result back to the RM via the cluster context
 	return result
 }

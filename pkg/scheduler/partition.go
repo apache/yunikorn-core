@@ -871,17 +871,6 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 	// the node ID is set when a reservation is allocated on a non-reserved node
 	alloc := result.Request
 	targetNodeID := result.NodeID
-	var reservedNodeID string
-	if result.ReservedNodeID == "" {
-		reservedNodeID = result.NodeID
-	} else {
-		reservedNodeID = result.ReservedNodeID
-		log.Log(log.SchedPartition).Debug("Reservation allocated on different node",
-			zap.String("current node", result.NodeID),
-			zap.String("reserved node", reservedNodeID),
-			zap.String("appID", appID))
-	}
-
 	targetNode := pc.GetNode(targetNodeID)
 	if targetNode == nil {
 		log.Log(log.SchedPartition).Info("Target node was removed while allocating",
@@ -907,8 +896,20 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 		pc.reserve(app, targetNode, result.Request)
 		return nil
 	}
+
 	// unreserve
 	if result.ResultType == objects.Unreserved || result.ResultType == objects.AllocatedReserved {
+		var reservedNodeID string
+		if result.ReservedNodeID == "" {
+			reservedNodeID = result.NodeID
+		} else {
+			reservedNodeID = result.ReservedNodeID
+			log.Log(log.SchedPartition).Debug("Reservation allocated on different node",
+				zap.String("current node", result.NodeID),
+				zap.String("reserved node", reservedNodeID),
+				zap.String("appID", appID))
+		}
+
 		reservedNode := pc.GetNode(reservedNodeID)
 		if reservedNode != nil {
 			pc.unReserve(app, reservedNode, result.Request)

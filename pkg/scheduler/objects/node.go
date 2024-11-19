@@ -323,6 +323,12 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 		sn.allocatedResource.Prune()
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.GetAllocatedResource())
+		log.Log(log.SchedNode).Info("node allocation removed",
+			zap.String("appID", alloc.GetApplicationID()),
+			zap.String("allocationKey", alloc.GetAllocationKey()),
+			zap.Stringer("allocatedResource", alloc.GetAllocatedResource()),
+			zap.Bool("placeholder", alloc.IsPlaceholder()),
+			zap.String("targetNode", sn.NodeID))
 		return alloc
 	}
 
@@ -365,6 +371,12 @@ func (sn *Node) addAllocationInternal(alloc *Allocation, force bool) bool {
 		sn.availableResource.SubFrom(res)
 		sn.availableResource.Prune()
 		sn.nodeEvents.SendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)
+		log.Log(log.SchedNode).Info("node allocation processed",
+			zap.String("appID", alloc.GetApplicationID()),
+			zap.String("allocationKey", alloc.GetAllocationKey()),
+			zap.Stringer("allocatedResource", alloc.GetAllocatedResource()),
+			zap.Bool("placeholder", alloc.IsPlaceholder()),
+			zap.String("targetNode", sn.NodeID))
 		result = true
 		return result
 	}
@@ -389,6 +401,12 @@ func (sn *Node) ReplaceAllocation(allocationKey string, replace *Allocation, del
 	sn.allocatedResource.AddTo(delta)
 	sn.availableResource.SubFrom(delta)
 	sn.availableResource.Prune()
+	log.Log(log.SchedNode).Info("node allocation replaced",
+		zap.String("appID", replace.GetApplicationID()),
+		zap.String("allocationKey", replace.GetAllocationKey()),
+		zap.Stringer("allocatedResource", replace.GetAllocatedResource()),
+		zap.String("placeholderKey", allocationKey),
+		zap.String("targetNode", sn.NodeID))
 	if !before.FitIn(sn.allocatedResource) {
 		log.Log(log.SchedNode).Warn("unexpected increase in node usage after placeholder replacement",
 			zap.String("placeholder allocationKey", allocationKey),

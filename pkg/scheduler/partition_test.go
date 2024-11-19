@@ -2327,6 +2327,9 @@ func TestAllocReserveNewNode(t *testing.T) {
 	assert.Equal(t, 0, len(node1.GetReservationKeys()), "old node should have no more reservations")
 	assert.Equal(t, 0, len(app.GetReservations()), "ask should have been reserved")
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 16000}))
+	alloc2 := node2.GetAllocation("alloc-2")
+	assert.Assert(t, alloc2 != nil, "alloc was nil")
+	assert.Equal(t, nodeID2, alloc2.GetNodeID(), "wrong node id")
 }
 
 func TestTryAllocateReserve(t *testing.T) {

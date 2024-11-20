@@ -1406,9 +1406,6 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 }
 
 func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allocation) bool {
-	log.Log(log.SchedApplication).Info("Triggering preemption process for daemon set ask",
-		zap.String("ds allocation key", ask.GetAllocationKey()))
-
 	// try preemption and see if we can free up resource
 	preemptor := NewRequiredNodePreemptor(reserve.node, ask)
 	preemptor.filterAllocations()
@@ -1431,9 +1428,8 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 			"preempting allocations to free up resources to run daemon set ask: "+ask.GetAllocationKey())
 		return true
 	}
-	log.Log(log.SchedApplication).Warn("Problem in finding the victims for preempting resources to meet required ask requirements",
-		zap.String("ds allocation key", ask.GetAllocationKey()),
-		zap.String("node id", reserve.nodeID))
+	ask.LogAllocationFailure(common.NoVictimForRequiredNode, true)
+	ask.SendRequiredNodePreemptionFailedEvent(reserve.node.NodeID)
 	return false
 }
 

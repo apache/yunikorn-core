@@ -457,6 +457,11 @@ func (a *Allocation) SendPredicatesFailedEvent(predicateErrors map[string]int) {
 	a.askEvents.SendPredicatesFailed(a.allocationKey, a.applicationID, predicateErrors, a.GetAllocatedResource())
 }
 
+// SendRequiredNodePreemptionFailedEvent updates the event system with required node preemption failed event.
+func (a *Allocation) SendRequiredNodePreemptionFailedEvent(node string) {
+	a.askEvents.SendRequiredNodePreemptionFailed(a.allocationKey, a.applicationID, node, a.GetAllocatedResource())
+}
+
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met.
 func (a *Allocation) GetAllocationLog() []*AllocationLogEntry {
 	a.RLock()

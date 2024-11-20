@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -2900,6 +2901,172 @@ func TestPredicateFailedEvents(t *testing.T) {
 	assert.Equal(t, "Unschedulable request 'alloc-0': fake predicate plugin failed (2x); ", event.Message)
 }
 
+func TestRequiredNodePreemption(t *testing.T) {
+	// tests successful RequiredNode (DaemonSet) preemption
+	app := newApplication(appID0, "default", "root.default")
+	var releaseEvents []*rmevent.RMReleaseAllocationEvent
+	app.rmEventHandler = &mockAppEventHandler{
+		callback: func(ev interface{}) {
+			if rmEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
+				releaseEvents = append(releaseEvents, rmEvent)
+				go func() {
+					rmEvent.Channel <- &rmevent.Result{
+						Succeeded: true,
+					}
+				}()
+			}
+		},
+	}
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 20})
+	node.nodeEvents = schedEvt.NewNodeEvents(mock.NewEventSystemDisabled())
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return node
+	}
+
+	// set queue
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	childQ, err := createManagedQueue(rootQ, "default", false, map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	app.SetQueue(childQ)
+
+	// add an ask
+	mockEvents := mock.NewEventSystem()
+	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
+	ask1 := newAllocationAsk("ask-1", "app-1", askRes)
+	ask1.askEvents = schedEvt.NewAskEvents(mockEvents)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "could not add ask-1")
+	preemptionAttemptsRemaining := 0
+
+	// allocate ask
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	result := app.tryAllocate(headRoom, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Equal(t, result.ResultType, Allocated, "could not allocate ask-1")
+	assert.Equal(t, result.Request.allocationKey, "ask-1", "unexpected allocation key")
+
+	// add ask2 with required node
+	ask2 := newAllocationAsk("ask-2", "app-1", askRes)
+	ask2.askEvents = schedEvt.NewAskEvents(mockEvents)
+	ask2.requiredNode = nodeID1
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "could not add ask-2")
+
+	// try to allocate ask2 with node being full - expect a reservation
+	result = app.tryAllocate(headRoom, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Equal(t, result.ResultType, Reserved, "allocation result is not reserved")
+	assert.Equal(t, result.Request.allocationKey, "ask-2", "unexpected allocation key")
+	err = app.Reserve(node, ask2)
+	assert.NilError(t, err, "reservation failed")
+
+	// preemption
+	assert.Assert(t, app.tryReservedAllocate(headRoom, iterator) == nil, "unexpected result from reserved allocation")
+	assert.Assert(t, ask1.IsPreempted(), "ask1 has not been preempted")
+	assert.Assert(t, ask2.HasTriggeredPreemption(), "ask2 has not triggered preemption")
+	assert.Equal(t, 1, len(releaseEvents), "unexpected number of release events")
+	assert.Equal(t, 1, len(releaseEvents[0].ReleasedAllocations), "unexpected number of release allocations")
+	assert.Equal(t, "ask-1", releaseEvents[0].ReleasedAllocations[0].AllocationKey, "allocation key")
+
+	// 2nd attempt - no preemption this time
+	releaseEvents = nil
+	assert.Assert(t, app.tryReservedAllocate(headRoom, iterator) == nil, "unexpected result from reserved allocation")
+	assert.Assert(t, releaseEvents == nil, "unexpected release event")
+
+	// check for preemption related events
+	for _, event := range mockEvents.Events {
+		assert.Assert(t, !strings.Contains(strings.ToLower(event.Message), "preemption"), "received a preemption related event")
+	}
+}
+
+func TestRequiredNodePreemptionFailed(t *testing.T) {
+	// tests RequiredNode (DaemonSet) preemption where the victim pod has a high priority, hence preemption is not possible
+	app := newApplication(appID0, "default", "root.default")
+	var releaseEvents []*rmevent.RMReleaseAllocationEvent
+	app.rmEventHandler = &mockAppEventHandler{
+		callback: func(ev interface{}) {
+			if rmEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
+				releaseEvents = append(releaseEvents, rmEvent)
+				go func() {
+					rmEvent.Channel <- &rmevent.Result{
+						Succeeded: true,
+					}
+				}()
+			}
+		},
+	}
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 20})
+	node.nodeEvents = schedEvt.NewNodeEvents(mock.NewEventSystemDisabled())
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return node
+	}
+
+	// set queue
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	childQ, err := createManagedQueue(rootQ, "default", false, map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	app.SetQueue(childQ)
+
+	// add an ask with high priority
+	mockEvents := mock.NewEventSystem()
+	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
+	ask1 := newAllocationAsk("ask-1", "app-1", askRes)
+	ask1.askEvents = schedEvt.NewAskEvents(mockEvents)
+	ask1.priority = 1000
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "could not add ask-1")
+	preemptionAttemptsRemaining := 0
+
+	// allocate ask
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	result := app.tryAllocate(headRoom, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Equal(t, result.ResultType, Allocated, "could not allocate ask-1")
+	assert.Equal(t, result.Request.allocationKey, "ask-1", "unexpected allocation key")
+
+	// add ask2 with required node
+	ask2 := newAllocationAsk("ask-2", "app-1", askRes)
+	ask2.askEvents = schedEvt.NewAskEvents(mockEvents)
+	ask2.requiredNode = nodeID1
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "could not add ask-2")
+
+	// try to allocate ask2 with node being full - expect a reservation
+	result = app.tryAllocate(headRoom, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Equal(t, result.ResultType, Reserved, "allocation result is not reserved")
+	assert.Equal(t, result.Request.allocationKey, "ask-2", "unexpected allocation key")
+	err = app.Reserve(node, ask2)
+	assert.NilError(t, err, "reservation failed")
+
+	// try preemption - should not succeed
+	assert.Assert(t, app.tryReservedAllocate(headRoom, iterator) == nil, "unexpected result from reserved allocation")
+	assert.Assert(t, !ask1.IsPreempted(), "unexpected preemption of ask1")
+	assert.Assert(t, !ask2.HasTriggeredPreemption(), "unexpected preemption triggered from ask2")
+	assert.Equal(t, 0, len(releaseEvents), "unexpected number of release events")
+	// check for events
+	noEvents := 0
+	var requestEvt *si.EventRecord
+	for _, event := range mockEvents.Events {
+		if event.Type == si.EventRecord_REQUEST && strings.Contains(strings.ToLower(event.Message), "preemption") {
+			noEvents++
+			requestEvt = event
+		}
+	}
+	assert.Equal(t, 1, noEvents, "unexpected number of REQUEST events")
+	assert.Equal(t, "Unschedulable request 'ask-2' with required node 'node-1', no preemption victim found", requestEvt.Message)
+	assert.Equal(t, 1, len(ask2.allocLog), "unexpected number of entries in the allocation log")
+	assert.Equal(t, int32(1), ask2.allocLog[common.NoVictimForRequiredNode].Count, "incorrect number of entry count")
+	assert.Equal(t, common.NoVictimForRequiredNode, ask2.allocLog[common.NoVictimForRequiredNode].Message, "unexpected log message")
+
+	// check counting & event throttling
+	assert.Assert(t, app.tryReservedAllocate(headRoom, iterator) == nil, "unexpected result from reserved allocation")
+	assert.Assert(t, app.tryReservedAllocate(headRoom, iterator) == nil, "unexpected result from reserved allocation")
+	assert.Assert(t, app.tryReservedAllocate(headRoom, iterator) == nil, "unexpected result from reserved allocation")
+	assert.Equal(t, 1, noEvents, "unexpected number of REQUEST events")
+	assert.Equal(t, int32(4), ask2.allocLog[common.NoVictimForRequiredNode].Count, "incorrect number of entry count")
+}
+
 type testIterator struct{}
 
 func (testIterator) ForEachNode(fn func(*Node) bool) {
@@ -3018,4 +3185,12 @@ func TestGetUint64Tag(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+type mockAppEventHandler struct {
+	callback func(ev interface{})
+}
+
+func (m mockAppEventHandler) HandleEvent(ev interface{}) {
+	m.callback(ev)
 }

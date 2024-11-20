@@ -133,12 +133,48 @@ func TestPredicateFailedEvents(t *testing.T) {
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
 	assert.Equal(t, "Unschedulable request 'alloc-0': error#0 (2x); error#1 (123x); error#2 (44x); ", event.Message)
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "alloc-0", event.ObjectID)
+	assert.Equal(t, "app-0", event.ReferenceID)
 
 	eventSystem.Reset()
 	// wait a bit, a new event is expected
 	time.Sleep(100 * time.Millisecond)
-	events.SendPredicatesFailed("alloc-0", "app-0", errors, resource)
+	events.SendPredicatesFailed("alloc-1", "app-0", errors, resource)
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event = eventSystem.Events[0]
-	assert.Equal(t, "Unschedulable request 'alloc-0': error#0 (2x); error#1 (123x); error#2 (44x); ", event.Message)
+	assert.Equal(t, "Unschedulable request 'alloc-1': error#0 (2x); error#1 (123x); error#2 (44x); ", event.Message)
+}
+
+func TestRequiredNodePreemptionFailedEvents(t *testing.T) {
+	resource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	eventSystem := mock.NewEventSystemDisabled()
+	events := NewAskEvents(eventSystem)
+	events.SendRequiredNodePreemptionFailed("alloc-0", "app-0", nodeID1, resource)
+	assert.Equal(t, 0, len(eventSystem.Events))
+
+	eventSystem = mock.NewEventSystem()
+	events = newAskEventsWithRate(eventSystem, 50*time.Millisecond, 1)
+	// only the first event is expected to be emitted due to rate limiting
+	for i := 0; i < 200; i++ {
+		events.SendRequiredNodePreemptionFailed("alloc-0", "app-0", nodeID1, resource)
+	}
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
+	assert.Equal(t, "Unschedulable request 'alloc-0' with required node 'node-1', no preemption victim found", event.Message)
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "alloc-0", event.ObjectID)
+	assert.Equal(t, "app-0", event.ReferenceID)
+	protoRes := resources.NewResourceFromProto(event.Resource)
+	assert.DeepEqual(t, resource, protoRes)
+
+	eventSystem.Reset()
+	// wait a bit, a new event is expected
+	time.Sleep(100 * time.Millisecond)
+	events.SendRequiredNodePreemptionFailed("alloc-1", "app-0", nodeID1, resource)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event = eventSystem.Events[0]
+	assert.Equal(t, "Unschedulable request 'alloc-1' with required node 'node-1', no preemption victim found", event.Message)
 }

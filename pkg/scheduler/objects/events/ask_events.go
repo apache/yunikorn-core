@@ -32,8 +32,9 @@ import (
 
 // AskEvents Request-specific events. These events are of REQUEST type, so they are eventually sent to the respective pods in K8s.
 type AskEvents struct {
-	eventSystem events.EventSystem
-	limiter     *rate.Limiter
+	eventSystem      events.EventSystem
+	predicateLimiter *rate.Limiter
+	reqNodeLimiter   *rate.Limiter
 }
 
 func (ae *AskEvents) SendRequestExceedsQueueHeadroom(allocKey, appID string, headroom, allocatedResource *resources.Resource, queuePath string) {
@@ -73,7 +74,7 @@ func (ae *AskEvents) SendRequestFitsInUserQuota(allocKey, appID string, allocate
 }
 
 func (ae *AskEvents) SendPredicatesFailed(allocKey, appID string, predicateErrors map[string]int, allocatedResource *resources.Resource) {
-	if !ae.eventSystem.IsEventTrackingEnabled() || !ae.limiter.Allow() {
+	if !ae.eventSystem.IsEventTrackingEnabled() || !ae.predicateLimiter.Allow() {
 		return
 	}
 
@@ -94,13 +95,24 @@ func (ae *AskEvents) SendPredicatesFailed(allocKey, appID string, predicateError
 	ae.eventSystem.AddEvent(event)
 }
 
+func (ae *AskEvents) SendRequiredNodePreemptionFailed(allocKey, appID, node string, allocatedResource *resources.Resource) {
+	if !ae.eventSystem.IsEventTrackingEnabled() || !ae.reqNodeLimiter.Allow() {
+		return
+	}
+
+	message := fmt.Sprintf("Unschedulable request '%s' with required node '%s', no preemption victim found", allocKey, node)
+	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
+	ae.eventSystem.AddEvent(event)
+}
+
 func NewAskEvents(evt events.EventSystem) *AskEvents {
 	return newAskEventsWithRate(evt, 15*time.Second, 1)
 }
 
 func newAskEventsWithRate(evt events.EventSystem, interval time.Duration, burst int) *AskEvents {
 	return &AskEvents{
-		eventSystem: evt,
-		limiter:     rate.NewLimiter(rate.Every(interval), burst),
+		eventSystem:      evt,
+		predicateLimiter: rate.NewLimiter(rate.Every(interval), burst),
+		reqNodeLimiter:   rate.NewLimiter(rate.Every(interval), burst),
 	}
 }

@@ -119,6 +119,9 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(conf.Name)
 	sq.QueuePath = strings.ToLower(conf.Name)
+	if parent != nil {
+		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
+	}
 	sq.parent = parent
 	sq.isManaged = true
 	sq.maxRunningApps = conf.MaxApplications
@@ -134,7 +137,6 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		// pull the properties from the parent that should be set on the child
 		sq.mergeProperties(parent.getProperties(), conf.Properties)
 		sq.UpdateQueueProperties()
-		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 		err := parent.addChildQueue(sq)
 		if err != nil {
 			return nil, errors.Join(errors.New("configured queue creation failed: "), err)

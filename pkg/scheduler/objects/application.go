@@ -124,29 +124,6 @@ type Application struct {
 	locking.RWMutex
 }
 
-func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
-	sa.RLock()
-	defer sa.RUnlock()
-	state := sa.stateMachine.Current()
-	resourceUsage := sa.usedResource.Clone()
-	preemptedUsage := sa.preemptedResource.Clone()
-	placeHolderUsage := sa.placeholderResource.Clone()
-	appSummary := &ApplicationSummary{
-		ApplicationID:       sa.ApplicationID,
-		SubmissionTime:      sa.SubmissionTime,
-		StartTime:           sa.startTime,
-		FinishTime:          sa.finishedTime,
-		User:                sa.user.User,
-		Queue:               sa.queuePath,
-		State:               state,
-		RmID:                rmID,
-		ResourceUsage:       resourceUsage,
-		PreemptedResource:   preemptedUsage,
-		PlaceholderResource: placeHolderUsage,
-	}
-	return appSummary
-}
-
 func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eventHandler handler.EventHandler, rmID string) *Application {
 	app := &Application{
 		ApplicationID:         siApp.ApplicationID,
@@ -2127,21 +2104,58 @@ func (sa *Application) cleanupTrackedResource() {
 	sa.preemptedResource = nil
 }
 
-func (sa *Application) CleanupTrackedResource() {
+// GetApplicationSummary locked version to get the application summary
+// Exposed for test only
+func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.getApplicationSummary(rmID)
+}
+
+func (sa *Application) getApplicationSummary(rmID string) *ApplicationSummary {
+	return &ApplicationSummary{
+		ApplicationID:       sa.ApplicationID,
+		SubmissionTime:      sa.SubmissionTime,
+		StartTime:           sa.startTime,
+		FinishTime:          sa.finishedTime,
+		User:                sa.user.User,
+		Queue:               sa.queuePath,
+		State:               sa.stateMachine.Current(),
+		RmID:                rmID,
+		ResourceUsage:       sa.usedResource.Clone(),
+		PreemptedResource:   sa.preemptedResource.Clone(),
+		PlaceholderResource: sa.placeholderResource.Clone(),
+	}
+}
+
+// LogAppSummary log the summary details for the application if it has run at any point in time.
+// The application summary only contains correct data when the application is in the Completed state.
+// Logging the data in any other state will show incomplete or inconsistent data.
+// After the data is logged the objects are cleaned up to lower overhead of Completed application tracking.
+func (sa *Application) LogAppSummary(rmID string) {
 	sa.Lock()
 	defer sa.Unlock()
+	if !sa.startTime.IsZero() {
+		appSummary := sa.getApplicationSummary(rmID)
+		appSummary.DoLogging()
+	}
 	sa.cleanupTrackedResource()
 }
 
-func (sa *Application) LogAppSummary(rmID string) {
-	if sa.startTime.IsZero() {
-		return
+// GetTrackedDAOMap returns the tracked resources type specified in which as a DAO similar to the normal resources.
+func (sa *Application) GetTrackedDAOMap(which string) map[string]map[string]int64 {
+	sa.RLock()
+	defer sa.RUnlock()
+	switch which {
+	case "usedResource":
+		return sa.usedResource.DAOMap()
+	case "preemptedResource":
+		return sa.preemptedResource.DAOMap()
+	case "placeholderResource":
+		return sa.placeholderResource.DAOMap()
+	default:
+		return map[string]map[string]int64{}
 	}
-	appSummary := sa.GetApplicationSummary(rmID)
-	appSummary.DoLogging()
-	appSummary.ResourceUsage = nil
-	appSummary.PreemptedResource = nil
-	appSummary.PlaceholderResource = nil
 }
 
 func (sa *Application) HasPlaceholderAllocation() bool {

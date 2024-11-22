@@ -340,35 +340,40 @@ func getStatesDAO(entries []*objects.StateLogEntry) []*dao.StateDAOInfo {
 	return statesDAO
 }
 
-func getApplicationDAO(app *objects.Application, summary *objects.ApplicationSummary) *dao.ApplicationDAOInfo {
+func getApplicationDAO(app *objects.Application) *dao.ApplicationDAOInfo {
 	if app == nil {
 		return &dao.ApplicationDAOInfo{}
 	}
 
+	// The resource history is only correct in COMPLETING or COMPLETED app state.
+	resHistory := dao.ResourceHistory{
+		ResourceUsage:       app.GetTrackedDAOMap("usedResource"),
+		PreemptedResource:   app.GetTrackedDAOMap("preemptedResource"),
+		PlaceholderResource: app.GetTrackedDAOMap("placeholderResource"),
+	}
+
 	return &dao.ApplicationDAOInfo{
-		ApplicationID:       app.ApplicationID,
-		UsedResource:        app.GetAllocatedResource().DAOMap(),
-		MaxUsedResource:     app.GetMaxAllocatedResource().DAOMap(),
-		PendingResource:     app.GetPendingResource().DAOMap(),
-		Partition:           common.GetPartitionNameWithoutClusterID(app.Partition),
-		QueueName:           app.GetQueuePath(),
-		SubmissionTime:      app.SubmissionTime.UnixNano(),
-		FinishedTime:        common.ZeroTimeInUnixNano(app.FinishedTime()),
-		Requests:            getAllocationAsksDAO(app.GetAllRequests()),
-		Allocations:         getAllocationsDAO(app.GetAllAllocations()),
-		State:               app.CurrentState(),
-		User:                app.GetUser().User,
-		Groups:              app.GetUser().Groups,
-		RejectedMessage:     app.GetRejectedMessage(),
-		PlaceholderData:     getPlaceholdersDAO(app.GetAllPlaceholderData()),
-		StateLog:            getStatesDAO(app.GetStateLog()),
-		HasReserved:         app.HasReserved(),
-		Reservations:        app.GetReservations(),
-		MaxRequestPriority:  app.GetAskMaxPriority(),
-		StartTime:           app.StartTime().UnixMilli(),
-		ResourceUsage:       summary.ResourceUsage,
-		PreemptedResource:   summary.PreemptedResource,
-		PlaceholderResource: summary.PlaceholderResource,
+		ApplicationID:      app.ApplicationID,
+		UsedResource:       app.GetAllocatedResource().DAOMap(),
+		MaxUsedResource:    app.GetMaxAllocatedResource().DAOMap(),
+		PendingResource:    app.GetPendingResource().DAOMap(),
+		Partition:          common.GetPartitionNameWithoutClusterID(app.Partition),
+		QueueName:          app.GetQueuePath(),
+		SubmissionTime:     app.SubmissionTime.UnixNano(),
+		FinishedTime:       common.ZeroTimeInUnixNano(app.FinishedTime()),
+		Requests:           getAllocationAsksDAO(app.GetAllRequests()),
+		Allocations:        getAllocationsDAO(app.GetAllAllocations()),
+		State:              app.CurrentState(),
+		User:               app.GetUser().User,
+		Groups:             app.GetUser().Groups,
+		RejectedMessage:    app.GetRejectedMessage(),
+		PlaceholderData:    getPlaceholdersDAO(app.GetAllPlaceholderData()),
+		StateLog:           getStatesDAO(app.GetStateLog()),
+		HasReserved:        app.HasReserved(),
+		Reservations:       app.GetReservations(),
+		MaxRequestPriority: app.GetAskMaxPriority(),
+		StartTime:          app.StartTime().UnixMilli(),
+		ResourceHistory:    resHistory,
 	}
 }
 
@@ -820,8 +825,7 @@ func getQueueApplications(w http.ResponseWriter, r *http.Request) {
 
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
 	for _, app := range queue.GetCopyOfApps() {
-		summary := app.GetApplicationSummary(partitionContext.RmID)
-		appsDao = append(appsDao, getApplicationDAO(app, summary))
+		appsDao = append(appsDao, getApplicationDAO(app))
 	}
 
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
@@ -870,8 +874,7 @@ func getPartitionApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	}
 	appsDao := make([]*dao.ApplicationDAOInfo, 0, len(appList))
 	for _, app := range appList {
-		summary := app.GetApplicationSummary(partitionContext.RmID)
-		appsDao = append(appsDao, getApplicationDAO(app, summary))
+		appsDao = append(appsDao, getApplicationDAO(app))
 	}
 	if err := json.NewEncoder(w).Encode(appsDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
@@ -919,8 +922,7 @@ func getApplication(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	summary := app.GetApplicationSummary(partitionContext.RmID)
-	appDao := getApplicationDAO(app, summary)
+	appDao := getApplicationDAO(app)
 	if err := json.NewEncoder(w).Encode(appDao); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)
 	}
@@ -990,8 +992,7 @@ func getQueueApplicationsByState(w http.ResponseWriter, r *http.Request) {
 	appsDao := make([]*dao.ApplicationDAOInfo, 0)
 	for _, app := range queue.GetCopyOfApps() {
 		if status == "" || strings.ToLower(app.CurrentState()) == status {
-			summary := app.GetApplicationSummary(partitionContext.RmID)
-			appsDao = append(appsDao, getApplicationDAO(app, summary))
+			appsDao = append(appsDao, getApplicationDAO(app))
 		}
 	}
 
@@ -1099,8 +1100,7 @@ func getApplicationsDAO(lists map[string]*scheduler.PartitionContext) []*dao.App
 		appList = append(appList, partition.GetRejectedApplications()...)
 
 		for _, app := range appList {
-			summary := app.GetApplicationSummary(partition.RmID)
-			result = append(result, getApplicationDAO(app, summary))
+			result = append(result, getApplicationDAO(app))
 		}
 	}
 

@@ -695,8 +695,14 @@ func (sq *Queue) GetPartitionQueueDAOInfo(include bool) dao.PartitionQueueDAOInf
 	queueInfo.IsManaged = sq.isManaged
 	queueInfo.CurrentPriority = sq.getCurrentPriority()
 	queueInfo.TemplateInfo = sq.template.GetTemplateInfo()
-	queueInfo.AbsUsedCapacity = resources.CalculateAbsUsedCapacity(
-		sq.maxResource, sq.allocatedResource).DAOMap()
+	queueInfo.AbsUsedCapacity = resources.CalculateAbsUsedCapacity(sq.maxResource, sq.allocatedResource).DAOMap()
+	queueInfo.SortingPolicy = sq.sortType.String()
+	queueInfo.PrioritySorting = sq.prioritySortEnabled
+	queueInfo.PreemptionEnabled = sq.preemptionPolicy != policies.DisabledPreemptionPolicy
+	queueInfo.IsPreemptionFence = sq.preemptionPolicy == policies.FencePreemptionPolicy
+	queueInfo.PreemptionDelay = sq.preemptionDelay.String()
+	queueInfo.IsPriorityFence = sq.priorityPolicy == policies.FencePriorityPolicy
+	queueInfo.PriorityOffset = sq.priorityOffset
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
 		queueInfo.Properties[k] = v

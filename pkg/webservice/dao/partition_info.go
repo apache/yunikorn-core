@@ -23,6 +23,7 @@ type PartitionInfo struct {
 	Name                    string            `json:"name"`              // no omitempty, name should not be empty
 	Capacity                PartitionCapacity `json:"capacity"`          // no omitempty, omitempty doesn't work on a structure value
 	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"` // no omitempty, omitempty doesn't work on a structure value
+	PreemptionEnabled       bool              `json:"preemptionEnabled"` // no omitempty, false shows preemption status better
 	TotalNodes              int               `json:"totalNodes,omitempty"`
 	Applications            map[string]int    `json:"applications,omitempty"`
 	TotalContainers         int               `json:"totalContainers,omitempty"`

@@ -1705,9 +1705,23 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	assert.Equal(t, leafDAO.QueueName, "root.leaf-queue")
 	assert.Equal(t, len(leafDAO.Children), 0, "leaf has no children")
 	assert.Equal(t, len(leafDAO.ChildNames), 0, "leaf has no children (names)")
+	assert.Equal(t, leafDAO.PreemptionEnabled, true, "preemption should be enabled")
 	assert.Equal(t, leafDAO.IsPreemptionFence, true, "fence should have been set")
 	assert.Equal(t, leafDAO.PreemptionDelay, "1h0m0s", "incorrect delay returned")
 	assert.Equal(t, leafDAO.SortingPolicy, "fair", "incorrect policy returned")
+
+	// special prop checks
+	leaf.properties = map[string]string{
+		configs.ApplicationSortPolicy: policies.FifoSortPolicy.String(),
+		configs.PreemptionDelay:       "10s",
+		configs.PreemptionPolicy:      policies.DisabledPreemptionPolicy.String(),
+	}
+	leaf.UpdateQueueProperties()
+	leafDAO = leaf.GetPartitionQueueDAOInfo(false)
+	assert.Equal(t, leafDAO.PreemptionEnabled, false, "preemption should not be enabled")
+	assert.Equal(t, leafDAO.IsPreemptionFence, false, "queue should not be a fence")
+	assert.Equal(t, leafDAO.PreemptionDelay, "10s", "incorrect delay returned")
+	assert.Equal(t, leafDAO.SortingPolicy, "fifo", "incorrect policy returned")
 }
 
 func getAllocatingAcceptedApps() map[string]bool {

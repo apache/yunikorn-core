@@ -47,7 +47,7 @@ func TestNewTrackedResourceFromMap(t *testing.T) {
 	var tests = []struct {
 		caseName string
 		input    map[string]map[string]Quantity
-		trMap map[string]map[string]Quantity
+		trMap    map[string]map[string]Quantity
 	}{
 		{
 			"nil",
@@ -220,8 +220,8 @@ func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 func TestEqualsTracked(t *testing.T) {
 	var tests = []struct {
 		caseName string
-		base    map[string]map[string]Quantity
-		compare map[string]map[string]int64
+		base     map[string]map[string]Quantity
+		compare  map[string]map[string]int64
 		expected bool
 	}{
 		{"nil inputs", nil, nil, true},

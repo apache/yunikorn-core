@@ -1928,8 +1928,7 @@ func TestRequiredNodeAllocation(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), resources.Multiply(res, 2))
 }
 
-func assertPreemptedResource(t *testing.T, appSummary *objects.ApplicationSummary, memorySeconds int64,
-	vcoresSecconds int64) {
+func assertPreemptedResource(t *testing.T, appSummary *objects.ApplicationSummary, memorySeconds int64, vcoresSecconds int64) {
 	detailedResource := appSummary.PreemptedResource.TrackedResourceMap["UNKNOWN"]
 
 	memValue, memPresent := detailedResource.Resources["memory"]
@@ -2008,11 +2007,9 @@ func TestPreemption(t *testing.T) {
 	assert.Equal(t, result.Request.GetAllocationKey(), allocKey3, "expected ask alloc-3 to be allocated")
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000}), getExpectedQueuesLimitsForPreemption())
 
-	appSummary := app1.GetApplicationSummary("default")
-	assertPreemptedResource(t, appSummary, -1, 5000)
+	assertPreemptedResource(t, app1.GetApplicationSummary("default"), -1, 5000)
 
-	appSummary = app2.GetApplicationSummary("default")
-	assert.Assert(t, appSummary.PreemptedResource.TrackedResourceMap["UNKNOWN"] == nil)
+	assert.Assert(t, app2.GetApplicationSummary("default").PreemptedResource.TrackedResourceMap["UNKNOWN"] == nil)
 }
 
 // Preemption followed by a normal allocation

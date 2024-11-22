@@ -1694,29 +1694,25 @@ func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	defaultPartition.AddRejectedApplication(app3, rejectedMessage)
 
 	// test get active app
-	sum1 := app1.GetApplicationSummary(defaultPartition.RmID)
-	sum2 := app2.GetApplicationSummary(defaultPartition.RmID)
-	expectedActiveDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app1, sum1), getApplicationDAO(app2, sum2)}
+	expectedActiveDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app1), getApplicationDAO(app2)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Active"}}, expectedActiveDao)
 
 	// test get active app with running state
-	expectedRunningDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app2, sum2)}
+	expectedRunningDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app2)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Active?status=Running", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Active"}}, expectedRunningDao)
 
 	// test get completed app
-	sum3 := app3.GetApplicationSummary(defaultPartition.RmID)
-	expectedCompletedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app3, sum3)}
+	expectedCompletedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app3)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Completed", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Completed"}}, expectedCompletedDao)
 
 	// test get rejected app
-	sum4 := app4.GetApplicationSummary(defaultPartition.RmID)
-	expectedRejectedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app4, sum4)}
+	expectedRejectedDao := []*dao.ApplicationDAOInfo{getApplicationDAO(app4)}
 	checkLegalGetAppsRequest(t, "/ws/v1/partition/default/applications/Rejected", httprouter.Params{
 		httprouter.Param{Key: "partition", Value: partitionNameWithoutClusterID},
 		httprouter.Param{Key: "state", Value: "Rejected"}}, expectedRejectedDao)
@@ -1973,9 +1969,9 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, "app-1", appDao.ApplicationID)
 	assert.Equal(t, app.StartTime().UnixMilli(), appDao.StartTime)
-	assert.Assert(t, resources.EqualsTracked(appSummary.ResourceUsage, appDao.ResourceUsage))
-	assert.Assert(t, resources.EqualsTracked(appSummary.PreemptedResource, appDao.PreemptedResource))
-	assert.Assert(t, resources.EqualsTracked(appSummary.PlaceholderResource, appDao.PlaceholderResource))
+	assert.Assert(t, appSummary.ResourceUsage.EqualsDAO(appDao.ResourceHistory.ResourceUsage))
+	assert.Assert(t, appSummary.PreemptedResource.EqualsDAO(appDao.ResourceHistory.PreemptedResource))
+	assert.Assert(t, appSummary.PlaceholderResource.EqualsDAO(appDao.ResourceHistory.PlaceholderResource))
 }
 
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {

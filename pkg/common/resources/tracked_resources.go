@@ -23,6 +23,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/exp/maps"
+
 	"github.com/apache/yunikorn-core/pkg/locking"
 )
 
@@ -44,10 +46,6 @@ func NewTrackedResource() *TrackedResource {
 // NewTrackedResourceFromMap creates NewTrackedResource from the given map.
 // Using for Testing purpose only.
 func NewTrackedResourceFromMap(m map[string]map[string]Quantity) *TrackedResource {
-	if m == nil {
-		return NewTrackedResource()
-	}
-
 	trackedMap := make(map[string]*Resource)
 	for inst, inner := range m {
 		trackedMap[inst] = NewResourceFromMap(inner)
@@ -56,6 +54,9 @@ func NewTrackedResourceFromMap(m map[string]map[string]Quantity) *TrackedResourc
 }
 
 func (tr *TrackedResource) String() string {
+	if tr == nil {
+		return "TrackedResource{}"
+	}
 	tr.RLock()
 	defer tr.RUnlock()
 
@@ -85,8 +86,7 @@ func (tr *TrackedResource) Clone() *TrackedResource {
 
 // AggregateTrackedResource aggregates resource usage to TrackedResourceMap[instType].
 // The time the given resource used is the delta between the resource createTime and currentTime.
-func (tr *TrackedResource) AggregateTrackedResource(instType string,
-	resource *Resource, bindTime time.Time) {
+func (tr *TrackedResource) AggregateTrackedResource(instType string, resource *Resource, bindTime time.Time) {
 	if resource == nil {
 		return
 	}
@@ -105,25 +105,37 @@ func (tr *TrackedResource) AggregateTrackedResource(instType string,
 	tr.TrackedResourceMap[instType] = aggregatedResourceTime
 }
 
-func EqualsTracked(left, right *TrackedResource) bool {
-	if left == right {
-		return true
+// EqualsDAO compares the TrackedResource against the DAO map that was created of the resource.
+// Test use only
+func (tr *TrackedResource) EqualsDAO(right map[string]map[string]int64) bool {
+	if tr == nil {
+		return len(right) == 0
 	}
-
-	if left == nil || right == nil {
+	tr.RLock()
+	defer tr.RUnlock()
+	if len(tr.TrackedResourceMap) != len(right) {
 		return false
 	}
 
-	for k, v := range left.TrackedResourceMap {
-		inner, ok := right.TrackedResourceMap[k]
-		if !ok {
+	for k, v := range tr.TrackedResourceMap {
+		if inner, ok := right[k]; !ok {
 			return false
-		}
-
-		if !Equals(v, inner) {
+		} else if !maps.Equal(v.DAOMap(), inner) {
 			return false
 		}
 	}
-
 	return true
+}
+
+// DAOMap converts the TrackedResource into a map structure for use in the REST API.
+func (tr *TrackedResource) DAOMap() map[string]map[string]int64 {
+	daoMAP := make(map[string]map[string]int64)
+	if tr != nil {
+		tr.RLock()
+		defer tr.RUnlock()
+		for k, res := range tr.TrackedResourceMap {
+			daoMAP[k] = res.DAOMap()
+		}
+	}
+	return daoMAP
 }

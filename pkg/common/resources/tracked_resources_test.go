@@ -29,73 +29,55 @@ import (
 	"gotest.tools/v3/assert"
 )
 
-func CheckLenOfTrackedResource(res *TrackedResource, expected int) (bool, string) {
-	if got := len(res.TrackedResourceMap); expected == 0 && (res == nil || got != expected) {
-		return false, fmt.Sprintf("input with empty and nil should be a empty tracked resource: Expected %d, got %d", expected, got)
+func CheckTrackedResource(res *TrackedResource, trMap map[string]map[string]Quantity) error {
+	if len(res.TrackedResourceMap) != len(trMap) {
+		return fmt.Errorf("input with empty and nil should be a empty tracked resource: Expected %d, got %d", len(trMap), len(res.TrackedResourceMap))
 	}
-	if got := len(res.TrackedResourceMap); got != expected {
-		return false, fmt.Sprintf("Length of tracked resources is wrong: Expected %d, got %d", expected, got)
-	}
-	return true, ""
-}
-
-func CheckResourceValueOfTrackedResource(res *TrackedResource, expected map[string]map[string]Quantity) (bool, string) {
-	for instanceType, expected := range expected {
+	for instanceType, expect := range trMap {
 		trackedRes := res.TrackedResourceMap[instanceType]
-		expectedRes := NewResourceFromMap(expected)
+		expectedRes := NewResourceFromMap(expect)
 		if !Equals(trackedRes, expectedRes) {
-			return false, fmt.Sprintf("instance type %s, expected %s, got %s", instanceType, trackedRes, expectedRes)
+			return fmt.Errorf("instance type %s, expected %s, got %s", instanceType, trackedRes, expectedRes)
 		}
 	}
-	return true, ""
+	return nil
 }
 
 func TestNewTrackedResourceFromMap(t *testing.T) {
-	type outputs struct {
-		length           int
-		trackedResources map[string]map[string]Quantity
-	}
 	var tests = []struct {
 		caseName string
 		input    map[string]map[string]Quantity
-		expected outputs
+		trMap map[string]map[string]Quantity
 	}{
 		{
 			"nil",
 			nil,
-			outputs{0, map[string]map[string]Quantity{}},
+			map[string]map[string]Quantity{},
 		},
 		{
 			"empty",
 			map[string]map[string]Quantity{},
-			outputs{0, map[string]map[string]Quantity{}},
-		},
+			map[string]map[string]Quantity{}},
 		{
 			"tracked resources of one instance type",
 			map[string]map[string]Quantity{"instanceType1": {"first": 1}},
-			outputs{1, map[string]map[string]Quantity{"instanceType1": {"first": 1}}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 1}},
 		},
 		{
 			"tracked resources of two instance type",
 			map[string]map[string]Quantity{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}},
-			outputs{2, map[string]map[string]Quantity{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 0}, "instanceType2": {"second": -1}},
 		},
 		{
 			"Multiple tracked resources for one instance type",
 			map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2, "third": 3}},
-			outputs{1, map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2, "third": 3}}},
+			map[string]map[string]Quantity{"instanceType1": {"first": 1, "second": -2, "third": 3}},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			res := NewTrackedResourceFromMap(tt.input)
-			if ok, err := CheckLenOfTrackedResource(res, tt.expected.length); !ok {
-				t.Error(err)
-			} else {
-				if ok, err := CheckResourceValueOfTrackedResource(res, tt.expected.trackedResources); !ok {
-					t.Error(err)
-				}
-			}
+			assert.NilError(t, CheckTrackedResource(res, tt.trMap))
 		})
 	}
 }
@@ -132,6 +114,11 @@ func TestTrackedResourceClone(t *testing.T) {
 	}
 
 	// case: tracked resource is nil
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("Clone panic on nil TrackedResource")
+		}
+	}()
 	tr := (*TrackedResource)(nil)
 	cloned := tr.Clone()
 	assert.Assert(t, cloned == nil)
@@ -220,58 +207,61 @@ func TestTrackedResourceAggregateTrackedResource(t *testing.T) {
 	}
 
 	// case: resource is nil
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("Panic on nil map for new TrackedResource")
+		}
+	}()
 	tr := NewTrackedResourceFromMap(nil)
 	tr.AggregateTrackedResource("instanceType1", nil, time.Now().Add(-time.Minute))
 	assert.Assert(t, tr.TrackedResourceMap != nil && len(tr.TrackedResourceMap) == 0)
 }
 
 func TestEqualsTracked(t *testing.T) {
-	type inputs struct {
-		base    map[string]map[string]Quantity
-		compare map[string]map[string]Quantity
-	}
 	var tests = []struct {
 		caseName string
-		input    inputs
+		base    map[string]map[string]Quantity
+		compare map[string]map[string]int64
 		expected bool
 	}{
-		{"simple cases (nil checks)", inputs{nil, nil}, true},
-		{"simple cases (nil checks)", inputs{map[string]map[string]Quantity{}, nil}, false},
-		{"same first and second level keys and different resource value",
-			inputs{map[string]map[string]Quantity{"first": {"val": 10}}, map[string]map[string]Quantity{"first": {"val": 0}}},
+		{"nil inputs", nil, nil, true},
+		{"both empty", map[string]map[string]Quantity{}, map[string]map[string]int64{}, true},
+		{"empty tracked nil dao", map[string]map[string]Quantity{}, nil, true},
+		{"empty tracked",
+			map[string]map[string]Quantity{},
+			map[string]map[string]int64{"first": {"val": 0}},
 			false,
 		},
-		{"different first-level key, same second-level key, same resource value",
-			inputs{map[string]map[string]Quantity{"first": {"val": 10}}, map[string]map[string]Quantity{"second": {"val": 10}}},
+		{"same keys different values",
+			map[string]map[string]Quantity{"first": {"val": 10}},
+			map[string]map[string]int64{"first": {"val": 0}},
+			false,
+		},
+		{"different instance type",
+			map[string]map[string]Quantity{"first": {"val": 10}},
+			map[string]map[string]int64{"second": {"val": 10}},
 			false},
-		{"same first-level key, different second-level key, same resource value",
-			inputs{map[string]map[string]Quantity{"first": {"val": 10}}, map[string]map[string]Quantity{"first": {"value": 10}}},
+		{"different resource type",
+			map[string]map[string]Quantity{"first": {"val": 10}},
+			map[string]map[string]int64{"first": {"value": 10}},
 			false},
-		{"same first-level key, second has larger sub-level map",
-			inputs{map[string]map[string]Quantity{"first": {"val": 10}}, map[string]map[string]Quantity{"first": {"val": 10, "sum": 7}}},
-			false},
-		{"same first-level key, first has larger sub-level map",
-			inputs{map[string]map[string]Quantity{"first": {"val": 10, "sum": 7}}, map[string]map[string]Quantity{"first": {"val": 10}}},
+		{"different resource count",
+			map[string]map[string]Quantity{"first": {"val": 10}},
+			map[string]map[string]int64{"first": {"val": 10, "sum": 7}},
 			false},
 		{"same keys and values",
-			inputs{map[string]map[string]Quantity{"x": {"val": 10, "sum": 7}}, map[string]map[string]Quantity{"x": {"val": 10, "sum": 7}}},
+			map[string]map[string]Quantity{"x": {"val": 10, "sum": 7}},
+			map[string]map[string]int64{"x": {"val": 10, "sum": 7}},
 			true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
 			var base, compare *TrackedResource
-			if tt.input.base != nil {
-				base = NewTrackedResourceFromMap(tt.input.base)
-			}
-			if tt.input.compare != nil {
-				compare = NewTrackedResourceFromMap(tt.input.compare)
+			if tt.base != nil {
+				base = NewTrackedResourceFromMap(tt.base)
 			}
 
-			result := EqualsTracked(base, compare)
-			assert.Assert(t, result == tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, base, compare)
-
-			result = EqualsTracked(compare, base)
-			assert.Assert(t, result == tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, result, compare, base)
+			assert.Equal(t, base.EqualsDAO(tt.compare), tt.expected, "Equal result should be %v instead of %v, left %v, right %v", tt.expected, base, compare)
 		})
 	}
 }
@@ -311,4 +301,13 @@ func TestTrackedResourceString(t *testing.T) {
 	})
 	expected = "TrackedResource{instanceType1:cpu=10,instanceType1:memory=20,instanceType2:memory=15}"
 	assert.Equal(t, sortTrackedResourceString(expected), sortTrackedResourceString(tr3.String()))
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("String panic on nil TrackedResource")
+		}
+	}()
+	tr := (*TrackedResource)(nil)
+	str := tr.String()
+	assert.Equal(t, str, "TrackedResource{}")
 }

@@ -480,6 +480,11 @@ func (a *Allocation) SendRequiredNodePreemptionFailedEvent(node string) {
 	a.askEvents.SendRequiredNodePreemptionFailed(a.allocationKey, a.applicationID, node, a.GetAllocatedResource())
 }
 
+// SendPreemptedBySchedulerEvent updates the event system with the preemption event.
+func (a *Allocation) SendPreemptedBySchedulerEvent(preemptorAllocKey, preemptorAppId, preemptorQueuePath string) {
+	a.askEvents.SendPreemptedByScheduler(a.allocationKey, a.applicationID, preemptorAllocKey, preemptorAppId, preemptorQueuePath, a.GetAllocatedResource())
+}
+
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met.
 func (a *Allocation) GetAllocationLog() []*AllocationLogEntry {
 	a.RLock()

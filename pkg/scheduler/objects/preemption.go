@@ -19,7 +19,6 @@
 package objects
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -637,8 +636,7 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 				zap.String("victimQueue", victimQueue.Name),
 			)
 			// send event
-			message := fmt.Sprintf("Preempted by %v from application %v in %v", p.ask.GetTag("kubernetes.io/meta/podName"), p.ask.applicationID, p.application.queuePath)
-			p.application.appEvents.SendPreemptAllocationEvent(victim.GetApplicationID(), victim.GetAllocationKey(), victim.GetAllocatedResource(), message)
+			victim.SendPreemptedBySchedulerEvent(p.ask.allocationKey, p.ask.applicationID, p.application.queuePath)
 		} else {
 			log.Log(log.SchedPreemption).Warn("BUG: Queue not found for preemption victim",
 				zap.String("queue", p.queue.Name),

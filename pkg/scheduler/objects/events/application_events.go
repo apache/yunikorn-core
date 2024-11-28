@@ -79,14 +79,6 @@ func (ae *ApplicationEvents) SendRemoveAllocationEvent(appID, allocKey string, a
 	ae.eventSystem.AddEvent(event)
 }
 
-func (ae *ApplicationEvents) SendPreemptAllocationEvent(appID, allocKey string, allocated *resources.Resource, message string) {
-	if !ae.eventSystem.IsEventTrackingEnabled() {
-		return
-	}
-	event := events.CreateAppEventRecord(appID, message, allocKey, si.EventRecord_REMOVE, si.EventRecord_ALLOC_PREEMPT, allocated)
-	ae.eventSystem.AddEvent(event)
-}
-
 func (ae *ApplicationEvents) SendRemoveAskEvent(appID, allocKey string, allocated *resources.Resource, detail si.EventRecord_ChangeDetail) {
 	if !ae.eventSystem.IsEventTrackingEnabled() {
 		return

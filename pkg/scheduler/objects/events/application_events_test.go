@@ -168,24 +168,6 @@ func TestSendRemoveAllocationEvent(t *testing.T) {
 	}
 }
 
-func TestSendPreemptAllocationEvent(t *testing.T) {
-	eventSystem := mock.NewEventSystemDisabled()
-	appEvents := NewApplicationEvents(eventSystem)
-	appEvents.SendPreemptAllocationEvent(appID, allocKey, resources.NewResource(), "Preempted by pod-a from application yunikorn-test-autogen in root.test")
-	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
-
-	eventSystem = mock.NewEventSystem()
-	appEvents = NewApplicationEvents(eventSystem)
-	appEvents.SendPreemptAllocationEvent(appID, allocKey, resources.NewResource(), "Preempted by pod-a from application yunikorn-test-autogen in root.test")
-	event := eventSystem.Events[0]
-	assert.Equal(t, si.EventRecord_APP, event.Type)
-	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
-	assert.Equal(t, si.EventRecord_ALLOC_PREEMPT, event.EventChangeDetail)
-	assert.Equal(t, "app-0", event.ObjectID)
-	assert.Equal(t, "alloc-0", event.ReferenceID)
-	assert.Equal(t, "Preempted by pod-a from application yunikorn-test-autogen in root.test", event.Message)
-}
-
 func TestSendRemoveAskEvent(t *testing.T) {
 	eventSystem := mock.NewEventSystemDisabled()
 	appEvents := NewApplicationEvents(eventSystem)

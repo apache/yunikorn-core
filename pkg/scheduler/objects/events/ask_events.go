@@ -105,6 +105,15 @@ func (ae *AskEvents) SendRequiredNodePreemptionFailed(allocKey, appID, node stri
 	ae.eventSystem.AddEvent(event)
 }
 
+func (ae *AskEvents) SendPreemptedByScheduler(allocKey, appID, preemptorAllocKey, preemptorAppId, preemptorQueuePath string, allocatedResource *resources.Resource) {
+	if !ae.eventSystem.IsEventTrackingEnabled() {
+		return
+	}
+	message := fmt.Sprintf("Preempted by %s from application %s in %s", preemptorAllocKey, preemptorAppId, preemptorQueuePath)
+	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
+	ae.eventSystem.AddEvent(event)
+}
+
 func NewAskEvents(evt events.EventSystem) *AskEvents {
 	return newAskEventsWithRate(evt, 15*time.Second, 1)
 }

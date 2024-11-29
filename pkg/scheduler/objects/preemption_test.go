@@ -20,8 +20,6 @@ package objects
 
 import (
 	"fmt"
-	events_mock "github.com/apache/yunikorn-core/pkg/events/mock"
-	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"strconv"
 	"testing"
 	"time"
@@ -30,8 +28,10 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	evtMock "github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -310,7 +310,7 @@ func TestTryPreemption_SendEvent(t *testing.T) {
 	alloc1, alloc2, err := creatApp1(childQ1, node, nil, map[string]resources.Quantity{"first": 5, "pods": 1})
 	assert.NilError(t, err)
 
-	eventSystem := events_mock.NewEventSystem()
+	eventSystem := evtMock.NewEventSystem()
 	events := schedEvt.NewAskEvents(eventSystem)
 	alloc1.askEvents = events
 

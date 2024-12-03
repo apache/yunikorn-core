@@ -51,7 +51,6 @@ func TestNewAsk(t *testing.T) {
 	askStr := ask.String()
 	expected := "allocationKey ask-1, applicationID app-1, Resource map[first:10], Allocated false"
 	assert.Equal(t, askStr, expected, "Strings should have been equal")
-	assert.Equal(t, "app-1|ask-1", ask.resKeyWithoutNode) //nolint:staticcheck
 }
 
 func TestAskAllocateDeallocate(t *testing.T) {

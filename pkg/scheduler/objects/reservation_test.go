@@ -33,62 +33,49 @@ func TestNewReservation(t *testing.T) {
 	app := newApplication("app-1", "default", "root.unknown")
 	node := newNodeRes("node-1", res)
 
-	// check the basics (failures)
-	reserve := newReservation(nil, nil, nil, true)
-	if reserve != nil {
-		t.Errorf("reservation with nil objects should have returned nil: %v", reserve)
+	tests := []struct {
+		name     string
+		node     *Node
+		app      *Application
+		ask      *Allocation
+		appBased bool
+		expected *reservation
+	}{
+		{"nil input", nil, nil, nil, true, nil},
+		{"nil alloc", node, app, nil, true, nil},
+		{"nil app", node, nil, ask, true, nil},
+		{"nil node", nil, app, ask, true, nil},
+		{"node based", node, app, ask, false, &reservation{"app-1", "", "alloc-1", app, node, ask}},
+		{"app based", node, app, ask, true, &reservation{"", "node-1", "alloc-1", app, node, ask}},
 	}
-	reserve = newReservation(node, app, nil, true)
-	if reserve != nil {
-		t.Errorf("reservation with nil ask set should have returned nil: '%v'", reserve)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reserve := newReservation(tt.node, tt.app, tt.ask, tt.appBased)
+			if tt.expected == nil {
+				assert.Equal(t, tt.expected, reserve, "unexpected reservation")
+			} else {
+				assert.Equal(t, reserve.appID, tt.expected.appID, "incorrect appID")
+				assert.Equal(t, reserve.nodeID, tt.expected.nodeID, "incorrect node ID")
+				assert.Equal(t, reserve.allocKey, tt.expected.allocKey, "incorrect alloc key")
+				if tt.appBased {
+					assert.Equal(t, reserve.String(), "app-1 -> node-1|alloc-1", "incorrect string form")
+				} else {
+					assert.Equal(t, reserve.String(), "node-1 -> app-1|alloc-1", "incorrect string form")
+				}
+			}
+		})
 	}
-	reserve = newReservation(node, nil, ask, true)
-	if reserve != nil {
-		t.Errorf("reservation with nil app set should have returned nil: '%v'", reserve)
-	}
-	reserve = newReservation(nil, app, ask, true)
-	if reserve != nil {
-		t.Errorf("reservation with nil node set should have returned nil: '%v'", reserve)
-	}
-
-	// working cases
-	reserve = newReservation(node, app, ask, true)
-	if reserve == nil {
-		t.Fatalf("reservation with all objects set should have returned nil: %v", reserve)
-	}
-	assert.Equal(t, reserve.getKey(), "node-1|alloc-1", "incorrect node reservation key")
-	assert.Equal(t, reserve.String(), "app-1 -> node-1|alloc-1", "incorrect string form")
-
-	reserve = newReservation(node, app, ask, false)
-	if reserve == nil {
-		t.Fatalf("reservation with all objects set should have returned nil: %v", reserve)
-	}
-	assert.Equal(t, reserve.getKey(), "app-1|alloc-1", "incorrect app reservation key")
-	assert.Equal(t, reserve.String(), "node-1 -> app-1|alloc-1", "incorrect string form")
 }
 
-func TestReservationKey(t *testing.T) {
-	// create the input objects
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	ask := newAllocationAsk("alloc-1", "app-1", res)
-	app := newApplication("app-1", "default", "root.unknown")
-	node := newNodeRes("node-1", res)
-
-	// check the basics
-	reserve := reservationKey(nil, nil, nil)
-	assert.Equal(t, reserve, "", "reservation with nil objects should have  empty key")
-	reserve = reservationKey(node, app, nil)
-	assert.Equal(t, reserve, "", "reservation with nil ask set should have empty key")
-	reserve = reservationKey(node, app, ask)
-	assert.Equal(t, reserve, "", "reservation with all objects set should have empty key")
-
-	// other cases
-	reserve = reservationKey(node, nil, ask)
-	assert.Equal(t, reserve, "node-1|alloc-1", "incorrect node reservation key")
-	assert.Equal(t, "node-1|alloc-1", ask.resKeyPerNode["node-1"])
-	assert.Equal(t, 1, len(ask.resKeyPerNode))
-	reserve = reservationKey(nil, app, ask)
-	assert.Equal(t, reserve, "app-1|alloc-1", "incorrect app reservation key")
+func TestReservationString(t *testing.T) {
+	var nilReserve *reservation
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil reservation in object test")
+		}
+	}()
+	str := nilReserve.String()
+	assert.Equal(t, "nil reservation", str, "nil reservation did not return correct string")
 }
 
 func TestGetObjects(t *testing.T) {

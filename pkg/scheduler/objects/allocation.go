@@ -48,7 +48,6 @@ type Allocation struct {
 	allowPreemptOther bool
 	originator        bool
 	tags              map[string]string
-	resKeyWithoutNode string // the reservation key without node
 	foreign           bool
 	preemptable       bool
 
@@ -57,9 +56,8 @@ type Allocation struct {
 	allocLog             map[string]*AllocationLogEntry
 	preemptionTriggered  bool
 	preemptCheckTime     time.Time
-	schedulingAttempted  bool              // whether scheduler core has tried to schedule this allocation
-	scaleUpTriggered     bool              // whether this aloocation has triggered autoscaling or not
-	resKeyPerNode        map[string]string // reservation key for a given node
+	schedulingAttempted  bool // whether scheduler core has tried to schedule this allocation
+	scaleUpTriggered     bool // whether this allocation has triggered autoscaling or not
 	allocatedResource    *resources.Resource
 	askEvents            *schedEvt.AskEvents
 	userQuotaCheckFailed bool
@@ -145,8 +143,6 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 		allowPreemptOther: alloc.PreemptionPolicy.GetAllowPreemptOther(),
 		originator:        alloc.Originator,
 		allocLog:          make(map[string]*AllocationLogEntry),
-		resKeyPerNode:     make(map[string]string),
-		resKeyWithoutNode: reservationKeyWithoutNode(alloc.ApplicationID, alloc.AllocationKey),
 		askEvents:         schedEvt.NewAskEvents(events.GetEventSystem()),
 		allocated:         allocated,
 		nodeID:            nodeID,
@@ -547,18 +543,6 @@ func (a *Allocation) HasTriggeredScaleUp() bool {
 	a.RLock()
 	defer a.RUnlock()
 	return a.scaleUpTriggered
-}
-
-func (a *Allocation) setReservationKeyForNode(node, resKey string) {
-	a.Lock()
-	defer a.Unlock()
-	a.resKeyPerNode[node] = resKey
-}
-
-func (a *Allocation) getReservationKeyForNode(node string) string {
-	a.RLock()
-	defer a.RUnlock()
-	return a.resKeyPerNode[node]
 }
 
 func (a *Allocation) setHeadroomCheckFailed(headroom *resources.Resource, queue string) {

@@ -891,6 +891,9 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 		return nil
 	}
 
+	// reservations were cancelled during the processing
+	pc.decReservationCount(result.CancelledReservations)
+
 	// reservation
 	if result.ResultType == objects.Reserved {
 		pc.reserve(app, targetNode, result.Request)
@@ -978,13 +981,7 @@ func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.Node, ask *objects.Allocation) {
 	// remove the reservation of the app, this will also unReserve the node
-	var err error
-	var num int
-	if num, err = app.UnReserve(node, ask); err != nil {
-		log.Log(log.SchedPartition).Info("Failed to unreserve, error during allocate on the app",
-			zap.Error(err))
-		return
-	}
+	num := app.UnReserve(node, ask)
 	// remove the reservation of the queue
 	appID := app.ApplicationID
 	app.GetQueue().UnReserve(appID, num)

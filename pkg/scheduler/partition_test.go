@@ -484,7 +484,7 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 	}
 	// check if updated (must be after allocate call)
 	assert.Equal(t, 1, len(app2.GetReservations()), "app reservation should have been updated")
-	assert.Equal(t, 1, len(app2.GetAskReservations(allocKey2)), "ask should have been reserved")
+	assert.Assert(t, app2.IsAllocationReserved(allocKey2), "ask should have been reserved")
 
 	// try through reserved scheduling cycle this should trigger preemption
 	result = partition.tryReservedAllocate()
@@ -1661,7 +1661,7 @@ func TestRequiredNodeReservation(t *testing.T) {
 	}
 	// check if updated (must be after allocate call)
 	assert.Equal(t, 1, len(app.GetReservations()), "app should have one reserved ask")
-	assert.Equal(t, 1, len(app.GetAskReservations(allocKey2)), "ask should have been reserved")
+	assert.Assert(t, app.IsAllocationReserved(allocKey2), "ask should have been reserved")
 	assertLimits(t, getTestUserGroup(), res)
 
 	// allocation that fits on the node should not be allocated
@@ -1684,7 +1684,7 @@ func TestRequiredNodeReservation(t *testing.T) {
 }
 
 // allocate ask request with required node having non daemon set reservations
-func TestRequiredNodeCancelNonDSReservations(t *testing.T) {
+func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 	partition := createQueuesNodes(t)
 	if partition == nil {
 		t.Fatal("partition create failed")
@@ -1733,8 +1733,9 @@ func TestRequiredNodeCancelNonDSReservations(t *testing.T) {
 		t.Fatal("2nd allocation did not return the correct allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 1, len(app.GetReservations()), "allocation should have been reserved")
 	assert.Equal(t, 1, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 1")
+	assert.Equal(t, 1, partition.reservations, "partition reservations should be 1")
 
 	res1, err := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
 	assert.NilError(t, err, "failed to create resource")
@@ -1757,8 +1758,9 @@ func TestRequiredNodeCancelNonDSReservations(t *testing.T) {
 	assert.Equal(t, objects.Allocated, result.ResultType, "allocation result type should have been allocated")
 
 	// earlier app (app1) reservation count should be zero
-	assert.Equal(t, 0, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 0, len(app.GetReservations()), "allocation should not have been reserved")
 	assert.Equal(t, 0, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 0")
+	assert.Equal(t, 0, partition.reservations, "partition reservations should be 0")
 }
 
 // allocate ask request with required node having daemon set reservations
@@ -1837,6 +1839,7 @@ func TestRequiredNodeCancelDSReservations(t *testing.T) {
 	// still reservation count is 1
 	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
 	assert.Equal(t, 1, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 1")
+	assert.Equal(t, 1, partition.reservations, "partition reservations should be 1")
 }
 
 func TestRequiredNodeNotExist(t *testing.T) {
@@ -2015,15 +2018,16 @@ func TestPreemption(t *testing.T) {
 // Preemption followed by a normal allocation
 func TestPreemptionForRequiredNodeNormalAlloc(t *testing.T) {
 	setupUGM()
-	// setup the partition so we can try the real allocation
+	// set up the partition so we can try the real allocation
 	partition, app := setupPreemptionForRequiredNode(t)
 	// now try the allocation again: the normal path
 	result := partition.tryAllocate()
-	if result != nil {
-		t.Fatal("allocations should not have returned a result")
+	if result == nil || result.Request == nil {
+		t.Fatal("allocation should have returned a result")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 0, len(app.GetReservations()), "no allocations on app should have been reserved")
+	assert.Equal(t, 0, partition.reservations, "no allocations on partition should have been reserved")
 }
 
 // Preemption followed by a reserved allocation
@@ -2234,8 +2238,8 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 		t.Fatal("allocation attempt should not have returned an allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
-	assert.Equal(t, 1, len(app.GetAskReservations(allocKey2)), "ask should have been reserved")
+	assert.Equal(t, 1, len(app.GetReservations()), "application should have been reserved")
+	assert.Assert(t, app.IsAllocationReserved(allocKey2), "allocation should have been reserved")
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 8000}), getExpectedQueuesLimitsForPreemptionWithRequiredNode())
 
 	// try through reserved scheduling cycle this should trigger preemption
@@ -2403,8 +2407,8 @@ func TestTryAllocateReserve(t *testing.T) {
 		t.Fatal("expected node-2 to be returned got nil")
 	}
 	partition.reserve(app, node2, ask)
-	if !app.IsReservedOnNode(node2.NodeID) || len(app.GetAskReservations("alloc-2")) == 0 {
-		t.Fatalf("reservation failure for ask2 and node2")
+	if !app.IsReservedOnNode(node2.NodeID) || !app.IsAllocationReserved("alloc-2") {
+		t.Fatalf("reservation failure for alloc-2 and node-2")
 	}
 
 	// first allocation should be app-1 and alloc-2
@@ -2420,7 +2424,7 @@ func TestTryAllocateReserve(t *testing.T) {
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000}))
 
 	// reservations should have been removed: it is in progress
-	if app.IsReservedOnNode(node2.NodeID) || len(app.GetAskReservations("alloc-2")) != 0 {
+	if app.IsReservedOnNode(node2.NodeID) || app.IsAllocationReserved("alloc-2") {
 		t.Fatalf("reservation removal failure for ask2 and node2")
 	}
 
@@ -2476,8 +2480,8 @@ func TestTryAllocateWithReserved(t *testing.T) {
 		t.Fatal("expected node-2 to be returned got nil")
 	}
 	partition.reserve(app, node2, ask)
-	if !app.IsReservedOnNode(node2.NodeID) || len(app.GetAskReservations("alloc-1")) == 0 {
-		t.Fatal("reservation failure for ask and node2")
+	if !app.IsReservedOnNode(node2.NodeID) || !app.IsAllocationReserved("alloc-1") {
+		t.Fatal("reservation failure for alloc-1 and node-2")
 	}
 	result := partition.tryAllocate()
 	if result == nil || result.Request == nil {

@@ -45,6 +45,7 @@ const (
 	appID3        = "app-3"
 	aKey          = "alloc-1"
 	aKey2         = "alloc-2"
+	aKey3         = "alloc-3"
 	nodeID1       = "node-1"
 	nodeID2       = "node-2"
 	instType1     = "itype-1"

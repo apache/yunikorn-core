@@ -21,37 +21,36 @@ package objects
 import (
 	"go.uber.org/zap"
 
-	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 type reservation struct {
-	nodeID string
-	appID  string
-	askKey string
-	// these references must ONLY be used for ask, node and application removal otherwise
+	appID    string
+	nodeID   string
+	allocKey string
+	// these references must ONLY be used for alloc, node and application removal otherwise
 	// the reservations cannot be removed and scheduling might be impacted.
-	app  *Application
-	node *Node
-	ask  *Allocation
+	app   *Application
+	node  *Node
+	alloc *Allocation
 }
 
 // The reservation inside the scheduler. A reservation object is never mutated and does not use locking.
 // The key depends on where the reservation was made (node or app).
 // appBased must be true for a reservation for an app and false for a reservation on a node
-func newReservation(node *Node, app *Application, ask *Allocation, appBased bool) *reservation {
-	if ask == nil || app == nil || node == nil {
+func newReservation(node *Node, app *Application, alloc *Allocation, appBased bool) *reservation {
+	if alloc == nil || app == nil || node == nil {
 		log.Log(log.SchedReservation).Warn("Illegal reservation requested: one input is nil",
 			zap.Stringer("node", node),
 			zap.Stringer("app", app),
-			zap.Stringer("ask", ask))
+			zap.Stringer("alloc", alloc))
 		return nil
 	}
 	res := &reservation{
-		askKey: ask.GetAllocationKey(),
-		ask:    ask,
-		app:    app,
-		node:   node,
+		allocKey: alloc.GetAllocationKey(),
+		alloc:    alloc,
+		app:      app,
+		node:     node,
 	}
 	if appBased {
 		res.nodeID = node.NodeID
@@ -61,51 +60,21 @@ func newReservation(node *Node, app *Application, ask *Allocation, appBased bool
 	return res
 }
 
-func reservationKey(node *Node, app *Application, ask *Allocation) string {
-	if ask == nil || (app == nil && node == nil) || (app != nil && node != nil) {
-		log.Log(log.SchedReservation).Warn("Illegal reservation key requested",
-			zap.Any("node", node),
-			zap.Any("app", app),
-			zap.Any("ask", ask))
-		return ""
-	}
-	if node == nil {
-		return ask.resKeyWithoutNode
-	}
-	key := ask.getReservationKeyForNode(node.NodeID)
-	if key != common.Empty {
-		return key
-	}
-
-	key = node.NodeID + "|" + ask.GetAllocationKey()
-	ask.setReservationKeyForNode(node.NodeID, key)
-	return key
-}
-
-func reservationKeyWithoutNode(appID, allocKey string) string {
-	return appID + "|" + allocKey
-}
-
-// Return the reservation key
-func (r *reservation) getKey() string {
-	if r.nodeID == "" {
-		return r.appID + "|" + r.askKey
-	}
-	return r.nodeID + "|" + r.askKey
-}
-
 func (r *reservation) String() string {
-	if r.nodeID == "" {
-		return r.node.NodeID + " -> " + r.appID + "|" + r.askKey
+	if r == nil {
+		return "nil reservation"
 	}
-	return r.app.ApplicationID + " -> " + r.nodeID + "|" + r.askKey
+	if r.nodeID == "" {
+		return r.node.NodeID + " -> " + r.appID + "|" + r.allocKey
+	}
+	return r.app.ApplicationID + " -> " + r.nodeID + "|" + r.allocKey
 }
 
 // GetObjects returns the objects that created the reservation.
 // None of the returned values will be nil unless the reservation itself is nil
 func (r *reservation) GetObjects() (*Node, *Application, *Allocation) {
 	if r != nil {
-		return r.node, r.app, r.ask
+		return r.node, r.app, r.alloc
 	}
 	return nil, nil, nil
 }

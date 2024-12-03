@@ -178,3 +178,23 @@ func TestRequiredNodePreemptionFailedEvents(t *testing.T) {
 	event = eventSystem.Events[0]
 	assert.Equal(t, "Unschedulable request 'alloc-1' with required node 'node-1', no preemption victim found", event.Message)
 }
+
+func TestPreemptedBySchedulerEvents(t *testing.T) {
+	resource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	eventSystem := mock.NewEventSystemDisabled()
+	events := NewAskEvents(eventSystem)
+	events.SendPreemptedByScheduler("alloc-0", appID, "preemptor-0", "preemptor-app-0", "root.parent.child1", resource)
+	assert.Equal(t, 0, len(eventSystem.Events))
+
+	eventSystem = mock.NewEventSystem()
+	events = NewAskEvents(eventSystem)
+	events.SendPreemptedByScheduler("alloc-0", appID, "preemptor-0", "preemptor-app-0", "root.parent.child1", resource)
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
+	assert.Equal(t, "alloc-0", event.ObjectID)
+	assert.Equal(t, appID, event.ReferenceID)
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, "Preempted by preemptor-0 from application preemptor-app-0 in root.parent.child1", event.Message)
+}

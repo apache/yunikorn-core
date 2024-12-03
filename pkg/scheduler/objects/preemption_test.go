@@ -28,8 +28,10 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	evtMock "github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -290,6 +292,58 @@ func TestTryPreemption(t *testing.T) {
 	assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
 	assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
+}
+
+func TestTryPreemption_SendEvent(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "pods": 5})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "20", "pods": "5"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, map[string]string{"first": "10"}, map[string]string{"first": "5"})
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, map[string]string{"first": "5"})
+	assert.NilError(t, err)
+
+	alloc1, alloc2, err := creatApp1(childQ1, node, nil, map[string]resources.Quantity{"first": 5, "pods": 1})
+	assert.NilError(t, err)
+
+	eventSystem := evtMock.NewEventSystem()
+	events := schedEvt.NewAskEvents(eventSystem)
+	alloc1.askEvents = events
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3")
+	assert.NilError(t, err)
+	childQ2.incPendingResource(ask3.GetAllocatedResource())
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	// register predicate handler
+	preemptions := []mock.Preemption{
+		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
+	}
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result != nil, "no result")
+	assert.NilError(t, plugin.GetPredicateError())
+	assert.Assert(t, ok, "no victims found")
+	assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
+	assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
+	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	assert.Equal(t, 1, len(eventSystem.Events))
+	event := eventSystem.Events[0]
+	assert.Equal(t, alloc1.applicationID, event.ReferenceID)
+	assert.Equal(t, alloc1.allocationKey, event.ObjectID)
+	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
+	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
+	assert.Equal(t, fmt.Sprintf("Preempted by %s from application %s in %s", "alloc3", appID2, "root.parent.child2"), event.Message)
 	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 

@@ -342,6 +342,10 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
+	if queue.IsDraining() {
+		return fmt.Errorf("queue %s is draining, cannot add application %s", queueName, appID)
+	}
+
 	guaranteedRes := app.GetGuaranteedResource()
 	maxRes := app.GetMaxResource()
 	maxApps := app.GetMaxApps()

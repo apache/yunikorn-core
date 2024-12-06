@@ -906,6 +906,21 @@ func TestAddApp(t *testing.T) {
 	scheduleApplicationsNew, err = metrics.GetSchedulerMetrics().GetTotalApplicationsNew()
 	assert.NilError(t, err, "get scheduler metrics failed")
 	assert.Equal(t, scheduleApplicationsNew, 1)
+
+	// mark queue stopped, no new application can be added
+	err = partition.handlePartitionEvent(objects.Start)
+	assert.NilError(t, err, "partition state change failed unexpectedly")
+	partition.GetQueue(defQueue).MarkQueueForRemoval()
+	err = partition.AddApplication(app)
+	if err == nil || partition.getApplication(appID3) != nil {
+		t.Errorf("add application on draining queue should have failed but did not")
+	}
+	queueApplicationsNew, err = metrics.GetQueueMetrics(defQueue).GetQueueApplicationsNew()
+	assert.NilError(t, err, "get queue metrics failed")
+	assert.Equal(t, queueApplicationsNew, 1)
+	scheduleApplicationsNew, err = metrics.GetSchedulerMetrics().GetTotalApplicationsNew()
+	assert.NilError(t, err, "get scheduler metrics failed")
+	assert.Equal(t, scheduleApplicationsNew, 1)
 }
 
 func TestAddAppForced(t *testing.T) {

@@ -952,12 +952,23 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 // Lock free call this must be called holding the context lock
 func (pc *PartitionContext) reserve(app *objects.Application, node *objects.Node, ask *objects.Allocation) {
 	appID := app.ApplicationID
-	// app has node already reserved cannot reserve again
-	if app.IsReservedOnNode(node.NodeID) {
-		log.Log(log.SchedPartition).Info("Application is already reserved on node",
+	// check if ask has reserved already, cannot have multiple reservations for one ask
+	nodeID := app.NodeReservedForAsk(ask.GetAllocationKey())
+	// We should not see a reservation for this ask yet
+	// sanity check the node that is reserved: same node just be done
+	// different node: fix it, unreserve the old node and reserve the new one
+	// this is all to safeguard the system it should never happen.
+	if nodeID != "" {
+		// same nodeID we do not need to do anything
+		if nodeID == node.NodeID {
+			return
+		}
+		log.Log(log.SchedPartition).Warn("ask is already reserved on different node, fixing reservations",
 			zap.String("appID", appID),
-			zap.String("nodeID", node.NodeID))
-		return
+			zap.String("allocationKey", ask.GetAllocationKey()),
+			zap.String("reserved nodeID", nodeID),
+			zap.String("new nodeID", node.NodeID))
+		pc.unReserve(app, pc.nodes.GetNode(nodeID), ask)
 	}
 	// all ok, add the reservation to the app, this will also reserve the node
 	if err := app.Reserve(node, ask); err != nil {

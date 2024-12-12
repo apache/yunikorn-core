@@ -796,20 +796,15 @@ func (sa *Application) HasReserved() bool {
 	return len(sa.reservations) > 0
 }
 
-// IsReservedOnNode returns true if and only if the node has been reserved by the application
-// An empty nodeID is never reserved.
-func (sa *Application) IsReservedOnNode(nodeID string) bool {
-	if nodeID == "" {
-		return false
-	}
+// NodeReservedForAsk returns the nodeID that has been reserved by the application for the ask
+// An empty nodeID means the ask is not reserved. An empty askKey is never reserved.
+func (sa *Application) NodeReservedForAsk(askKey string) string {
 	sa.RLock()
 	defer sa.RUnlock()
-	for _, reserved := range sa.reservations {
-		if reserved.nodeID == nodeID {
-			return true
-		}
+	if reserved, ok := sa.reservations[askKey]; ok {
+		return reserved.nodeID
 	}
-	return false
+	return ""
 }
 
 // Reserve the application for this node and alloc combination.
@@ -923,19 +918,6 @@ func (sa *Application) unReserveInternal(reserve *reservation) int {
 	return 0
 }
 
-// IsAllocationReserved returns true if the allocation has been reserved
-func (sa *Application) IsAllocationReserved(allocKey string) bool {
-	sa.RLock()
-	defer sa.RUnlock()
-	return sa.reservations[allocKey] != nil
-}
-
-// getAllocationReservation returns the reservation object for the allocation
-// No locking must be called while holding the lock
-func (sa *Application) getAllocationReservation(allocKey string) *reservation {
-	return sa.reservations[allocKey]
-}
-
 // canAllocationReserve Check if the allocation has already been reserved. An alloc can never reserve more than one node.
 // No locking must be called while holding the lock
 func (sa *Application) canAllocationReserve(alloc *Allocation) error {
@@ -945,7 +927,7 @@ func (sa *Application) canAllocationReserve(alloc *Allocation) error {
 			zap.String("allocationKey", allocKey))
 		return common.ErrorReservingAlloc
 	}
-	reserved := sa.getAllocationReservation(allocKey)
+	reserved := sa.reservations[allocKey]
 	if reserved != nil {
 		log.Log(log.SchedApplication).Debug("reservation already exists",
 			zap.String("allocKey", allocKey),
@@ -1100,12 +1082,13 @@ func (sa *Application) tryRequiredNode(request *Allocation, getNodeFn func(strin
 	if len(reservations) > 0 {
 		num = sa.cancelReservations(reservations)
 	}
+	_, thisReserved := sa.reservations[allocationKey]
 	// now try the request, we don't care about predicate error messages here
 	result, _ := sa.tryNode(node, request) //nolint:errcheck
 	if result != nil {
 		result.CancelledReservations = num
 		// check if the node was reserved and we allocated after a release
-		if _, ok := sa.reservations[allocationKey]; ok {
+		if thisReserved {
 			log.Log(log.SchedApplication).Debug("allocation on required node after release",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("nodeID", requiredNode),
@@ -1118,6 +1101,11 @@ func (sa *Application) tryRequiredNode(request *Allocation, getNodeFn func(strin
 			zap.String("allocationKey", allocationKey),
 			zap.Stringer("resultType", result.ResultType))
 		return result
+	}
+	// if this ask was already reserved we should not have deleted any reservations
+	// we also do not need to send back a reservation result and just return nil to check the next ask
+	if thisReserved {
+		return nil
 	}
 	result = newReservedAllocationResult(node.NodeID, request)
 	result.CancelledReservations = num
@@ -1452,7 +1440,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	scoreReserved := math.Inf(1)
 	// check if the alloc is reserved or not
 	allocKey := ask.GetAllocationKey()
-	reserved := sa.getAllocationReservation(allocKey)
+	reserved := sa.reservations[allocKey]
 	var allocResult *AllocationResult
 	var predicateErrors map[string]int
 	iterator.ForEachNode(func(node *Node) bool {

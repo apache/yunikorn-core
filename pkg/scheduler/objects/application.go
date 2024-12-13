@@ -472,41 +472,44 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 func (sa *Application) GetReservations() []string {
 	sa.RLock()
 	defer sa.RUnlock()
-	keys := make([]string, 0)
+	keys := make([]string, len(sa.reservations))
+	var i int
 	for key := range sa.reservations {
-		keys = append(keys, key)
+		keys[i] = key
+		i++
 	}
 	return keys
 }
 
-// Return the allocation ask for the key, nil if not found
+// GetAllocationAsk returns the allocation alloc for the key, nil if not found
 func (sa *Application) GetAllocationAsk(allocationKey string) *Allocation {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.requests[allocationKey]
 }
 
-// Return the allocated resources for this application
+// GetAllocatedResource returns the currently allocated resources for this application
 func (sa *Application) GetAllocatedResource() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.allocatedResource.Clone()
 }
 
+// GetMaxAllocatedResource returns the peak of the allocated resources for this application
 func (sa *Application) GetMaxAllocatedResource() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.maxAllocatedResource.Clone()
 }
 
-// Return the allocated placeholder resources for this application
+// GetPlaceholderResource returns the currently allocated placeholder resources for this application
 func (sa *Application) GetPlaceholderResource() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.allocatedPlaceholder.Clone()
 }
 
-// Return the total placeholder ask for this application
+// GetPlaceholderAsk returns the total placeholder resource request for this application
 // Is only set on app creation and used when app is added to a queue
 func (sa *Application) GetPlaceholderAsk() *resources.Resource {
 	sa.RLock()
@@ -521,8 +524,8 @@ func (sa *Application) GetPendingResource() *resources.Resource {
 	return sa.pending
 }
 
-// Remove one or more allocation asks from this application.
-// This also removes any reservations that are linked to the ask.
+// RemoveAllocationAsk removes one or more allocation asks from this application.
+// This also removes any reservations that are linked to the allocations.
 // The return value is the number of reservations released
 func (sa *Application) RemoveAllocationAsk(allocKey string) int {
 	sa.Lock()
@@ -537,23 +540,16 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 		return 0
 	}
 	var deltaPendingResource *resources.Resource = nil
-	// when allocation key not specified, cleanup all allocation ask
+	// when allocation key is not specified, cleanup all allocations
 	var toRelease int
 	if allocKey == "" {
 		// cleanup all reservations
-		for key, reserve := range sa.reservations {
-			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
-			if err != nil {
-				log.Log(log.SchedApplication).Warn("Removal of reservation failed while removing all allocation asks",
-					zap.String("appID", sa.ApplicationID),
-					zap.String("reservationKey", key),
-					zap.Error(err))
-				continue
-			}
-			// clean up the queue reservation (one at a time)
-			sa.queue.UnReserve(sa.ApplicationID, releases)
+		for _, reserve := range sa.reservations {
+			releases := sa.unReserveInternal(reserve)
 			toRelease += releases
 		}
+		// clean up the queue reservation
+		sa.queue.UnReserve(sa.ApplicationID, toRelease)
 		// Cleanup total pending resource
 		deltaPendingResource = sa.pending
 		sa.pending = resources.NewResource()
@@ -566,16 +562,8 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 		sa.queue.UpdateApplicationPriority(sa.ApplicationID, sa.askMaxPriority)
 	} else {
 		// cleanup the reservation for this allocation
-		for _, key := range sa.GetAskReservations(allocKey) {
-			reserve := sa.reservations[key]
-			releases, err := sa.unReserveInternal(reserve.node, reserve.ask)
-			if err != nil {
-				log.Log(log.SchedApplication).Warn("Removal of reservation failed while removing allocation ask",
-					zap.String("appID", sa.ApplicationID),
-					zap.String("reservationKey", key),
-					zap.Error(err))
-				continue
-			}
+		if reserve, ok := sa.reservations[allocKey]; ok {
+			releases := sa.unReserveInternal(reserve)
 			// clean up the queue reservation
 			sa.queue.UnReserve(sa.ApplicationID, releases)
 			toRelease += releases
@@ -596,7 +584,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 	}
 	// clean up the queue pending resources
 	sa.queue.decPendingResource(deltaPendingResource)
-	// Check if we need to change state based on the ask removal:
+	// Check if we need to change state based on the removal:
 	// 1) if pending is zero (no more asks left)
 	// 2) if confirmed allocations is zero (no real tasks running)
 	// Change the state to completing.
@@ -828,152 +816,145 @@ func (sa *Application) HasReserved() bool {
 	return len(sa.reservations) > 0
 }
 
-// IsReservedOnNode returns true if and only if the node has been reserved by the application
-// An empty nodeID is never reserved.
-func (sa *Application) IsReservedOnNode(nodeID string) bool {
-	if nodeID == "" {
-		return false
-	}
+// NodeReservedForAsk returns the nodeID that has been reserved by the application for the ask
+// An empty nodeID means the ask is not reserved. An empty askKey is never reserved.
+func (sa *Application) NodeReservedForAsk(askKey string) string {
 	sa.RLock()
 	defer sa.RUnlock()
-	// make sure matches only for the whole nodeID
-	separator := nodeID + "|"
-	for key := range sa.reservations {
-		if strings.HasPrefix(key, separator) {
-			return true
-		}
+	if reserved, ok := sa.reservations[askKey]; ok {
+		return reserved.nodeID
 	}
-	return false
+	return ""
 }
 
-// Reserve the application for this node and ask combination.
+// Reserve the application for this node and alloc combination.
 // If the reservation fails the function returns false, if the reservation is made it returns true.
-// If the node and ask combination was already reserved for the application this is a noop and returns true.
+// If the node and alloc combination was already reserved for the application this is a noop and returns true.
 func (sa *Application) Reserve(node *Node, ask *Allocation) error {
+	if node == nil || ask == nil {
+		return fmt.Errorf("reservation creation failed node or alloc are nil on appID %s", sa.ApplicationID)
+	}
 	sa.Lock()
 	defer sa.Unlock()
 	return sa.reserveInternal(node, ask)
 }
 
-// Unlocked version for Reserve that really does the work.
+// reserveInternal is the unlocked version for Reserve that really does the work.
 // Must only be called while holding the application lock.
 func (sa *Application) reserveInternal(node *Node, ask *Allocation) error {
+	allocKey := ask.GetAllocationKey()
+	if sa.requests[allocKey] == nil {
+		log.Log(log.SchedApplication).Debug("alloc is not registered to this app",
+			zap.String("app", sa.ApplicationID),
+			zap.String("allocKey", allocKey))
+		return fmt.Errorf("reservation creation failed alloc %s not found on appID %s", allocKey, sa.ApplicationID)
+	}
 	// create the reservation (includes nil checks)
 	nodeReservation := newReservation(node, sa, ask, true)
 	if nodeReservation == nil {
 		log.Log(log.SchedApplication).Debug("reservation creation failed unexpectedly",
 			zap.String("app", sa.ApplicationID),
-			zap.Any("node", node),
-			zap.Any("ask", ask))
-		return fmt.Errorf("reservation creation failed node or ask are nil on appID %s", sa.ApplicationID)
+			zap.Stringer("node", node),
+			zap.Stringer("alloc", ask))
+		return fmt.Errorf("reservation creation failed node or alloc are nil on appID %s", sa.ApplicationID)
 	}
-	allocKey := ask.GetAllocationKey()
-	if sa.requests[allocKey] == nil {
-		log.Log(log.SchedApplication).Debug("ask is not registered to this app",
-			zap.String("app", sa.ApplicationID),
-			zap.String("allocKey", allocKey))
-		return fmt.Errorf("reservation creation failed ask %s not found on appID %s", allocKey, sa.ApplicationID)
-	}
-	if !sa.canAskReserve(ask) {
-		if ask.IsAllocated() {
-			return fmt.Errorf("ask is already allocated")
-		} else {
-			return fmt.Errorf("ask is already reserved")
-		}
+	// the alloc should not have reserved a node yet: do not allow multiple nodes to be reserved
+	if err := sa.canAllocationReserve(ask); err != nil {
+		return err
 	}
 	// check if we can reserve the node before reserving on the app
 	if err := node.Reserve(sa, ask); err != nil {
 		return err
 	}
-	sa.reservations[nodeReservation.getKey()] = nodeReservation
+	sa.reservations[allocKey] = nodeReservation
 	log.Log(log.SchedApplication).Info("reservation added successfully",
 		zap.String("app", sa.ApplicationID),
 		zap.String("node", node.NodeID),
-		zap.String("ask", allocKey))
+		zap.String("alloc", allocKey))
 	return nil
 }
 
-// UnReserve the application for this node and ask combination.
-// This first removes the reservation from the node.
+// UnReserve the application for this node and alloc combination.
 // If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
 // The error is set if the reservation key cannot be removed from the app or node.
-func (sa *Application) UnReserve(node *Node, ask *Allocation) (int, error) {
+func (sa *Application) UnReserve(node *Node, ask *Allocation) int {
+	log.Log(log.SchedApplication).Info("unreserving allocation from application",
+		zap.String("appID", sa.ApplicationID),
+		zap.Stringer("node", node),
+		zap.Stringer("alloc", ask))
+	if node == nil || ask == nil {
+		return 0
+	}
 	sa.Lock()
 	defer sa.Unlock()
-	return sa.unReserveInternal(node, ask)
+	reserve, ok := sa.reservations[ask.allocationKey]
+	if !ok {
+		log.Log(log.SchedApplication).Debug("reservation not found on application",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("allocationKey", ask.allocationKey))
+		return 0
+	}
+	if reserve.nodeID != node.NodeID {
+		log.Log(log.SchedApplication).Warn("UnReserve: provided info not consistent with reservation",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("node", reserve.nodeID),
+			zap.String("alloc", reserve.allocKey))
+	}
+	return sa.unReserveInternal(reserve)
 }
 
 // Unlocked version for UnReserve that really does the work.
+// This is idempotent and will not fail
 // Must only be called while holding the application lock.
-func (sa *Application) unReserveInternal(node *Node, ask *Allocation) (int, error) {
-	resKey := reservationKey(node, nil, ask)
-	if resKey == "" {
-		log.Log(log.SchedApplication).Debug("unreserve reservation key create failed unexpectedly",
-			zap.String("appID", sa.ApplicationID),
-			zap.Stringer("node", node),
-			zap.Stringer("ask", ask))
-		return 0, fmt.Errorf("reservation key failed node or ask are nil for appID %s", sa.ApplicationID)
+func (sa *Application) unReserveInternal(reserve *reservation) int {
+	// this should not happen
+	if reserve == nil {
+		return 0
 	}
 	// unReserve the node before removing from the app
-	var num int
-	var err error
-	if num, err = node.unReserve(sa, ask); err != nil {
-		return 0, err
-	}
+	num := reserve.node.unReserve(reserve.alloc)
 	// if the unreserve worked on the node check the app
-	if _, found := sa.reservations[resKey]; found {
+	if _, found := sa.reservations[reserve.allocKey]; found {
 		// worked on the node means either found or not but no error, log difference here
 		if num == 0 {
 			log.Log(log.SchedApplication).Info("reservation not found while removing from node, app has reservation",
 				zap.String("appID", sa.ApplicationID),
-				zap.String("nodeID", node.NodeID),
-				zap.String("ask", ask.GetAllocationKey()))
+				zap.String("nodeID", reserve.nodeID),
+				zap.String("alloc", reserve.allocKey))
 		}
-		delete(sa.reservations, resKey)
-		log.Log(log.SchedApplication).Info("reservation removed successfully", zap.String("node", node.NodeID),
-			zap.String("app", ask.GetApplicationID()), zap.String("ask", ask.GetAllocationKey()))
-		return 1, nil
+		delete(sa.reservations, reserve.allocKey)
+		log.Log(log.SchedApplication).Info("reservation removed successfully",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("node", reserve.nodeID),
+			zap.String("alloc", reserve.allocKey))
+		return 1
 	}
 	// reservation was not found
 	log.Log(log.SchedApplication).Info("reservation not found while removing from app",
 		zap.String("appID", sa.ApplicationID),
-		zap.String("nodeID", node.NodeID),
-		zap.String("ask", ask.GetAllocationKey()),
+		zap.String("node", reserve.nodeID),
+		zap.String("alloc", reserve.allocKey),
 		zap.Int("nodeReservationsRemoved", num))
-	return 0, nil
+	return 0
 }
 
-// Return the allocation reservations on any node.
-// The returned array is 0 or more keys into the reservations map.
+// canAllocationReserve Check if the allocation has already been reserved. An alloc can never reserve more than one node.
 // No locking must be called while holding the lock
-func (sa *Application) GetAskReservations(allocKey string) []string {
-	reservationKeys := make([]string, 0)
-	if allocKey == "" {
-		return reservationKeys
+func (sa *Application) canAllocationReserve(alloc *Allocation) error {
+	allocKey := alloc.GetAllocationKey()
+	if alloc.IsAllocated() {
+		log.Log(log.SchedApplication).Debug("allocation is marked as allocated, no reservation allowed",
+			zap.String("allocationKey", allocKey))
+		return common.ErrorReservingAlloc
 	}
-	for key := range sa.reservations {
-		if strings.HasSuffix(key, allocKey) {
-			reservationKeys = append(reservationKeys, key)
-		}
-	}
-	return reservationKeys
-}
-
-// Check if the allocation has already been reserved. An ask can never reserve more than one node.
-// No locking must be called while holding the lock
-func (sa *Application) canAskReserve(ask *Allocation) bool {
-	allocKey := ask.GetAllocationKey()
-	if ask.IsAllocated() {
-		log.Log(log.SchedApplication).Debug("ask already allocated, no reservation allowed",
-			zap.String("askKey", allocKey))
-		return false
-	}
-	if len(sa.GetAskReservations(allocKey)) > 0 {
+	reserved := sa.reservations[allocKey]
+	if reserved != nil {
 		log.Log(log.SchedApplication).Debug("reservation already exists",
-			zap.String("askKey", allocKey))
-		return false
+			zap.String("allocKey", allocKey),
+			zap.String("nodeID", reserved.nodeID))
+		return common.ErrorDuplicateReserve
 	}
-	return true
+	return nil
 }
 
 func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*Allocation) {
@@ -1065,42 +1046,13 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		requiredNode := request.GetRequiredNode()
 		// does request have any constraint to run on specific node?
 		if requiredNode != "" {
-			// the iterator might not have the node we need as it could be reserved, or we have not added it yet
-			node := getNodeFn(requiredNode)
-			if node == nil {
-				getRateLimitedAppLog().Info("required node is not found (could be transient)",
-					zap.String("application ID", sa.ApplicationID),
-					zap.String("allocationKey", request.GetAllocationKey()),
-					zap.String("required node", requiredNode))
-				return nil
-			}
-			// Are there any non daemon set reservations on specific required node?
-			// Cancel those reservations to run daemon set pods
-			reservations := node.GetReservations()
-			if len(reservations) > 0 {
-				if !sa.cancelReservations(reservations) {
-					return nil
-				}
-			}
-			// we don't care about predicate error messages here
-			result, _ := sa.tryNode(node, request) //nolint:errcheck
+			result := sa.tryRequiredNode(request, getNodeFn)
 			if result != nil {
-				// check if the node was reserved and we allocated after a release
-				if _, ok := sa.reservations[reservationKey(node, nil, request)]; ok {
-					log.Log(log.SchedApplication).Debug("allocation on required node after release",
-						zap.String("appID", sa.ApplicationID),
-						zap.String("nodeID", requiredNode),
-						zap.String("allocationKey", request.GetAllocationKey()))
-					result.ResultType = AllocatedReserved
-					return result
-				}
-				log.Log(log.SchedApplication).Debug("allocation on required node is completed",
-					zap.String("nodeID", node.NodeID),
-					zap.String("allocationKey", request.GetAllocationKey()),
-					zap.Stringer("resultType", result.ResultType))
 				return result
 			}
-			return newReservedAllocationResult(node.NodeID, request)
+			// it did not allocate or reserve: should only happen if the node is not registered yet
+			// just continue with the next request
+			continue
 		}
 
 		iterator := nodeIterator()
@@ -1128,50 +1080,86 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	return nil
 }
 
-func (sa *Application) cancelReservations(reservations []*reservation) bool {
-	for _, res := range reservations {
-		// skip the node
-		if res.ask.GetRequiredNode() != "" {
-			log.Log(log.SchedApplication).Warn("reservation for ask with required node already exists on the node",
-				zap.String("required node", res.node.NodeID),
-				zap.String("existing ask reservation key", res.getKey()))
-			return false
-		}
+// tryRequiredNode tries to place the allocation in the specific node that is set as the required node in the allocation.
+// The first time the allocation is seen it will try to make the allocation on the node. If that does not work it will
+// always trigger the reservation of the node.
+func (sa *Application) tryRequiredNode(request *Allocation, getNodeFn func(string) *Node) *AllocationResult {
+	requiredNode := request.GetRequiredNode()
+	allocationKey := request.GetAllocationKey()
+	// the iterator might not have the node we need as it could be reserved, or we have not added it yet
+	node := getNodeFn(requiredNode)
+	if node == nil {
+		getRateLimitedAppLog().Info("required node is not found (could be transient)",
+			zap.String("application ID", sa.ApplicationID),
+			zap.String("allocationKey", allocationKey),
+			zap.String("required node", requiredNode))
+		return nil
 	}
-	var err error
+	// Are there any reservations on this node that does not specifically require this node?
+	// Cancel any reservations to make room for the allocations that require the node
 	var num int
+	reservations := node.GetReservations()
+	if len(reservations) > 0 {
+		num = sa.cancelReservations(reservations)
+	}
+	_, thisReserved := sa.reservations[allocationKey]
+	// now try the request, we don't care about predicate error messages here
+	result, _ := sa.tryNode(node, request) //nolint:errcheck
+	if result != nil {
+		result.CancelledReservations = num
+		// check if the node was reserved and we allocated after a release
+		if thisReserved {
+			log.Log(log.SchedApplication).Debug("allocation on required node after release",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("nodeID", requiredNode),
+				zap.String("allocationKey", allocationKey))
+			result.ResultType = AllocatedReserved
+			return result
+		}
+		log.Log(log.SchedApplication).Debug("allocation on required node is completed",
+			zap.String("nodeID", node.NodeID),
+			zap.String("allocationKey", allocationKey),
+			zap.Stringer("resultType", result.ResultType))
+		return result
+	}
+	// if this ask was already reserved we should not have deleted any reservations
+	// we also do not need to send back a reservation result and just return nil to check the next ask
+	if thisReserved {
+		return nil
+	}
+	result = newReservedAllocationResult(node.NodeID, request)
+	result.CancelledReservations = num
+	return result
+}
+
+// cancelReservations will cancel all non required node reservations for a node. The list of reservations passed in is
+// a copy of all reservations of a single node. This is called during the required node allocation cycle only.
+// The returned int value is used to update the partition counter of active reservations.
+func (sa *Application) cancelReservations(reservations []*reservation) int {
+	var released, num int
 	// un reserve all the apps that were reserved on the node
 	for _, res := range reservations {
+		// cleanup if the reservation does not have this node as a requirement
+		if res.alloc.requiredNode != "" {
+			continue
+		}
 		thisApp := res.app.ApplicationID == sa.ApplicationID
 		if thisApp {
-			num, err = sa.unReserveInternal(res.node, res.ask)
-		} else {
-			num, err = res.app.UnReserve(res.node, res.ask)
-		}
-		if err != nil {
-			log.Log(log.SchedApplication).Warn("Unable to cancel reservations on node",
-				zap.String("victim application ID", res.app.ApplicationID),
-				zap.String("victim allocationKey", res.getKey()),
-				zap.String("required node", res.node.NodeID),
-				zap.Int("reservations count", num),
-				zap.String("application ID", sa.ApplicationID))
-			return false
-		} else {
-			log.Log(log.SchedApplication).Info("Cancelled reservation on required node",
-				zap.String("affected application ID", res.app.ApplicationID),
-				zap.String("affected allocationKey", res.getKey()),
-				zap.String("required node", res.node.NodeID),
-				zap.Int("reservations count", num),
-				zap.String("application ID", sa.ApplicationID))
-		}
-		// remove the reservation of the queue
-		if thisApp {
+			num = sa.unReserveInternal(res)
 			sa.queue.UnReserve(sa.ApplicationID, num)
 		} else {
+			num = res.app.UnReserve(res.node, res.alloc)
 			res.app.GetQueue().UnReserve(res.app.ApplicationID, num)
 		}
+		log.Log(log.SchedApplication).Info("Cancelled reservation for required node allocation",
+			zap.String("triggered by appID", sa.ApplicationID),
+			zap.String("affected application ID", res.appID),
+			zap.String("affected allocationKey", res.allocKey),
+			zap.String("required node", res.nodeID),
+			zap.Int("reservations count", num))
+		released += num
 	}
-	return true
+	return released
 }
 
 // tryPlaceholderAllocate tries to replace a placeholder that is allocated with a real allocation
@@ -1258,14 +1246,15 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	// pick the first fit and try all nodes if that fails give up
 	var allocResult *AllocationResult
 	if phFit != nil && reqFit != nil {
+		resKey := reqFit.GetAllocationKey()
 		iterator.ForEachNode(func(node *Node) bool {
 			if !node.IsSchedulable() {
-				log.Log(log.SchedApplication).Debug("skipping node for placeholder ask as state is unschedulable",
-					zap.String("allocationKey", reqFit.GetAllocationKey()),
+				log.Log(log.SchedApplication).Debug("skipping node for placeholder alloc as state is unschedulable",
+					zap.String("allocationKey", resKey),
 					zap.String("node", node.NodeID))
 				return true
 			}
-			if !node.preAllocateCheck(reqFit.GetAllocatedResource(), reservationKey(nil, sa, reqFit)) {
+			if !node.preAllocateCheck(reqFit.GetAllocatedResource(), resKey) {
 				return true
 			}
 			// skip the node if conditions can not be satisfied
@@ -1277,7 +1266,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if !node.TryAddAllocation(reqFit) {
 				log.Log(log.SchedApplication).Debug("Node update failed unexpectedly",
 					zap.String("applicationID", sa.ApplicationID),
-					zap.Stringer("ask", reqFit),
+					zap.Stringer("alloc", reqFit),
 					zap.Stringer("placeholder", phFit))
 				return false
 			}
@@ -1286,7 +1275,7 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
 					zap.Error(err))
 				// unwind node allocation
-				_ = node.RemoveAllocation(reqFit.GetAllocationKey())
+				_ = node.RemoveAllocation(resKey)
 				return false
 			}
 			// allocation worked: on a non placeholder node update resultType and return
@@ -1317,7 +1306,7 @@ func (sa *Application) checkHeadRooms(ask *Allocation, userHeadroom *resources.R
 	return userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) && headRoom.FitInMaxUndef(ask.GetAllocatedResource())
 }
 
-// Try a reserved allocation of an outstanding reservation
+// tryReservedAllocate tries allocating an outstanding reservation
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *AllocationResult {
 	sa.Lock()
 	defer sa.Unlock()
@@ -1326,14 +1315,14 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
-		ask := sa.requests[reserve.askKey]
+		ask := sa.requests[reserve.allocKey]
 		// sanity check and cleanup if needed
 		if ask == nil || ask.IsAllocated() {
 			var unreserveAsk *Allocation
 			// if the ask was not found we need to construct one to unreserve
 			if ask == nil {
 				unreserveAsk = &Allocation{
-					allocationKey: reserve.askKey,
+					allocationKey: reserve.allocKey,
 					applicationID: sa.ApplicationID,
 					allocLog:      make(map[string]*AllocationLogEntry),
 				}
@@ -1368,17 +1357,17 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 	// try this on all other nodes
 	for _, reserve := range sa.reservations {
-		// Other nodes cannot be tried if the ask has a required node
-		ask := reserve.ask
-		if ask.GetRequiredNode() != "" {
+		// Other nodes cannot be tried if a required node is requested
+		alloc := reserve.alloc
+		if alloc.GetRequiredNode() != "" {
 			continue
 		}
 		iterator := nodeIterator()
 		if iterator != nil {
-			if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
+			if !sa.checkHeadRooms(alloc, userHeadroom, headRoom) {
 				continue
 			}
-			result := sa.tryNodesNoReserve(ask, iterator, reserve.nodeID)
+			result := sa.tryNodesNoReserve(alloc, iterator, reserve.nodeID)
 			// have a candidate return it, including the node that was reserved
 			if result != nil {
 				return result
@@ -1433,8 +1422,8 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 	return false
 }
 
-// Try all the nodes for a reserved request that have not been tried yet.
-// This should never result in a reservation as the ask is already reserved
+// tryNodesNoReserve tries all the nodes for a reserved request that have not been tried yet.
+// This should never result in a reservation as the allocation is already reserved
 func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator, reservedNode string) *AllocationResult {
 	var allocResult *AllocationResult
 	iterator.ForEachNode(func(node *Node) bool {
@@ -1469,14 +1458,13 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *AllocationResult {
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
-	// check if the ask is reserved or not
+	// check if the alloc is reserved or not
 	allocKey := ask.GetAllocationKey()
-	reservedAsks := sa.GetAskReservations(allocKey)
-	allowReserve := !ask.IsAllocated() && len(reservedAsks) == 0
+	reserved := sa.reservations[allocKey]
 	var allocResult *AllocationResult
 	var predicateErrors map[string]int
 	iterator.ForEachNode(func(node *Node) bool {
-		// skip the node if the node is not valid for the ask
+		// skip the node if the node is not schedulable
 		if !node.IsSchedulable() {
 			log.Log(log.SchedApplication).Debug("skipping node for ask as state is unschedulable",
 				zap.String("allocationKey", allocKey),
@@ -1498,28 +1486,23 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 		// allocation worked so return
 		if result != nil {
 			metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
-			// check if the node was reserved for this ask: if it is set the resultType and return
-			// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
-			// but we have no locking
-			if _, ok := sa.reservations[reservationKey(node, nil, ask)]; ok {
-				log.Log(log.SchedApplication).Debug("allocate found reserved ask during non reserved allocate",
-					zap.String("appID", sa.ApplicationID),
-					zap.String("nodeID", node.NodeID),
-					zap.String("allocationKey", allocKey))
+			// check if the alloc had a reservation: if it has set the resultType and return
+			if reserved != nil {
+				if reserved.nodeID != node.NodeID {
+					// we have a different node reserved for this alloc
+					log.Log(log.SchedApplication).Debug("allocate picking reserved alloc during non reserved allocate",
+						zap.String("appID", sa.ApplicationID),
+						zap.String("reserved nodeID", reserved.nodeID),
+						zap.String("allocationKey", allocKey))
+					result.ReservedNodeID = reserved.nodeID
+				} else {
+					// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
+					log.Log(log.SchedApplication).Debug("allocate found reserved alloc during non reserved allocate",
+						zap.String("appID", sa.ApplicationID),
+						zap.String("nodeID", node.NodeID),
+						zap.String("allocationKey", allocKey))
+				}
 				result.ResultType = AllocatedReserved
-				allocResult = result
-				return false
-			}
-			// we could also have a different node reserved for this ask if it has pick one of
-			// the reserved nodes to unreserve (first one in the list)
-			if len(reservedAsks) > 0 {
-				nodeID := strings.TrimSuffix(reservedAsks[0], "|"+allocKey)
-				log.Log(log.SchedApplication).Debug("allocate picking reserved ask during non reserved allocate",
-					zap.String("appID", sa.ApplicationID),
-					zap.String("nodeID", nodeID),
-					zap.String("allocationKey", allocKey))
-				result.ResultType = AllocatedReserved
-				result.ReservedNodeID = nodeID
 				allocResult = result
 				return false
 			}
@@ -1529,14 +1512,14 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 		}
 		// nothing allocated should we look at a reservation?
 		askAge := time.Since(ask.GetCreateTime())
-		if allowReserve && askAge > reservationDelay {
+		if reserved == nil && askAge > reservationDelay {
 			log.Log(log.SchedApplication).Debug("app reservation check",
 				zap.String("allocationKey", allocKey),
 				zap.Time("createTime", ask.GetCreateTime()),
 				zap.Duration("askAge", askAge),
 				zap.Duration("reservationDelay", reservationDelay))
 			score := node.GetFitInScoreForAvailableResource(ask.GetAllocatedResource())
-			// Record the so-far best node to reserve
+			// Record the best node so-far to reserve
 			if score < scoreReserved {
 				scoreReserved = score
 				nodeToReserve = node
@@ -1560,7 +1543,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 			zap.String("appID", sa.ApplicationID),
 			zap.String("nodeID", nodeToReserve.NodeID),
 			zap.String("allocationKey", allocKey),
-			zap.Int("reservations", len(reservedAsks)))
+			zap.Int("reservations", len(sa.reservations)))
 		// skip the node if conditions can not be satisfied
 		if nodeToReserve.preReserveConditions(ask) != nil {
 			return nil
@@ -1572,11 +1555,12 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	return nil
 }
 
-// Try allocating on one specific node
+// tryNode tries allocating on one specific node
 func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, error) {
 	toAllocate := ask.GetAllocatedResource()
+	allocationKey := ask.GetAllocationKey()
 	// create the key for the reservation
-	if !node.preAllocateCheck(toAllocate, reservationKey(nil, sa, ask)) {
+	if !node.preAllocateCheck(toAllocate, allocationKey) {
 		// skip schedule onto node
 		return nil, nil
 	}
@@ -1591,13 +1575,13 @@ func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, 
 			log.Log(log.SchedApplication).DPanic("queue update failed unexpectedly",
 				zap.Error(err))
 			// revert the node update
-			node.RemoveAllocation(ask.GetAllocationKey())
+			node.RemoveAllocation(allocationKey)
 			return nil, nil
 		}
-		// mark this ask as allocated
+		// mark this alloc as allocated
 		_, err := sa.allocateAsk(ask)
 		if err != nil {
-			log.Log(log.SchedApplication).Warn("allocation of ask failed unexpectedly",
+			log.Log(log.SchedApplication).Warn("allocation of alloc failed unexpectedly",
 				zap.Error(err))
 		}
 		// all is OK, last update for the app

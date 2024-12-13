@@ -36,10 +36,11 @@ func (art AllocationResultType) String() string {
 }
 
 type AllocationResult struct {
-	ResultType     AllocationResultType
-	Request        *Allocation
-	NodeID         string
-	ReservedNodeID string
+	ResultType            AllocationResultType
+	Request               *Allocation
+	NodeID                string
+	ReservedNodeID        string
+	CancelledReservations int
 }
 
 func (ar *AllocationResult) String() string {

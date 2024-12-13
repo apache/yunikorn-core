@@ -20,17 +20,17 @@ package objects
 
 import (
 	"fmt"
-	"strings"
 
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -110,9 +110,9 @@ func (sn *Node) initializeAttribute(newAttributes map[string]string) {
 		sn.attributes = map[string]string{}
 	}
 
-	sn.Hostname = sn.attributes[common.HostName]
-	sn.Rackname = sn.attributes[common.RackName]
-	sn.Partition = sn.attributes[common.NodePartition]
+	sn.Hostname = sn.attributes[siCommon.HostName]
+	sn.Rackname = sn.attributes[siCommon.RackName]
+	sn.Partition = sn.attributes[siCommon.NodePartition]
 }
 
 // Get an attribute by name. The most used attributes can be directly accessed via the
@@ -129,7 +129,7 @@ func (sn *Node) GetAttributes() map[string]string {
 // Get InstanceType of this node.
 // This is a lock free call because all attributes are considered read only
 func (sn *Node) GetInstanceType() string {
-	itype := sn.GetAttribute(common.InstanceType)
+	itype := sn.GetAttribute(siCommon.InstanceType)
 	if itype != "" {
 		return itype
 	}
@@ -466,7 +466,7 @@ func (sn *Node) preConditions(ask *Allocation, allocate bool) error {
 
 // preAllocateCheck checks if the node should be considered as a possible node to allocate on.
 // No updates are made this only performs a pre allocate checks
-func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
+func (sn *Node) preAllocateCheck(res *resources.Resource, allocationKey string) bool {
 	// cannot allocate zero or negative resource
 	if !resources.StrictlyGreaterThanZero(res) {
 		log.Log(log.SchedNode).Debug("pre alloc check: requested resource is zero",
@@ -475,10 +475,10 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	}
 	// check if the node is reserved for this app/alloc
 	if sn.IsReserved() {
-		if !sn.isReservedForApp(resKey) {
-			log.Log(log.SchedNode).Debug("pre alloc check: node reserved for different app or ask",
+		if !sn.isReservedForAllocation(allocationKey) {
+			log.Log(log.SchedNode).Debug("pre alloc check: node reserved for different alloc",
 				zap.String("nodeID", sn.NodeID),
-				zap.String("resKey", resKey))
+				zap.String("allocationKey", allocationKey))
 			return false
 		}
 	}
@@ -489,95 +489,98 @@ func (sn *Node) preAllocateCheck(res *resources.Resource, resKey string) bool {
 	return sn.availableResource.FitIn(res)
 }
 
-// Return if the node has been reserved by any application
+// IsReserved returns true if the node has been reserved for an allocation
 func (sn *Node) IsReserved() bool {
 	sn.RLock()
 	defer sn.RUnlock()
 	return len(sn.reservations) > 0
 }
 
-// isReservedForApp returns true if and only if the node has been reserved by the application
-// NOTE: a return value of false does not mean the node is not reserved by a different app
-func (sn *Node) isReservedForApp(key string) bool {
+// isReservedForAllocation returns true if and only if the node has been reserved by this allocation
+// NOTE: a return value of false does not mean the node is not reserved by a different allocation, use IsReserved
+// to test if the node has any reservation.
+func (sn *Node) isReservedForAllocation(key string) bool {
 	if key == "" {
 		return false
 	}
 	sn.RLock()
 	defer sn.RUnlock()
-	if strings.Contains(key, "|") {
-		return sn.reservations[key] != nil
-	}
-	// make sure matches only for the whole appID
-	separator := key + "|"
-	for resKey := range sn.reservations {
-		if strings.HasPrefix(resKey, separator) {
-			return true
-		}
-	}
-	return false
+	return sn.reservations[key] != nil
 }
 
-// Reserve the node for this application and ask combination, if not reserved yet.
+// Reserve the node for this application and alloc combination.
 // The reservation is checked against the node resources.
-// If the reservation fails the function returns false, if the reservation is made it returns true.
+// If the reservation fails the function returns an error, if the reservation is made it returns nil.
 func (sn *Node) Reserve(app *Application, ask *Allocation) error {
-	defer sn.notifyListeners()
 	sn.Lock()
 	defer sn.Unlock()
-	if len(sn.reservations) > 0 {
-		return fmt.Errorf("node is already reserved, nodeID %s", sn.NodeID)
-	}
 	appReservation := newReservation(sn, app, ask, false)
-	// this should really not happen just guard against panic
-	// either app or ask are nil
+	// this should really not happen just guard against panic either app or alloc are nil
 	if appReservation == nil {
 		log.Log(log.SchedNode).Debug("reservation creation failed unexpectedly",
 			zap.String("nodeID", sn.NodeID),
-			zap.Any("app", app),
-			zap.Any("ask", ask))
-		return fmt.Errorf("reservation creation failed app or ask are nil on nodeID %s", sn.NodeID)
+			zap.Stringer("app", app),
+			zap.Stringer("alloc", ask))
+		return fmt.Errorf("reservation creation failed either app or alloc are nil on nodeID %s", sn.NodeID)
+	}
+	reqNode := ask.requiredNode != ""
+	if !reqNode && len(sn.reservations) > 0 {
+		log.Log(log.SchedNode).Warn("normal reservation on already reserved node",
+			zap.String("nodeID", sn.NodeID),
+			zap.String("new app", appReservation.appID),
+			zap.String("new alloc", appReservation.allocKey))
+		return common.ErrorNodeAlreadyReserved
+	}
+	// allow multiple required node reservations on the same node
+	if reqNode {
+		// make sure all other reservations are for required nodes
+		for _, reserved := range sn.reservations {
+			if reserved.alloc.requiredNode == "" {
+				log.Log(log.SchedNode).Warn("trying to add normal reservation to node with required node reservation",
+					zap.String("nodeID", sn.NodeID),
+					zap.String("existing app", reserved.appID),
+					zap.String("existing alloc", reserved.allocKey),
+					zap.String("new app", appReservation.appID),
+					zap.String("new alloc", appReservation.allocKey))
+				return fmt.Errorf("normal reservation: required node reservation present, nodeID %s", sn.NodeID)
+			}
+		}
 	}
 	// reservation must fit on the empty node
 	if !sn.totalResource.FitIn(ask.GetAllocatedResource()) {
 		log.Log(log.SchedNode).Debug("reservation does not fit on the node",
 			zap.String("nodeID", sn.NodeID),
 			zap.String("appID", app.ApplicationID),
-			zap.String("ask", ask.GetAllocationKey()),
-			zap.Stringer("allocationAsk", ask.GetAllocatedResource()))
-		return fmt.Errorf("reservation does not fit on node %s, appID %s, ask %s", sn.NodeID, app.ApplicationID, ask.GetAllocatedResource().String())
+			zap.String("alloc", ask.GetAllocationKey()),
+			zap.Stringer("requested resources", ask.GetAllocatedResource()))
+		return common.ErrorNodeNotFitReserve
 	}
-	sn.reservations[appReservation.getKey()] = appReservation
+	sn.reservations[ask.allocationKey] = appReservation
 	sn.nodeEvents.SendReservedEvent(sn.NodeID, ask.GetAllocatedResource(), ask.GetAllocationKey())
 	// reservation added successfully
 	return nil
 }
 
-// unReserve the node for this application and ask combination
-// If the reservation does not exist it returns 0 for reservations removed, if the reservation is removed it returns 1.
-// The error is set if the reservation key cannot be generated.
-func (sn *Node) unReserve(app *Application, ask *Allocation) (int, error) {
-	defer sn.notifyListeners()
+// unReserve the node for this application and alloc combination
+// If the reservation does not exist or alloc is nil it returns 0 for reservations removed,
+// if the reservation is removed it returns 1.
+func (sn *Node) unReserve(alloc *Allocation) int {
+	if alloc == nil {
+		return 0
+	}
 	sn.Lock()
 	defer sn.Unlock()
-	resKey := reservationKey(nil, app, ask)
-	if resKey == "" {
-		log.Log(log.SchedNode).Debug("unreserve reservation key create failed unexpectedly",
-			zap.String("nodeID", sn.NodeID),
-			zap.Any("app", app),
-			zap.Any("ask", ask))
-		return 0, fmt.Errorf("reservation key failed app or ask are nil on nodeID %s", sn.NodeID)
-	}
-	if _, ok := sn.reservations[resKey]; ok {
-		delete(sn.reservations, resKey)
-		sn.nodeEvents.SendUnreservedEvent(sn.NodeID, ask.GetAllocatedResource(), ask.GetAllocationKey())
-		return 1, nil
+	if _, ok := sn.reservations[alloc.allocationKey]; ok {
+		delete(sn.reservations, alloc.allocationKey)
+		sn.nodeEvents.SendUnreservedEvent(sn.NodeID, alloc.GetAllocatedResource(), alloc.GetAllocationKey())
+		return 1
 	}
 	// reservation was not found
 	log.Log(log.SchedNode).Debug("reservation not found while removing from node",
 		zap.String("nodeID", sn.NodeID),
-		zap.String("appID", app.ApplicationID),
-		zap.String("ask", ask.GetAllocationKey()))
-	return 0, nil
+		zap.String("alloc", alloc.GetAllocationKey()),
+		zap.String("appID", alloc.GetApplicationID()))
+	return 0
 }
 
 // GetReservations returns all reservation made on this node

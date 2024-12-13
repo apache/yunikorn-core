@@ -105,10 +105,9 @@ func TestCheckConditions(t *testing.T) {
 }
 
 func TestPreAllocateCheck(t *testing.T) {
-	nodeID := nodeID1
 	resNode := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 1})
-	node := newNode(nodeID, resNode.Resources)
-	if node == nil || node.NodeID != nodeID {
+	node := newNode(nodeID1, resNode.Resources)
+	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
 
@@ -132,24 +131,20 @@ func TestPreAllocateCheck(t *testing.T) {
 	assert.Assert(t, !node.preAllocateCheck(resOther, ""), "unknown resource type should not have fitted on node")
 
 	// set allocated resource
-	alloc := newAllocation(appID1, nodeID, resSmall)
+	alloc := newAllocation(appID1, nodeID1, resSmall)
 	node.AddAllocation(alloc)
 	assert.Assert(t, node.preAllocateCheck(resSmall, ""), "small resource should have fitted in available allocation")
 	assert.Assert(t, !node.preAllocateCheck(resNode, ""), "node resource should not have fitted in available allocation")
 
 	// check if we can allocate on a reserved node
-	q := map[string]resources.Quantity{"first": 0}
-	res := resources.NewResourceFromMap(q)
-	ask := newAllocationAsk(aKey, appID1, res)
+	ask := newAllocationAsk(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}))
 	app := newApplication(appID1, "default", "root.unknown")
 
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
-	node.reservations[reserve.getKey()] = reserve
-	assert.Assert(t, !node.preAllocateCheck(resSmall, "app-2"), "node was reserved for different app but check passed")
-	assert.Assert(t, !node.preAllocateCheck(resSmall, "app-1|alloc-2"), "node was reserved for this app but not the alloc and check passed")
-	assert.Assert(t, node.preAllocateCheck(resSmall, appID1), "node was reserved for this app but check did not pass check")
-	assert.Assert(t, node.preAllocateCheck(resSmall, "app-1|alloc-1"), "node was reserved for this app/alloc but check did not pass check")
+	node.reservations[reserve.allocKey] = reserve
+	assert.Assert(t, !node.preAllocateCheck(resSmall, aKey2), "node was reserved for different app but check passed")
+	assert.Assert(t, node.preAllocateCheck(resSmall, aKey), "node was reserved for this app/alloc but check did not pass check")
 
 	// Check if we can allocate on non scheduling node
 	node.SetSchedulable(false)
@@ -190,20 +185,14 @@ func TestNodeReservation(t *testing.T) {
 	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
 	}
-	if node.IsReserved() {
-		t.Fatal("new node should not have reservations")
-	}
-	if node.isReservedForApp("") {
-		t.Error("new node should not have reservations for empty key")
-	}
-	if node.isReservedForApp("unknown") {
-		t.Error("new node should not have reservations for unknown key")
-	}
+	assert.Assert(t, !node.IsReserved(), "new node should not have reservations")
+	assert.Assert(t, !node.isReservedForAllocation(""), "new node should not have reservations for empty key")
+	assert.Assert(t, !node.isReservedForAllocation("unknown"), "new node should not have reservations for unknown key")
 
 	// reserve illegal request
 	err := node.Reserve(nil, nil)
 	if err == nil {
-		t.Errorf("illegal reservation requested but did not fail: error %v", err)
+		t.Fatal("illegal reservation requested but did not fail")
 	}
 
 	// too large for node
@@ -212,7 +201,7 @@ func TestNodeReservation(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	err = node.Reserve(app, ask)
 	if err == nil {
-		t.Errorf("requested reservation does not fit in node resource but did not fail: error %v", err)
+		t.Fatal("requested reservation does not fit in node resource but did not fail")
 	}
 
 	// resource type not available on node
@@ -221,7 +210,7 @@ func TestNodeReservation(t *testing.T) {
 	app = newApplication(appID1, "default", "root.unknown")
 	err = node.Reserve(app, ask)
 	if err == nil {
-		t.Errorf("requested reservation does not match node resource types but did not fail: error %v", err)
+		t.Fatal("requested reservation does not match node resource types but did not fail")
 	}
 
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
@@ -230,39 +219,56 @@ func TestNodeReservation(t *testing.T) {
 	// reserve that works
 	err = node.Reserve(app, ask)
 	assert.NilError(t, err, "reservation should not have failed")
-	if node.isReservedForApp("") {
-		t.Error("node should not have reservations for empty key")
-	}
-	if node.isReservedForApp("unknown") {
-		t.Errorf("node should not have reservations for unknown key")
-	}
-	if node.IsReserved() && !node.isReservedForApp(appID1) {
-		t.Errorf("node should have reservations for app-1")
-	}
+	assert.Assert(t, !node.isReservedForAllocation(""), "node should not have reservations for empty key")
+	assert.Assert(t, !node.isReservedForAllocation("unknown"), "node should not have reservations for unknown key")
+	assert.Assert(t, node.IsReserved(), "node should have been reserved")
+	assert.Assert(t, node.isReservedForAllocation(aKey), "node should have reservations for alloc-1")
 
 	// 2nd reservation on node
-	err = node.Reserve(nil, nil)
+	app2 := newApplication(appID2, "default", "root.unknown")
+	ask2 := newAllocationAsk("alloc-2", appID2, res)
+	err = node.Reserve(app2, ask2)
 	if err == nil {
-		t.Errorf("reservation requested on already reserved node: error %v", err)
+		t.Fatal("reservation requested on already reserved node")
 	}
 
-	// unreserve different app
-	_, err = node.unReserve(nil, nil)
-	if err == nil {
-		t.Errorf("illegal reservation release but did not fail: error %v", err)
-	}
-	ask2 := newAllocationAsk("alloc-2", appID2, res)
-	app2 := newApplication(appID2, "default", "root.unknown")
-	var num int
-	num, err = node.unReserve(app2, ask2)
-	assert.NilError(t, err, "un-reserve different app should have failed without error")
-	assert.Equal(t, num, 0, "un-reserve different app should have failed without releases")
-	num, err = node.unReserve(app, ask)
-	assert.NilError(t, err, "un-reserve should not have failed")
+	// unreserve different alloc
+	num := node.unReserve(nil)
+	assert.Equal(t, num, 0, "un-reserve different alloc should have failed without releases")
+	num = node.unReserve(ask2)
+	assert.Equal(t, num, 0, "un-reserve different alloc should have failed without releases")
+	num = node.unReserve(ask)
 	assert.Equal(t, num, 1, "un-reserve app should have released ")
 }
 
-func TestIsReservedForApp(t *testing.T) {
+func TestRequiredNodeAfterReservation(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	if node == nil || node.NodeID != nodeID1 {
+		t.Fatalf("node create failed which should not have %v", node)
+	}
+	if node.IsReserved() {
+		t.Fatal("new node should not have reservations")
+	}
+	// normal node reservation
+	allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAsk(aKey, appID1, allocRes)
+	app := newApplication(appID1, "default", "root.unknown")
+	err := node.Reserve(app, ask)
+	assert.NilError(t, err, "normal node reservation should not have failed")
+	assert.Assert(t, node.IsReserved(), "node should have been reserved")
+	assert.Assert(t, node.isReservedForAllocation(aKey), "node should have reservations for alloc-1")
+
+	ask2 := newAllocationAsk(aKey2, appID1, allocRes)
+	ask2.requiredNode = nodeID1
+	app = newApplication(appID1, "default", "root.unknown")
+	// required node as 2nd reservation
+	err = node.Reserve(app, ask2)
+	if err == nil {
+		t.Fatalf("adding required node reservation should have failed")
+	}
+}
+
+func TestMultiRequiredNodeReservation(t *testing.T) {
 	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
 	if node == nil || node.NodeID != nodeID1 {
 		t.Fatalf("node create failed which should not have %v", node)
@@ -271,32 +277,48 @@ func TestIsReservedForApp(t *testing.T) {
 		t.Fatal("new node should not have reservations")
 	}
 
+	// required node reservation
+	allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAsk(aKey, appID1, allocRes)
+	ask.requiredNode = nodeID1
+	app := newApplication(appID1, "default", "root.unknown")
+	err := node.Reserve(app, ask)
+	assert.NilError(t, err, "required node reservation should not have failed")
+	assert.Assert(t, node.IsReserved(), "node should have been reserved")
+	assert.Assert(t, node.isReservedForAllocation(aKey), "node should have reservations for alloc-1")
+
+	ask2 := newAllocationAsk(aKey2, appID1, allocRes)
+	app = newApplication(appID1, "default", "root.unknown")
+	// non required node as 2nd reservation
+	err = node.Reserve(app, ask2)
+	if err == nil {
+		t.Fatalf("adding to required node reservation should have failed")
+	}
+
+	// required node as 2nd reservation on node
+	ask2.requiredNode = nodeID1
+	err = node.Reserve(app, ask2)
+	assert.NilError(t, err, "required node reservation should not have failed")
+	assert.Assert(t, node.IsReserved(), "node should have been reserved")
+	assert.Assert(t, node.isReservedForAllocation(aKey2), "node should have reservations for alloc-2")
+}
+
+func TestIsReservedForAllocation(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	if node == nil || node.NodeID != nodeID1 {
+		t.Fatalf("node create failed which should not have %v", node)
+	}
+	assert.Assert(t, !node.IsReserved(), "new node should not have reservations")
+
 	// check if we can allocate on a reserved node
-	q := map[string]resources.Quantity{"first": 0}
-	res := resources.NewResourceFromMap(q)
-	ask := newAllocationAsk(aKey, appID1, res)
+	ask := newAllocationAsk(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}))
 	app := newApplication(appID1, "default", "root.unknown")
 
 	// standalone reservation unreserve returns false as app is not reserved
 	reserve := newReservation(node, app, ask, false)
-	node.reservations[reserve.getKey()] = reserve
-	if node.isReservedForApp("app-2") {
-		t.Error("node was reserved for different app but check passed ")
-	}
-	if node.isReservedForApp("app-1|alloc-2") {
-		t.Error("node was reserved for this app but not the alloc and check passed ")
-	}
-	if !node.isReservedForApp(appID1) {
-		t.Error("node was reserved for this app but check did not passed ")
-	}
-	if !node.isReservedForApp("app-1|alloc-1") {
-		t.Error("node was reserved for this app/alloc but check did not passed ")
-	}
-	// app name similarity check: chop of the last char to make sure we check the full name
-	similar := appID1[:len(appID1)-1]
-	if node.isReservedForApp(similar) {
-		t.Errorf("similar app should not have reservations on node %s", similar)
-	}
+	node.reservations[reserve.allocKey] = reserve
+	assert.Assert(t, !node.isReservedForAllocation(aKey2), "node was reserved for different alloc but check passed ")
+	assert.Assert(t, node.isReservedForAllocation(aKey), "node was reserved for this alloc but check did not passed ")
 }
 
 func TestAttributes(t *testing.T) {
@@ -858,8 +880,7 @@ func TestNodeEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
 
 	mockEvents.Reset()
-	_, err = node.unReserve(app, ask)
-	assert.NilError(t, err, "could not unreserve")
+	assert.Equal(t, node.unReserve(ask), 1, "expected the reservation to be removed")
 	event = mockEvents.Events[0]
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)

@@ -20,11 +20,24 @@ package common
 
 import "errors"
 
-// InvalidQueueName returned when queue name is invalid
-var InvalidQueueName = errors.New("invalid queue name, max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed")
+var (
+	// InvalidQueueName returned when queue name is invalid
+	InvalidQueueName = errors.New("invalid queue name, max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed")
+	// ErrorReservingAlloc returned when an ask that is allocated tries to reserve a node.
+	ErrorReservingAlloc = errors.New("ask already allocated, no reservation allowed")
+	// ErrorDuplicateReserve returned when the same reservation already exists on the application
+	ErrorDuplicateReserve = errors.New("reservation already exists")
+	// ErrorNodeAlreadyReserved returned when the node is already reserved, failing the reservation
+	ErrorNodeAlreadyReserved = errors.New("node is already reserved")
+	// ErrorNodeNotFitReserve returned when the allocation does not fit on an empty node, failing the reservation
+	ErrorNodeNotFitReserve = errors.New("reservation does not fit on node")
+)
 
-const PreemptionPreconditionsFailed = "Preemption preconditions failed"
-const PreemptionDoesNotGuarantee = "Preemption queue guarantees check failed"
-const PreemptionShortfall = "Preemption helped but short of resources"
-const PreemptionDoesNotHelp = "Preemption does not help"
-const NoVictimForRequiredNode = "No fit on required node, preemption does not help"
+// Constant messages for AllocationLog entries
+const (
+	PreemptionPreconditionsFailed = "Preemption preconditions failed"
+	PreemptionDoesNotGuarantee    = "Preemption queue guarantees check failed"
+	PreemptionShortfall           = "Preemption helped but short of resources"
+	PreemptionDoesNotHelp         = "Preemption does not help"
+	NoVictimForRequiredNode       = "No fit on required node, preemption does not help"
+)

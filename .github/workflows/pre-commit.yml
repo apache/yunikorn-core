@@ -48,7 +48,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        k8s: [v1.31.0]
+        k8s: [v1.32.0]
         plugin: [""]
     steps:
       - name: Checkout yunikorn-k8shim source code

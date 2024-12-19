@@ -1870,6 +1870,11 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 					continue
 				}
 
+				// skip allocs which have already been preempted
+				if alloc.IsPreempted() {
+					continue
+				}
+
 				// if we have encountered a fence then all tasks are eligible for preemption
 				// otherwise the task is a candidate if its priority is less than or equal to the ask priority
 				if fenced || int64(alloc.GetPriority()) <= askPriority {

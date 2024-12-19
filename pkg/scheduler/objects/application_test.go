@@ -1495,7 +1495,6 @@ func TestTimeoutPlaceholderHard(t *testing.T) {
 }
 
 func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
-
 	setupUGM()
 	// create a fake queue
 	queue, err := createRootQueue(nil)
@@ -1587,7 +1586,6 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 }
 
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
-
 	setupUGM()
 
 	originalPhTimeout := defaultPlaceholderTimeout

@@ -50,6 +50,9 @@ const (
 	nodeID2       = "node-2"
 	instType1     = "itype-1"
 	testgroup     = "testgroup"
+	tg1           = "tg-1"
+	tg2           = "tg-2"
+	tg3           = "tg-3"
 	foreignAlloc1 = "foreign-1"
 	foreignAlloc2 = "foreign-2"
 )

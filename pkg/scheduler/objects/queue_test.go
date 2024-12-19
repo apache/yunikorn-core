@@ -1975,12 +1975,15 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
 	alloc2.released = false
 
-	//alloc2 has already been preempted and should not be considered a valid victim
+	// alloc2 has already been preempted and should not be considered a valid victim
 	alloc2.MarkPreempted()
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 1, len(victims(snapshot)), "wrong victim count")
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
-	alloc2.UnmarkPreempted()
+	// recreate alloc2 to restore non-prempted state
+	app2.RemoveAllocation(alloc2.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
+	alloc2 = createAllocation("ask2", appID2, nodeID1, true, true, -1000, res)
+	app2.AddAllocation(alloc2)
 
 	// setting priority offset on parent2 queue should remove leaf2 victims
 	parent2.priorityOffset = 1001

@@ -3553,3 +3553,46 @@ func TestTryPlaceHolderAllocateDifferentTaskGroups(t *testing.T) {
 	result := app.tryPlaceholderAllocate(iterator, getNode)
 	assert.Assert(t, result == nil, "result should be nil since the ask has a different task group")
 }
+
+func TestTryPlaceHolderAllocateDifferentNodes(t *testing.T) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node1, nodeID2: node2}
+	iterator := getNodeIteratorFn(node1, node2)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	app := newApplication(appID0, "default", "root.default")
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ph := newPlaceholderAlloc(appID0, nodeID1, res, tg1)
+	app.AddAllocation(ph)
+	app.addPlaceholderData(ph)
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+
+	// predicate check fails on node1 and passes on node2
+	mockPlugin := mockCommon.NewPredicatePlugin(false, map[string]int{nodeID1: 0})
+	plugins.RegisterSchedulerPlugin(mockPlugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	// should allocate on node2
+	ask := newAllocationAsk(aKey, appID0, res)
+	ask.taskGroupName = tg1
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	result := app.tryPlaceholderAllocate(iterator, getNode)
+	assert.Assert(t, result != nil, "result should not be nil")
+	assert.Equal(t, Replaced, result.ResultType, "result type should be Replaced")
+	assert.Equal(t, nodeID2, result.NodeID, "result should be on node2")
+	assert.Equal(t, ask, result.Request, "result should contain the ask")
+	assert.Equal(t, ph, result.Request.GetRelease(), "real allocation should link to placeholder")
+	assert.Equal(t, result.Request, ph.GetRelease(), "placeholder should link to real allocation")
+	// placeholder data remains unchanged until RM confirms the replacement
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+}

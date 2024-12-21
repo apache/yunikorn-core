@@ -159,7 +159,9 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 	if userTracker.decreaseTrackedResource(queuePath, applicationID, usage, removeApp) {
 		log.Log(log.SchedUGM).Info("Removing user from manager",
 			zap.String("user", user.User))
+		m.Lock()
 		delete(m.userTrackers, user.User)
+		m.Unlock()
 	}
 	// if the app did not have a group we're done otherwise update the groupTracker
 	if appGroup == common.Empty {
@@ -184,7 +186,9 @@ func (m *Manager) DecreaseTrackedResource(queuePath, applicationID string, usage
 			zap.String("queue path", queuePath),
 			zap.String("application", applicationID),
 			zap.Bool("removeApp", removeApp))
+		m.Lock()
 		delete(m.groupTrackers, appGroup)
+		m.Unlock()
 	}
 }
 

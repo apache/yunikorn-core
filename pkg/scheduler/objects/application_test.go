@@ -501,10 +501,6 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
 
 	// test PlaceholderData
-	const (
-		tg1 = "tg-1"
-		tg2 = "tg-2"
-	)
 	ask = newAllocationAskTG(aKey, appID1, tg1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been updated on app")
@@ -859,7 +855,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	assert.Assert(t, app.IsNew(), "New application did not return new state: %s", app.CurrentState())
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	askID := "ask-1"
-	ask := newAllocationAskTG(askID, appID1, "TG1", res)
+	ask := newAllocationAskTG(askID, appID1, tg1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 	// app with ask, even for placeholder, should be accepted
@@ -884,7 +880,7 @@ func TestStateChangeOnPlaceholderAdd(t *testing.T) {
 	// app with ask should be accepted
 	assert.Assert(t, app.IsAccepted(), "Application did not change to accepted state: %s", app.CurrentState())
 	// add an alloc based on the placeholder ask
-	allocInfo := newAllocationAll(askID, appID1, nodeID1, "TG1", res, true, 0)
+	allocInfo := newAllocationAll(askID, appID1, nodeID1, tg1, res, true, 0)
 	app.AddAllocation(allocInfo)
 	// app should be in the same state as it was before as it is a placeholder allocation
 	assert.Assert(t, app.IsAccepted(), "Application did not return accepted state after alloc: %s", app.CurrentState())
@@ -1499,11 +1495,6 @@ func TestTimeoutPlaceholderHard(t *testing.T) {
 }
 
 func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulingStyle string) {
-	const (
-		tg1 = "tg-1"
-		tg2 = "tg-2"
-	)
-
 	setupUGM()
 	// create a fake queue
 	queue, err := createRootQueue(nil)
@@ -1595,8 +1586,6 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 }
 
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
-	const tg1 = "tg-1"
-
 	setupUGM()
 
 	originalPhTimeout := defaultPlaceholderTimeout
@@ -3437,4 +3426,173 @@ func TestApplication_canAllocationReserve(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTryPlaceHolderAllocateNoPlaceHolders(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	app := newApplication(appID0, "default", "root.default")
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAsk(aKey, appID0, res)
+	ask.taskGroupName = tg1
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	result := app.tryPlaceholderAllocate(iterator, getNode)
+	assert.Assert(t, result == nil, "result should be nil since there are no placeholders to allocate")
+}
+
+func TestTryPlaceHolderAllocateSmallerRequest(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	app := newApplication(appID0, "default", "root.default")
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ph := newPlaceholderAlloc(appID0, nodeID1, res, tg1)
+	app.AddAllocation(ph)
+	app.addPlaceholderData(ph)
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+
+	// allocation request is smaller than placeholder
+	smallerRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask := newAllocationAsk(aKey, appID0, smallerRes)
+	ask.taskGroupName = tg1
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	result := app.tryPlaceholderAllocate(iterator, getNode)
+	assert.Assert(t, result != nil, "result should not be nil since the ask is smaller than the placeholder")
+	assert.Equal(t, Replaced, result.ResultType, "result type should be Replaced")
+	assert.Equal(t, nodeID1, result.NodeID, "result should be on the same node as placeholder")
+	assert.Equal(t, ask, result.Request, "result should contain the ask")
+	assert.Equal(t, ph, result.Request.GetRelease(), "real allocation should link to placeholder")
+	assert.Equal(t, result.Request, ph.GetRelease(), "placeholder should link to real allocation")
+	// placeholder data remains unchanged until RM confirms the replacement
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+}
+
+func TestTryPlaceHolderAllocateLargerRequest(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	app := newApplication(appID0, "default", "root.default")
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ph := newPlaceholderAlloc(appID0, nodeID1, res, tg1)
+	app.AddAllocation(ph)
+	app.addPlaceholderData(ph)
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+
+	// allocation request is larger than placeholder
+	largerRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	ask := newAllocationAsk(aKey, appID0, largerRes)
+	ask.taskGroupName = tg1
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	result := app.tryPlaceholderAllocate(iterator, getNode)
+	assert.Assert(t, result == nil, "result should be nil since the ask is larger than the placeholder")
+	assert.Assert(t, ph.IsReleased(), "placeholder should have been released")
+	// placeholder data remains unchanged until RM confirms the release
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+}
+
+func TestTryPlaceHolderAllocateDifferentTaskGroups(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	app := newApplication(appID0, "default", "root.default")
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ph := newPlaceholderAlloc(appID0, nodeID1, res, tg1)
+	app.AddAllocation(ph)
+	app.addPlaceholderData(ph)
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+
+	// allocation request has a different task group
+	ask := newAllocationAsk(aKey, appID0, res)
+	ask.taskGroupName = tg2
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	result := app.tryPlaceholderAllocate(iterator, getNode)
+	assert.Assert(t, result == nil, "result should be nil since the ask has a different task group")
+}
+
+func TestTryPlaceHolderAllocateDifferentNodes(t *testing.T) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node1, nodeID2: node2}
+	iterator := getNodeIteratorFn(node1, node2)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	app := newApplication(appID0, "default", "root.default")
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ph := newPlaceholderAlloc(appID0, nodeID1, res, tg1)
+	app.AddAllocation(ph)
+	app.addPlaceholderData(ph)
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+
+	// predicate check fails on node1 and passes on node2
+	mockPlugin := mockCommon.NewPredicatePlugin(false, map[string]int{nodeID1: 0})
+	plugins.RegisterSchedulerPlugin(mockPlugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	// should allocate on node2
+	ask := newAllocationAsk(aKey, appID0, res)
+	ask.taskGroupName = tg1
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	result := app.tryPlaceholderAllocate(iterator, getNode)
+	assert.Assert(t, result != nil, "result should not be nil")
+	assert.Equal(t, Replaced, result.ResultType, "result type should be Replaced")
+	assert.Equal(t, nodeID2, result.NodeID, "result should be on node2")
+	assert.Equal(t, ask, result.Request, "result should contain the ask")
+	assert.Equal(t, ph, result.Request.GetRelease(), "real allocation should link to placeholder")
+	assert.Equal(t, result.Request, ph.GetRelease(), "placeholder should link to real allocation")
+	// placeholder data remains unchanged until RM confirms the replacement
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
 }

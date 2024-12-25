@@ -183,6 +183,16 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 				queueName = ""
 				continue
 			}
+			// Check if the queue in Draining state, and if so, proceed to the next rule
+			if queue.IsDraining() {
+				log.Log(log.SchedApplication).Debug("Cannot Placing application in draining queue",
+					zap.String("queueName", queueName),
+					zap.String("ruleName", checkRule.getName()),
+					zap.String("application", app.ApplicationID))
+				// reset the queue name for the last rule in the chain
+				queueName = ""
+				continue
+			}
 		}
 		// we have a queue that allows submitting and can be created: app placed
 		log.Log(log.SchedApplication).Info("Rule result for placing application",

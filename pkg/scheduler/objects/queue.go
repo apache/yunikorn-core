@@ -113,9 +113,29 @@ func newBlankQueue() *Queue {
 	}
 }
 
-// NewConfiguredQueue creates a new queue from scratch based on the configuration
+// NewConfiguredQueue creates a new queue from scratch based on the configuration and logs at info level
 // lock free as it cannot be referenced yet
 func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
+	queue, err := newConfiguredQueueInternal(conf, parent)
+	if queue != nil {
+		log.Log(log.SchedQueue).Info("configured queue added to scheduler",
+			zap.String("queueName", queue.QueuePath))
+	}
+	return queue, err
+}
+
+// NewConfiguredShadowQueue creates a new queue from scratch based on the configuration and logs at debug level
+// lock free as it cannot be referenced yet
+func NewConfiguredShadowQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
+	queue, err := newConfiguredQueueInternal(conf, parent)
+	if queue != nil {
+		log.Log(log.SchedQueue).Debug("shadow queue created",
+			zap.String("queueName", queue.QueuePath))
+	}
+	return queue, err
+}
+
+func newConfiguredQueueInternal(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(conf.Name)
 	sq.QueuePath = strings.ToLower(conf.Name)
@@ -145,8 +165,6 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 		sq.UpdateQueueProperties()
 	}
 	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
-	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
-		zap.String("queueName", sq.QueuePath))
 	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
 
 	return sq, nil

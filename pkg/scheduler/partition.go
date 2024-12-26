@@ -224,7 +224,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 		queue := pc.getQueueInternal(pathName)
 		var err error
 		if queue == nil {
-			queue, err = objects.NewConfiguredQueue(queueConfig, parent)
+			queue, err = objects.NewConfiguredShadowQueue(queueConfig, parent)
 		} else {
 			err = queue.ApplyConf(queueConfig)
 		}

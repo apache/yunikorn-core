@@ -732,12 +732,7 @@ func TestDecreaseTrackedResourceForGroupTracker(t *testing.T) {
 	assert.Equal(t, groupTracker.queueTracker.childQueueTrackers["parent"].runningApplications[TestApp1], true)
 	assert.Equal(t, resources.Equals(groupTracker.queueTracker.childQueueTrackers["parent"].resourceUsage, usage), true)
 
-	conf.Queues[0].Queues[0].Limits = []configs.Limit{
-		{
-			Limit:  "parent queue limit for a specific group",
-			Groups: user.Groups,
-		},
-	}
+	conf.Queues[0].Queues[0].Limits = nil
 	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
 
 	manager.DecreaseTrackedResource("root.parent", TestApp1, usage, user, true)

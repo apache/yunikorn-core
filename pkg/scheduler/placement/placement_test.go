@@ -330,7 +330,7 @@ partitions:
 	err = man.PlaceApplication(app)
 	queueName = app.GetQueuePath()
 	if err == nil || queueName != "" {
-		t.Errorf("Cannot Placing application in draining queue: '%s', error: %v", queueName, err)
+		t.Errorf("draining queue: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}
 }
 

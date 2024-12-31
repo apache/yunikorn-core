@@ -185,7 +185,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 			}
 			// Check if the queue in Draining state, and if so, proceed to the next rule
 			if queue.IsDraining() {
-				log.Log(log.SchedApplication).Debug("Cannot Placing application in draining queue",
+				log.Log(log.SchedApplication).Debug("Cannot place application in draining queue",
 					zap.String("queueName", queueName),
 					zap.String("ruleName", checkRule.getName()),
 					zap.String("application", app.ApplicationID))

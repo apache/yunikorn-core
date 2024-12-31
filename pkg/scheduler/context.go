@@ -365,7 +365,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 		part, ok := cc.partitions[p.Name]
 		if ok {
 			// make sure the new info passes all checks
-			_, err = newPartitionContext(p, rmID, nil)
+			_, err = newPartitionContextForValidation(p, rmID, nil)
 			if err != nil {
 				return err
 			}

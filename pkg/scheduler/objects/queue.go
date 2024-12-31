@@ -118,21 +118,19 @@ func newBlankQueue() *Queue {
 func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
 	queue, err := newConfiguredQueueInternal(conf, parent)
 	if queue != nil {
+		queue.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
 		log.Log(log.SchedQueue).Info("configured queue added to scheduler",
 			zap.String("queueName", queue.QueuePath))
+		queue.queueEvents.SendNewQueueEvent(queue.QueuePath, queue.isManaged)
 	}
 	return queue, err
 }
 
-// NewConfiguredShadowQueue creates a new queue from scratch based on the configuration and logs at debug level
+// NewConfiguredQueueForValidation is used to validate the queue configuration.
+// It works similarly to NewConfiguredQueue but neither logs the queue creation nor sends a queue event.
 // lock free as it cannot be referenced yet
-func NewConfiguredShadowQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
-	queue, err := newConfiguredQueueInternal(conf, parent)
-	if queue != nil {
-		log.Log(log.SchedQueue).Debug("shadow queue created",
-			zap.String("queueName", queue.QueuePath))
-	}
-	return queue, err
+func NewConfiguredQueueForValidation(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
+	return newConfiguredQueueInternal(conf, parent)
 }
 
 func newConfiguredQueueInternal(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
@@ -164,8 +162,6 @@ func newConfiguredQueueInternal(conf configs.QueueConfig, parent *Queue) (*Queue
 	} else {
 		sq.UpdateQueueProperties()
 	}
-	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
-	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
 
 	return sq, nil
 }

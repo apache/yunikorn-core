@@ -113,7 +113,7 @@ func newBlankQueue() *Queue {
 	}
 }
 
-// NewConfiguredQueue creates a new queue from scratch based on the configuration and logs at info level
+// NewConfiguredQueue creates a new queue from scratch based on the configuration
 // lock free as it cannot be referenced yet
 func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
 	queue, err := newConfiguredQueueInternal(conf, parent)

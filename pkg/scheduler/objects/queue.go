@@ -116,6 +116,24 @@ func newBlankQueue() *Queue {
 // NewConfiguredQueue creates a new queue from scratch based on the configuration
 // lock free as it cannot be referenced yet
 func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
+	queue, err := newConfiguredQueueInternal(conf, parent)
+	if queue != nil {
+		queue.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
+		log.Log(log.SchedQueue).Info("configured queue added to scheduler",
+			zap.String("queueName", queue.QueuePath))
+		queue.queueEvents.SendNewQueueEvent(queue.QueuePath, queue.isManaged)
+	}
+	return queue, err
+}
+
+// NewConfiguredQueueForValidation is used to validate the queue configuration.
+// It works similarly to NewConfiguredQueue but neither logs the queue creation nor sends a queue event.
+// lock free as it cannot be referenced yet
+func NewConfiguredQueueForValidation(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
+	return newConfiguredQueueInternal(conf, parent)
+}
+
+func newConfiguredQueueInternal(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(conf.Name)
 	sq.QueuePath = strings.ToLower(conf.Name)
@@ -144,10 +162,6 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	} else {
 		sq.UpdateQueueProperties()
 	}
-	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
-	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
-		zap.String("queueName", sq.QueuePath))
-	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
 
 	return sq, nil
 }

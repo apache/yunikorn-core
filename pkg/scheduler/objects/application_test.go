@@ -3596,3 +3596,57 @@ func TestTryPlaceHolderAllocateDifferentNodes(t *testing.T) {
 	// placeholder data remains unchanged until RM confirms the replacement
 	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
 }
+
+func TestTryNodesNoReserve(t *testing.T) {
+	app := newApplication(appID0, "default", "root.default")
+
+	queue, err := createRootQueue(map[string]string{"first": "5"})
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAsk(aKey, appID0, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	// reserve the allocation on node1
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	err = app.Reserve(node1, ask)
+	assert.NilError(t, err, "reservation failed")
+
+	// case 1: node is the reserved node
+	iterator := getNodeIteratorFn(node1)
+	result := app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
+	assert.Assert(t, result == nil, "result should be nil since node1 is the reserved node")
+
+	// case 2: node is unschedulable
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5})
+	node2.schedulable = false
+	iterator = getNodeIteratorFn(node2)
+	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
+	assert.Assert(t, result == nil, "result should be nil since node2 is unschedulable")
+
+	// case 3: node does not have enough resources
+	node3 := newNode(nodeID3, map[string]resources.Quantity{"first": 1})
+	iterator = getNodeIteratorFn(node3)
+	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
+	assert.Assert(t, result == nil, "result should be nil since node3 does not have enough resources")
+
+	// case 4: node fails predicate
+	mockPlugin := mockCommon.NewPredicatePlugin(false, map[string]int{nodeID4: 1})
+	plugins.RegisterSchedulerPlugin(mockPlugin)
+	defer plugins.UnregisterSchedulerPlugins()
+	node4 := newNode(nodeID4, map[string]resources.Quantity{"first": 5})
+	iterator = getNodeIteratorFn(node4)
+	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
+	assert.Assert(t, result == nil, "result should be nil since node4 fails predicate")
+
+	// case 5: success
+	node5 := newNode(nodeID5, map[string]resources.Quantity{"first": 5})
+	iterator = getNodeIteratorFn(node5)
+	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
+	assert.Assert(t, result != nil, "result should not be nil")
+	assert.Equal(t, node5.NodeID, result.NodeID, "result should be on node5")
+	assert.Equal(t, result.ResultType, AllocatedReserved, "result type should be AllocatedReserved")
+	assert.Equal(t, result.ReservedNodeID, node1.NodeID, "reserved node should be node1")
+}

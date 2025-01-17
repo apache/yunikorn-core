@@ -323,6 +323,15 @@ partitions:
 	if err == nil || queueName != "" {
 		t.Errorf("parent queue: app should not have been placed, queue: '%s', error: %v", queueName, err)
 	}
+
+	// provided rule (2nd): submit to draining queue
+	app = newApplication("app1", "default", "root.testparent.testchild", user, nil, nil, "")
+	man.queueFn("root.testparent.testchild").MarkQueueForRemoval()
+	err = man.PlaceApplication(app)
+	queueName = app.GetQueuePath()
+	if err == nil || queueName != "" {
+		t.Errorf("draining queue: app should not have been placed, queue: '%s', error: %v", queueName, err)
+	}
 }
 
 //nolint:funlen

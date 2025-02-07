@@ -21,8 +21,9 @@ package objects
 import (
 	"testing"
 
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/v3/assert"
+
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestSolutionScoring(t *testing.T) {

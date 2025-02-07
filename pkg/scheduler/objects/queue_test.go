@@ -2318,7 +2318,6 @@ func TestNewConfiguredQueue(t *testing.T) {
 	time.Sleep(time.Second)
 	noEvents := eventSystem.Store.CountStoredEvents()
 	assert.Equal(t, noEvents, uint64(0), "expected 0 event, got %d", noEvents)
-
 }
 
 func TestResetRunningState(t *testing.T) {

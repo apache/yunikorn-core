@@ -154,11 +154,9 @@ func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig
 		log.Log(log.SchedPartition).Debug("NodeSorting policy incorrectly set or unknown",
 			zap.Error(err))
 		log.Log(log.SchedPartition).Info(fmt.Sprintf("NodeSorting policy not set using '%s' as default", configuredPolicy))
-	} else {
-		if !silence {
-			log.Log(log.SchedPartition).Info("NodeSorting policy set from config",
-				zap.Stringer("policyName", configuredPolicy))
-		}
+	} else if !silence {
+		log.Log(log.SchedPartition).Info("NodeSorting policy set from config",
+			zap.Stringer("policyName", configuredPolicy))
 	}
 	pc.nodes.SetNodeSortingPolicy(objects.NewNodeSortingPolicy(conf.NodeSortPolicy.Type, conf.NodeSortPolicy.ResourceWeights))
 }

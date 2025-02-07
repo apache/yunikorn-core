@@ -60,16 +60,16 @@ func setupNode(t *testing.T, nodeID string, partition *PartitionContext, nodeRes
 }
 
 func TestNewPartition(t *testing.T) {
-	partition, err := newPartitionContext(configs.PartitionConfig{}, "", nil)
+	partition, err := newPartitionContext(configs.PartitionConfig{}, "", nil, false)
 	if err == nil || partition != nil {
 		t.Fatal("nil inputs should not have returned partition")
 	}
 	conf := configs.PartitionConfig{Name: "test"}
-	partition, err = newPartitionContext(conf, "", nil)
+	partition, err = newPartitionContext(conf, "", nil, false)
 	if err == nil || partition != nil {
 		t.Fatal("named partition without RM should not have returned partition")
 	}
-	partition, err = newPartitionContext(conf, "test", &ClusterContext{})
+	partition, err = newPartitionContext(conf, "test", &ClusterContext{}, false)
 	if err == nil || partition != nil {
 		t.Fatal("partition without root queue should not have returned partition")
 	}
@@ -83,7 +83,7 @@ func TestNewPartition(t *testing.T) {
 			},
 		},
 	}
-	partition, err = newPartitionContext(conf, "test", &ClusterContext{})
+	partition, err = newPartitionContext(conf, "test", &ClusterContext{}, false)
 	if err == nil || partition != nil {
 		t.Fatal("partition without root queue should not have returned partition")
 	}
@@ -115,7 +115,7 @@ func TestNewPartition(t *testing.T) {
 			},
 		},
 	}
-	partition, err = newPartitionContext(conf, "test", &ClusterContext{})
+	partition, err = newPartitionContext(conf, "test", &ClusterContext{}, false)
 	assert.NilError(t, err, "partition create should not have failed with error")
 	if partition.root.QueuePath != "root" {
 		t.Fatal("partition root queue not set as expected")
@@ -142,7 +142,7 @@ func TestNewWithPlacement(t *testing.T) {
 		Limits:         nil,
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
-	partition, err := newPartitionContext(confWith, rmID, nil)
+	partition, err := newPartitionContext(confWith, rmID, nil, false)
 	assert.NilError(t, err, "test partition create failed with error")
 
 	// add a rule and check if it is updated
@@ -1004,7 +1004,7 @@ func TestAddAppForcedWithPlacement(t *testing.T) {
 		Limits:         nil,
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
-	partition, err := newPartitionContext(confWith, rmID, nil)
+	partition, err := newPartitionContext(confWith, rmID, nil, false)
 	assert.NilError(t, err, "test partition create failed with error")
 
 	// add a new app using tag rule
@@ -1314,7 +1314,7 @@ func TestCreateDeepQueueConfig(t *testing.T) {
 	if root == nil {
 		t.Error("root queue not found in partition")
 	}
-	err = partition.addQueue(conf, root)
+	err = partition.addQueue(conf, root, false)
 	assert.NilError(t, err, "'root.level1.level2.level3.level4.level5' queue creation from config failed")
 	queue := partition.GetQueue("root.level1.level2.level3.level4.level5")
 	if queue == nil {
@@ -1530,7 +1530,7 @@ func TestGetQueue(t *testing.T) {
 	}
 	var parent *objects.Queue
 	// manually add the queue in below the root
-	parent, err = objects.NewConfiguredQueue(parentConf, queue)
+	parent, err = objects.NewConfiguredQueue(parentConf, queue, false)
 	assert.NilError(t, err, "failed to create parent queue")
 	queue = partition.GetQueue("root.unknown")
 	assert.Equal(t, queue, nilQueue, "partition returned not nil for non existing queue name request: %v", queue)
@@ -3864,7 +3864,7 @@ func TestUpdateNodeSortingPolicy(t *testing.T) {
 				PlacementRules: nil,
 				Limits:         nil,
 				NodeSortPolicy: configs.NodeSortingPolicy{Type: tt.input},
-			})
+			}, false)
 
 			ans := partition.nodes.GetNodeSortingPolicy().PolicyType().String()
 			if ans != tt.want {
@@ -3911,7 +3911,7 @@ func TestGetNodeSortingPolicyWhenNewPartitionFromConfig(t *testing.T) {
 				},
 			}
 
-			p, err := newPartitionContext(conf, rmID, nil)
+			p, err := newPartitionContext(conf, rmID, nil, false)
 			if err != nil {
 				t.Errorf("Partition creation fail: %s", err.Error())
 			}
@@ -4401,7 +4401,7 @@ func TestLimitMaxApplications(t *testing.T) {
 				NodeSortPolicy: configs.NodeSortingPolicy{},
 			}
 
-			partition, err := newPartitionContext(conf, rmID, nil)
+			partition, err := newPartitionContext(conf, rmID, nil, false)
 			assert.NilError(t, err, "partition create failed")
 
 			// add node1
@@ -4556,7 +4556,7 @@ func TestLimitMaxApplicationsForReservedAllocation(t *testing.T) {
 				NodeSortPolicy: configs.NodeSortingPolicy{},
 			}
 
-			partition, err := newPartitionContext(conf, rmID, nil)
+			partition, err := newPartitionContext(conf, rmID, nil, false)
 			assert.NilError(t, err, "partition create failed")
 
 			// add node1

@@ -2261,7 +2261,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 			},
 		},
 	}
-	parent, err := NewConfiguredQueue(parentConfig, nil)
+	parent, err := NewConfiguredQueue(parentConfig, nil, false)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, parent.Name, "parent_queue")
 	assert.Equal(t, parent.QueuePath, "parent_queue")
@@ -2281,7 +2281,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 			Guaranteed: getResourceConf(),
 		},
 	}
-	childLeaf, err := NewConfiguredQueue(leafConfig, parent)
+	childLeaf, err := NewConfiguredQueue(leafConfig, parent, false)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
 	assert.Assert(t, childLeaf.template == nil)
@@ -2298,13 +2298,27 @@ func TestNewConfiguredQueue(t *testing.T) {
 		Name:   "nonleaf_queue",
 		Parent: true,
 	}
-	childNonLeaf, err := NewConfiguredQueue(NonLeafConfig, parent)
+	childNonLeaf, err := NewConfiguredQueue(NonLeafConfig, parent, false)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childNonLeaf.QueuePath, "parent_queue.nonleaf_queue")
 	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
 	assert.Equal(t, len(childNonLeaf.properties), 0)
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
+
+	// case 2: do not send queue event when silence flag is set to true
+	events.Init()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+	rootConfig := configs.QueueConfig{
+		Name: "root",
+	}
+	_, err = NewConfiguredQueue(rootConfig, nil, true)
+	assert.NilError(t, err, "failed to create queue: %v", err)
+	time.Sleep(time.Second)
+	noEvents := eventSystem.Store.CountStoredEvents()
+	assert.Equal(t, noEvents, uint64(0), "expected 0 event, got %d", noEvents)
+
 }
 
 func TestResetRunningState(t *testing.T) {
@@ -2354,7 +2368,7 @@ func TestNewRecoveryQueue(t *testing.T) {
 		Properties:    map[string]string{configs.ApplicationSortPolicy: "fair"},
 		ChildTemplate: configs.ChildTemplate{Properties: map[string]string{configs.ApplicationSortPolicy: "fair"}},
 	}
-	parent, err = NewConfiguredQueue(parentConfig, nil)
+	parent, err = NewConfiguredQueue(parentConfig, nil, false)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	recoveryQueue, err := NewRecoveryQueue(parent)
 	assert.NilError(t, err, "failed to create recovery queue: %v", err)

@@ -61,6 +61,180 @@ func TestSolutionScoring(t *testing.T) {
 	assert.Check(t, noOp.betterThan(ideal, singleAlloc), "noop should be better than ideal")
 }
 
+func TestPredicateCheckResult_String(t *testing.T) {
+	tests := []struct {
+		name   string
+		result *predicateCheckResult
+		want   string
+	}{
+		{
+			name: "empty nodeID",
+			result: &predicateCheckResult{
+				nodeID: "",
+			},
+			want: "",
+		},
+		{
+			name: "basic result without victims",
+			result: &predicateCheckResult{
+				nodeID:        "node-1",
+				allocationKey: "alloc-1",
+				success:       true,
+				index:         0,
+			},
+			want: "node: node-1, alloc: alloc-1, success: true, index: 0",
+		},
+		{
+			name: "result with single victim",
+			result: &predicateCheckResult{
+				nodeID:        "node-1",
+				allocationKey: "alloc-1",
+				success:       true,
+				index:         1,
+				victims: []*Allocation{
+					newAllocationAll("alloc-key-1", "app-1", "node-1", "", nil, false, 0),
+				},
+			},
+			want: "node: node-1, alloc: alloc-1, success: true, index: 1, victims: [allocationKey alloc-key-1, applicationID app-1, Resource map[], Allocated true]",
+		},
+		{
+			name: "result with multiple victims",
+			result: &predicateCheckResult{
+				nodeID:        "node-1",
+				allocationKey: "alloc-1",
+				success:       true,
+				index:         2,
+				victims: []*Allocation{
+					newAllocationAll("alloc-key-1", "app-1", "node-1", "", nil, false, 0),
+					newAllocationAll("alloc-key-2", "app-2", "node-2", "", nil, false, 0),
+				},
+			},
+			want: "node: node-1, alloc: alloc-1, success: true, index: 2, victims: [allocationKey alloc-key-1, applicationID app-1, Resource map[], Allocated true, allocationKey alloc-key-2, applicationID app-2, Resource map[], Allocated true]",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.result.String()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestPredicateCheckResult_PopulateVictims(t *testing.T) {
+	tests := []struct {
+		name          string
+		pcr           *predicateCheckResult
+		victimsByNode map[string][]*Allocation
+		wantVictims   []*Allocation
+		wantSuccess   bool
+		wantIndex     int
+	}{
+		{
+			name: "nil predicateCheckResult",
+			pcr:  nil,
+			victimsByNode: map[string][]*Allocation{
+				"node-1": {newAllocation("app-1", "node-1", nil)},
+			},
+			wantVictims: nil,
+			wantSuccess: false,
+			wantIndex:   0,
+		},
+		{
+			name: "unsuccessful result",
+			pcr: &predicateCheckResult{
+				nodeID:  "node-1",
+				success: false,
+				index:   1,
+			},
+			victimsByNode: map[string][]*Allocation{
+				"node-1": {newAllocation("app-1", "node-1", nil)},
+			},
+			wantVictims: nil,
+			wantSuccess: false,
+			wantIndex:   1,
+		},
+		{
+			name: "node not found",
+			pcr: &predicateCheckResult{
+				nodeID:  "node-missing",
+				success: true,
+				index:   0,
+			},
+			victimsByNode: map[string][]*Allocation{
+				"node-1": {newAllocation("app-1", "node-1", nil)},
+			},
+			wantVictims: nil,
+			wantSuccess: false,
+			wantIndex:   -1,
+		},
+		{
+			name: "index too large",
+			pcr: &predicateCheckResult{
+				nodeID:  "node-1",
+				success: true,
+				index:   2,
+			},
+			victimsByNode: map[string][]*Allocation{
+				"node-1": {newAllocation("app-1", "node-1", nil)},
+			},
+			wantVictims: nil,
+			wantSuccess: false,
+			wantIndex:   -1,
+		},
+		{
+			name: "successful population single victim",
+			pcr: &predicateCheckResult{
+				nodeID:  "node-1",
+				success: true,
+				index:   0,
+			},
+			victimsByNode: map[string][]*Allocation{
+				"node-1": {newAllocation("app-1", "node-1", nil)},
+			},
+			wantVictims: []*Allocation{newAllocation("app-1", "node-1", nil)},
+			wantSuccess: true,
+			wantIndex:   0,
+		},
+		{
+			name: "successful population multiple victims",
+			pcr: &predicateCheckResult{
+				nodeID:  "node-1",
+				success: true,
+				index:   1,
+			},
+			victimsByNode: map[string][]*Allocation{
+				"node-1": {
+					newAllocation("app-1", "node-1", nil),
+					newAllocation("app-2", "node-1", nil),
+				},
+			},
+			wantVictims: []*Allocation{
+				newAllocation("app-1", "node-1", nil),
+				newAllocation("app-2", "node-1", nil),
+			},
+			wantSuccess: true,
+			wantIndex:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.pcr.populateVictims(tt.victimsByNode)
+
+			if tt.pcr != nil {
+				assert.Equal(t, tt.wantSuccess, tt.pcr.success, "success mismatch")
+				assert.Equal(t, tt.wantIndex, tt.pcr.index, "index mismatch")
+				if tt.wantVictims == nil {
+					assert.Assert(t, tt.pcr.victims == nil || len(tt.pcr.victims) == 0, "expected no victims")
+				} else {
+					assert.Equal(t, len(tt.wantVictims), len(tt.pcr.victims), "victims length mismatch")
+				}
+			}
+		})
+	}
+}
+
 func scoreMap(nodeID string, orig, self []bool) map[string][]*Allocation {
 	alloc := make([]*Allocation, 0)
 	for i := range orig {

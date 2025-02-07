@@ -149,7 +149,7 @@ func preemptPredicateCheck(plugin api.ResourceManagerCallback, ch chan<- *predic
 
 func (p *predicateCheckResult) String() string {
 	if p.nodeID == "" {
-		return "empty predicate result"
+		return ""
 	}
 	var result strings.Builder
 	result.WriteString(fmt.Sprintf("node: %s, ", p.nodeID))

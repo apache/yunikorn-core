@@ -1831,13 +1831,3 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Si
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 }
-
-func allocForScore(originator bool, allowPreemptSelf bool) *Allocation {
-	return NewAllocationFromSI(&si.Allocation{
-		AllocationKey:    "alloc1",
-		ApplicationID:    appID1,
-		Originator:       originator,
-		NodeID:           nodeID1,
-		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: allowPreemptSelf},
-	})
-}

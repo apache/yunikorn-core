@@ -21,6 +21,7 @@ package objects
 import (
 	"testing"
 
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 	"gotest.tools/v3/assert"
 )
 
@@ -241,4 +242,14 @@ func scoreMap(nodeID string, orig, self []bool) map[string][]*Allocation {
 		alloc = append(alloc, allocForScore(orig[i], self[i]))
 	}
 	return map[string][]*Allocation{nodeID: alloc}
+}
+
+func allocForScore(originator bool, allowPreemptSelf bool) *Allocation {
+	return NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    "alloc1",
+		ApplicationID:    appID1,
+		Originator:       originator,
+		NodeID:           nodeID1,
+		PreemptionPolicy: &si.PreemptionPolicy{AllowPreemptSelf: allowPreemptSelf},
+	})
 }

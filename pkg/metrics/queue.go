@@ -44,10 +44,11 @@ const (
 	ContainerAllocated = "allocated"
 	ContainerRejected  = "rejected"
 
-	QueueGuaranteed = "guaranteed"
-	QueueMax        = "max"
-	QueuePending    = "pending"
-	QueuePreempting = "preempting"
+	QueueGuaranteed     = "guaranteed"
+	QueueMax            = "max"
+	QueuePending        = "pending"
+	QueuePreempting     = "preempting"
+	QueueMaxRunningApps = "maxRunningApps"
 )
 
 // QueueMetrics to declare queue metrics
@@ -99,7 +100,7 @@ func InitQueueMetrics(name string) *QueueMetrics {
 			Namespace:   Namespace,
 			Name:        "queue_resource",
 			ConstLabels: prometheus.Labels{"queue": name},
-			Help:        "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`.",
+			Help:        "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`, 'maxRunningApps'.",
 		}, []string{"state", "resource"})
 
 	q.resourceMetricsSubsystem = prometheus.NewGaugeVec(
@@ -107,7 +108,7 @@ func InitQueueMetrics(name string) *QueueMetrics {
 			Namespace: Namespace,
 			Subsystem: replaceStr,
 			Name:      "queue_resource",
-			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`.",
+			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`, 'maxRunningApps'.",
 		}, []string{"state", "resource"})
 
 	var queueMetricsList = []prometheus.Collector{
@@ -353,4 +354,9 @@ func (m *QueueMetrics) SetQueuePendingResourceMetrics(resourceName string, value
 
 func (m *QueueMetrics) SetQueuePreemptingResourceMetrics(resourceName string, value float64) {
 	m.setQueueResource(QueuePreempting, resourceName, value)
+}
+
+func (m *QueueMetrics) SetQueueMaxRunningAppsResourceMetrics(value uint64) {
+	resourceName := "apps"
+	m.setQueueResource(QueueMaxRunningApps, resourceName, float64(value))
 }

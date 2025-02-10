@@ -125,6 +125,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.parent = parent
 	sq.isManaged = true
 	sq.maxRunningApps = conf.MaxApplications
+	sq.updateMaxRunningAppsResourceMetrics()
 
 	// update the properties
 	if err := sq.applyConf(conf); err != nil {
@@ -223,6 +224,7 @@ func (sq *Queue) applyTemplate(childTemplate *template.Template) {
 	// update metrics for guaranteed and max resource
 	sq.updateGuaranteedResourceMetrics()
 	sq.updateMaxResourceMetrics()
+	sq.updateMaxRunningAppsResourceMetrics()
 }
 
 // getProperties returns a copy of the properties for this queue
@@ -366,6 +368,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 			return err
 		}
 		sq.maxRunningApps = conf.MaxApplications
+		sq.updateMaxRunningAppsResourceMetrics()
 	}
 
 	sq.properties = conf.Properties
@@ -462,6 +465,7 @@ func (sq *Queue) SetMaxRunningApps(maxApps uint64) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.maxRunningApps = maxApps
+	sq.updateMaxRunningAppsResourceMetrics()
 }
 
 // setTemplate sets the template on the queue based on the config.
@@ -1703,6 +1707,10 @@ func (sq *Queue) updatePreemptingResourceMetrics() {
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}
+}
+
+func (sq *Queue) updateMaxRunningAppsResourceMetrics() {
+	metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxRunningAppsResourceMetrics(sq.maxRunningApps)
 }
 
 func (sq *Queue) removeMetrics() {

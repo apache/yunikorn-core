@@ -155,7 +155,7 @@ func TestACLCreate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			got, err := NewACL(tt.input)
+			got, err := NewACL(tt.input, false)
 			if err != nil {
 				t.Errorf("parsing failed for string: %s", tt.input)
 			}
@@ -177,7 +177,7 @@ func TestNewACLErrorCase(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.caseName, func(t *testing.T) {
-			if _, err := NewACL(tt.acl); err == nil {
+			if _, err := NewACL(tt.acl, false); err == nil {
 				t.Errorf("parsing %s string should be failed", tt.acl)
 			}
 		})
@@ -238,7 +238,7 @@ func TestACLAccess(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("vistor %v, acl %s", tt.visitor, tt.acl), func(t *testing.T) {
-			acl, err := NewACL(tt.acl)
+			acl, err := NewACL(tt.acl, false)
 			if err != nil {
 				t.Error("the number of space should not be more than 2 because the number of categories only include users and groups")
 			}

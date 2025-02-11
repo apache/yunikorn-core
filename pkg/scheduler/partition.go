@@ -132,7 +132,7 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 
 	// We need to pass in the locked version of the GetQueue function.
 	// Placing an application will not have a lock on the partition context.
-	pc.placementManager = placement.NewPlacementManager(conf.PlacementRules, pc.GetQueue)
+	pc.placementManager = placement.NewPlacementManager(conf.PlacementRules, pc.GetQueue, silence)
 	// get the user group cache for the partition
 	pc.userGroupCache = security.GetUserGroupCache("")
 	pc.updateNodeSortingPolicy(conf, silence)

@@ -2340,11 +2340,11 @@ func TestResetRunningState(t *testing.T) {
 	parent.MarkQueueForRemoval()
 	assert.Assert(t, parent.IsDraining(), "parent should be marked as draining")
 	assert.Assert(t, leaf.IsDraining(), "leaf should be marked as draining")
-	err = parent.applyConf(emptyConf)
+	err = parent.applyConf(emptyConf, false)
 	assert.NilError(t, err, "failed to update parent")
 	assert.Assert(t, parent.IsRunning(), "parent should be running again")
 	assert.Assert(t, leaf.IsDraining(), "leaf should still be marked as draining")
-	err = leaf.applyConf(emptyConf)
+	err = leaf.applyConf(emptyConf, false)
 	assert.NilError(t, err, "failed to update leaf")
 	assert.Assert(t, leaf.IsRunning(), "leaf should be running again")
 }

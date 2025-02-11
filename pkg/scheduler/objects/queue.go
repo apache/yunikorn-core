@@ -128,7 +128,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool) (
 	sq.maxRunningApps = conf.MaxApplications
 
 	// update the properties
-	if err := sq.applyConf(conf); err != nil {
+	if err := sq.applyConf(conf, silence); err != nil {
 		return nil, errors.Join(errors.New("configured queue creation failed: "), err)
 	}
 
@@ -312,21 +312,22 @@ func filterParentProperty(key string, value string) string {
 func (sq *Queue) ApplyConf(conf configs.QueueConfig) error {
 	sq.Lock()
 	defer sq.Unlock()
-	return sq.applyConf(conf)
+	return sq.applyConf(conf, false)
 }
 
 // applyConf applies all the properties to the queue from the config.
-// lock free call, must be called holding the queue lock or during create only
-func (sq *Queue) applyConf(conf configs.QueueConfig) error {
+// lock free call, must be called holding the queue lock or during create only.
+// If the silence flag is set to true, the function will not log when setting the users.
+func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) error {
 	// Set the ACLs
 	var err error
-	sq.submitACL, err = security.NewACL(conf.SubmitACL)
+	sq.submitACL, err = security.NewACL(conf.SubmitACL, silence)
 	if err != nil {
 		log.Log(log.SchedQueue).Error("parsing submit ACL failed this should not happen",
 			zap.Error(err))
 		return err
 	}
-	sq.adminACL, err = security.NewACL(conf.AdminACL)
+	sq.adminACL, err = security.NewACL(conf.AdminACL, silence)
 	if err != nil {
 		log.Log(log.SchedQueue).Error("parsing admin ACL failed this should not happen",
 			zap.Error(err))

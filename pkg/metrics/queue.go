@@ -356,7 +356,6 @@ func (m *QueueMetrics) SetQueuePreemptingResourceMetrics(resourceName string, va
 	m.setQueueResource(QueuePreempting, resourceName, value)
 }
 
-func (m *QueueMetrics) SetQueueMaxRunningAppsResourceMetrics(value uint64) {
-	resourceName := "apps"
-	m.setQueueResource(QueueMaxRunningApps, resourceName, float64(value))
+func (m *QueueMetrics) SetQueueMaxRunningAppsMetrics(value uint64) {
+	m.setQueueResource(QueueMaxRunningApps, "apps", float64(value))
 }

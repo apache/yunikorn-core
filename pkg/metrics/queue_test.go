@@ -250,8 +250,8 @@ func TestQueueMaxRunningAppsResourceMetrics(t *testing.T) {
 	qm = getQueueMetrics()
 	defer unregisterQueueMetrics()
 
-	qm.SetQueueMaxRunningAppsResourceMetrics(1)
-	verifyResourceMetrics(t, "maxRunningApps", "Apps")
+	qm.SetQueueMaxRunningAppsMetrics(1)
+	verifyResourceMetrics(t, "maxRunningApps", "apps")
 }
 
 func TestRemoveQueueMetrics(t *testing.T) {

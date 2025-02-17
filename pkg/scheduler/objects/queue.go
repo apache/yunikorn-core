@@ -317,7 +317,7 @@ func (sq *Queue) ApplyConf(conf configs.QueueConfig) error {
 
 // applyConf applies all the properties to the queue from the config.
 // lock free call, must be called holding the queue lock or during create only.
-// If the silence flag is set to true, the function will not log when setting the users.
+// If the silence flag is set to true, the function will not log when setting users and groups.
 func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) error {
 	// Set the ACLs
 	var err error

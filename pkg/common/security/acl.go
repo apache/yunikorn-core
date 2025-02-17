@@ -75,15 +75,20 @@ func (a *ACL) setUsers(userList []string, silence bool) {
 }
 
 // set the group list in the ACL, invalid group names are ignored
-func (a *ACL) setGroups(groupList []string) {
+// If the silence flag is set to true, the function will not log when setting the groups.
+func (a *ACL) setGroups(groupList []string, silence bool) {
 	a.groups = make(map[string]bool)
 	// special case if the wildcard was already set
 	if a.allAllowed {
-		log.Log(log.Security).Info("ignoring group list in ACL: wildcard set")
+		if !silence {
+			log.Log(log.Security).Info("ignoring group list in ACL: wildcard set")
+		}
 		return
 	}
 	if len(groupList) == 1 && groupList[0] == common.Wildcard {
-		log.Log(log.Security).Info("group list is wildcard, allowing all access")
+		if !silence {
+			log.Log(log.Security).Info("group list is wildcard, allowing all access")
+		}
 		a.users = make(map[string]bool)
 		a.allAllowed = true
 		return
@@ -98,8 +103,10 @@ func (a *ACL) setGroups(groupList []string) {
 		if groupRegExp.MatchString(group) {
 			a.groups[group] = true
 		} else {
-			log.Log(log.Security).Info("ignoring group in ACL",
-				zap.String("group", group))
+			if !silence {
+				log.Log(log.Security).Info("ignoring group in ACL",
+					zap.String("group", group))
+			}
 		}
 	}
 }
@@ -121,7 +128,7 @@ func NewACL(aclStr string, silence bool) (ACL, error) {
 	// parse users and groups
 	acl.setUsers(strings.Split(fields[0], common.Separator), silence)
 	if len(fields) == 2 {
-		acl.setGroups(strings.Split(fields[1], common.Separator))
+		acl.setGroups(strings.Split(fields[1], common.Separator), silence)
 	}
 	return acl, nil
 }

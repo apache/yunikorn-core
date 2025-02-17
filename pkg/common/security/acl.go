@@ -102,11 +102,9 @@ func (a *ACL) setGroups(groupList []string, silence bool) {
 		// check the group validity
 		if groupRegExp.MatchString(group) {
 			a.groups[group] = true
-		} else {
-			if !silence {
-				log.Log(log.Security).Info("ignoring group in ACL",
-					zap.String("group", group))
-			}
+		} else if !silence {
+			log.Log(log.Security).Info("ignoring group in ACL",
+				zap.String("group", group))
 		}
 	}
 }

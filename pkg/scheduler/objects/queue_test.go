@@ -298,9 +298,11 @@ func TestPendingCalc(t *testing.T) {
 	want := concatQueueResourceMetric(metrics, []string{`
 yunikorn_root_queue_resource{resource="memory",state="pending"} 100
 yunikorn_root_queue_resource{resource="vcores",state="pending"} 10
+yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
 `, `
 yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 100
 yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 10
+yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
@@ -314,9 +316,11 @@ yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 10
 	want = concatQueueResourceMetric(metrics, []string{`
 yunikorn_root_queue_resource{resource="memory",state="pending"} 0
 yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
+yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
 `, `
 yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
 yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
+yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
@@ -334,16 +338,18 @@ yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
 	want = concatQueueResourceMetric(metrics, []string{`
 yunikorn_root_queue_resource{resource="memory",state="pending"} 0
 yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
+yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
 `, `
 yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
 yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
+yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
 }
 
 const (
-	QueueResourceMetricHelp = "# HELP %v Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`."
+	QueueResourceMetricHelp = "# HELP %v Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`, `maxRunningApps`."
 	QueueResourceMetricType = "# TYPE %v gauge"
 )
 

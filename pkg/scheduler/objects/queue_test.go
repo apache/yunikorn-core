@@ -349,7 +349,7 @@ yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
 }
 
 const (
-	QueueResourceMetricHelp = "# HELP %v Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`, 'maxRunningApps'."
+	QueueResourceMetricHelp = "# HELP %v Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`, `maxRunningApps`."
 	QueueResourceMetricType = "# TYPE %v gauge"
 )
 

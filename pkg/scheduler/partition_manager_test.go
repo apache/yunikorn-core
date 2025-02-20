@@ -41,7 +41,7 @@ func createPartitionContext(t *testing.T) *PartitionContext {
 		},
 	}
 	cc := &ClusterContext{}
-	partition, err := newPartitionContext(conf, "test", cc)
+	partition, err := newPartitionContext(conf, "test", cc, false)
 	assert.NilError(t, err)
 	return partition
 }

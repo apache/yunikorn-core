@@ -97,7 +97,7 @@ func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, m
 			Guaranteed: guarRes,
 		}
 	}
-	queue, err := NewConfiguredQueue(queueConfig, parentSQ)
+	queue, err := NewConfiguredQueue(queueConfig, parentSQ, false)
 	if err != nil {
 		return nil, err
 	}

@@ -365,7 +365,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 		part, ok := cc.partitions[p.Name]
 		if ok {
 			// make sure the new info passes all checks
-			_, err = newPartitionContext(p, rmID, nil)
+			_, err = newPartitionContext(p, rmID, nil, true)
 			if err != nil {
 				return err
 			}
@@ -379,7 +379,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 			// not found: new partition, no checks needed
 			log.Log(log.SchedContext).Info("added partitions", zap.String("partitionName", partitionName))
 
-			part, err = newPartitionContext(p, rmID, cc)
+			part, err = newPartitionContext(p, rmID, cc, false)
 			if err != nil {
 				return err
 			}

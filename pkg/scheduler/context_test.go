@@ -86,7 +86,7 @@ func createTestContext(t *testing.T, partitionName string) *ClusterContext {
 			},
 		},
 	}
-	partition, err := newPartitionContext(conf, "test", context)
+	partition, err := newPartitionContext(conf, "test", context, false)
 	assert.NilError(t, err, "partition create should not have failed with error")
 	context.partitions[partition.Name] = partition
 	return context

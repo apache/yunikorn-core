@@ -114,8 +114,9 @@ func newBlankQueue() *Queue {
 }
 
 // NewConfiguredQueue creates a new queue from scratch based on the configuration
-// lock free as it cannot be referenced yet
-func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
+// lock free as it cannot be referenced yet.
+// If the silence flag is set to true, the function will neither log the queue creation nor send a queue event.
+func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(conf.Name)
 	sq.QueuePath = strings.ToLower(conf.Name)
@@ -128,7 +129,7 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.updateMaxRunningAppsMetrics()
 
 	// update the properties
-	if err := sq.applyConf(conf); err != nil {
+	if err := sq.applyConf(conf, silence); err != nil {
 		return nil, errors.Join(errors.New("configured queue creation failed: "), err)
 	}
 
@@ -145,10 +146,13 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	} else {
 		sq.UpdateQueueProperties()
 	}
-	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
-	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
-		zap.String("queueName", sq.QueuePath))
-	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
+
+	if !silence {
+		sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
+		log.Log(log.SchedQueue).Info("configured queue added to scheduler",
+			zap.String("queueName", sq.QueuePath))
+		sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
+	}
 
 	return sq, nil
 }
@@ -310,21 +314,22 @@ func filterParentProperty(key string, value string) string {
 func (sq *Queue) ApplyConf(conf configs.QueueConfig) error {
 	sq.Lock()
 	defer sq.Unlock()
-	return sq.applyConf(conf)
+	return sq.applyConf(conf, false)
 }
 
 // applyConf applies all the properties to the queue from the config.
-// lock free call, must be called holding the queue lock or during create only
-func (sq *Queue) applyConf(conf configs.QueueConfig) error {
+// lock free call, must be called holding the queue lock or during create only.
+// If the silence flag is set to true, the function will not log when setting users and groups.
+func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) error {
 	// Set the ACLs
 	var err error
-	sq.submitACL, err = security.NewACL(conf.SubmitACL)
+	sq.submitACL, err = security.NewACL(conf.SubmitACL, silence)
 	if err != nil {
 		log.Log(log.SchedQueue).Error("parsing submit ACL failed this should not happen",
 			zap.Error(err))
 		return err
 	}
-	sq.adminACL, err = security.NewACL(conf.AdminACL)
+	sq.adminACL, err = security.NewACL(conf.AdminACL, silence)
 	if err != nil {
 		log.Log(log.SchedQueue).Error("parsing admin ACL failed this should not happen",
 			zap.Error(err))

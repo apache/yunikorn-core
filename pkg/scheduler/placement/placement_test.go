@@ -34,20 +34,20 @@ import (
 // basic test to check if no rules leave the manager unusable
 func TestManagerNew(t *testing.T) {
 	// basic info without rules, manager should not init
-	man := NewPlacementManager(nil, queueFunc)
+	man := NewPlacementManager(nil, queueFunc, false)
 	assert.Equal(t, 2, len(man.rules), "wrong rule count for new placement manager, no config")
 	assert.Equal(t, types.Provided, man.rules[0].getName(), "wrong name for implicit provided rule")
 	assert.Equal(t, types.Recovery, man.rules[1].getName(), "wrong name for implicit recovery rule")
 
 	// fail update rules with unknown rule
 	rules := []configs.PlacementRule{{Name: "unknown", Create: true}}
-	man = NewPlacementManager(rules, queueFunc)
+	man = NewPlacementManager(rules, queueFunc, false)
 	assert.Equal(t, 0, len(man.rules), "wrong rule count for new placement manager, no config")
 }
 
 func TestManagerInit(t *testing.T) {
 	// basic info without rules, manager should implicitly init
-	man := NewPlacementManager(nil, queueFunc)
+	man := NewPlacementManager(nil, queueFunc, false)
 	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil rules config")
 	ruleDAOs := man.GetRulesDAO()
 	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for nil rules config")
@@ -56,7 +56,7 @@ func TestManagerInit(t *testing.T) {
 
 	// try to init with empty list should do the same
 	var rules []configs.PlacementRule
-	err := man.initialise(rules)
+	err := man.initialise(rules, false)
 	assert.NilError(t, err, "Failed to initialize empty placement rules")
 	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty rules config")
 	ruleDAOs = man.GetRulesDAO()
@@ -67,7 +67,7 @@ func TestManagerInit(t *testing.T) {
 	rules = []configs.PlacementRule{
 		{Name: "unknown"},
 	}
-	err = man.initialise(rules)
+	err = man.initialise(rules, false)
 	if err == nil {
 		t.Error("initialise with 'unknown' rule list should have failed")
 	}
@@ -81,7 +81,7 @@ func TestManagerInit(t *testing.T) {
 	rules = []configs.PlacementRule{
 		{Name: "test"},
 	}
-	err = man.initialise(rules)
+	err = man.initialise(rules, false)
 	assert.NilError(t, err, "failed to init existing manager")
 	ruleDAOs = man.GetRulesDAO()
 	assert.Equal(t, 2, len(ruleDAOs), "wrong DAO count for manager with test rule")
@@ -90,7 +90,7 @@ func TestManagerInit(t *testing.T) {
 
 	// update the manager: remove rules implicit state is reverted
 	rules = []configs.PlacementRule{}
-	err = man.initialise(rules)
+	err = man.initialise(rules, false)
 	assert.NilError(t, err, "Failed to re-initialize empty placement rules")
 	assert.Equal(t, 2, len(man.rules), "wrong rule count for empty rules config")
 	ruleDAOs = man.GetRulesDAO()
@@ -99,7 +99,7 @@ func TestManagerInit(t *testing.T) {
 	assert.Equal(t, ruleDAOs[1].Name, types.Recovery, "expected recovery rule as second rule")
 
 	// check if we handle a nil list
-	err = man.initialise(nil)
+	err = man.initialise(nil, false)
 	assert.NilError(t, err, "Failed to re-initialize nil placement rules")
 	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil rules config")
 	ruleDAOs = man.GetRulesDAO()
@@ -117,7 +117,7 @@ func TestManagerInit(t *testing.T) {
 			},
 		},
 	}
-	err = man.initialise(rules)
+	err = man.initialise(rules, false)
 	assert.NilError(t, err, "Failed to re-initialize nil placement rules")
 	assert.Equal(t, 2, len(man.rules), "wrong rule count for nil rules config")
 	ruleDAOs = man.GetRulesDAO()
@@ -128,7 +128,7 @@ func TestManagerInit(t *testing.T) {
 
 func TestManagerUpdate(t *testing.T) {
 	// basic info without rules, manager should not init
-	man := NewPlacementManager(nil, queueFunc)
+	man := NewPlacementManager(nil, queueFunc, false)
 	// update the manager
 	rules := []configs.PlacementRule{
 		{Name: "test"},
@@ -172,7 +172,7 @@ func TestManagerBuildRule(t *testing.T) {
 	rules := []configs.PlacementRule{
 		{Name: "test"},
 	}
-	ruleObjs, err := buildRules(rules)
+	ruleObjs, err := buildRules(rules, false)
 	if err != nil {
 		t.Errorf("test rule build should not have failed, err: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestManagerBuildRule(t *testing.T) {
 			},
 		},
 	}
-	ruleObjs, err = buildRules(rules)
+	ruleObjs, err = buildRules(rules, false)
 	if err != nil || len(ruleObjs) != 2 {
 		t.Errorf("test rule build should not have failed and created 2 top level rule, err: %v, rules: %v", err, ruleObjs)
 	} else {
@@ -203,7 +203,7 @@ func TestManagerBuildRule(t *testing.T) {
 		{Name: "user"},
 		{Name: "test"},
 	}
-	ruleObjs, err = buildRules(rules)
+	ruleObjs, err = buildRules(rules, false)
 	if err != nil || len(ruleObjs) != 3 {
 		t.Errorf("rule build should not have failed and created 3 rules, err: %v, rules: %v", err, ruleObjs)
 	} else if ruleObjs[0].getName() != rules[0].Name || ruleObjs[1].getName() != rules[1].Name || ruleObjs[2].getName() != "recovery" {
@@ -230,7 +230,7 @@ partitions:
 	err := initQueueStructure([]byte(data))
 	assert.NilError(t, err, "setting up the queue config failed")
 	// basic info without rules, manager should init
-	man := NewPlacementManager(nil, queueFunc)
+	man := NewPlacementManager(nil, queueFunc, false)
 	if man == nil {
 		t.Fatal("placement manager create failed")
 	}
@@ -362,7 +362,7 @@ partitions:
 			Value:  "namespace",
 			Create: true},
 	}
-	man := NewPlacementManager(rules, queueFunc)
+	man := NewPlacementManager(rules, queueFunc, false)
 	if man == nil {
 		t.Fatal("placement manager create failed")
 	}
@@ -503,7 +503,7 @@ partitions:
 			Value:  "root.custom",
 			Create: true},
 	}
-	man1 := NewPlacementManager(rules, queueFunc)
+	man1 := NewPlacementManager(rules, queueFunc, false)
 	if man1 == nil {
 		t.Fatal("placement manager create failed")
 	}
@@ -559,7 +559,7 @@ partitions:
 	err := initQueueStructure([]byte(data))
 	assert.NilError(t, err, "setting up the queue config failed")
 	// basic info without rules, manager should init
-	man := NewPlacementManager(nil, queueFunc)
+	man := NewPlacementManager(nil, queueFunc, false)
 	if man == nil {
 		t.Fatal("placement manager create failed")
 	}

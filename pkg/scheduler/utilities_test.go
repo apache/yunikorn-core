@@ -110,7 +110,7 @@ func newBasePartitionNoRootDefault() (*PartitionContext, error) {
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
-	return newPartitionContext(conf, rmID, nil)
+	return newPartitionContext(conf, rmID, nil, false)
 }
 
 func newBasePartition() (*PartitionContext, error) {
@@ -167,7 +167,7 @@ func newBasePartition() (*PartitionContext, error) {
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
-	return newPartitionContext(conf, rmID, nil)
+	return newPartitionContext(conf, rmID, nil, false)
 }
 
 func newConfiguredPartition() (*PartitionContext, error) {
@@ -265,7 +265,7 @@ func newConfiguredPartition() (*PartitionContext, error) {
 		Limits:         nil,
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
-	return newPartitionContext(conf, rmID, nil)
+	return newPartitionContext(conf, rmID, nil, false)
 }
 
 func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarantees map[string]string) (*PartitionContext, error) {
@@ -374,7 +374,7 @@ func newPreemptionConfiguredPartition(parentLimit map[string]string, leafGuarant
 		PlacementRules: nil,
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
-	return newPartitionContext(conf, rmID, nil)
+	return newPartitionContext(conf, rmID, nil, false)
 }
 
 func newLimitedPartition(resLimit map[string]string) (*PartitionContext, error) {
@@ -435,7 +435,7 @@ func newLimitedPartition(resLimit map[string]string) (*PartitionContext, error) 
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
-	return newPartitionContext(conf, rmID, nil)
+	return newPartitionContext(conf, rmID, nil, false)
 }
 
 func newPlacementPartition() (*PartitionContext, error) {
@@ -477,7 +477,7 @@ func newPlacementPartition() (*PartitionContext, error) {
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
-	return newPartitionContext(conf, rmID, nil)
+	return newPartitionContext(conf, rmID, nil, false)
 }
 
 func newApplication(appID, partition, queueName string) *objects.Application {

@@ -43,11 +43,11 @@ type AppPlacementManager struct {
 	locking.RWMutex
 }
 
-func NewPlacementManager(rules []configs.PlacementRule, queueFunc func(string) *objects.Queue) *AppPlacementManager {
+func NewPlacementManager(rules []configs.PlacementRule, queueFunc func(string) *objects.Queue, silence bool) *AppPlacementManager {
 	m := &AppPlacementManager{
 		queueFn: queueFunc,
 	}
-	if err := m.initialise(rules); err != nil {
+	if err := m.initialise(rules, silence); err != nil {
 		log.Log(log.Config).Error("Placement manager created without rules: not active", zap.Error(err))
 	}
 	return m
@@ -66,7 +66,7 @@ func (m *AppPlacementManager) GetRulesDAO() []*dao.RuleDAO {
 
 // UpdateRules sets the rules for an active placement manager
 func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
-	if err := m.initialise(rules); err != nil {
+	if err := m.initialise(rules, false); err != nil {
 		log.Log(log.Config).Info("Placement manager rules not reloaded", zap.Error(err))
 		return err
 	}
@@ -74,17 +74,22 @@ func (m *AppPlacementManager) UpdateRules(rules []configs.PlacementRule) error {
 }
 
 // initialise the rules from a parsed config.
-func (m *AppPlacementManager) initialise(rules []configs.PlacementRule) error {
-	log.Log(log.Config).Info("Building new rule list for placement manager")
+// If the silence flag is set to true, the function will not log.
+func (m *AppPlacementManager) initialise(rules []configs.PlacementRule, silence bool) error {
+	if !silence {
+		log.Log(log.Config).Info("Building new rule list for placement manager")
+	}
 	// build temp list from new config
-	tempRules, err := buildRules(rules)
+	tempRules, err := buildRules(rules, silence)
 	if err != nil {
 		return err
 	}
 	m.Lock()
 	defer m.Unlock()
 
-	log.Log(log.Config).Info("Activated rule set in placement manager")
+	if !silence {
+		log.Log(log.Config).Info("Activated rule set in placement manager")
+	}
 	m.rules = tempRules
 	// all done manager is initialised
 	for rule := range m.rules {
@@ -183,6 +188,16 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 				queueName = ""
 				continue
 			}
+			// Check if the queue in Draining state, and if so, proceed to the next rule
+			if queue.IsDraining() {
+				log.Log(log.SchedApplication).Debug("Cannot place application in draining queue",
+					zap.String("queueName", queueName),
+					zap.String("ruleName", checkRule.getName()),
+					zap.String("application", app.ApplicationID))
+				// reset the queue name for the last rule in the chain
+				queueName = ""
+				continue
+			}
 		}
 		// we have a queue that allows submitting and can be created: app placed
 		log.Log(log.SchedApplication).Info("Rule result for placing application",
@@ -203,11 +218,14 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 
 // buildRules builds a new rule set based on the config.
 // If the rule set is correct and can be used the new set is returned.
-// If any error is encountered a nil array is returned and the error set
-func buildRules(rules []configs.PlacementRule) ([]rule, error) {
+// If any error is encountered a nil array is returned and the error set.
+// If the silence flag is set to true, the function will not log.
+func buildRules(rules []configs.PlacementRule, silence bool) ([]rule, error) {
 	// empty list should result in a single "provided" rule
 	if len(rules) == 0 {
-		log.Log(log.Config).Info("Placement manager configured without rules: using implicit provided rule")
+		if !silence {
+			log.Log(log.Config).Info("Placement manager configured without rules: using implicit provided rule")
+		}
 		rules = []configs.PlacementRule{{
 			Name:   types.Provided,
 			Create: false,

@@ -79,7 +79,7 @@ type PartitionContext struct {
 	locking.RWMutex
 }
 
-func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterContext) (*PartitionContext, error) {
+func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterContext, silence bool) (*PartitionContext, error) {
 	if conf.Name == "" || rmID == "" {
 		log.Log(log.SchedPartition).Info("partition cannot be created",
 			zap.String("partition name", conf.Name),
@@ -98,15 +98,16 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		foreignAllocs:         make(map[string]*objects.Allocation),
 	}
 	pc.partitionManager = newPartitionManager(pc, cc)
-	if err := pc.initialPartitionFromConfig(conf); err != nil {
+	if err := pc.initialPartitionFromConfig(conf, silence); err != nil {
 		return nil, err
 	}
 
 	return pc, nil
 }
 
-// Initialise the partition
-func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionConfig) error {
+// Initialise the partition.
+// If the silence flag is set to true, the function will not log queue creation or node sorting policy, update limit settings, or send a queue event.
+func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionConfig, silence bool) error {
 	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {
 		return fmt.Errorf("partition cannot be created without root queue")
 	}
@@ -115,38 +116,45 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// Add the rest of the queue structure recursively
 	queueConf := conf.Queues[0]
 	var err error
-	if pc.root, err = objects.NewConfiguredQueue(queueConf, nil); err != nil {
+	if pc.root, err = objects.NewConfiguredQueue(queueConf, nil, silence); err != nil {
 		return err
 	}
 	// recursively add the queues to the root
-	if err = pc.addQueue(queueConf.Queues, pc.root); err != nil {
+	if err = pc.addQueue(queueConf.Queues, pc.root, silence); err != nil {
 		return err
 	}
-	log.Log(log.SchedPartition).Info("root queue added",
-		zap.String("partitionName", pc.Name),
-		zap.String("rmID", pc.RmID))
+
+	if !silence {
+		log.Log(log.SchedPartition).Info("root queue added",
+			zap.String("partitionName", pc.Name),
+			zap.String("rmID", pc.RmID))
+	}
 
 	// We need to pass in the locked version of the GetQueue function.
 	// Placing an application will not have a lock on the partition context.
-	pc.placementManager = placement.NewPlacementManager(conf.PlacementRules, pc.GetQueue)
+	pc.placementManager = placement.NewPlacementManager(conf.PlacementRules, pc.GetQueue, silence)
 	// get the user group cache for the partition
 	pc.userGroupCache = security.GetUserGroupCache("")
-	pc.updateNodeSortingPolicy(conf)
+	pc.updateNodeSortingPolicy(conf, silence)
 	pc.updatePreemption(conf)
 
 	// update limit settings: start at the root
-	return ugm.GetUserManager().UpdateConfig(queueConf, conf.Queues[0].Name)
+	if !silence {
+		return ugm.GetUserManager().UpdateConfig(queueConf, conf.Queues[0].Name)
+	}
+	return nil
 }
 
 // NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
-func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig) {
+// If the silence flag is set to true, the function will not log when setting the node sorting policy.
+func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig, silence bool) {
 	var configuredPolicy policies.SortingPolicy
 	configuredPolicy, err := policies.SortingPolicyFromString(conf.NodeSortPolicy.Type)
 	if err != nil {
 		log.Log(log.SchedPartition).Debug("NodeSorting policy incorrectly set or unknown",
 			zap.Error(err))
 		log.Log(log.SchedPartition).Info(fmt.Sprintf("NodeSorting policy not set using '%s' as default", configuredPolicy))
-	} else {
+	} else if !silence {
 		log.Log(log.SchedPartition).Info("NodeSorting policy set from config",
 			zap.Stringer("policyName", configuredPolicy))
 	}
@@ -170,7 +178,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 		log.Log(log.SchedPartition).Info("New placement rules not activated, config reload failed", zap.Error(err))
 		return err
 	}
-	pc.updateNodeSortingPolicy(conf)
+	pc.updateNodeSortingPolicy(conf, false)
 
 	pc.Lock()
 	defer pc.Unlock()
@@ -191,17 +199,18 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	return ugm.GetUserManager().UpdateConfig(queueConf, conf.Queues[0].Name)
 }
 
-// Process the config structure and create a queue info tree for this partition
-func (pc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *objects.Queue) error {
+// Process the config structure and create a queue info tree for this partition.
+// If the silence flag is set to true, the function will neither log the queue creation nor send a queue event.
+func (pc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *objects.Queue, silence bool) error {
 	// create the queue at this level
 	for _, queueConf := range conf {
-		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent)
+		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent, silence)
 		if err != nil {
 			return err
 		}
 		// recursive create the queues below
 		if len(queueConf.Queues) > 0 {
-			err = pc.addQueue(queueConf.Queues, thisQueue)
+			err = pc.addQueue(queueConf.Queues, thisQueue, silence)
 			if err != nil {
 				return err
 			}
@@ -224,7 +233,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 		queue := pc.getQueueInternal(pathName)
 		var err error
 		if queue == nil {
-			queue, err = objects.NewConfiguredQueue(queueConfig, parent)
+			queue, err = objects.NewConfiguredQueue(queueConfig, parent, false)
 		} else {
 			err = queue.ApplyConf(queueConfig)
 		}

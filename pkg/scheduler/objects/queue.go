@@ -114,8 +114,9 @@ func newBlankQueue() *Queue {
 }
 
 // NewConfiguredQueue creates a new queue from scratch based on the configuration
-// lock free as it cannot be referenced yet
-func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error) {
+// lock free as it cannot be referenced yet.
+// If the silence flag is set to true, the function will neither log the queue creation nor send a queue event.
+func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(conf.Name)
 	sq.QueuePath = strings.ToLower(conf.Name)
@@ -125,9 +126,10 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	sq.parent = parent
 	sq.isManaged = true
 	sq.maxRunningApps = conf.MaxApplications
+	sq.updateMaxRunningAppsMetrics()
 
 	// update the properties
-	if err := sq.applyConf(conf); err != nil {
+	if err := sq.applyConf(conf, silence); err != nil {
 		return nil, errors.Join(errors.New("configured queue creation failed: "), err)
 	}
 
@@ -144,10 +146,13 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue) (*Queue, error)
 	} else {
 		sq.UpdateQueueProperties()
 	}
-	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
-	log.Log(log.SchedQueue).Info("configured queue added to scheduler",
-		zap.String("queueName", sq.QueuePath))
-	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
+
+	if !silence {
+		sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
+		log.Log(log.SchedQueue).Info("configured queue added to scheduler",
+			zap.String("queueName", sq.QueuePath))
+		sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
+	}
 
 	return sq, nil
 }
@@ -223,6 +228,7 @@ func (sq *Queue) applyTemplate(childTemplate *template.Template) {
 	// update metrics for guaranteed and max resource
 	sq.updateGuaranteedResourceMetrics()
 	sq.updateMaxResourceMetrics()
+	sq.updateMaxRunningAppsMetrics()
 }
 
 // getProperties returns a copy of the properties for this queue
@@ -308,21 +314,22 @@ func filterParentProperty(key string, value string) string {
 func (sq *Queue) ApplyConf(conf configs.QueueConfig) error {
 	sq.Lock()
 	defer sq.Unlock()
-	return sq.applyConf(conf)
+	return sq.applyConf(conf, false)
 }
 
 // applyConf applies all the properties to the queue from the config.
-// lock free call, must be called holding the queue lock or during create only
-func (sq *Queue) applyConf(conf configs.QueueConfig) error {
+// lock free call, must be called holding the queue lock or during create only.
+// If the silence flag is set to true, the function will not log when setting users and groups.
+func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) error {
 	// Set the ACLs
 	var err error
-	sq.submitACL, err = security.NewACL(conf.SubmitACL)
+	sq.submitACL, err = security.NewACL(conf.SubmitACL, silence)
 	if err != nil {
 		log.Log(log.SchedQueue).Error("parsing submit ACL failed this should not happen",
 			zap.Error(err))
 		return err
 	}
-	sq.adminACL, err = security.NewACL(conf.AdminACL)
+	sq.adminACL, err = security.NewACL(conf.AdminACL, silence)
 	if err != nil {
 		log.Log(log.SchedQueue).Error("parsing admin ACL failed this should not happen",
 			zap.Error(err))
@@ -366,6 +373,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig) error {
 			return err
 		}
 		sq.maxRunningApps = conf.MaxApplications
+		sq.updateMaxRunningAppsMetrics()
 	}
 
 	sq.properties = conf.Properties
@@ -462,6 +470,7 @@ func (sq *Queue) SetMaxRunningApps(maxApps uint64) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.maxRunningApps = maxApps
+	sq.updateMaxRunningAppsMetrics()
 }
 
 // setTemplate sets the template on the queue based on the config.
@@ -1703,6 +1712,10 @@ func (sq *Queue) updatePreemptingResourceMetrics() {
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}
+}
+
+func (sq *Queue) updateMaxRunningAppsMetrics() {
+	metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxRunningAppsMetrics(sq.maxRunningApps)
 }
 
 func (sq *Queue) removeMetrics() {

@@ -246,6 +246,14 @@ func TestQueuePreemptingResourceMetrics(t *testing.T) {
 	verifyResourceMetrics(t, "preempting", "cpu")
 }
 
+func TestQueueMaxRunningAppsResourceMetrics(t *testing.T) {
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
+
+	qm.SetQueueMaxRunningAppsMetrics(1)
+	verifyResourceMetrics(t, "maxRunningApps", "apps")
+}
+
 func TestRemoveQueueMetrics(t *testing.T) {
 	testQueueName := "root.test"
 	qm = GetQueueMetrics(testQueueName)

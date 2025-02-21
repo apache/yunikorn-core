@@ -693,14 +693,18 @@ func assertUserGroupResourceMaxLimits(t *testing.T, userGroup security.UserGroup
 		getMaxResource(usage.Queues, maxResources)
 		for q, qMaxLimits := range expectedQueuesMaxLimits {
 			if qRes, ok := maxResources[q]; ok {
-				assert.Equal(t, resources.Equals(qRes, qMaxLimits[maxresources].(*resources.Resource)), true)
+				maxRes, ok := qMaxLimits[maxresources].(*resources.Resource)
+				assert.Assert(t, ok, "expected resource type is not resource")
+				assert.Equal(t, resources.Equals(qRes, maxRes), true)
 			}
 		}
 		maxApplications := make(map[string]uint64)
 		getMaxApplications(usage.Queues, maxApplications)
 		for q, qMaxLimits := range expectedQueuesMaxLimits {
 			if qApps, ok := maxApplications[q]; ok {
-				assert.Equal(t, qApps, qMaxLimits[maxapplications].(uint64), "queue path is "+q+" actual: "+strconv.Itoa(int(qApps))+", expected: "+strconv.Itoa(int(qMaxLimits[maxapplications].(uint64))))
+				maxApps, ok := qMaxLimits[maxapplications].(uint64)
+				assert.Assert(t, ok, "expected application type is not uint64")
+				assert.Equal(t, qApps, maxApps, "queue path is "+q+" actual: "+strconv.Itoa(int(qApps))+", expected: "+strconv.Itoa(int(maxApps))) //nolint:gosec
 			}
 		}
 	}
@@ -712,14 +716,18 @@ func assertUserGroupResourceMaxLimits(t *testing.T, userGroup security.UserGroup
 		getMaxResource(gUsage.Queues, gMaxResources)
 		for q, qMaxLimits := range expectedQueuesMaxLimits {
 			if qRes, ok := gMaxResources[q]; ok {
-				assert.Equal(t, resources.Equals(qRes, qMaxLimits[maxresources].(*resources.Resource)), true)
+				maxRes, ok := qMaxLimits[maxresources].(*resources.Resource)
+				assert.Assert(t, ok, "expected resource type is not resource")
+				assert.Equal(t, resources.Equals(qRes, maxRes), true)
 			}
 		}
 		gMaxApps := make(map[string]uint64)
 		getMaxApplications(gUsage.Queues, gMaxApps)
 		for q, qMaxLimits := range expectedQueuesMaxLimits {
 			if qApps, ok := gMaxApps[q]; ok {
-				assert.Equal(t, qApps, qMaxLimits[maxapplications].(uint64))
+				maxApps, ok := qMaxLimits[maxapplications].(uint64)
+				assert.Assert(t, ok, "expected application type is not uint64")
+				assert.Equal(t, qApps, maxApps)
 			}
 		}
 	}

@@ -20,6 +20,7 @@ package resources
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -407,7 +408,7 @@ func SubErrorNegative(left, right *Resource) (*Resource, error) {
 	res, message := subNonNegative(left, right)
 	var err error
 	if message != "" {
-		err = fmt.Errorf(message)
+		err = errors.New(message)
 	}
 	return res, err
 }

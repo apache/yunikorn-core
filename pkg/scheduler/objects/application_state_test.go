@@ -521,7 +521,7 @@ func assertTotalAppsRejectedMetrics(t testing.TB, expected int) {
 func assertQueueRunningApps(t testing.TB, app *Application, expected int) {
 	t.Helper()
 	runningApps := app.queue.runningApps
-	assert.Equal(t, runningApps, uint64(expected), "total running application in queue is not as expected.")
+	assert.Equal(t, runningApps, uint64(expected), "total running application in queue is not as expected.") //nolint:gosec
 }
 
 func assertQueueApplicationsAcceptedMetrics(t testing.TB, app *Application, expected int) {

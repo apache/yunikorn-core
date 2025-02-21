@@ -397,7 +397,7 @@ func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trac
 	}
 
 	// apply user/group specific limit settings set if configured, otherwise use wild card limit settings
-	if qt.maxRunningApps != 0 && running > int(qt.maxRunningApps) {
+	if qt.maxRunningApps != 0 && running > int(qt.maxRunningApps) { //nolint: gosec
 		return false
 	}
 	return true

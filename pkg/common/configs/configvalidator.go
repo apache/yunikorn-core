@@ -316,7 +316,7 @@ func checkResourceConfig(cur QueueConfig) (*resources.Resource, *resources.Resou
 // Check the placement rules for correctness
 func checkPlacementRules(partition *PartitionConfig) error {
 	// return if nothing defined
-	if partition.PlacementRules == nil || len(partition.PlacementRules) == 0 {
+	if len(partition.PlacementRules) == 0 {
 		return nil
 	}
 

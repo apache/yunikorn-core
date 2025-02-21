@@ -43,7 +43,11 @@ func TestNewNodeCollection(t *testing.T) {
 }
 
 func initBaseCollection() *baseNodeCollection {
-	return NewNodeCollection("test").(*baseNodeCollection)
+	collection, ok := NewNodeCollection("test").(*baseNodeCollection)
+	if !ok {
+		return nil
+	}
+	return collection
 }
 
 func initNode(name string) *Node {

@@ -228,7 +228,7 @@ func TestPredicateCheckResult_PopulateVictims(t *testing.T) {
 				assert.Equal(t, tt.wantSuccess, tt.pcr.success, "success mismatch")
 				assert.Equal(t, tt.wantIndex, tt.pcr.index, "index mismatch")
 				if tt.wantVictims == nil {
-					assert.Assert(t, tt.pcr.victims == nil || len(tt.pcr.victims) == 0, "expected no victims")
+					assert.Assert(t, len(tt.pcr.victims) == 0, "expected no victims")
 				} else {
 					assert.Equal(t, len(tt.wantVictims), len(tt.pcr.victims), "victims length mismatch")
 				}

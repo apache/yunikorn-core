@@ -306,14 +306,16 @@ func parseLevel(level string) *zapcore.Level {
 	}
 
 	// parse numeric
-	levelNum, err := strconv.ParseInt(level, 10, 31)
+	levelNum, err := strconv.ParseInt(level, 10, 8)
 	if err == nil {
-		zapLevel = zapcore.Level(levelNum)
-		if zapLevel < zapcore.DebugLevel {
+		// Validate levelNum is within valid zapcore.Level range before conversion
+		switch {
+		case levelNum < int64(zapcore.DebugLevel):
 			zapLevel = zapcore.DebugLevel
-		}
-		if zapLevel >= zapcore.InvalidLevel {
+		case levelNum >= int64(zapcore.InvalidLevel):
 			zapLevel = zapcore.InvalidLevel - 1
+		default:
+			zapLevel = zapcore.Level(levelNum)
 		}
 		return &zapLevel
 	}

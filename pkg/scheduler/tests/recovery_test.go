@@ -675,9 +675,7 @@ func TestAppRecovery(t *testing.T) {
 	mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	app := serviceContext.Scheduler.GetClusterContext().GetApplication(appID1, "[rm:123]default")
-	if app == nil {
-		t.Fatal("application not found after recovery")
-	}
+	assert.Assert(t, app != nil, "application not found after recovery")
 	assert.Equal(t, app.ApplicationID, appID1)
 	assert.Equal(t, app.GetQueuePath(), "root.a")
 }

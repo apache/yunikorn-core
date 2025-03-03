@@ -1354,7 +1354,9 @@ func (pc *PartitionContext) calculateNodesResourceUsage() map[string][]int {
 	return mapResult
 }
 
-func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
+// processAllocationRelease processes the releases from the RM and removes the allocation(s) as requested.
+// Updates the application which can trigger an application state change.
+func (pc *PartitionContext) processAllocationRelease(release *si.AllocationRelease, app *objects.Application) []*objects.Allocation {
 	released := make([]*objects.Allocation, 0)
 	// when allocationKey is not specified, remove all allocations from the app
 	allocationKey := release.GetAllocationKey()
@@ -1386,7 +1388,7 @@ func (pc *PartitionContext) generateReleased(release *si.AllocationRelease, app 
 
 // removeAllocation removes the referenced allocation(s) from the applications and nodes
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) { //nolint:funlen
+func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*objects.Allocation, *objects.Allocation) {
 	if release == nil {
 		return nil, nil
 	}
@@ -1402,25 +1404,20 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		return nil, nil
 	}
 
-	// temp store for allocations manipulated
-	released := pc.generateReleased(release, app)
-	var confirmed *objects.Allocation
+	// **** DO NOT MOVE **** this must be called before any allocations are released.
+	// Processing a removal while in the Completing state could race with the state change. The race occurs between
+	// removing the allocation and updating the queue after node processing. If the state change removes the queue link
+	// before we get to updating the queue after the node we leave the resources as allocated on the queue. The queue
+	// will always exist at this point. Retrieving the queue now sidesteps this.
+	queue := app.GetQueue()
 
-	// all releases are collected: placeholder count needs updating for all placeholder releases
-	// regardless of what happens later
-	phReleases := 0
-	for _, r := range released {
-		if r.IsPlaceholder() {
-			phReleases++
-		}
-	}
-	if phReleases > 0 {
-		pc.decPhAllocationCount(phReleases)
-	}
+	released := pc.processAllocationRelease(release, app)
+	pc.updatePhAllocationCount(released)
 
-	// for each allocation to release, update the node and queue.
 	total := resources.NewResource()
 	totalPreempting := resources.NewResource()
+	var confirmed *objects.Allocation
+	// for each allocation to release, update the node and queue.
 	for _, alloc := range released {
 		node := pc.GetNode(alloc.GetNodeID())
 		if node == nil {
@@ -1471,13 +1468,6 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		}
 	}
 
-	// Processing a removal while in the Completing state could race with the state change.
-	// The race occurs between removing the allocation and updating the queue after node processing.
-	// If the state change removes the queue link before we get to updating the queue after the node we
-	// leave the resources as allocated on the queue. The queue cannot be removed yet at this point as
-	// there are still allocations left. So retrieve the queue early to sidestep the race.
-	queue := app.GetQueue()
-
 	if resources.StrictlyGreaterThanZero(total) {
 		if err := queue.DecAllocatedResource(total); err != nil {
 			log.Log(log.SchedPartition).Warn("failed to release resources from queue",
@@ -1513,6 +1503,22 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 
 	return released, confirmed
+}
+
+// updatePhAllocationCount checks the released allocations and updates the partition context counter of allocated
+// placeholders.
+func (pc *PartitionContext) updatePhAllocationCount(released []*objects.Allocation) {
+	// all releases are collected: placeholder count needs updating for all placeholder releases
+	// regardless of what happens later
+	phReleases := 0
+	for _, a := range released {
+		if a.IsPlaceholder() {
+			phReleases++
+		}
+	}
+	if phReleases > 0 {
+		pc.decPhAllocationCount(phReleases)
+	}
 }
 
 func (pc *PartitionContext) GetCurrentState() string {

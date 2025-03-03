@@ -1499,9 +1499,7 @@ func TestGetQueue(t *testing.T) {
 func TestTryAllocate(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -1578,12 +1576,7 @@ func TestTryAllocate(t *testing.T) {
 func TestRequiredNodeReservation(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
-	if result := partition.tryAllocate(); result != nil {
-		t.Fatalf("empty cluster allocate returned allocation: %s", result)
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	node := partition.nodes.GetNode(nodeID1)
 	if node == nil {
 		t.Fatal("node-1 should have been created")
@@ -1664,9 +1657,7 @@ func TestRequiredNodeReservation(t *testing.T) {
 // allocate ask request with required node having non daemon set reservations
 func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -1744,9 +1735,7 @@ func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 // allocate ask request with required node having daemon set reservations
 func TestRequiredNodeCancelDSReservations(t *testing.T) {
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -1829,9 +1818,7 @@ func TestRequiredNodeCancelDSReservations(t *testing.T) {
 func TestRequiredNodeNotExist(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -1866,9 +1853,7 @@ func TestRequiredNodeNotExist(t *testing.T) {
 // basic ds scheduling on specific node in first allocate run itself (without any need for reservation)
 func TestRequiredNodeAllocation(t *testing.T) {
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result.Request.String())
 	}
@@ -2037,9 +2022,7 @@ func TestPreemptionForRequiredNodeReservedAlloc(t *testing.T) {
 
 func TestPreemptionForRequiredNodeMultipleAttemptsAvoided(t *testing.T) {
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.parent.sub-leaf")
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "8"})
@@ -2119,9 +2102,7 @@ func getExpectedQueuesLimitsForPreemptionWithRequiredNode() map[string]map[strin
 // setup the partition with existing allocations so we can test preemption
 func setupPreemption(t *testing.T) (*PartitionContext, *objects.Application, *objects.Application, *objects.Allocation, *objects.Allocation) {
 	partition := createPreemptionQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -2181,9 +2162,7 @@ func setupPreemption(t *testing.T) (*PartitionContext, *objects.Application, *ob
 // setup the partition in a state that we need for multiple tests
 func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.Application) {
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -2261,9 +2240,7 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 func TestTryAllocateLarge(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -2294,9 +2271,7 @@ func TestTryAllocateLarge(t *testing.T) {
 func TestAllocReserveNewNode(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned result: %s", result)
 	}
@@ -2365,9 +2340,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 func TestTryAllocateReserve(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryReservedAllocate(); result != nil {
 		t.Fatalf("empty cluster reserved allocate returned allocation: %s", result)
 	}
@@ -2439,9 +2412,7 @@ func TestTryAllocateReserve(t *testing.T) {
 func TestTryAllocateWithReserved(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if alloc := partition.tryReservedAllocate(); alloc != nil {
 		t.Fatalf("empty cluster reserved allocate returned allocation: %v", alloc)
 	}
@@ -2463,9 +2434,7 @@ func TestTryAllocateWithReserved(t *testing.T) {
 
 	// reserve one node: scheduling should happen on the other
 	node2 := partition.GetNode(nodeID2)
-	if node2 == nil {
-		t.Fatal("expected node-2 to be returned got nil")
-	}
+	assert.Assert(t, node2 != nil, "expected node-2 to be returned got nil")
 	partition.reserve(app, node2, ask)
 	if app.NodeReservedForAsk(allocKey) != nodeID2 {
 		t.Fatal("reservation failure for alloc-1 and node-2")
@@ -2494,9 +2463,7 @@ func TestTryAllocateWithReserved(t *testing.T) {
 func TestScheduleRemoveReservedAsk(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -2584,9 +2551,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 // update the config with nodes registered and make sure that the root max and guaranteed are not changed
 func TestUpdateRootQueue(t *testing.T) {
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "20"})
 	assert.NilError(t, err, "resource creation failed")
 	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
@@ -3890,9 +3855,7 @@ func TestGetNodeSortingPolicyWhenNewPartitionFromConfig(t *testing.T) {
 func TestTryAllocateMaxRunning(t *testing.T) {
 	const resType = "vcore"
 	partition := createQueuesNodes(t)
-	if partition == nil {
-		t.Fatal("partition create failed")
-	}
+	assert.Assert(t, partition != nil, "partition create failed")
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}

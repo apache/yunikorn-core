@@ -356,10 +356,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	maxApps := app.GetMaxApps()
 	if !isRecoveryQueue && (guaranteedRes != nil || maxRes != nil || maxApps != 0) {
 		// set resources based on tags, but only if the queue is dynamic (unmanaged)
-		if queue.IsManaged() {
-			log.Log(log.SchedQueue).Warn("Trying to set resources on a queue that is not an unmanaged leaf",
-				zap.String("queueName", queue.QueuePath))
-		} else {
+		if !queue.IsManaged() {
 			if maxApps != 0 {
 				queue.SetMaxRunningApps(maxApps)
 			}

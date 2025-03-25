@@ -226,8 +226,7 @@ func TestSortAppsFifo(t *testing.T) {
 		app := newApplication(appID, "partition", "queue")
 		app.pending = res
 		input[appID] = app
-		// make sure the time stamps differ at least a bit (tracking in nano seconds)
-		time.Sleep(time.Nanosecond * 5)
+		app.submissionTime = time.Unix(int64(i), 0)
 	}
 
 	// fifo - apps should come back in order created 0, 1, 2, 3
@@ -236,8 +235,8 @@ func TestSortAppsFifo(t *testing.T) {
 
 	input["app-1"].askMaxPriority = 3
 	input["app-3"].askMaxPriority = 5
-	input["app-2"].SubmissionTime = input["app-3"].SubmissionTime
-	input["app-1"].SubmissionTime = input["app-3"].SubmissionTime
+	input["app-2"].submissionTime = input["app-3"].submissionTime
+	input["app-1"].submissionTime = input["app-3"].submissionTime
 	list = sortApplications(input, policies.FifoSortPolicy, false, nil)
 	/*
 	* apps order: 0, 3, 1, 2
@@ -410,7 +409,7 @@ func TestSortBySubmissionTime(t *testing.T) {
 		app := newApplication(appID, "partition", "queue")
 		app.pending = res
 		input[appID] = app
-		app.SubmissionTime = baseline.Add(-time.Minute * time.Duration(i))
+		app.submissionTime = baseline.Add(-time.Minute * time.Duration(i))
 		input[appID] = app
 	}
 

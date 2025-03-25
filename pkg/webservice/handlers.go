@@ -359,7 +359,7 @@ func getApplicationDAO(app *objects.Application) *dao.ApplicationDAOInfo {
 		PendingResource:    app.GetPendingResource().DAOMap(),
 		Partition:          common.GetPartitionNameWithoutClusterID(app.Partition),
 		QueueName:          app.GetQueuePath(),
-		SubmissionTime:     app.SubmissionTime.UnixNano(),
+		SubmissionTime:     app.GetSubmissionTime().UnixNano(),
 		FinishedTime:       common.ZeroTimeInUnixNano(app.FinishedTime()),
 		Requests:           getAllocationAsksDAO(app.GetAllRequests()),
 		Allocations:        getAllocationsDAO(app.GetAllAllocations()),

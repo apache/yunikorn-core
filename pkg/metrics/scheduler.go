@@ -62,9 +62,11 @@ type SchedulerMetrics struct {
 	node                  *prometheus.GaugeVec
 	nodeResourceUsage     map[string]*prometheus.GaugeVec
 	schedulingLatency     prometheus.Histogram
+	schedulingCycle       prometheus.Histogram
 	sortingLatency        *prometheus.HistogramVec
 	tryNodeLatency        prometheus.Histogram
 	tryPreemptionLatency  prometheus.Histogram
+	tryNodeEvaluation     prometheus.Histogram
 	lock                  locking.RWMutex
 }
 
@@ -117,6 +119,17 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8), // start from 0.1ms
 		},
 	)
+
+	s.schedulingCycle = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "scheduling_cycle_milliseconds",
+			Help:      "Time taken for a scheduling cycle, in seconds.",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8),
+		},
+	)
+
 	s.sortingLatency = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
@@ -132,6 +145,16 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "trynode_latency_milliseconds",
 			Help:      "Latency of node condition checks for container allocations, such as placement constraints, in seconds.",
+			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8),
+		},
+	)
+
+	s.tryNodeEvaluation = prometheus.NewHistogram(
+		prometheus.HistogramOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "trynode_evaluation_milliseconds",
+			Help:      "Time taken to evaluate ndoes for a pod, in seconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8),
 		},
 	)
@@ -155,6 +178,8 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		s.schedulingLatency,
 		s.sortingLatency,
 		s.tryNodeLatency,
+		s.schedulingCycle,
+		s.tryNodeEvaluation,
 		s.tryPreemptionLatency,
 	}
 	for _, metric := range metricsList {
@@ -182,6 +207,10 @@ func (m *SchedulerMetrics) ObserveSchedulingLatency(start time.Time) {
 	m.schedulingLatency.Observe(SinceInSeconds(start))
 }
 
+func (m *SchedulerMetrics) ObserveSchedulingCycle(start time.Time) {
+	m.schedulingCycle.Observe(SinceInSeconds(start))
+}
+
 func (m *SchedulerMetrics) ObserveAppSortingLatency(start time.Time) {
 	m.sortingLatency.WithLabelValues(SortingApp).Observe(SinceInSeconds(start))
 }
@@ -192,6 +221,10 @@ func (m *SchedulerMetrics) ObserveQueueSortingLatency(start time.Time) {
 
 func (m *SchedulerMetrics) ObserveTryNodeLatency(start time.Time) {
 	m.tryNodeLatency.Observe(SinceInSeconds(start))
+}
+
+func (m *SchedulerMetrics) ObserveTryNodeEvaluation(start time.Time) {
+	m.tryNodeEvaluation.Observe(SinceInSeconds(start))
 }
 
 func (m *SchedulerMetrics) ObserveTryPreemptionLatency(start time.Time) {

@@ -223,7 +223,9 @@ func unregisterMetrics() {
 	prometheus.Unregister(sm.application)
 	prometheus.Unregister(sm.node)
 	prometheus.Unregister(sm.schedulingLatency)
+	prometheus.Unregister(sm.schedulingCycle)
 	prometheus.Unregister(sm.sortingLatency)
 	prometheus.Unregister(sm.tryNodeLatency)
+	prometheus.Unregister(sm.tryNodeEvaluation)
 	prometheus.Unregister(sm.tryPreemptionLatency)
 }

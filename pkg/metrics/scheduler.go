@@ -154,7 +154,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Namespace: Namespace,
 			Subsystem: SchedulerSubsystem,
 			Name:      "trynode_evaluation_milliseconds",
-			Help:      "Time taken to evaluate ndoes for a pod, in seconds.",
+			Help:      "Time taken to evaluate nodes for a pod, in seconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8),
 		},
 	)

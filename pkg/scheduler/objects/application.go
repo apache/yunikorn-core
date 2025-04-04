@@ -597,9 +597,7 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	if ask.IsAllocated() || resources.IsZero(ask.GetAllocatedResource()) {
 		return fmt.Errorf("invalid ask added to app %s: %v", sa.ApplicationID, ask)
 	}
-	if len(sa.sortedRequests) == 0 {
-		// IMPORTANT: the assumption here is that the first ask is supposed to be the oldest
-		// which is coming from the shim
+	if ask.createTime.Before(sa.submissionTime) {
 		sa.submissionTime = ask.createTime
 	}
 	delta := ask.GetAllocatedResource().Clone()

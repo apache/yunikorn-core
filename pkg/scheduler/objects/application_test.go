@@ -3666,6 +3666,10 @@ func TestAppSubmissionTime(t *testing.T) {
 	ask2.createTime = time.Unix(0, 200)
 	err = app.AddAllocationAsk(ask2)
 	assert.NilError(t, err)
-
 	assert.Equal(t, app.submissionTime, time.Unix(0, 100), "app submission time is not set properly")
+	ask3 := newAllocationAsk(aKey3, appID1, res)
+	ask3.createTime = time.Unix(0, 50)
+	err = app.AddAllocationAsk(ask3)
+	assert.NilError(t, err)
+	assert.Equal(t, app.submissionTime, time.Unix(0, 50), "app submission time is not set properly")
 }

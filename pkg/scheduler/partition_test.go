@@ -323,7 +323,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Equal(t, 1, partition.getPhAllocationCount(), "number of active placeholders")
 
 	// fake an ask that is used
-	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false)
+	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false, nil)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
 	_, err = app.AllocateAsk(allocKey)
@@ -743,7 +743,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
 
 	// fake an ask that is used
-	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false)
+	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false, nil)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
 	_, err = app.AllocateAsk(allocKey)
@@ -817,7 +817,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
 
 	// fake an ask that is used
-	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false)
+	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false, nil)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
 	_, err = app.AllocateAsk(allocKey)
@@ -4842,25 +4842,32 @@ func TestAppSchedulingOrderFIFO(t *testing.T) {
 
 	// add two asks to app2 first
 	app2AskRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
-	app2Ask1 := newAllocationAsk(allocKey2, appID2, app2AskRes)
+
+	app2Ask1 := newAllocationAskAll(allocKey2, appID2, "", app2AskRes, 0, false, map[string]string{
+		siCommon.CreationTime: "100",
+	})
 	err = app2.AddAllocationAsk(app2Ask1)
 	assert.NilError(t, err, "could not add ask")
-	app2Ask2 := newAllocationAsk(allocKey3, appID2, app2AskRes)
+	app2Ask2 := newAllocationAskAll(allocKey3, appID2, "", app2AskRes, 0, false, map[string]string{
+		siCommon.CreationTime: "50",
+	})
 	err = app2.AddAllocationAsk(app2Ask2)
 	assert.NilError(t, err, "could not add ask")
 
 	askRes1 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	ask1 := newAllocationAsk(allocKey, appID1, askRes1)
+	ask1 := newAllocationAskAll(allocKey, appID1, "", askRes1, 0, false, map[string]string{
+		siCommon.CreationTime: "1000",
+	})
 	err = app1.AddAllocationAsk(ask1)
 	assert.NilError(t, err, "could not add ask")
 
 	// the two asks from app2 should be scheduled
 	alloc := partition.tryAllocate()
 	assert.Assert(t, alloc != nil, "no allocation was made")
-	assert.Equal(t, allocKey2, alloc.Request.GetAllocationKey())
+	assert.Equal(t, allocKey3, alloc.Request.GetAllocationKey())
 	alloc = partition.tryAllocate()
 	assert.Assert(t, alloc != nil, "no allocation was made")
-	assert.Equal(t, allocKey3, alloc.Request.GetAllocationKey())
+	assert.Equal(t, allocKey2, alloc.Request.GetAllocationKey())
 	alloc = partition.tryAllocate()
 	assert.Assert(t, alloc != nil, "no allocation was made")
 	assert.Equal(t, allocKey, alloc.Request.GetAllocationKey())

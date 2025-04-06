@@ -541,7 +541,7 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 					AllocationKey:         p.ask.GetAllocationKey(),
 					NodeID:                nodeID,
 					PreemptAllocationKeys: keys,
-					StartIndex:            int32(idx),
+					StartIndex:            int32(idx), //nolint: gosec
 				})
 			}
 		}

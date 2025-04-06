@@ -19,26 +19,28 @@
 
 module github.com/apache/yunikorn-core
 
-go 1.21
+go 1.23.0
+
+toolchain go1.23.7
 
 require (
-	github.com/apache/yunikorn-scheduler-interface v0.0.0-20241016105739-f0e241aa0146
-	github.com/google/btree v1.1.2
-	github.com/google/go-cmp v0.6.0
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20250304214837-4513ff3a692d
+	github.com/google/btree v1.1.3
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/looplab/fsm v1.0.1
+	github.com/looplab/fsm v1.0.2
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.45.0
 	github.com/sasha-s/go-deadlock v0.3.5
-	go.uber.org/zap v1.26.0
-	golang.org/x/exp v0.0.0-20240409090435-93d18d7e34b8
-	golang.org/x/net v0.25.0
-	golang.org/x/time v0.5.0
-	google.golang.org/grpc v1.65.0
+	go.uber.org/zap v1.27.0
+	golang.org/x/exp v0.0.0-20250228200357-dead58393ab7
+	golang.org/x/net v0.36.0
+	golang.org/x/time v0.10.0
+	google.golang.org/grpc v1.71.0
 	gopkg.in/yaml.v3 v3.0.1
-	gotest.tools/v3 v3.5.1
+	gotest.tools/v3 v3.5.2
 )
 
 require (
@@ -46,20 +48,20 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
-	github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7 // indirect
+	github.com/petermattis/goid v0.0.0-20250303134427-723919f7f203 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/text v0.21.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
-	google.golang.org/protobuf v1.34.2 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect
+	google.golang.org/protobuf v1.36.5 // indirect
 )
 
 replace (
-	github.com/petermattis/goid => github.com/petermattis/goid v0.0.0-20240813172612-4fcff4a6cae7
-	golang.org/x/crypto => golang.org/x/crypto v0.31.0
-	golang.org/x/net => golang.org/x/net v0.33.0
-	golang.org/x/sys => golang.org/x/sys v0.24.0
-	golang.org/x/text => golang.org/x/text v0.17.0
-	golang.org/x/tools => golang.org/x/tools v0.24.0
+	github.com/petermattis/goid => github.com/petermattis/goid v0.0.0-20250303134427-723919f7f203
+	golang.org/x/crypto => golang.org/x/crypto v0.35.0
+	golang.org/x/net => golang.org/x/net v0.36.0
+	golang.org/x/sys => golang.org/x/sys v0.30.0
+	golang.org/x/text => golang.org/x/text v0.22.0
+	golang.org/x/tools => golang.org/x/tools v0.30.0
 )

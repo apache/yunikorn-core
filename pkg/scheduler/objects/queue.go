@@ -1417,7 +1417,7 @@ func (sq *Queue) canRunApp(appID string) bool {
 	if sq.maxRunningApps == 0 || sq.allocatingAcceptedApps[appID] {
 		return true
 	}
-	running := sq.runningApps + uint64(len(sq.allocatingAcceptedApps)+1)
+	running := sq.runningApps + uint64(len(sq.allocatingAcceptedApps)+1) //nolint: gosec
 	return running <= sq.maxRunningApps
 }
 
@@ -1998,7 +1998,7 @@ func priorityValueByPolicy(policy policies.PriorityPolicy, offset int32, priorit
 		if result < int64(configs.MinPriority) {
 			return configs.MinPriority
 		}
-		return int32(result)
+		return int32(result) //nolint: gosec
 	}
 }
 

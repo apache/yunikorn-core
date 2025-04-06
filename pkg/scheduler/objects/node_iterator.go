@@ -37,9 +37,11 @@ type treeIterator struct {
 // The accept() function checks if the node should be a candidate or not.
 func (ti *treeIterator) ForEachNode(f func(*Node) bool) {
 	ti.getTree().Ascend(func(item btree.Item) bool {
-		node := item.(nodeRef).node
-		if ti.accept(node) {
-			return f(node)
+		if ref, ok := item.(nodeRef); ok {
+			node := ref.node
+			if ti.accept(node) {
+				return f(node)
+			}
 		}
 
 		return true

@@ -323,7 +323,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	assert.Equal(t, 1, partition.getPhAllocationCount(), "number of active placeholders")
 
 	// fake an ask that is used
-	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false)
+	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false, nil)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
 	_, err = app.AllocateAsk(allocKey)
@@ -743,7 +743,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
 
 	// fake an ask that is used
-	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false)
+	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false, nil)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
 	_, err = app.AllocateAsk(allocKey)
@@ -817,7 +817,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	assert.Equal(t, 2, partition.GetTotalNodeCount(), "node list was not updated as expected")
 
 	// fake an ask that is used
-	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false)
+	ask := newAllocationAskAll(allocKey, appID1, taskGroup, appRes, 1, false, nil)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should be added to app")
 	_, err = app.AllocateAsk(allocKey)
@@ -4799,4 +4799,76 @@ func TestForeignAllocation(t *testing.T) { //nolint:funlen
 	assert.Assert(t, confirmed == nil)
 	assert.Equal(t, 0, len(partition.foreignAllocs))
 	assert.Equal(t, 0, len(node.GetYunikornAllocations()))
+}
+
+func TestAppSchedulingOrderFIFO(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:       "default",
+						Parent:     false,
+						Properties: map[string]string{configs.ApplicationSortPolicy: policies.FifoSortPolicy.String()},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Limits:         nil,
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+	}
+	err = partition.updatePartitionDetails(conf)
+	assert.NilError(t, err, "unable to update partition config")
+
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	node := newNodeMaxResource(nodeID1, nodeRes)
+	err = partition.AddNode(node)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app1)
+	assert.NilError(t, err, "could not add application")
+	app2 := newApplication(appID2, "default", defQueue)
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err, "could not add application")
+
+	// add two asks to app2 first
+	app2AskRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
+
+	app2Ask1 := newAllocationAskAll(allocKey2, appID2, "", app2AskRes, 0, false, map[string]string{
+		siCommon.CreationTime: "100",
+	})
+	err = app2.AddAllocationAsk(app2Ask1)
+	assert.NilError(t, err, "could not add ask")
+	app2Ask2 := newAllocationAskAll(allocKey3, appID2, "", app2AskRes, 0, false, map[string]string{
+		siCommon.CreationTime: "50",
+	})
+	err = app2.AddAllocationAsk(app2Ask2)
+	assert.NilError(t, err, "could not add ask")
+
+	askRes1 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ask1 := newAllocationAskAll(allocKey, appID1, "", askRes1, 0, false, map[string]string{
+		siCommon.CreationTime: "1000",
+	})
+	err = app1.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "could not add ask")
+
+	// the two asks from app2 should be scheduled
+	alloc := partition.tryAllocate()
+	assert.Assert(t, alloc != nil, "no allocation was made")
+	assert.Equal(t, allocKey3, alloc.Request.GetAllocationKey())
+	alloc = partition.tryAllocate()
+	assert.Assert(t, alloc != nil, "no allocation was made")
+	assert.Equal(t, allocKey2, alloc.Request.GetAllocationKey())
+	alloc = partition.tryAllocate()
+	assert.Assert(t, alloc != nil, "no allocation was made")
+	assert.Equal(t, allocKey, alloc.Request.GetAllocationKey())
 }

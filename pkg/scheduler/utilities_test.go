@@ -557,18 +557,18 @@ func newApplicationTGTagsWithPhTimeout(appID, partition, queueName string, task 
 }
 
 func newAllocationAskTG(allocKey, appID, taskGroup string, res *resources.Resource, placeHolder bool) *objects.Allocation {
-	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, placeHolder)
+	return newAllocationAskAll(allocKey, appID, taskGroup, res, 1, placeHolder, nil)
 }
 
 func newAllocationAsk(allocKey, appID string, res *resources.Resource) *objects.Allocation {
-	return newAllocationAskAll(allocKey, appID, "", res, 1, false)
+	return newAllocationAskAll(allocKey, appID, "", res, 1, false, nil)
 }
 
 func newAllocationAskPriority(allocKey, appID string, res *resources.Resource, prio int32) *objects.Allocation {
-	return newAllocationAskAll(allocKey, appID, "", res, prio, false)
+	return newAllocationAskAll(allocKey, appID, "", res, prio, false, nil)
 }
 
-func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.Allocation {
+func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool, tags map[string]string) *objects.Allocation {
 	return objects.NewAllocationFromSI(&si.Allocation{
 		AllocationKey:    allocKey,
 		ApplicationID:    appID,
@@ -577,6 +577,7 @@ func newAllocationAskAll(allocKey, appID, taskGroup string, res *resources.Resou
 		Priority:         prio,
 		TaskGroupName:    taskGroup,
 		Placeholder:      placeHolder,
+		AllocationTags:   tags,
 	})
 }
 

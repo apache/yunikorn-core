@@ -77,10 +77,9 @@ type StateLogEntry struct {
 }
 
 type Application struct {
-	ApplicationID  string            // application ID
-	Partition      string            // partition Name
-	SubmissionTime time.Time         // time application was submitted
-	tags           map[string]string // application tags used in scheduling
+	ApplicationID string            // application ID
+	Partition     string            // partition Name
+	tags          map[string]string // application tags used in scheduling
 
 	// Private mutable fields need protection
 	queuePath         string
@@ -91,6 +90,7 @@ type Application struct {
 	sortedRequests    sortedRequests          // list of requests pre-sorted
 	user              security.UserGroup      // owner of the application
 	allocatedResource *resources.Resource     // total allocated resources
+	submissionTime    time.Time               // time application was submitted (based on the first ask)
 
 	usedResource        *resources.TrackedResource // keep track of resource usage of the application
 	preemptedResource   *resources.TrackedResource // keep track of preempted resource usage of the application
@@ -128,7 +128,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 	app := &Application{
 		ApplicationID:         siApp.ApplicationID,
 		Partition:             siApp.PartitionName,
-		SubmissionTime:        time.Now(),
+		submissionTime:        time.Now(),
 		queuePath:             siApp.QueueName,
 		tags:                  siApp.Tags,
 		pending:               resources.NewResource(),
@@ -175,7 +175,7 @@ func (sa *Application) String() string {
 		return "application is nil"
 	}
 	return fmt.Sprintf("applicationID: %s, Partition: %s, SubmissionTime: %x, State: %s",
-		sa.ApplicationID, sa.Partition, sa.SubmissionTime, sa.stateMachine.Current())
+		sa.ApplicationID, sa.Partition, sa.GetSubmissionTime(), sa.stateMachine.Current())
 }
 
 func (sa *Application) SetState(state string) {
@@ -596,6 +596,9 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	}
 	if ask.IsAllocated() || resources.IsZero(ask.GetAllocatedResource()) {
 		return fmt.Errorf("invalid ask added to app %s: %v", sa.ApplicationID, ask)
+	}
+	if ask.createTime.Before(sa.submissionTime) {
+		sa.submissionTime = ask.createTime
 	}
 	delta := ask.GetAllocatedResource().Clone()
 
@@ -2099,7 +2102,7 @@ func (sa *Application) GetApplicationSummary(rmID string) *ApplicationSummary {
 func (sa *Application) getApplicationSummary(rmID string) *ApplicationSummary {
 	return &ApplicationSummary{
 		ApplicationID:       sa.ApplicationID,
-		SubmissionTime:      sa.SubmissionTime,
+		SubmissionTime:      sa.submissionTime,
 		StartTime:           sa.startTime,
 		FinishTime:          sa.finishedTime,
 		User:                sa.user.User,
@@ -2261,4 +2264,10 @@ func (sa *Application) getResourceFromTags(tag string) *resources.Resource {
 	}
 
 	return resource
+}
+
+func (sa *Application) GetSubmissionTime() time.Time {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.submissionTime
 }

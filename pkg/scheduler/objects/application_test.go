@@ -3650,3 +3650,26 @@ func TestTryNodesNoReserve(t *testing.T) {
 	assert.Equal(t, result.ResultType, AllocatedReserved, "result type should be AllocatedReserved")
 	assert.Equal(t, result.ReservedNodeID, node1.NodeID, "reserved node should be node1")
 }
+
+func TestAppSubmissionTime(t *testing.T) {
+	app := newApplication(appID0, "default", "root.default")
+	queue, err := createRootQueue(map[string]string{"first": "5"})
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask1 := newAllocationAsk(aKey, appID1, res)
+	ask1.createTime = time.Unix(0, 100)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err)
+	ask2 := newAllocationAsk(aKey2, appID1, res)
+	ask2.createTime = time.Unix(0, 200)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err)
+	assert.Equal(t, app.submissionTime, time.Unix(0, 100), "app submission time is not set properly")
+	ask3 := newAllocationAsk(aKey3, appID1, res)
+	ask3.createTime = time.Unix(0, 50)
+	err = app.AddAllocationAsk(ask3)
+	assert.NilError(t, err)
+	assert.Equal(t, app.submissionTime, time.Unix(0, 50), "app submission time is not set properly")
+}

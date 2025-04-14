@@ -150,10 +150,12 @@ func sortApplicationsBySubmissionTimeAndPriority(sortedApps []*Application) {
 	sort.SliceStable(sortedApps, func(i, j int) bool {
 		l := sortedApps[i]
 		r := sortedApps[j]
-		if l.SubmissionTime.Before(r.SubmissionTime) {
+		lSubTime := l.GetSubmissionTime()
+		rSubTime := r.GetSubmissionTime()
+		if lSubTime.Before(rSubTime) {
 			return true
 		}
-		if r.SubmissionTime.Before(l.SubmissionTime) {
+		if rSubTime.Before(lSubTime) {
 			return false
 		}
 		return l.GetAskMaxPriority() > r.GetAskMaxPriority()
@@ -172,7 +174,7 @@ func sortApplicationsByPriorityAndSubmissionTime(sortedApps []*Application) {
 		if leftPriority < rightPriority {
 			return false
 		}
-		return l.SubmissionTime.Before(r.SubmissionTime)
+		return l.GetSubmissionTime().Before(r.GetSubmissionTime())
 	})
 }
 

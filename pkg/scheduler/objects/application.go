@@ -1723,6 +1723,9 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		sa.allocatedResource = resources.Add(sa.allocatedResource, alloc.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
 	}
+	if alloc.createTime.Before(sa.submissionTime) {
+		sa.submissionTime = alloc.createTime
+	}
 	sa.appEvents.SendNewAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.GetAllocatedResource())
 	sa.allocations[alloc.GetAllocationKey()] = alloc
 }

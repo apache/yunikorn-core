@@ -590,6 +590,10 @@ func newAllocation(allocKey, appID, nodeID string, res *resources.Resource) *obj
 }
 
 func newAllocationAll(allocKey, appID, nodeID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool) *objects.Allocation {
+	return newAllocationAllTags(allocKey, appID, nodeID, taskGroup, res, prio, placeHolder, nil)
+}
+
+func newAllocationAllTags(allocKey, appID, nodeID, taskGroup string, res *resources.Resource, prio int32, placeHolder bool, tags map[string]string) *objects.Allocation {
 	return objects.NewAllocationFromSI(&si.Allocation{
 		AllocationKey:    allocKey,
 		ApplicationID:    appID,
@@ -599,6 +603,7 @@ func newAllocationAll(allocKey, appID, nodeID, taskGroup string, res *resources.
 		Priority:         prio,
 		TaskGroupName:    taskGroup,
 		Placeholder:      placeHolder,
+		AllocationTags:   tags,
 	})
 }
 

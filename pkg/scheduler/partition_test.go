@@ -1689,6 +1689,7 @@ func TestRequiredNodeReservation(t *testing.T) {
 	assert.Equal(t, len(reservations), 2, "node should have two reservations")
 	_, _, resAsk = reservations[0].GetObjects()
 	_, _, resAsk2 := reservations[1].GetObjects()
+	// nolint: staticcheck
 	if !((resAsk.GetAllocationKey() == allocKey3 && resAsk2.GetAllocationKey() == allocKey2) ||
 		(resAsk2.GetAllocationKey() == allocKey3 && resAsk.GetAllocationKey() == allocKey2)) {
 		t.Fatal("missing reservation on the node")

@@ -98,6 +98,65 @@ func TestInsertRemove(t *testing.T) {
 	assert.Equal(t, 99, len(sorted))
 }
 
+func TestRemoveWithSamePriorityAndTime(t *testing.T) {
+	// Create a sorted requests list
+	sorted := sortedRequests{}
+
+	// Create allocations with same priority and creation time
+	// but different allocation keys
+	baseTime := time.Now()
+	alloc1 := &Allocation{
+		createTime:    baseTime,
+		priority:      10,
+		allocationKey: "alloc-1",
+	}
+	alloc2 := &Allocation{
+		createTime:    baseTime,
+		priority:      10,
+		allocationKey: "alloc-2",
+	}
+	alloc3 := &Allocation{
+		createTime:    baseTime,
+		priority:      10,
+		allocationKey: "alloc-3",
+	}
+
+	// Insert the allocations
+	sorted.insert(alloc1)
+	sorted.insert(alloc2)
+	sorted.insert(alloc3)
+
+	// Verify all allocations are in the list
+	assert.Equal(t, 3, len(sorted))
+	assert.Assert(t, askPresent(alloc1, sorted), "alloc1 should be present")
+	assert.Assert(t, askPresent(alloc2, sorted), "alloc2 should be present")
+	assert.Assert(t, askPresent(alloc3, sorted), "alloc3 should be present")
+
+	// Try to remove alloc2
+	sorted.remove(alloc2)
+
+	// Verify alloc2 is removed but alloc1 and alloc3 are still there
+	assert.Equal(t, 2, len(sorted))
+	assert.Assert(t, askPresent(alloc1, sorted), "alloc1 should still be present")
+	assert.Assert(t, !askPresent(alloc2, sorted), "alloc2 should be removed")
+	assert.Assert(t, askPresent(alloc3, sorted), "alloc3 should still be present")
+
+	// Try to remove alloc1
+	sorted.remove(alloc1)
+
+	// Verify alloc1 is removed and only alloc3 remains
+	assert.Equal(t, 1, len(sorted))
+	assert.Assert(t, !askPresent(alloc1, sorted), "alloc1 should be removed")
+	assert.Assert(t, askPresent(alloc3, sorted), "alloc3 should still be present")
+
+	// Try to remove alloc3
+	sorted.remove(alloc3)
+
+	// Verify all allocations are removed
+	assert.Equal(t, 0, len(sorted))
+	assert.Assert(t, !askPresent(alloc3, sorted), "alloc3 should be removed")
+}
+
 func askPresent(ask *Allocation, asks []*Allocation) bool {
 	for _, a := range asks {
 		if a.allocationKey == ask.allocationKey {

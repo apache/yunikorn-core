@@ -276,11 +276,6 @@ func getQueueMetrics() *QueueMetrics {
 }
 
 func verifyAppMetrics(t *testing.T, expectedState string) {
-	verifyAppMetricsLabel(t, expectedState)
-	verifyAppMetricsSubsystem(t, expectedState)
-}
-
-func verifyAppMetricsLabel(t *testing.T, expectedState string) {
 	checkFn := func(labels []*dto.LabelPair) {
 		assert.Equal(t, 2, len(labels))
 		assert.Equal(t, "queue", *labels[0].Name)
@@ -290,16 +285,6 @@ func verifyAppMetricsLabel(t *testing.T, expectedState string) {
 	}
 
 	verifyMetricsLabel(t, checkFn)
-}
-
-func verifyAppMetricsSubsystem(t *testing.T, expectedState string) {
-	checkFn := func(labels []*dto.LabelPair) {
-		assert.Equal(t, 1, len(labels))
-		assert.Equal(t, "state", *labels[0].Name)
-		assert.Equal(t, expectedState, *labels[0].Value)
-	}
-
-	verifyMetricsSubsytem(t, checkFn)
 }
 
 func verifyContainerMetrics(t *testing.T, expectedState string, value float64) {
@@ -326,7 +311,6 @@ func verifyContainerMetrics(t *testing.T, expectedState string, value float64) {
 }
 func verifyResourceMetrics(t *testing.T, expectedState, expectedResource string) {
 	verifyResourceMetricsLabel(t, expectedState, expectedResource)
-	verifyResourceMetricsSubsystem(t, expectedState, expectedResource)
 }
 
 func verifyResourceMetricsLabel(t *testing.T, expectedState, expectedResource string) {
@@ -341,18 +325,6 @@ func verifyResourceMetricsLabel(t *testing.T, expectedState, expectedResource st
 	}
 
 	verifyMetricsLabel(t, checkFn)
-}
-
-func verifyResourceMetricsSubsystem(t *testing.T, expectedState, expectedResource string) {
-	checkFn := func(labels []*dto.LabelPair) {
-		assert.Equal(t, 2, len(labels))
-		assert.Equal(t, "resource", *labels[0].Name)
-		assert.Equal(t, expectedResource, *labels[0].Value)
-		assert.Equal(t, "state", *labels[1].Name)
-		assert.Equal(t, expectedState, *labels[1].Value)
-	}
-
-	verifyMetricsSubsytem(t, checkFn)
 }
 
 func verifyMetricsLabel(t *testing.T, checkLabel func(label []*dto.LabelPair)) {
@@ -376,32 +348,9 @@ func verifyMetricsLabel(t *testing.T, checkLabel func(label []*dto.LabelPair)) {
 	assert.Assert(t, checked, "Failed to find metric")
 }
 
-func verifyMetricsSubsytem(t *testing.T, checkLabel func(label []*dto.LabelPair)) {
-	mfs, err := prometheus.DefaultGatherer.Gather()
-	assert.NilError(t, err)
-
-	var checked bool
-	for _, metric := range mfs {
-		if strings.Contains(metric.GetName(), "yunikorn_root_test") {
-			assert.Equal(t, 1, len(metric.Metric))
-			assert.Equal(t, dto.MetricType_GAUGE, metric.GetType())
-			m := metric.Metric[0]
-			checkLabel(m.Label)
-			assert.Assert(t, m.Gauge != nil)
-			assert.Equal(t, float64(1), *m.Gauge.Value)
-			checked = true
-			break
-		}
-	}
-
-	assert.Assert(t, checked, "Failed to find metric")
-}
-
 func unregisterQueueMetrics() {
-	prometheus.Unregister(qm.appMetricsLabel)
-	prometheus.Unregister(qm.appMetricsSubsystem)
+	prometheus.Unregister(qm.appMetrics)
 	prometheus.Unregister(qm.containerMetrics)
 	prometheus.Unregister(qm.resourceMetricsLabel)
-	prometheus.Unregister(qm.resourceMetricsSubsystem)
 	qm.knownResourceTypes = make(map[string]struct{})
 }

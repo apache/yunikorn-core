@@ -294,15 +294,14 @@ func TestPendingCalc(t *testing.T) {
 	if !resources.Equals(leaf.pending, allocRes) {
 		t.Errorf("leaf queue pending allocation failed to increment expected %v, got %v", allocRes, leaf.pending)
 	}
-	metrics := []string{"yunikorn_root_queue_resource", "yunikorn_root_leaf_queue_resource"}
+	metrics := []string{"yunikorn_queue_resource"}
 	want := concatQueueResourceMetric(metrics, []string{`
-yunikorn_root_queue_resource{resource="memory",state="pending"} 100
-yunikorn_root_queue_resource{resource="vcores",state="pending"} 10
-yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
-`, `
-yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 100
-yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 10
-yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root",resource="memory",state="pending"} 100
+yunikorn_queue_resource{queue="root",resource="vcores",state="pending"} 10
+yunikorn_queue_resource{queue="root",resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="memory",state="pending"} 100
+yunikorn_queue_resource{queue="root.leaf",resource="vcores",state="pending"} 10
+yunikorn_queue_resource{queue="root.leaf",resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
@@ -314,13 +313,12 @@ yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
 		t.Errorf("leaf queue pending allocation failed to decrement expected 0, got %v", leaf.pending)
 	}
 	want = concatQueueResourceMetric(metrics, []string{`
-yunikorn_root_queue_resource{resource="memory",state="pending"} 0
-yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
-yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
-`, `
-yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
-yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
-yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root",resource="memory",state="pending"} 0
+yunikorn_queue_resource{queue="root",resource="vcores",state="pending"} 0
+yunikorn_queue_resource{queue="root",resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="memory",state="pending"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="vcores",state="pending"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
@@ -336,13 +334,12 @@ yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
 		t.Errorf("leaf queue pending allocation should have failed to decrement expected zero, got %v", leaf.pending)
 	}
 	want = concatQueueResourceMetric(metrics, []string{`
-yunikorn_root_queue_resource{resource="memory",state="pending"} 0
-yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
-yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
-`, `
-yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
-yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
-yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root",resource="memory",state="pending"} 0
+yunikorn_queue_resource{queue="root",resource="vcores",state="pending"} 0
+yunikorn_queue_resource{queue="root",resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="memory",state="pending"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="vcores",state="pending"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")

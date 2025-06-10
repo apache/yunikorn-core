@@ -3657,6 +3657,7 @@ func TestAppSubmissionTime(t *testing.T) {
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
+	// asks
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask1 := newAllocationAsk(aKey, appID1, res)
 	ask1.createTime = time.Unix(0, 100)
@@ -3672,4 +3673,15 @@ func TestAppSubmissionTime(t *testing.T) {
 	err = app.AddAllocationAsk(ask3)
 	assert.NilError(t, err)
 	assert.Equal(t, app.submissionTime, time.Unix(0, 50), "app submission time is not set properly")
+
+	// allocations
+	alloc1 := newAllocation(appID1, nodeID1, res)
+	alloc1.createTime = time.Unix(0, 60)
+	app.AddAllocation(alloc1)
+	assert.Equal(t, app.submissionTime, time.Unix(0, 50), "app submission time is not set properly")
+
+	alloc2 := newAllocation(appID1, nodeID1, res)
+	alloc2.createTime = time.Unix(0, 30)
+	app.AddAllocation(alloc2)
+	assert.Equal(t, app.submissionTime, time.Unix(0, 30), "app submission time is not set properly")
 }

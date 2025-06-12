@@ -50,13 +50,12 @@ func (s *sortedRequests) insertAt(index int, ask *Allocation) {
 }
 
 func (s *sortedRequests) remove(ask *Allocation) {
-	idx := sort.Search(len(*s), func(i int) bool {
-		return (*s)[i].LessThan(ask)
-	})
-	if idx == len(*s) || (*s)[idx].allocationKey != ask.allocationKey {
-		return
+	for i, a := range *s {
+		if a.allocationKey == ask.allocationKey {
+			s.removeAt(i)
+			return
+		}
 	}
-	s.removeAt(idx)
 }
 
 func (s *sortedRequests) removeAt(index int) {

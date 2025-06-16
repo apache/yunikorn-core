@@ -65,15 +65,15 @@ func initEventMetrics() *EventMetrics {
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: EventSubsystem,
-			Name:      "total_processed",
-			Help:      "total events processed",
+			Name:      "total_stored",
+			Help:      "total events stored",
 		})
 	metrics.totalEventsNotStored = prometheus.NewGauge(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
 			Subsystem: EventSubsystem,
-			Name:      "total_processed",
-			Help:      "total events processed",
+			Name:      "total_not_stored",
+			Help:      "total events not stored",
 		})
 	metrics.totalEventsCollected = prometheus.NewGauge(
 		prometheus.GaugeOpts{

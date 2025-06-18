@@ -66,20 +66,32 @@ type UserGroup struct {
 	resolved int64
 }
 
+const (
+	Default = ""
+	Ldap    = "ldap"
+	Test    = "test"
+	Os      = "os"
+)
+
 // Get the resolver for the user and group info.
 // Current setup allows three resolvers:
 // * NO resolver: default, no user or group resolution just return the info (k8s use case)
 // * OS resolver: uses the OS libraries to resolve user and group memberships
 // * Test resolver: fake resolution for testing
-func GetUserGroupCache(resolver string) *UserGroupCache {
+// * Ldap resolver: uses the LDAP protocol to resolve user and group memberships
+func GetUserGroupCache(ugr configs.UserGroupResolver) *UserGroupCache {
+	resolver := ugr.Type
 	once.Do(func() {
 		switch resolver {
-		case "test":
+		case Test:
 			log.Log(log.Security).Info("creating test user group resolver")
 			instance = GetUserGroupCacheTest()
-		case "os":
+		case Os:
 			log.Log(log.Security).Info("creating OS user group resolver")
 			instance = GetUserGroupCacheOS()
+		case Ldap:
+			log.Log(log.Security).Info("creating LDAP user group resolver")
+			instance = GetUserGroupCacheLdap()
 		default:
 			log.Log(log.Security).Info("creating UserGroupCache without resolver")
 			instance = GetUserGroupNoResolve()
@@ -231,6 +243,10 @@ func (c *UserGroupCache) Stop() {
 	if !stopped.Load() {
 		log.Log(log.Security).Info("Stopping UserGroupCache background cleanup")
 		close(c.stop)
+		// Clear the cache before resetting the instance
+		c.lock.Lock()
+		c.ugs = make(map[string]*UserGroup)
+		c.lock.Unlock()
 		once = &sync.Once{} // re-init so that GetUserGroupCache() can create a new instance again
 		instance = nil
 		stopped.Store(true)

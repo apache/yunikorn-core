@@ -53,13 +53,9 @@ const (
 
 // QueueMetrics to declare queue metrics
 type QueueMetrics struct {
-	appMetricsLabel *prometheus.GaugeVec
-	// Deprecated - To be removed in 1.7.0. Replaced with queue label Metrics
-	appMetricsSubsystem  *prometheus.GaugeVec
+	appMetrics           *prometheus.GaugeVec
 	containerMetrics     *prometheus.CounterVec
 	resourceMetricsLabel *prometheus.GaugeVec
-	// Deprecated - To be removed in 1.7.0. Replaced with queue label Metrics
-	resourceMetricsSubsystem *prometheus.GaugeVec
 	// Track known resource types
 	knownResourceTypes map[string]struct{}
 	lock               locking.Mutex
@@ -71,20 +67,12 @@ func InitQueueMetrics(name string) *QueueMetrics {
 
 	replaceStr := formatMetricName(name)
 
-	q.appMetricsLabel = prometheus.NewGaugeVec(
+	q.appMetrics = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace:   Namespace,
 			Name:        "queue_app",
 			ConstLabels: prometheus.Labels{"queue": name},
 			Help:        "Queue application metrics. State of the application includes `new`, `accepted`, `rejected`, `running`, `failing`, `failed`, `resuming`, `completing`, `completed`.",
-		}, []string{"state"})
-
-	q.appMetricsSubsystem = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: Namespace,
-			Subsystem: replaceStr,
-			Name:      "queue_app",
-			Help:      "Queue application metrics. State of the application includes `new`, `accepted`, `rejected`, `running`, `failing`, `failed`, `resuming`, `completing`, `completed`.",
 		}, []string{"state"})
 
 	q.containerMetrics = prometheus.NewCounterVec(
@@ -103,20 +91,10 @@ func InitQueueMetrics(name string) *QueueMetrics {
 			Help:        "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`, `maxRunningApps`.",
 		}, []string{"state", "resource"})
 
-	q.resourceMetricsSubsystem = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Namespace: Namespace,
-			Subsystem: replaceStr,
-			Name:      "queue_resource",
-			Help:      "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`, `maxRunningApps`.",
-		}, []string{"state", "resource"})
-
 	var queueMetricsList = []prometheus.Collector{
-		q.appMetricsLabel,
-		q.appMetricsSubsystem,
+		q.appMetrics,
 		q.containerMetrics,
 		q.resourceMetricsLabel,
-		q.resourceMetricsSubsystem,
 	}
 
 	// Register the metrics
@@ -135,11 +113,9 @@ func InitQueueMetrics(name string) *QueueMetrics {
 
 func (m *QueueMetrics) UnregisterMetrics() {
 	var queueMetricsList = []prometheus.Collector{
-		m.appMetricsLabel,
-		m.appMetricsSubsystem,
+		m.appMetrics,
 		m.containerMetrics,
 		m.resourceMetricsLabel,
-		m.resourceMetricsSubsystem,
 	}
 
 	// Unregister the metrics
@@ -149,27 +125,22 @@ func (m *QueueMetrics) UnregisterMetrics() {
 }
 
 func (m *QueueMetrics) incQueueApplications(state string) {
-	m.appMetricsLabel.WithLabelValues(state).Inc()
-	m.appMetricsSubsystem.WithLabelValues(state).Inc()
+	m.appMetrics.WithLabelValues(state).Inc()
 }
 
 func (m *QueueMetrics) decQueueApplications(state string) {
-	m.appMetricsLabel.WithLabelValues(state).Dec()
-	m.appMetricsSubsystem.WithLabelValues(state).Dec()
+	m.appMetrics.WithLabelValues(state).Dec()
 }
 
 func (m *QueueMetrics) setQueueResource(state string, resourceName string, value float64) {
 	m.resourceMetricsLabel.WithLabelValues(state, resourceName).Set(value)
-	m.resourceMetricsSubsystem.WithLabelValues(state, resourceName).Set(value)
 }
 
 func (m *QueueMetrics) Reset() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	m.appMetricsLabel.Reset()
-	m.appMetricsSubsystem.Reset()
+	m.appMetrics.Reset()
 	m.resourceMetricsLabel.Reset()
-	m.resourceMetricsSubsystem.Reset()
 	m.knownResourceTypes = make(map[string]struct{})
 }
 
@@ -183,7 +154,7 @@ func (m *QueueMetrics) DecQueueApplicationsRunning() {
 
 func (m *QueueMetrics) GetQueueApplicationsRunning() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppRunning).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppRunning).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -200,7 +171,7 @@ func (m *QueueMetrics) DecQueueApplicationsNew() {
 
 func (m *QueueMetrics) GetQueueApplicationsNew() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppNew).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppNew).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -217,7 +188,7 @@ func (m *QueueMetrics) DecQueueApplicationsAccepted() {
 
 func (m *QueueMetrics) GetQueueApplicationsAccepted() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppAccepted).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppAccepted).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -230,7 +201,7 @@ func (m *QueueMetrics) IncQueueApplicationsRejected() {
 
 func (m *QueueMetrics) GetQueueApplicationsRejected() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppRejected).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppRejected).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -247,7 +218,7 @@ func (m *QueueMetrics) DecQueueApplicationsResuming() {
 
 func (m *QueueMetrics) GetQueueApplicationsResuming() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppResuming).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppResuming).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -264,7 +235,7 @@ func (m *QueueMetrics) DecQueueApplicationsFailing() {
 
 func (m *QueueMetrics) GetQueueApplicationsFailing() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppFailing).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppFailing).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -277,7 +248,7 @@ func (m *QueueMetrics) IncQueueApplicationsFailed() {
 
 func (m *QueueMetrics) GetQueueApplicationsFailed() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppFailed).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppFailed).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -294,7 +265,7 @@ func (m *QueueMetrics) DecQueueApplicationsCompleting() {
 
 func (m *QueueMetrics) GetQueueApplicationsCompleting() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppCompleting).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppCompleting).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}
@@ -307,7 +278,7 @@ func (m *QueueMetrics) IncQueueApplicationsCompleted() {
 
 func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {
 	metricDto := &dto.Metric{}
-	err := m.appMetricsLabel.WithLabelValues(AppCompleted).Write(metricDto)
+	err := m.appMetrics.WithLabelValues(AppCompleted).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}

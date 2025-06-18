@@ -33,8 +33,8 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
-// RejectedError is the standard error returned if placement has failed
-var RejectedError = errors.New("application rejected: no placement rule matched")
+// ErrorRejected is the standard error returned if placement has failed
+var ErrorRejected = errors.New("application rejected: no placement rule matched")
 
 type AppPlacementManager struct {
 	rules   []rule
@@ -209,7 +209,7 @@ func (m *AppPlacementManager) PlaceApplication(app *objects.Application) error {
 	// no more rules to check no queueName found reject placement
 	if queueName == "" {
 		app.SetQueuePath("")
-		return RejectedError
+		return ErrorRejected
 	}
 	// Add the queue into the application, overriding what was submitted
 	app.SetQueuePath(queueName)

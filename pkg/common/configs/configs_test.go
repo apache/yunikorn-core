@@ -42,7 +42,7 @@ func TestConfigMap(t *testing.T) {
 func TestCallback(t *testing.T) {
 	defer RemoveConfigMapCallback("test-callback")
 
-	var callbackReceived bool = false
+	var callbackReceived bool
 	AddConfigMapCallback("test-callback", func() {
 		callbackReceived = true
 	})

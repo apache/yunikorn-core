@@ -25,6 +25,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+// nolint:unused
 type exampleRMCallback struct {
 	mock.ResourceManagerCallback
 	acceptedApplications map[string]bool
@@ -37,6 +38,7 @@ type exampleRMCallback struct {
 	locking.RWMutex
 }
 
+// nolint:unused
 func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) error {
 	m.Lock()
 	defer m.Unlock()
@@ -58,6 +60,7 @@ func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) er
 	return nil
 }
 
+// nolint:unused
 func (m *exampleRMCallback) UpdateApplication(response *si.ApplicationResponse) error {
 	m.Lock()
 	defer m.Unlock()
@@ -73,6 +76,7 @@ func (m *exampleRMCallback) UpdateApplication(response *si.ApplicationResponse) 
 	return nil
 }
 
+// nolint:unused
 func (m *exampleRMCallback) UpdateNode(response *si.NodeResponse) error {
 	m.Lock()
 	defer m.Unlock()
@@ -88,6 +92,7 @@ func (m *exampleRMCallback) UpdateNode(response *si.NodeResponse) error {
 	return nil
 }
 
+// nolint:unused
 func newExampleRMCallback() *exampleRMCallback {
 	return &exampleRMCallback{
 		acceptedApplications: make(map[string]bool),
@@ -99,6 +104,7 @@ func newExampleRMCallback() *exampleRMCallback {
 	}
 }
 
+//nolint:unused
 func exampleOfRunYourOwnRM() {
 	// Start all tests
 	serviceContext := entrypoint.StartAllServices()
@@ -223,4 +229,8 @@ partitions:
 		},
 		RmID: "rm:123",
 	})
+
+	if err != nil {
+		panic(err)
+	}
 }

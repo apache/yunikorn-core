@@ -120,6 +120,7 @@ func (cc *ClusterContext) setEventHandler(rmHandler handler.EventHandler) {
 func (cc *ClusterContext) schedule() bool {
 	// schedule each partition defined in the cluster
 	activity := false
+	scheduleCycleStart := time.Now()
 	for _, psc := range cc.GetPartitionMapClone() {
 		// if there are no resources in the partition just skip
 		if psc.root.GetMaxResource() == nil {
@@ -151,6 +152,7 @@ func (cc *ClusterContext) schedule() bool {
 			activity = true
 		}
 	}
+	metrics.GetSchedulerMetrics().ObserveSchedulingCycle(scheduleCycleStart)
 	return activity
 }
 

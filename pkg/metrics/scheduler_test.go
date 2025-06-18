@@ -168,6 +168,22 @@ func TestSchedulerApplicationsFailed(t *testing.T) {
 	verifyMetric(t, 1, "failed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
 }
 
+func TestSchedulingCycle(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.ObserveSchedulingCycle(time.Now().Add(-1 * time.Minute))
+	verifyHistogram(t, "scheduling_cycle_milliseconds", 60, 1)
+}
+
+func TestTryNodeEvaluation(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.ObserveTryNodeEvaluation(time.Now().Add(-1 * time.Minute))
+	verifyHistogram(t, "trynode_evaluation_milliseconds", 60, 1)
+}
+
 func getSchedulerMetrics(t *testing.T) *SchedulerMetrics {
 	unregisterMetrics()
 	return InitSchedulerMetrics()
@@ -223,7 +239,9 @@ func unregisterMetrics() {
 	prometheus.Unregister(sm.application)
 	prometheus.Unregister(sm.node)
 	prometheus.Unregister(sm.schedulingLatency)
+	prometheus.Unregister(sm.schedulingCycle)
 	prometheus.Unregister(sm.sortingLatency)
 	prometheus.Unregister(sm.tryNodeLatency)
+	prometheus.Unregister(sm.tryNodeEvaluation)
 	prometheus.Unregister(sm.tryPreemptionLatency)
 }

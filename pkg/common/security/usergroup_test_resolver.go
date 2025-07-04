@@ -26,9 +26,12 @@ import (
 )
 
 const (
+	Testuser  = "testuser"
 	Testuser1 = "testuser1"
 	Testuser2 = "testuser2"
 	Testuser3 = "testuser3"
+	Testuser4 = "testuser4"
+	Testuser5 = "testuser5"
 )
 
 // Get the cache with a test resolver

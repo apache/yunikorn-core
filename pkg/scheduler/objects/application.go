@@ -1446,6 +1446,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	reserved := sa.reservations[allocKey]
 	var allocResult *AllocationResult
 	var predicateErrors map[string]int
+	tryNodeCycleStart := time.Now()
 	iterator.ForEachNode(func(node *Node) bool {
 		// skip the node if the node is not schedulable
 		if !node.IsSchedulable() {
@@ -1510,6 +1511,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 		}
 		return true
 	})
+	metrics.GetSchedulerMetrics().ObserveTryNodeEvaluation(tryNodeCycleStart)
 
 	if allocResult != nil {
 		return allocResult

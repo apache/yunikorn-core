@@ -2296,7 +2296,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			expectedErrorMsg: common.InvalidQueueName.Error(),
+			expectedErrorMsg: common.ErrorInvalidQueueName.Error(),
 		},
 		{
 			name: "Invalid Child Queue Name With Special Character",
@@ -2309,7 +2309,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            0,
-			expectedErrorMsg: common.InvalidQueueName.Error(),
+			expectedErrorMsg: common.ErrorInvalidQueueName.Error(),
 		},
 		{
 			name: "Valid Multiple Queues",

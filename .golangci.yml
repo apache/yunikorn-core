@@ -17,52 +17,52 @@
 # under the License.
 
 # options for analysis running
+version: "2"
 run:
   issues-exit-code: 1
   modules-download-mode: readonly
-  timeout: 5m
-
-# settings of specific linters
-linters-settings:
-  errcheck:
-    check-type-assertions: true
-    check-blank: true
-  revive:
-    confidence: 0.8
-  gofmt:
-    simplify: true
-  goimports:
-    local-prefixes: github.com/apache/yunikorn
-  govet:
-    shadow: true
-  funlen:
-    lines: 120
-    statements: 80
-  depguard:
-    rules:
-      main:
-        files:
-          - $all
-        deny:
-          - pkg: "github.com/sirupsen/logrus"
-            desc: "logging is standardised via yunikorn logger and zap"
-          - pkg: "github.com/stretchr/testify"
-            desc: "test assertions must use gotest.tools/v3/assert"
-
-# linters to use
 linters:
-  disable-all: true
-  fast: false
+  settings:
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+    revive:
+      confidence: 0.8
+    govet:
+      enable:
+        - shadow
+    funlen:
+      lines: 120
+      statements: 80
+    depguard:
+      rules:
+        main:
+          files:
+            - $all
+          deny:
+            - pkg: github.com/sirupsen/logrus
+              desc: logging is standardised via yunikorn logger and zap
+            - pkg: github.com/stretchr/testify
+              desc: test assertions must use gotest.tools/v3/assert
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+  default: none
   enable:
     - errcheck
     - unused
     - staticcheck
-    - gosimple
     - ineffassign
     - funlen
     - revive
-    - gofmt
-    - goimports
     - govet
     - goconst
     - depguard
@@ -72,26 +72,23 @@ linters:
     - gosec
     - dogsled
     - whitespace
-
 issues:
-  exclude-use-default: true
-
-  # Maximum issues count per one linter. Set to 0 to disable. Default is 50.
   max-issues-per-linter: 0
-
-  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
   max-same-issues: 0
-
-  # Show only new issues: if there are unstaged changes or untracked files,
-  # only those changes are analyzed, else only changes in HEAD~ are analyzed.
-  # It's a super-useful option for integration of golangci-lint into existing
-  # large codebase. It's not practical to fix all existing issues at the moment
-  # of integration: much better don't allow issues in new code.
-  # Default is false.
   new: false
-
-  # Show only new issues created after git revision `REV`
-  # new-from-rev: REV
-
-  # Show only new issues created in git patch with set file path.
-  # new-from-patch: path/to/patch/file
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+    goimports:
+      local-prefixes:
+        - github.com/apache/yunikorn
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

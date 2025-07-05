@@ -413,7 +413,7 @@ partitions:
 			app := newApplication("app1", "default", tt.queue, tt.user, tt.tags, nil, "")
 			err = man.PlaceApplication(app)
 			if tt.placed == "" {
-				assert.Assert(t, errors.Is(err, RejectedError), "unexpected error or no error returned")
+				assert.Assert(t, errors.Is(err, ErrorRejected), "unexpected error or no error returned")
 			} else {
 				assert.NilError(t, err, "unexpected placement failure")
 				assert.Equal(t, tt.placed, app.GetQueuePath(), "incorrect queue set")
@@ -471,7 +471,7 @@ partitions:
 			app := newApplication("app1", "default", tt.queue, tt.user, tt.tags, nil, "")
 			err = man.PlaceApplication(app)
 			if tt.placed == "" {
-				assert.Assert(t, errors.Is(err, RejectedError), "unexpected error or no error returned")
+				assert.Assert(t, errors.Is(err, ErrorRejected), "unexpected error or no error returned")
 			} else {
 				assert.NilError(t, err, "unexpected placement failure")
 				assert.Equal(t, tt.placed, app.GetQueuePath(), "incorrect queue set")
@@ -540,7 +540,7 @@ partitions:
 			app := newApplication("app1", "default", tt.queue, tt.user, tt.tags, nil, "")
 			err = man1.PlaceApplication(app)
 			if tt.placed == "" {
-				assert.Assert(t, errors.Is(err, RejectedError), "unexpected error or no error returned")
+				assert.Assert(t, errors.Is(err, ErrorRejected), "unexpected error or no error returned")
 			} else {
 				assert.NilError(t, err, "unexpected placement failure")
 				assert.Equal(t, tt.placed, app.GetQueuePath(), "incorrect queue set")

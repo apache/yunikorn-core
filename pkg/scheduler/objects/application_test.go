@@ -2349,6 +2349,7 @@ func createPreemptNodeTestSetup(t *testing.T) (func() NodeIterator, func(NodeID 
 	assert.NilError(t, err)
 	return iterator, getNode, node1, unlimitedQ, childQ1, childQ2
 }
+
 func TestTryAllocatePreemptNodeWithReservations(t *testing.T) {
 	iterator, getNode, node1, unlimitedQ, childQ1, childQ2 := createPreemptNodeTestSetup(t)
 	app0 := newApplication(appID0, "default", "root.unlimited")
@@ -2430,6 +2431,189 @@ func TestTryAllocatePreemptNodeWithReservations(t *testing.T) {
 	assert.Assert(t, result3 != nil, "result3 expected")
 	assert.Equal(t, Reserved, result3.ResultType, "expected reservation")
 	alloc3 = result3.Request
+	assert.Assert(t, alloc3 != nil, "alloc3 expected")
+	assert.Assert(t, allocs[0].IsPreempted(), "alloc1 should have been preempted")
+}
+
+func TestTryAllocatePreemptNodeWithReservationsWithHighPriority(t *testing.T) {
+	iterator, getNode, node1, unlimitedQ, childQ1, childQ2 := createPreemptNodeTestSetup(t)
+	app0 := newApplication(appID0, "default", "root.unlimited")
+	app0.SetQueue(unlimitedQ)
+	unlimitedQ.applications[appID0] = app0
+	ask00 := newAllocationAsk("alloc0-0", appID0, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}))
+	err := app0.AddAllocationAsk(ask00)
+	assert.NilError(t, err)
+	ask01 := newAllocationAsk("alloc0-1", appID0, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}))
+	err = app0.AddAllocationAsk(ask01)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask1.priority = math.MaxInt32 - 1
+	err = app1.AddAllocationAsk(ask1)
+	assert.NilError(t, err)
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask2.priority = math.MaxInt32 - 1
+	err = app1.AddAllocationAsk(ask2)
+	assert.NilError(t, err)
+
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.applications[appID2] = app2
+	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask3.priority = math.MaxInt32 - 1
+	ask3.allowPreemptOther = true
+	err = app2.AddAllocationAsk(ask3)
+	assert.NilError(t, err)
+
+	app3 := newApplication(appID3, "default", "root.parent.child2")
+	app3.SetQueue(childQ2)
+	childQ2.applications[appID3] = app3
+	ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask4.allowPreemptOther = true
+	err = app3.AddAllocationAsk(ask4)
+	assert.NilError(t, err)
+
+	preemptionAttemptsRemaining := 10
+
+	// consume capacity with 'unlimited' app
+	for _, r := range []*resources.Resource{resources.NewResourceFromMap(map[string]resources.Quantity{"first": 40}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 39})} {
+		result0 := app0.tryAllocate(r, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+		assert.Assert(t, result0 != nil, "result0 expected")
+		alloc0 := result0.Request
+		assert.Assert(t, alloc0 != nil, "alloc0 expected")
+		alloc0.SetNodeID(result0.NodeID)
+	}
+
+	// consume remainder of space but not quota
+	allocs := make([]*Allocation, 0)
+	for _, r := range []*resources.Resource{resources.NewResourceFromMap(map[string]resources.Quantity{"first": 28}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 23})} {
+		var alloc1 *Allocation
+		result1 := app1.tryAllocate(r, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+		assert.Assert(t, result1 != nil, "result1 expected")
+		alloc1 = result1.Request
+		assert.Assert(t, result1.Request != nil, "alloc1 expected")
+		alloc1.SetNodeID(result1.NodeID)
+		allocs = append(allocs, alloc1)
+	}
+
+	// on first attempt, should see a reservation since we're after the reservation timeout
+	ask3.createTime = ask3.createTime.Add(-10 * time.Second)
+	result3 := app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Assert(t, result3 != nil, "result3 expected")
+	alloc3 := result3.Request
+	assert.Assert(t, alloc3 != nil, "alloc3 not expected")
+	assert.Equal(t, "node1", result3.NodeID, "wrong node assignment")
+	assert.Equal(t, Reserved, result3.ResultType, "expected reservation")
+	assert.Assert(t, !allocs[1].IsPreempted(), "alloc2 should not have been preempted")
+	err = node1.Reserve(app2, ask3)
+	assert.NilError(t, err)
+
+	// pass the time and try again
+	ask4.createTime = ask4.createTime.Add(-30 * time.Second)
+	SetReservationWaitTimeout(-60 * time.Second)
+	result3 = app3.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Assert(t, result3 == nil, "result3 expected")
+
+	// Set higher priority than the reserved ask priority
+	ask4.priority = math.MaxInt32
+	ask4.preemptCheckTime = ask4.preemptCheckTime.Add(-30 * time.Second)
+	result4 := app3.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Assert(t, result4 != nil, "result3 expected")
+	assert.Equal(t, Reserved, result4.ResultType, "expected reservation")
+	alloc3 = result4.Request
+	assert.Assert(t, alloc3 != nil, "alloc3 expected")
+	assert.Assert(t, allocs[0].IsPreempted(), "alloc1 should have been preempted")
+}
+
+func TestTryAllocatePreemptNodeWithReservationsWaitingTimeNotExceeded(t *testing.T) {
+	iterator, getNode, node1, unlimitedQ, childQ1, childQ2 := createPreemptNodeTestSetup(t)
+	app0 := newApplication(appID0, "default", "root.unlimited")
+	app0.SetQueue(unlimitedQ)
+	unlimitedQ.applications[appID0] = app0
+	ask00 := newAllocationAsk("alloc0-0", appID0, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}))
+	err := app0.AddAllocationAsk(ask00)
+	assert.NilError(t, err)
+	ask01 := newAllocationAsk("alloc0-1", appID0, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}))
+	err = app0.AddAllocationAsk(ask01)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.applications[appID1] = app1
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	err = app1.AddAllocationAsk(ask1)
+	assert.NilError(t, err)
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	err = app1.AddAllocationAsk(ask2)
+	assert.NilError(t, err)
+
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.applications[appID2] = app2
+	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask3.allowPreemptOther = true
+	err = app2.AddAllocationAsk(ask3)
+	assert.NilError(t, err)
+
+	app3 := newApplication(appID3, "default", "root.parent.child2")
+	app3.SetQueue(childQ2)
+	childQ2.applications[appID3] = app3
+	ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask4.allowPreemptOther = true
+	err = app3.AddAllocationAsk(ask4)
+	assert.NilError(t, err)
+
+	preemptionAttemptsRemaining := 10
+
+	// consume capacity with 'unlimited' app
+	for _, r := range []*resources.Resource{resources.NewResourceFromMap(map[string]resources.Quantity{"first": 40}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 39})} {
+		result0 := app0.tryAllocate(r, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+		assert.Assert(t, result0 != nil, "result0 expected")
+		alloc0 := result0.Request
+		assert.Assert(t, alloc0 != nil, "alloc0 expected")
+		alloc0.SetNodeID(result0.NodeID)
+	}
+
+	// consume remainder of space but not quota
+	allocs := make([]*Allocation, 0)
+	for _, r := range []*resources.Resource{resources.NewResourceFromMap(map[string]resources.Quantity{"first": 28}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 23})} {
+		var alloc1 *Allocation
+		result1 := app1.tryAllocate(r, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+		assert.Assert(t, result1 != nil, "result1 expected")
+		alloc1 = result1.Request
+		assert.Assert(t, result1.Request != nil, "alloc1 expected")
+		alloc1.SetNodeID(result1.NodeID)
+		allocs = append(allocs, alloc1)
+	}
+
+	// on first attempt, should see a reservation since we're after the reservation timeout
+	ask3.createTime = ask3.createTime.Add(-10 * time.Second)
+	result3 := app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Assert(t, result3 != nil, "result3 expected")
+	alloc3 := result3.Request
+	assert.Assert(t, alloc3 != nil, "alloc3 not expected")
+	assert.Equal(t, "node1", result3.NodeID, "wrong node assignment")
+	assert.Equal(t, Reserved, result3.ResultType, "expected reservation")
+	assert.Assert(t, !allocs[1].IsPreempted(), "alloc2 should not have been preempted")
+	err = node1.Reserve(app2, ask3)
+	assert.NilError(t, err)
+
+	// Set higher priority than the reserved ask priority but no preemption because reserved ask waiting time not exceeded
+	ask4.priority = 1
+	result3 = app3.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Assert(t, result3 == nil, "result3 expected")
+
+	// Ensure reserved ask waiting time exceeds
+	ask4.createTime = ask4.createTime.Add(-30 * time.Second)
+	SetReservationWaitTimeout(-60 * time.Second)
+	ask4.preemptCheckTime = ask4.preemptCheckTime.Add(-30 * time.Second)
+	result4 := app3.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Assert(t, result4 != nil, "result3 expected")
+	assert.Equal(t, Reserved, result4.ResultType, "expected reservation")
+	alloc3 = result4.Request
 	assert.Assert(t, alloc3 != nil, "alloc3 expected")
 	assert.Assert(t, allocs[0].IsPreempted(), "alloc1 should have been preempted")
 }

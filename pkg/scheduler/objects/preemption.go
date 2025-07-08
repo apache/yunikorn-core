@@ -172,8 +172,7 @@ func (p *Preemptor) initWorkingState() {
 				}
 				createTime := res.alloc.GetCreateTime()
 				// Take reservation delay also into account
-				waitingTime := reservationWaitTimeout.Seconds() - reservationDelay.Seconds()
-				askAge := time.Since(createTime.Add(time.Duration(waitingTime)))
+				askAge := time.Since(createTime.Add(reservationWaitTimeout).Add(reservationDelay))
 
 				// Cancel reservation based on its priority and waiting time in reservation queue
 				if res.alloc.GetPriority() < p.ask.priority && askAge > reservationWaitTimeout {

@@ -677,7 +677,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 
 func IsQueueNameValid(queueName string) error {
 	if !QueueNameRegExp.MatchString(queueName) {
-		return common.InvalidQueueName
+		return common.ErrorInvalidQueueName
 	}
 	return nil
 }

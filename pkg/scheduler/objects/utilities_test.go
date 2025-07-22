@@ -315,9 +315,10 @@ func assertAllocationLog(t *testing.T, ask *Allocation) {
 	preemptionPreconditionsFailed := false
 	PreemptionDoesNotHelp := false
 	for _, l := range log {
-		if l.Message == common.PreemptionPreconditionsFailed {
+		switch l.Message {
+		case common.PreemptionPreconditionsFailed:
 			preemptionPreconditionsFailed = true
-		} else if l.Message == common.PreemptionDoesNotHelp {
+		case common.PreemptionDoesNotHelp:
 			PreemptionDoesNotHelp = true
 		}
 	}

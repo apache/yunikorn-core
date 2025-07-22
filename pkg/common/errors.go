@@ -22,7 +22,7 @@ import "errors"
 
 var (
 	// InvalidQueueName returned when queue name is invalid
-	InvalidQueueName = errors.New("invalid queue name, max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed")
+	ErrorInvalidQueueName = errors.New("invalid queue name, max 64 characters consisting of alphanumeric characters and '-', '_', '#', '@', '/', ':' allowed")
 	// ErrorReservingAlloc returned when an ask that is allocated tries to reserve a node.
 	ErrorReservingAlloc = errors.New("ask already allocated, no reservation allowed")
 	// ErrorDuplicateReserve returned when the same reservation already exists on the application

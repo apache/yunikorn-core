@@ -1170,6 +1170,7 @@ partitions:
 	node2Alloc := ms.scheduler.GetClusterContext().GetPartition(partition).GetNode("node-2:1234").GetAllocatedResource().Resources[siCommon.Memory]
 	// we do not know which node was chosen so we need to check:
 	// node1 == 90 && node2 == 0  || node1 == 0 && node2 == 90
+	// nolint: staticcheck
 	if !(node1Alloc == 90000000 && node2Alloc == 0) && !(node1Alloc == 0 && node2Alloc == 90000000) {
 		t.Errorf("allocation not contained on one: node1 = %d, node2 = %d", node1Alloc, node2Alloc)
 	}

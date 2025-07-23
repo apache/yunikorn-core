@@ -161,7 +161,35 @@ func (p *Preemptor) initWorkingState() {
 
 	// walk node iterator and track available resources per node
 	p.iterator.ForEachNode(func(node *Node) bool {
-		if !node.IsSchedulable() || (node.IsReserved() && !node.isReservedForAllocation(p.ask.GetAllocationKey())) || !node.FitInNode(p.ask.GetAllocatedResource()) {
+		hasOtherReservations := false
+		if node.IsReserved() && !node.isReservedForAllocation(p.ask.GetAllocationKey()) {
+			hasOtherReservations = true
+			for _, res := range node.GetReservations() {
+				// Is Allocation daemon set?
+				// Has this allocation already triggered preemption?
+				if res.alloc.requiredNode != "" || res.alloc.HasTriggeredPreemption() {
+					continue
+				}
+				createTime := res.alloc.GetCreateTime()
+				// Take reservation delay also into account
+				askAge := time.Since(createTime.Add(reservationWaitTimeout).Add(reservationDelay))
+
+				// Cancel reservation based on its priority and waiting time in reservation queue
+				if res.alloc.GetPriority() < p.ask.priority && askAge > reservationWaitTimeout {
+					num := res.app.UnReserve(res.node, res.alloc)
+					res.app.GetQueue().UnReserve(res.app.ApplicationID, num)
+					log.Log(log.SchedApplication).Info("Cancelled reservation to consider node for preemption",
+						zap.String("triggered by appID", p.application.ApplicationID),
+						zap.String("triggered by allocationKey", p.ask.allocationKey),
+						zap.String("affected application ID", res.appID),
+						zap.String("affected allocationKey", res.allocKey),
+						zap.String("node", res.nodeID),
+						zap.Int("reservations count", num))
+					hasOtherReservations = false
+				}
+			}
+		}
+		if !node.IsSchedulable() || hasOtherReservations || !node.FitInNode(p.ask.GetAllocatedResource()) {
 			// node is not available, remove any potential victims from consideration
 			delete(allocationsByNode, node.NodeID)
 		} else {

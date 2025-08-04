@@ -47,9 +47,9 @@ import (
 )
 
 var (
-	reservationDelay = 2 * time.Second
+	reservationDelay       = 2 * time.Second
+	reservationWaitTimeout = 60 * time.Minute
 	// Make it configurable
-	reservationWaitTimeout    = 60 * time.Minute
 	completingTimeout         = 30 * time.Second
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
@@ -204,13 +204,6 @@ func SetReservationDelay(delay time.Duration) {
 	log.Log(log.SchedApplication).Debug("Set reservation delay",
 		zap.Duration("delay", delay))
 	reservationDelay = delay
-}
-
-// SetReservationWaitTimeout How long reservation should wait in queue?
-func SetReservationWaitTimeout(waitTimeout time.Duration) {
-	log.Log(log.SchedApplication).Debug("Set reservation wait timeout",
-		zap.Duration("wait timeout", waitTimeout))
-	reservationWaitTimeout = waitTimeout
 }
 
 // Return the current state or a checked specific state for the application.

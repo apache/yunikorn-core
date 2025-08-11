@@ -235,5 +235,4 @@ func TestTruncateEventMessage(t *testing.T) {
 			assert.Equal(t, testCase.expectedLength, len(truncated))
 		})
 	}
-
 }

@@ -209,31 +209,35 @@ func TestRingBufferCapacity(t *testing.T) {
 
 func TestTruncateEventMessage(t *testing.T) {
 	testCases := []struct {
-		name           string
-		message        string
-		expectedLength int
+		name     string
+		message  string
+		expected string
 	}{
 		{
-			name:           "message length less than 1024 characters",
-			message:        strings.Repeat("a", 10),
-			expectedLength: 10,
+			name:     "message length less than 1024 characters",
+			message:  getTestString(10),
+			expected: getTestString(10),
 		},
 		{
-			name:           "message length exactly 1024 characters",
-			message:        strings.Repeat("a", 1024),
-			expectedLength: 1024,
+			name:     "message length exactly 1024 characters",
+			message:  getTestString(1024),
+			expected: getTestString(1024),
 		},
 		{
-			name:           "message length greater than 1024 characters",
-			message:        strings.Repeat("a", 1100),
-			expectedLength: 1024,
+			name:     "message length greater than 1024 characters",
+			message:  getTestString(1100),
+			expected: getTestString(1021) + "...",
 		},
 	}
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			truncated := truncateEventMessage(testCase.message)
-			assert.Equal(t, testCase.expectedLength, len(truncated))
+			assert.Equal(t, testCase.expected, truncated)
 		})
 	}
+}
+
+func getTestString(stringLength int) string {
+	return strings.Repeat("x", stringLength)
 }

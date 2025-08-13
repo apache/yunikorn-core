@@ -226,7 +226,7 @@ func TestTruncateEventMessage(t *testing.T) {
 		{
 			name:     "message length greater than 1024 characters",
 			message:  getTestString(1100),
-			expected: getTestString(1021) + "...",
+			expected: getTestString(1024-3) + "...",
 		},
 	}
 

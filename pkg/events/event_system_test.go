@@ -20,6 +20,7 @@ package events
 
 import (
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -204,4 +205,39 @@ func TestRingBufferCapacity(t *testing.T) {
 	configs.SetConfigMap(config)
 	capacity = getRingBufferCapacity()
 	assert.Equal(t, uint64(configs.DefaultEventRingBufferCapacity), capacity)
+}
+
+func TestTruncateEventMessage(t *testing.T) {
+	testCases := []struct {
+		name     string
+		message  string
+		expected string
+	}{
+		{
+			name:     "message length less than 1024 characters",
+			message:  getTestString(10),
+			expected: getTestString(10),
+		},
+		{
+			name:     "message length exactly 1024 characters",
+			message:  getTestString(1024),
+			expected: getTestString(1024),
+		},
+		{
+			name:     "message length greater than 1024 characters",
+			message:  getTestString(1100),
+			expected: getTestString(1024-3) + "...",
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			truncated := truncateEventMessage(testCase.message)
+			assert.Equal(t, testCase.expected, truncated)
+		})
+	}
+}
+
+func getTestString(stringLength int) string {
+	return strings.Repeat("x", stringLength)
 }

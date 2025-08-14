@@ -222,6 +222,10 @@ func (ec *EventSystemImpl) Stop() {
 
 // AddEvent adds an event record to the event system. See the interface for details.
 func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
+	if event != nil {
+		event.Message = truncateEventMessage(event.Message)
+	}
+
 	metrics.GetEventMetrics().IncEventsCreated()
 	select {
 	case ec.channel <- event:
@@ -230,6 +234,15 @@ func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 		log.Log(log.Events).Debug("could not add Event to channel")
 		metrics.GetEventMetrics().IncEventsNotChanneled()
 	}
+}
+
+// truncates event message to 1024 characters for k8s compatibility
+func truncateEventMessage(message string) string {
+	const k8sEventMessageLimit = 1024
+	if len(message) <= k8sEventMessageLimit {
+		return message
+	}
+	return message[:k8sEventMessageLimit-3] + "..."
 }
 
 func isTrackingEnabled() bool {

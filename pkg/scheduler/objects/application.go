@@ -47,7 +47,9 @@ import (
 )
 
 var (
-	reservationDelay          = 2 * time.Second
+	reservationDelay       = 2 * time.Second
+	reservationWaitTimeout = 60 * time.Minute
+	// Make it configurable
 	completingTimeout         = 30 * time.Second
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute

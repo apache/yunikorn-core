@@ -35,11 +35,11 @@ require (
 	github.com/prometheus/common v0.45.0
 	github.com/sasha-s/go-deadlock v0.3.5
 	go.uber.org/zap v1.27.0
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/exp v0.0.0-20250228200357-dead58393ab7
 	golang.org/x/net v0.36.0
 	golang.org/x/time v0.10.0
 	google.golang.org/grpc v1.71.0
-	gopkg.in/yaml.v3 v3.0.1
 	gotest.tools/v3 v3.5.2
 )
 

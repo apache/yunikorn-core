@@ -219,6 +219,7 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 		return false
 	}
 
+	oldRemaining := currentQueue.GetRemainingGuaranteedResource()
 	currentQueue.AddAllocation(p.ask.GetAllocatedResource())
 
 	// remove each allocation in turn, validating that at some point we free enough resources to allow this ask to fit
@@ -226,7 +227,12 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 		for _, alloc := range snapshot.PotentialVictims {
 			snapshot.RemoveAllocation(alloc.GetAllocatedResource())
 			remaining := currentQueue.GetRemainingGuaranteedResource()
-			if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
+
+			// Net remaining guaranteed is nothing but the latest remaining guaranteed value resulted after
+			// the removal of victim on ask queue. In case of res type not used in victim but defined in ask queue's guaranteed,
+			// Net remaining value ensures it has only RELEVANT res types and not res types not being touched at all from victim context.
+			netRemaining := resources.ExtractLatestIfModified(oldRemaining, remaining)
+			if remaining != nil && resources.StrictlyGreaterThanOrEquals(netRemaining, resources.Zero) {
 				return true
 			}
 		}
@@ -272,21 +278,32 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 				preemptableResource := queueSnapshot.GetPreemptableResource()
 
+				// Net remaining guaranteed is nothing but the latest remaining guaranteed value resulted after
+				// the removal of victim on victim queue. In case of res type not used in victim but defined in victim queue's guaranteed,
+				// Net remaining value ensures it has only RELEVANT res types and not res types not being touched at all from victim context.
+				netRemaining := resources.ExtractLatestIfModified(oldRemaining, queueSnapshot.GetRemainingGuaranteedResource())
+
 				// Did removing this allocation still keep the queue over-allocated?
 				// At times, over-allocation happens because of resource types in usage but not defined as guaranteed.
-				// So, as an additional check, -ve remaining guaranteed resource before removing the victim means
+				// So, as an additional check, -ve or zero net remaining guaranteed resource means
 				// some really useful victim is there.
 				// In case of victims densely populated on any specific node, checking/honouring the guaranteed quota on ask or preemptor queue
 				// acts as early filtering layer to carry forward only the required victims.
 				// For other cases like victims spread over multiple nodes, this doesn't add great value.
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
-					(oldRemaining == nil || resources.StrictlyGreaterThan(resources.Zero, oldRemaining)) {
+					(netRemaining == nil || resources.StrictlyGreaterThanOrEquals(resources.Zero, netRemaining)) {
 					// add the current victim into the ask queue
+					askQueueOldRemaining := askQueue.GetRemainingGuaranteedResource()
 					askQueue.AddAllocation(victim.GetAllocatedResource())
 					askQueueNewRemaining := askQueue.GetRemainingGuaranteedResource()
 
+					// Net remaining guaranteed is nothing but the latest remaining guaranteed value resulted after
+					// the removal of victim on ask queue. In case of res type not used in victim but defined in ask queue's guaranteed,
+					// Net remaining value ensures it has only RELEVANT res types and not res types not being touched at all from victim context.
+					askQueueNetRemaining := resources.ExtractLatestIfModified(askQueueOldRemaining, askQueueNewRemaining)
+
 					// Did adding this allocation make the ask queue over - utilized?
-					if askQueueNewRemaining != nil && resources.StrictlyGreaterThan(resources.Zero, askQueueNewRemaining) {
+					if askQueueNewRemaining != nil && resources.StrictlyGreaterThan(resources.Zero, askQueueNetRemaining) {
 						askQueue.RemoveAllocation(victim.GetAllocatedResource())
 						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
 						break
@@ -344,13 +361,18 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 				preemptableResource := queueSnapshot.GetPreemptableResource()
 
+				// Net remaining guaranteed is nothing but the latest remaining guaranteed value resulted after
+				// the removal of victim on victim's queue. In case of res type not used in victim but defined in victim queue's guaranteed,
+				// Net remaining value ensures it has only RELEVANT res types and not res types not being touched at all from victim context.
+				netRemaining := resources.ExtractLatestIfModified(oldRemaining, queueSnapshot.GetRemainingGuaranteedResource())
+
 				// Did removing this allocation still keep the queue over-allocated?
 				// At times, over-allocation happens because of resource types in usage but not defined as guaranteed.
-				// So, as an additional check, -ve remaining guaranteed resource before removing the victim means
+				// So, as an additional check, -ve or zero net remaining guaranteed resource means
 				// some really useful victim is there.
 				// Similar checks could be added even on the ask or preemptor queue to prevent being over utilized.
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
-					(oldRemaining == nil || resources.StrictlyGreaterThan(resources.Zero, oldRemaining)) {
+					(netRemaining == nil || resources.StrictlyGreaterThanOrEquals(resources.Zero, netRemaining)) {
 					// removing task does not violate queue constraints, adjust queue and node
 					nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
 					// check if ask now fits and we haven't had this happen before
@@ -493,6 +515,8 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 		return compareAllocationLess(potentialVictims[i], potentialVictims[j])
 	})
 
+	askQueueRemaining := askQueue.GetRemainingGuaranteedResource()
+
 	// evaluate each potential victim in turn, stopping once sufficient resources have been freed
 	victims := make([]*Allocation, 0)
 	for _, victim := range potentialVictims {
@@ -502,20 +526,31 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 				oldRemaining := queueSnapshot.GetRemainingGuaranteedResource()
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 
+				// Net remaining guaranteed is nothing but the latest remaining guaranteed value resulted after
+				// the removal of victim on victim's queue. In case of res type not used in victim but defined in victim queue's guaranteed,
+				// Net remaining value ensures it has only RELEVANT res types and not res types not being touched at all from victim context.
+				netRemaining := resources.ExtractLatestIfModified(oldRemaining, queueSnapshot.GetRemainingGuaranteedResource())
+
 				// Did removing this allocation still keep the queue over-allocated?
 				// At times, over-allocation happens because of resource types in usage but not defined as guaranteed.
-				// So, as an additional check, -ve remaining guaranteed resource before removing the victim means
+				// So, as an additional check, -ve or zero net remaining guaranteed resource means
 				// some really useful victim is there.
 				preemptableResource := queueSnapshot.GetPreemptableResource()
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
-					(oldRemaining == nil || resources.StrictlyGreaterThan(resources.Zero, oldRemaining)) {
+					(netRemaining == nil || resources.StrictlyGreaterThanOrEquals(resources.Zero, netRemaining)) {
 					askQueueRemainingAfterVictimRemoval := askQueue.GetRemainingGuaranteedResource()
 
 					// add the current victim into the ask queue
 					askQueue.AddAllocation(victim.GetAllocatedResource())
 					askQueueNewRemaining := askQueue.GetRemainingGuaranteedResource()
+
+					// Net remaining guaranteed is nothing but the latest remaining guaranteed value resulted after
+					// the removal of victim on ask queue. In case of res type not used in victim but defined in ask queue's guaranteed,
+					// Net remaining value ensures it has only RELEVANT res types and not res types not being touched at all from victim context.
+					askQueueNetRemaining := resources.ExtractLatestIfModified(askQueueRemainingAfterVictimRemoval, askQueueNewRemaining)
+
 					// Did adding this allocation make the ask queue over - utilized?
-					if askQueueNewRemaining != nil && resources.StrictlyGreaterThan(resources.Zero, askQueueNewRemaining) {
+					if askQueueNewRemaining != nil && resources.StrictlyGreaterThan(resources.Zero, askQueueNetRemaining) {
 						askQueue.RemoveAllocation(victim.GetAllocatedResource())
 						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
 						break
@@ -536,12 +571,22 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 			}
 		}
 	}
-	// At last, did the ask queue usage under or equals guaranteed quota?
-	finalRemainingRes := askQueue.GetRemainingGuaranteedResource()
-	if finalRemainingRes != nil && resources.StrictlyGreaterThanOrEquals(finalRemainingRes, resources.Zero) {
-		return victims, true
+
+	// At last, did the ask queue usage under or equals guaranteed quota after finding the additional victims?
+	if len(victims) > 0 {
+		finalRemainingRes := askQueue.GetRemainingGuaranteedResource()
+
+		// Net remaining guaranteed is nothing but the latest remaining guaranteed value resulted after
+		// the removal of victim on ask queue. In case of res type not used in victim but defined in ask queue's guaranteed,
+		// Net remaining value ensures it has only RELEVANT res types and not res types not being touched at all from victim context.
+		netRemaining := resources.ExtractLatestIfModified(askQueueRemaining, finalRemainingRes)
+		if finalRemainingRes != nil && resources.StrictlyGreaterThanOrEquals(netRemaining, resources.Zero) {
+			return victims, true
+		} else {
+			return victims, false
+		}
 	}
-	return nil, false
+	return nil, true
 }
 
 // tryNodes attempts to find potential nodes for scheduling. For each node, potential victims are passed to
@@ -705,7 +750,8 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
 		zap.String("allocationKey", p.ask.GetAllocationKey()),
 		zap.String("nodeID", nodeID),
-		zap.Int("victimCount", len(victims)))
+		zap.Int("collected victim count", len(victims)),
+		zap.Int("preempted victim count", len(finalVictims)))
 	return newReservedAllocationResult(nodeID, p.ask), true
 }
 

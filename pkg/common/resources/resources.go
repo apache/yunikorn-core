@@ -1200,3 +1200,26 @@ func (r *Resource) DominantResourceType(capacity *Resource) string {
 	}
 	return dominant
 }
+
+// ExtractLatestIfModified Extract the latest value for every resource type only if value has been modified
+// If both resources are nil, return nil resource
+// If no resource type matches, return nil resource
+// If resource type exists and none modified, return nil resource
+func ExtractLatestIfModified(old *Resource, new *Resource) *Resource {
+	if old == nil || new == nil {
+		return nil
+	}
+	latest := NewResource()
+	for k, v := range old.Resources {
+		if newValue, exists := new.Resources[k]; exists {
+			if v != newValue {
+				latest.Resources[k] = newValue
+			}
+		}
+	}
+	if len(latest.Resources) > 0 {
+		return latest
+	} else {
+		return nil
+	}
+}

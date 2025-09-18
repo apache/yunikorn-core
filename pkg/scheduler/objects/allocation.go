@@ -37,6 +37,7 @@ import (
 
 type Allocation struct {
 	// Read-only fields
+	allocationName    string
 	allocationKey     string
 	applicationID     string
 	taskGroupName     string    // task group this allocation belongs to
@@ -130,6 +131,7 @@ func NewAllocationFromSI(alloc *si.Allocation) *Allocation {
 	}
 
 	return &Allocation{
+		allocationName:    alloc.AllocationTags[siCommon.DomainYuniKorn+siCommon.KeyPodName],
 		allocationKey:     alloc.AllocationKey,
 		applicationID:     alloc.ApplicationID,
 		allocatedResource: resources.NewResourceFromProto(alloc.ResourcePerAlloc),
@@ -592,4 +594,8 @@ func (a *Allocation) IsForeign() bool {
 
 func (a *Allocation) IsPreemptable() bool {
 	return a.preemptable
+}
+
+func (a *Allocation) GetAllocationName() string {
+	return a.allocationName
 }

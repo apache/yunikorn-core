@@ -631,6 +631,7 @@ func newForeignAllocation(allocKey, nodeID string, allocated *resources.Resource
 		AllocationKey: allocKey,
 		AllocationTags: map[string]string{
 			siCommon.Foreign: siCommon.AllocTypeDefault,
+			siCommon.DomainYuniKorn + siCommon.KeyPodName: "pod-" + allocKey,
 		},
 		NodeID:           id,
 		ResourcePerAlloc: allocated.ToProto(),

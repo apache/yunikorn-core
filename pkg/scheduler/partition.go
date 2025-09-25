@@ -1330,22 +1330,27 @@ func (pc *PartitionContext) handleForeignAllocation(allocationKey, applicationID
 
 	exists := pc.getOrStoreForeignAlloc(alloc)
 	if !exists {
-		log.Log(log.SchedPartition).Info("handling new foreign allocation",
+		log.Log(log.SchedPartition).Info("adding new foreign allocation",
 			zap.String("partitionName", pc.Name),
 			zap.String("nodeID", nodeID),
-			zap.String("allocationKey", allocationKey))
+			zap.String("name", alloc.GetAllocationName()),
+			zap.String("allocationKey", allocationKey),
+			zap.Stringer("allocated resource", alloc.GetAllocatedResource()))
 		node.AddAllocation(alloc)
 		return false, true, nil
 	}
 
-	log.Log(log.SchedPartition).Info("handling foreign allocation update",
+	log.Log(log.SchedPartition).Info("updating foreign allocation",
 		zap.String("partitionName", pc.Name),
 		zap.String("appID", applicationID),
-		zap.String("allocationKey", allocationKey))
+		zap.String("name", alloc.GetAllocationName()),
+		zap.String("allocationKey", allocationKey),
+		zap.Stringer("new allocated resource", alloc.GetAllocatedResource()))
 	prev := node.UpdateForeignAllocation(alloc)
 	if prev == nil {
 		log.Log(log.SchedPartition).Warn("BUG: previous allocation not found during update",
-			zap.String("allocationKey", allocationKey))
+			zap.String("allocationKey", allocationKey),
+			zap.String("name", alloc.GetAllocationName()))
 	}
 
 	return false, false, nil
@@ -1599,11 +1604,13 @@ func (pc *PartitionContext) removeForeignAllocation(allocID string) {
 	node := pc.GetNode(nodeID)
 	if node == nil {
 		log.Log(log.SchedPartition).Debug("Node not found for foreign allocation",
+			zap.String("name", alloc.GetAllocationName()),
 			zap.String("allocationID", allocID),
 			zap.String("nodeID", nodeID))
 		return
 	}
 	log.Log(log.SchedPartition).Info("Removing foreign allocation",
+		zap.String("name", alloc.GetAllocationName()),
 		zap.String("allocationID", allocID),
 		zap.String("nodeID", nodeID))
 	node.RemoveAllocation(allocID)

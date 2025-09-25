@@ -593,3 +593,7 @@ func (a *Allocation) IsForeign() bool {
 func (a *Allocation) IsPreemptable() bool {
 	return a.preemptable
 }
+
+func (a *Allocation) GetAllocationName() string {
+	return a.tags[siCommon.DomainYuniKorn+siCommon.KeyPodName]
+}

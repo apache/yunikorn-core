@@ -25,6 +25,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -44,7 +45,7 @@ func createAllocationAsk(allocationKey string, app string, allowPreemption bool,
 	return ask
 }
 
-func createAllocation(allocationKey string, app string, nodeID string, allowPreemption bool, isOriginator bool, priority int32, res *resources.Resource) *Allocation {
+func createAllocation(allocationKey string, app string, nodeID string, allowPreemption bool, isOriginator bool, priority int32, requiredNode bool, res *resources.Resource) *Allocation {
 	tags := map[string]string{}
 	siAsk := &si.Allocation{
 		AllocationKey:    allocationKey,
@@ -57,6 +58,9 @@ func createAllocation(allocationKey string, app string, nodeID string, allowPree
 		AllocationTags:   tags,
 		NodeID:           nodeID,
 	}
+	if requiredNode {
+		tags[siCommon.DomainYuniKorn+siCommon.KeyRequiredNode] = nodeID
+	}
 	ask := NewAllocationFromSI(siAsk)
 	return ask
 }
@@ -67,58 +71,58 @@ func prepareAllocationAsks(t *testing.T, node *Node) []*Allocation {
 	result := make([]*Allocation, 0)
 
 	// regular pods
-	alloc1 := createAllocation("ask1", "app1", node.NodeID, true, false, 10,
+	alloc1 := createAllocation("ask1", "app1", node.NodeID, true, false, 10, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	assert.Assert(t, node.TryAddAllocation(alloc1))
 	result = append(result, alloc1)
 
-	alloc2 := createAllocation("ask2", "app1", node.NodeID, true, false, 10,
+	alloc2 := createAllocation("ask2", "app1", node.NodeID, true, false, 10, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	alloc2.createTime = createTime
 	assert.Assert(t, node.TryAddAllocation(alloc2))
 	result = append(result, alloc2)
 
-	alloc3 := createAllocation("ask3", "app1", node.NodeID, true, false, 15,
+	alloc3 := createAllocation("ask3", "app1", node.NodeID, true, false, 15, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	assert.Assert(t, node.TryAddAllocation(alloc3))
 	result = append(result, alloc3)
 
-	alloc4 := createAllocation("ask4", "app1", node.NodeID, true, false, 10,
+	alloc4 := createAllocation("ask4", "app1", node.NodeID, true, false, 10, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc4.createTime = createTime
 	assert.Assert(t, node.TryAddAllocation(alloc4))
 	result = append(result, alloc4)
 
-	alloc5 := createAllocation("ask5", "app1", node.NodeID, true, false, 5,
+	alloc5 := createAllocation("ask5", "app1", node.NodeID, true, false, 5, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	assert.Assert(t, node.TryAddAllocation(alloc5))
 	result = append(result, alloc5)
 
 	// opted out pods
-	alloc6 := createAllocation("ask6", "app1", node.NodeID, false, false, 10,
+	alloc6 := createAllocation("ask6", "app1", node.NodeID, false, false, 10, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	assert.Assert(t, node.TryAddAllocation(alloc6))
 	result = append(result, alloc6)
 
-	alloc7 := createAllocation("ask7", "app1", node.NodeID, false, false, 10,
+	alloc7 := createAllocation("ask7", "app1", node.NodeID, false, false, 10, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	alloc7.createTime = createTime
 	assert.Assert(t, node.TryAddAllocation(alloc7))
 	result = append(result, alloc7)
 
-	alloc8 := createAllocation("ask8", "app1", node.NodeID, false, false, 15,
+	alloc8 := createAllocation("ask8", "app1", node.NodeID, false, false, 15, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
 	assert.Assert(t, node.TryAddAllocation(alloc8))
 	result = append(result, alloc8)
 
 	// driver/owner pods
-	alloc9 := createAllocation("ask9", "app1", node.NodeID, false, true, 10,
+	alloc9 := createAllocation("ask9", "app1", node.NodeID, false, true, 10, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc9.createTime = createTime
 	assert.Assert(t, node.TryAddAllocation(alloc9))
 	result = append(result, alloc9)
 
-	alloc10 := createAllocation("ask10", "app1", node.NodeID, true, true, 5,
+	alloc10 := createAllocation("ask10", "app1", node.NodeID, true, true, 5, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	assert.Assert(t, node.TryAddAllocation(alloc10))
 	result = append(result, alloc10)
@@ -201,7 +205,8 @@ func TestFilterAllocations(t *testing.T) {
 		resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5}))
 	p := NewRequiredNodePreemptor(node, requiredAsk)
 	asks := prepareAllocationAsks(t, node)
-	p.filterAllocations()
+	result := p.filterAllocations()
+	verifyFilterResult(t, 10, 0, 10, 0, 0, result)
 	filteredAllocations := p.getAllocations()
 
 	// allocations are not even considered as there is no match. of course, no victims
@@ -213,7 +218,8 @@ func TestFilterAllocations(t *testing.T) {
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	p1 := NewRequiredNodePreemptor(node, requiredAsk1)
 	asks = prepareAllocationAsks(t, node)
-	p1.filterAllocations()
+	result = p1.filterAllocations()
+	verifyFilterResult(t, 10, 0, 0, 10, 0, result)
 	filteredAllocations = p.getAllocations()
 
 	// allocations are not even considered as there is no match. of course, no victims
@@ -225,27 +231,39 @@ func TestFilterAllocations(t *testing.T) {
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	p2 := NewRequiredNodePreemptor(node, requiredAsk2)
 	asks = prepareAllocationAsks(t, node)
-	p2.filterAllocations()
+	result = p2.filterAllocations()
+	verifyFilterResult(t, 10, 0, 0, 0, 0, result)
 	filteredAllocations = p2.getAllocations()
 	assert.Equal(t, len(filteredAllocations), 10)
 	removeAllocationAsks(node, asks)
 
-	// case 4: allocation has preempted
+	// case 4: allocation has been preempted
 	requiredAsk3 := createAllocationAsk("ask12", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	p3 := NewRequiredNodePreemptor(node, requiredAsk3)
 	asks = prepareAllocationAsks(t, node)
-	p3.filterAllocations()
+	node.GetAllocation("ask5").MarkPreempted() // "ask5" would be the first and only victim without this
+	result = p3.filterAllocations()
 	p3.sortAllocations()
 
-	victims := p3.GetVictims()
-	for _, victim := range victims {
-		victim.MarkPreempted()
-	}
-	p3.filterAllocations()
+	verifyFilterResult(t, 10, 0, 0, 0, 1, result)
 	filteredAllocations = p3.getAllocations()
-	assert.Equal(t, len(filteredAllocations), 19)
+	assert.Equal(t, len(filteredAllocations), 9) // "ask5" is no longer considered as a victim
 	removeAllocationAsks(node, asks)
+
+	// case 5: existing required node allocation
+	requiredAsk4 := createAllocationAsk("ask12", "app1", true, true, 20,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	p4 := NewRequiredNodePreemptor(node, requiredAsk4)
+	_ = prepareAllocationAsks(t, node)
+	allocReqNode := createAllocation("ask11", "app1", node.NodeID, true, true, 5, true,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	assert.Assert(t, node.TryAddAllocation(allocReqNode))
+
+	result = p4.filterAllocations()
+	verifyFilterResult(t, 11, 1, 0, 0, 0, result)
+	filteredAllocations = p4.getAllocations()
+	assert.Equal(t, len(filteredAllocations), 10)
 }
 
 func TestGetVictims(t *testing.T) {
@@ -304,4 +322,13 @@ func TestGetVictims(t *testing.T) {
 	victims3 := p3.GetVictims()
 	assert.Equal(t, len(victims3), 0)
 	removeAllocationAsks(node, asks)
+}
+
+func verifyFilterResult(t *testing.T, totalAllocations, requiredNodeAllocations, resourceNotEnough, higherPriorityAllocations, alreadyPreemptedAllocations int, result filteringResult) {
+	t.Helper()
+	assert.Equal(t, totalAllocations, result.totalAllocations)
+	assert.Equal(t, requiredNodeAllocations, result.requiredNodeAllocations)
+	assert.Equal(t, resourceNotEnough, result.resourceNotEnough)
+	assert.Equal(t, higherPriorityAllocations, result.higherPriorityAllocations)
+	assert.Equal(t, alreadyPreemptedAllocations, result.alreadyPreemptedAllocations)
 }

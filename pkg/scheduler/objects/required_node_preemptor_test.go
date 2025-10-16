@@ -328,7 +328,7 @@ func verifyFilterResult(t *testing.T, totalAllocations, requiredNodeAllocations,
 	t.Helper()
 	assert.Equal(t, totalAllocations, result.totalAllocations)
 	assert.Equal(t, requiredNodeAllocations, result.requiredNodeAllocations)
-	assert.Equal(t, resourceNotEnough, result.resourceNotEnough)
+	assert.Equal(t, resourceNotEnough, result.atLeastOneResNotMatched)
 	assert.Equal(t, higherPriorityAllocations, result.higherPriorityAllocations)
 	assert.Equal(t, alreadyPreemptedAllocations, result.alreadyPreemptedAllocations)
 }

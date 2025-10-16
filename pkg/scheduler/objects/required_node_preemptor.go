@@ -31,11 +31,11 @@ type PreemptionContext struct {
 }
 
 type filteringResult struct {
-	totalAllocations            int
-	requiredNodeAllocations     int
-	resourceNotEnough           int
-	higherPriorityAllocations   int
-	alreadyPreemptedAllocations int
+	totalAllocations            int // total number of allocations
+	requiredNodeAllocations     int // number of requiredNode (daemon set) allocations that cannot be preempted
+	atLeastOneResNotMatched     int // number of allocations where there's no single resource type that would match
+	higherPriorityAllocations   int // number of allocations with higher priority
+	alreadyPreemptedAllocations int // number of allocations already preempted
 }
 
 func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation) *PreemptionContext {
@@ -81,7 +81,7 @@ func (p *PreemptionContext) filterAllocations() filteringResult {
 		if includeAllocation {
 			p.allocations = append(p.allocations, allocation)
 		} else {
-			result.resourceNotEnough++
+			result.atLeastOneResNotMatched++
 		}
 	}
 

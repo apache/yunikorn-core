@@ -1411,12 +1411,12 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 	getRateLimitedReqNodeLog().Info("no victim found for required node preemption",
 		zap.String("allocation key", ask.GetAllocationKey()),
 		zap.String("allocation name", ask.GetAllocationName()),
-		zap.String("node", reserve.nodeID),
+		zap.String("node", reserve.node.NodeID),
 		zap.Int("total allocations", result.totalAllocations),
 		zap.Int("requiredNode allocations", result.requiredNodeAllocations),
 		zap.Int("allocations already preempted", result.alreadyPreemptedAllocations),
 		zap.Int("higher priority allocations", result.higherPriorityAllocations),
-		zap.Int("allocations with insufficient resources", result.resourceNotEnough))
+		zap.Int("allocations with non-matching resources", result.atLeastOneResNotMatched))
 	return false
 }
 

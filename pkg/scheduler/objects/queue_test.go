@@ -1873,9 +1873,9 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parentGuar := map[string]string{siCommon.Memory: "100"}
 	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
 	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
-	alloc2 := createAllocation("ask2", appID2, nodeID1, true, true, -1000, res)
+	alloc2 := createAllocation("ask2", appID2, nodeID1, true, true, -1000, false, res)
 	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
-	alloc3 := createAllocation("ask3", appID2, nodeID1, true, true, -1000, res)
+	alloc3 := createAllocation("ask3", appID2, nodeID1, true, true, -1000, false, res)
 	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
 	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
@@ -1985,7 +1985,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
 	// recreate alloc2 to restore non-prempted state
 	app2.RemoveAllocation(alloc2.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
-	alloc2 = createAllocation("ask2", appID2, nodeID1, true, true, -1000, res)
+	alloc2 = createAllocation("ask2", appID2, nodeID1, true, true, -1000, false, res)
 	app2.AddAllocation(alloc2)
 
 	// setting priority offset on parent2 queue should remove leaf2 victims

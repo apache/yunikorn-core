@@ -294,15 +294,14 @@ func TestPendingCalc(t *testing.T) {
 	if !resources.Equals(leaf.pending, allocRes) {
 		t.Errorf("leaf queue pending allocation failed to increment expected %v, got %v", allocRes, leaf.pending)
 	}
-	metrics := []string{"yunikorn_root_queue_resource", "yunikorn_root_leaf_queue_resource"}
+	metrics := []string{"yunikorn_queue_resource"}
 	want := concatQueueResourceMetric(metrics, []string{`
-yunikorn_root_queue_resource{resource="memory",state="pending"} 100
-yunikorn_root_queue_resource{resource="vcores",state="pending"} 10
-yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
-`, `
-yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 100
-yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 10
-yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root",resource="memory",state="pending"} 100
+yunikorn_queue_resource{queue="root",resource="vcores",state="pending"} 10
+yunikorn_queue_resource{queue="root",resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="memory",state="pending"} 100
+yunikorn_queue_resource{queue="root.leaf",resource="vcores",state="pending"} 10
+yunikorn_queue_resource{queue="root.leaf",resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
@@ -314,13 +313,12 @@ yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
 		t.Errorf("leaf queue pending allocation failed to decrement expected 0, got %v", leaf.pending)
 	}
 	want = concatQueueResourceMetric(metrics, []string{`
-yunikorn_root_queue_resource{resource="memory",state="pending"} 0
-yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
-yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
-`, `
-yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
-yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
-yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root",resource="memory",state="pending"} 0
+yunikorn_queue_resource{queue="root",resource="vcores",state="pending"} 0
+yunikorn_queue_resource{queue="root",resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="memory",state="pending"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="vcores",state="pending"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
@@ -336,13 +334,12 @@ yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
 		t.Errorf("leaf queue pending allocation should have failed to decrement expected zero, got %v", leaf.pending)
 	}
 	want = concatQueueResourceMetric(metrics, []string{`
-yunikorn_root_queue_resource{resource="memory",state="pending"} 0
-yunikorn_root_queue_resource{resource="vcores",state="pending"} 0
-yunikorn_root_queue_resource{resource="apps",state="maxRunningApps"} 0
-`, `
-yunikorn_root_leaf_queue_resource{resource="memory",state="pending"} 0
-yunikorn_root_leaf_queue_resource{resource="vcores",state="pending"} 0
-yunikorn_root_leaf_queue_resource{resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root",resource="memory",state="pending"} 0
+yunikorn_queue_resource{queue="root",resource="vcores",state="pending"} 0
+yunikorn_queue_resource{queue="root",resource="apps",state="maxRunningApps"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="memory",state="pending"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="vcores",state="pending"} 0
+yunikorn_queue_resource{queue="root.leaf",resource="apps",state="maxRunningApps"} 0
 `},
 	)
 	assert.NilError(t, promtu.GatherAndCompare(prometheus.DefaultGatherer, strings.NewReader(want), metrics...), "unexpected metrics")
@@ -1876,9 +1873,9 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parentGuar := map[string]string{siCommon.Memory: "100"}
 	ask := createAllocationAsk("ask1", appID1, true, true, 0, res)
 	ask2 := createAllocationAsk("ask2", appID2, true, true, -1000, res)
-	alloc2 := createAllocation("ask2", appID2, nodeID1, true, true, -1000, res)
+	alloc2 := createAllocation("ask2", appID2, nodeID1, true, true, -1000, false, res)
 	ask3 := createAllocationAsk("ask3", appID2, true, true, -1000, res)
-	alloc3 := createAllocation("ask3", appID2, nodeID1, true, true, -1000, res)
+	alloc3 := createAllocation("ask3", appID2, nodeID1, true, true, -1000, false, res)
 	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
 	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
@@ -1988,7 +1985,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")
 	// recreate alloc2 to restore non-prempted state
 	app2.RemoveAllocation(alloc2.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
-	alloc2 = createAllocation("ask2", appID2, nodeID1, true, true, -1000, res)
+	alloc2 = createAllocation("ask2", appID2, nodeID1, true, true, -1000, false, res)
 	app2.AddAllocation(alloc2)
 
 	// setting priority offset on parent2 queue should remove leaf2 victims

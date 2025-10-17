@@ -27,7 +27,7 @@ import (
 	"strings"
 
 	"go.uber.org/zap"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 
 	"github.com/apache/yunikorn-core/pkg/log"
 )

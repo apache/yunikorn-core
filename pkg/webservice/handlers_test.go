@@ -33,7 +33,7 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v3"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -1999,7 +1999,7 @@ func assertQueueInvalid(t *testing.T, resp *MockResponseWriter, invalidQueuePath
 	err := json.Unmarshal(resp.outputBytes, &errInfo)
 	assert.NilError(t, err, unmarshalError)
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
-	assert.Equal(t, errInfo.Message, common.InvalidQueueName.Error(), jsonMessageError)
+	assert.Equal(t, errInfo.Message, common.ErrorInvalidQueueName.Error(), jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
 }
 
@@ -2086,7 +2086,7 @@ func TestValidateQueue(t *testing.T) {
 
 	invalidQueuePath := "root.test.test123!"
 	err1 := validateQueue(invalidQueuePath)
-	assert.Error(t, err1, common.InvalidQueueName.Error())
+	assert.Error(t, err1, common.ErrorInvalidQueueName.Error())
 
 	err2 := validateQueue("root")
 	assert.NilError(t, err2, "Queue path is correct but still throwing error.")
@@ -2833,7 +2833,7 @@ func verifyStateDumpJSON(t *testing.T, aggregated *AggregatedStateInfo, partitio
 	assert.Check(t, len(aggregated.ClusterInfo) > 0)
 	assert.Check(t, len(aggregated.Queues) == 1, "should only have root queue")
 	assert.Check(t, len(aggregated.LogLevel) > 0)
-	assert.Check(t, len(aggregated.Config.SchedulerConfig.Partitions) == partitionCount, "incorrect partition count")
+	assert.Check(t, len(aggregated.Config.Partitions) == partitionCount, "incorrect partition count")
 	assert.Check(t, len(aggregated.Config.Extra) > 0)
 	assert.Check(t, aggregated.RMDiagnostics["empty"] != nil, "expected no RM registered for diagnostics")
 	assert.Check(t, len(aggregated.PlacementRules) == partitionCount, "incorrect partition count")

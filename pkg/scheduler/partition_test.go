@@ -1689,6 +1689,7 @@ func TestRequiredNodeReservation(t *testing.T) {
 	assert.Equal(t, len(reservations), 2, "node should have two reservations")
 	_, _, resAsk = reservations[0].GetObjects()
 	_, _, resAsk2 := reservations[1].GetObjects()
+	// nolint: staticcheck
 	if !((resAsk.GetAllocationKey() == allocKey3 && resAsk2.GetAllocationKey() == allocKey2) ||
 		(resAsk2.GetAllocationKey() == allocKey3 && resAsk.GetAllocationKey() == allocKey2)) {
 		t.Fatal("missing reservation on the node")
@@ -4843,32 +4844,60 @@ func TestAppSchedulingOrderFIFO(t *testing.T) {
 	// add two asks to app2 first
 	app2AskRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
 
-	app2Ask1 := newAllocationAskAll(allocKey2, appID2, "", app2AskRes, 0, false, map[string]string{
+	app2Ask1 := newAllocationAskAll("app2-alloc-1", appID2, "", app2AskRes, 0, false, map[string]string{
 		siCommon.CreationTime: "100",
 	})
 	err = app2.AddAllocationAsk(app2Ask1)
 	assert.NilError(t, err, "could not add ask")
-	app2Ask2 := newAllocationAskAll(allocKey3, appID2, "", app2AskRes, 0, false, map[string]string{
+	app2Ask2 := newAllocationAskAll("app2-alloc-2", appID2, "", app2AskRes, 0, false, map[string]string{
 		siCommon.CreationTime: "50",
 	})
 	err = app2.AddAllocationAsk(app2Ask2)
 	assert.NilError(t, err, "could not add ask")
+	app2Ask3 := newAllocationAskAll("app2-alloc-3", appID2, "", app2AskRes, 0, false, map[string]string{
+		siCommon.CreationTime: "150",
+	})
+	err = app2.AddAllocationAsk(app2Ask3)
+	assert.NilError(t, err, "could not add ask")
 
 	askRes1 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
-	ask1 := newAllocationAskAll(allocKey, appID1, "", askRes1, 0, false, map[string]string{
+	app1Ask1 := newAllocationAskAll("app1-alloc-1", appID1, "", askRes1, 0, false, map[string]string{
 		siCommon.CreationTime: "1000",
 	})
-	err = app1.AddAllocationAsk(ask1)
+	err = app1.AddAllocationAsk(app1Ask1)
+	assert.NilError(t, err, "could not add ask")
+	app1Ask2 := newAllocationAskAll("app1-alloc-2", appID1, "", askRes1, 0, false, map[string]string{
+		siCommon.CreationTime: "1100",
+	})
+	err = app1.AddAllocationAsk(app1Ask2)
 	assert.NilError(t, err, "could not add ask")
 
 	// the two asks from app2 should be scheduled
 	alloc := partition.tryAllocate()
 	assert.Assert(t, alloc != nil, "no allocation was made")
-	assert.Equal(t, allocKey3, alloc.Request.GetAllocationKey())
+	assert.Equal(t, "app2-alloc-2", alloc.Request.GetAllocationKey())
 	alloc = partition.tryAllocate()
 	assert.Assert(t, alloc != nil, "no allocation was made")
-	assert.Equal(t, allocKey2, alloc.Request.GetAllocationKey())
+	assert.Equal(t, "app2-alloc-1", alloc.Request.GetAllocationKey())
+
+	// add existing allocation to appID1 - should change scheduling order
+	allocExisting := newAllocationAllTags("allocExisting", appID1, nodeID1, "",
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), 0, false, map[string]string{
+			siCommon.CreationTime: "30", // older than app2Ask2 (alloc-3)
+		})
+	app1.AddAllocation(allocExisting)
+
+	// should schedule from app-1
 	alloc = partition.tryAllocate()
 	assert.Assert(t, alloc != nil, "no allocation was made")
-	assert.Equal(t, allocKey, alloc.Request.GetAllocationKey())
+	assert.Equal(t, "app1-alloc-1", alloc.Request.GetAllocationKey())
+
+	alloc = partition.tryAllocate()
+	assert.Assert(t, alloc != nil, "no allocation was made")
+	assert.Equal(t, "app1-alloc-2", alloc.Request.GetAllocationKey())
+
+	// latest from app-2 again
+	alloc = partition.tryAllocate()
+	assert.Assert(t, alloc != nil, "no allocation was made")
+	assert.Equal(t, "app2-alloc-3", alloc.Request.GetAllocationKey())
 }

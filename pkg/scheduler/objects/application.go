@@ -47,13 +47,17 @@ import (
 )
 
 var (
-	reservationDelay          = 2 * time.Second
+	reservationDelay       = 2 * time.Second
+	reservationWaitTimeout = 60 * time.Minute
+	// Make it configurable
 	completingTimeout         = 30 * time.Second
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
 )
 var initAppLogOnce sync.Once
 var rateLimitedAppLog *log.RateLimitedLogger
+var initReqNodeLogOnce sync.Once
+var rateLimitedReqNodeLog *log.RateLimitedLogger
 
 const (
 	Soft string = "Soft"
@@ -1380,7 +1384,7 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allocation) bool {
 	// try preemption and see if we can free up resource
 	preemptor := NewRequiredNodePreemptor(reserve.node, ask)
-	preemptor.filterAllocations()
+	result := preemptor.filterAllocations()
 	preemptor.sortAllocations()
 
 	// Are there any victims/asks to preempt?
@@ -1388,12 +1392,14 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 	if len(victims) > 0 {
 		log.Log(log.SchedApplication).Info("Found victims for required node preemption",
 			zap.String("ds allocation key", ask.GetAllocationKey()),
+			zap.String("allocation name", ask.GetAllocationName()),
 			zap.Int("no.of victims", len(victims)))
 		for _, victim := range victims {
 			if victimQueue := sa.queue.FindQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
 				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
 			}
 			victim.MarkPreempted()
+			victim.SendPreemptedBySchedulerEvent(ask.GetAllocationKey(), ask.GetApplicationID(), sa.ApplicationID)
 		}
 		ask.MarkTriggeredPreemption()
 		sa.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
@@ -1402,6 +1408,15 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 	}
 	ask.LogAllocationFailure(common.NoVictimForRequiredNode, true)
 	ask.SendRequiredNodePreemptionFailedEvent(reserve.node.NodeID)
+	getRateLimitedReqNodeLog().Info("no victim found for required node preemption",
+		zap.String("allocation key", ask.GetAllocationKey()),
+		zap.String("allocation name", ask.GetAllocationName()),
+		zap.String("node", reserve.node.NodeID),
+		zap.Int("total allocations", result.totalAllocations),
+		zap.Int("requiredNode allocations", result.requiredNodeAllocations),
+		zap.Int("allocations already preempted", result.alreadyPreemptedAllocations),
+		zap.Int("higher priority allocations", result.higherPriorityAllocations),
+		zap.Int("allocations with non-matching resources", result.atLeastOneResNotMatched))
 	return false
 }
 
@@ -1446,6 +1461,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	reserved := sa.reservations[allocKey]
 	var allocResult *AllocationResult
 	var predicateErrors map[string]int
+	tryNodeCycleStart := time.Now()
 	iterator.ForEachNode(func(node *Node) bool {
 		// skip the node if the node is not schedulable
 		if !node.IsSchedulable() {
@@ -1510,6 +1526,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 		}
 		return true
 	})
+	metrics.GetSchedulerMetrics().ObserveTryNodeEvaluation(tryNodeCycleStart)
 
 	if allocResult != nil {
 		return allocResult
@@ -1722,6 +1739,9 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		sa.incUserResourceUsage(alloc.GetAllocatedResource())
 		sa.allocatedResource = resources.Add(sa.allocatedResource, alloc.GetAllocatedResource())
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedResource, sa.maxAllocatedResource)
+	}
+	if alloc.createTime.Before(sa.submissionTime) {
+		sa.submissionTime = alloc.createTime
 	}
 	sa.appEvents.SendNewAllocationEvent(sa.ApplicationID, alloc.allocationKey, alloc.GetAllocatedResource())
 	sa.allocations[alloc.GetAllocationKey()] = alloc
@@ -2174,6 +2194,13 @@ func getRateLimitedAppLog() *log.RateLimitedLogger {
 		rateLimitedAppLog = log.NewRateLimitedLogger(log.SchedApplication, time.Second)
 	})
 	return rateLimitedAppLog
+}
+
+func getRateLimitedReqNodeLog() *log.RateLimitedLogger {
+	initReqNodeLogOnce.Do(func() {
+		rateLimitedReqNodeLog = log.NewRateLimitedLogger(log.SchedApplication, time.Minute)
+	})
+	return rateLimitedReqNodeLog
 }
 
 func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit bool) {

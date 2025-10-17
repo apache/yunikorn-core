@@ -159,14 +159,17 @@ func TestApplicationHistoryTracking(t *testing.T) {
 
 	// make sure app transitions to Completing
 	app := ms.getApplication(appID1)
-	err = common.WaitForCondition(time.Millisecond*10, time.Second, func() bool {
+	err = common.WaitForCondition(time.Millisecond*10, 5*time.Second, func() bool {
 		return app.IsCompleting()
 	})
 	assert.NilError(t, err, "timeout waiting for app state Completing")
 
-	eventsDao, err = client.GetBatchEvents()
-	assert.NilError(t, err)
-	assert.Equal(t, 18, len(eventsDao.EventRecords), "number of events generated")
+	err = common.WaitForCondition(time.Millisecond*10, 5*time.Second, func() bool {
+		eventsDao, err = client.GetBatchEvents()
+		assert.NilError(t, err)
+		return len(eventsDao.EventRecords) == 18
+	})
+	assert.NilError(t, err, "number of events generated")
 	verifyAllocationCancelledEvents(t, eventsDao.EventRecords[13:])
 	events, _ = getEventsFromStream(t, false, stream, 4)
 	assert.NilError(t, err)

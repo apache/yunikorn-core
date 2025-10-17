@@ -419,6 +419,7 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.NilError(t, err, "Resource creation failed")
 	tags := make(map[string]string)
 	tags[siCommon.CreationTime] = strconv.FormatInt(past, 10)
+	tags[siCommon.DomainYuniKorn+siCommon.KeyPodName] = "testpod"
 	allocSI := &si.Allocation{
 		AllocationKey:    "ask-1",
 		NodeID:           "node-1",
@@ -446,6 +447,7 @@ func TestNewAllocFromSI(t *testing.T) {
 	assert.Assert(t, !alloc.IsAllowPreemptSelf(), "ask should not have allow-preempt-self set")
 	assert.Assert(t, alloc.IsAllowPreemptOther(), "ask should have allow-preempt-other set")
 	assert.Assert(t, reflect.DeepEqual(alloc.tags, alloc.GetTagsClone()))
+	assert.Equal(t, alloc.GetAllocationName(), "testpod")
 
 	allocSI.Originator = false
 	allocSI.PreemptionPolicy.AllowPreemptSelf = true

@@ -30,6 +30,14 @@ type PreemptionContext struct {
 	allocations []*Allocation
 }
 
+type filteringResult struct {
+	totalAllocations            int // total number of allocations
+	requiredNodeAllocations     int // number of requiredNode (daemon set) allocations that cannot be preempted
+	atLeastOneResNotMatched     int // number of allocations where there's no single resource type that would match
+	higherPriorityAllocations   int // number of allocations with higher priority
+	alreadyPreemptedAllocations int // number of allocations already preempted
+}
+
 func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation) *PreemptionContext {
 	preemptor := &PreemptionContext{
 		node:        node,
@@ -39,15 +47,26 @@ func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation) *PreemptionCo
 	return preemptor
 }
 
-func (p *PreemptionContext) filterAllocations() {
-	for _, allocation := range p.node.GetYunikornAllocations() {
+func (p *PreemptionContext) filterAllocations() filteringResult {
+	var result filteringResult
+	yunikornAllocations := p.node.GetYunikornAllocations()
+	result.totalAllocations = len(yunikornAllocations)
+
+	for _, allocation := range yunikornAllocations {
 		// skip daemon set pods and higher priority allocation
-		if allocation.GetRequiredNode() != "" || allocation.GetPriority() > p.requiredAsk.GetPriority() {
+		if allocation.GetRequiredNode() != "" {
+			result.requiredNodeAllocations++
+			continue
+		}
+
+		if allocation.GetPriority() > p.requiredAsk.GetPriority() {
+			result.higherPriorityAllocations++
 			continue
 		}
 
 		// skip if the allocation is already being preempted
 		if allocation.IsPreempted() {
+			result.alreadyPreemptedAllocations++
 			continue
 		}
 
@@ -61,8 +80,12 @@ func (p *PreemptionContext) filterAllocations() {
 		}
 		if includeAllocation {
 			p.allocations = append(p.allocations, allocation)
+		} else {
+			result.atLeastOneResNotMatched++
 		}
 	}
+
+	return result
 }
 
 // sort based on the following criteria in the specified order:

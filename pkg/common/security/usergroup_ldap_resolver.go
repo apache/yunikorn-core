@@ -27,15 +27,19 @@ import (
 	"strings"
 	"time"
 
-	"go.uber.org/zap"
-
 	"github.com/go-ldap/ldap/v3"
+	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 // This file contains the implementation of the LDAP resolver for user groups
+
+type LdapLookup struct {
+	config LdapConfig
+	access LdapAccess
+}
 
 // LdapAccess defines the interface for LDAP operations
 type LdapAccess interface {
@@ -52,74 +56,13 @@ type LdapAccess interface {
 	Close(conn *ldap.Conn)
 }
 
-// LdapAccessImpl implements the LdapAccess interface with real LDAP operations
-type LdapAccessImpl struct{}
-
-func (l *LdapAccessImpl) DialURL(url string, options ...ldap.DialOpt) (*ldap.Conn, error) {
-	return ldap.DialURL(url, options...)
+type ConfigReader interface {
+	ReadLdapConfig() (*LdapConfig, error)
 }
 
-func (l *LdapAccessImpl) Bind(conn *ldap.Conn, username, password string) error {
-	return conn.Bind(username, password)
-}
+type configReaderImpl struct{}
 
-func (l *LdapAccessImpl) Search(conn *ldap.Conn, searchRequest *ldap.SearchRequest) (*ldap.SearchResult, error) {
-	return conn.Search(searchRequest)
-}
-
-func (l *LdapAccessImpl) Close(conn *ldap.Conn) {
-	conn.Close()
-}
-
-// ldapAccessFactory is a function type that creates LdapAccess instances
-type ldapAccessFactory func(config *LdapResolverConfig) LdapAccess
-
-// defaultLdapAccessFactory is the default factory function that creates real LdapAccessImpl instances
-var defaultLdapAccessFactory ldapAccessFactory = func(config *LdapResolverConfig) LdapAccess {
-	return &LdapAccessImpl{}
-}
-
-// newLdapAccessImpl creates a new LdapAccess instance using the current factory
-// This can be replaced in tests to return mock implementations
-var newLdapAccessImpl = defaultLdapAccessFactory
-
-// resetLdapAccessFactory resets the factory to the default implementation
-// This is used in tests to ensure the global state is restored
-func resetLdapAccessFactory() {
-	newLdapAccessImpl = defaultLdapAccessFactory
-}
-
-// LDAPResolverConfig holds the configuration for the LDAP resolver
-type LdapResolverConfig struct {
-	Host         string
-	Port         int
-	BaseDN       string
-	Filter       string
-	GroupAttr    string
-	ReturnAttr   []string
-	BindUser     string
-	BindPassword string
-	Insecure     bool
-	SSL          bool
-}
-
-// Default values for the LDAP resolver
-var ldapConf = LdapResolverConfig{
-	Host:         common.DefaultLdapHost,
-	Port:         common.DefaultLdapPort,
-	BaseDN:       common.DefaultLdapBaseDN,
-	Filter:       common.DefaultLdapFilter,
-	GroupAttr:    common.DefaultLdapGroupAttr,
-	ReturnAttr:   common.DefaultLdapReturnAttr,
-	BindUser:     common.DefaultLdapBindUser,
-	BindPassword: common.DefaultLdapBindPassword,
-	Insecure:     common.DefaultLdapInsecure,
-	SSL:          common.DefaultLdapSSL,
-}
-
-// read secrets from the secrets directory
-// returns true if at least one secret was loaded and the configuration is valid, false otherwise
-var readSecrets = func() bool {
+func (configReaderImpl) ReadLdapConfig() (*LdapConfig, error) {
 	secretsDir := common.LdapMountPath
 
 	// Read all files from secrets directory
@@ -128,7 +71,7 @@ var readSecrets = func() bool {
 		log.Log(log.Security).Error("Unable to access LDAP secrets directory",
 			zap.String("directory", secretsDir),
 			zap.Error(err))
-		return false
+		return nil, fmt.Errorf("unable to access LDAP secrets directory under %s", secretsDir)
 	}
 
 	secretCount := 0
@@ -172,6 +115,8 @@ var readSecrets = func() bool {
 			zap.String("key", secretKey))
 	}
 
+	ldapConf := getDefaultLdapConfig()
+
 	// Apply validated values to the configuration
 	if host, ok := validSecrets[common.LdapHost].(string); ok {
 		ldapConf.Host = host
@@ -201,12 +146,12 @@ var readSecrets = func() bool {
 		ldapConf.Insecure = insecure
 	}
 	if ssl, ok := validSecrets[common.LdapSSL].(bool); ok {
-		ldapConf.SSL = ssl
+		ldapConf.useSsl = ssl
 	}
 
 	// Validate the entire configuration
 	validator := NewLdapValidator()
-	isValid := validator.ValidateConfig(&ldapConf)
+	isValid := validator.ValidateConfig(ldapConf)
 
 	// Check if all required fields were provided in the secrets
 	requiredFields := []string{
@@ -220,7 +165,7 @@ var readSecrets = func() bool {
 		common.LdapBindPassword,
 	}
 
-	missingFields := []string{}
+	var missingFields []string
 	for _, field := range requiredFields {
 		if _, ok := validSecrets[field]; !ok {
 			missingFields = append(missingFields, field)
@@ -238,13 +183,72 @@ var readSecrets = func() bool {
 		zap.Bool("configurationValid", isValid),
 		zap.Int("missingRequiredFields", len(missingFields)))
 
-	return secretCount > 0 && isValid && len(missingFields) == 0
+	if secretCount == 0 || !isValid || len(missingFields) != 0 {
+		return ldapConf, fmt.Errorf("unable to properly load LDAP configuration")
+	}
+
+	return ldapConf, nil
 }
 
-func GetUserGroupCacheLdap() *UserGroupCache {
-	secretsLoaded := readSecrets()
+func GetConfigReader() ConfigReader {
+	return configReaderImpl{}
+}
 
-	if !secretsLoaded {
+func getDefaultLdapConfig() *LdapConfig {
+	return &LdapConfig{
+		Host:         common.DefaultLdapHost,
+		Port:         common.DefaultLdapPort,
+		BaseDN:       common.DefaultLdapBaseDN,
+		Filter:       common.DefaultLdapFilter,
+		GroupAttr:    common.DefaultLdapGroupAttr,
+		ReturnAttr:   common.DefaultLdapReturnAttr,
+		BindUser:     common.DefaultLdapBindUser,
+		BindPassword: common.DefaultLdapBindPassword,
+		Insecure:     common.DefaultLdapInsecure,
+		useSsl:       common.DefaultLdapSSL,
+	}
+}
+
+// ldapAccessImpl implements the LdapAccess interface with real LDAP operations
+type ldapAccessImpl struct{}
+
+func (ldapAccessImpl) DialURL(url string, options ...ldap.DialOpt) (*ldap.Conn, error) {
+	return ldap.DialURL(url, options...)
+}
+
+func (ldapAccessImpl) Bind(conn *ldap.Conn, username, password string) error {
+	return conn.Bind(username, password)
+}
+
+func (ldapAccessImpl) Search(conn *ldap.Conn, searchRequest *ldap.SearchRequest) (*ldap.SearchResult, error) {
+	return conn.Search(searchRequest)
+}
+
+func (ldapAccessImpl) Close(conn *ldap.Conn) {
+	_ = conn.Close()
+}
+
+func GetLdapAccess() LdapAccess {
+	return ldapAccessImpl{}
+}
+
+// LDAPResolverConfig holds the configuration for the LDAP resolver
+type LdapConfig struct {
+	Host         string
+	Port         int
+	BaseDN       string
+	Filter       string
+	GroupAttr    string
+	ReturnAttr   []string
+	BindUser     string
+	BindPassword string
+	Insecure     bool
+	useSsl       bool
+}
+
+func GetUserGroupCacheLdap(reader ConfigReader, access LdapAccess) *UserGroupCache {
+	config, err := reader.ReadLdapConfig()
+	if err != nil {
 		// Log a FATAL level message - this is very prominent and will typically cause the application to exit
 		log.Log(log.Security).Fatal("LDAP configuration not found or invalid. No secrets were loaded from the secrets directory.",
 			zap.String("secretsPath", common.LdapMountPath),
@@ -255,18 +259,23 @@ func GetUserGroupCacheLdap() *UserGroupCache {
 		panic("LDAP configuration not found or invalid")
 	}
 
+	ldapLookup := &LdapLookup{
+		config: *config,
+		access: access,
+	}
+
 	return &UserGroupCache{
 		ugs:           map[string]*UserGroup{},
 		interval:      cleanerInterval * time.Second,
-		lookup:        LdapLookupUser,
-		lookupGroupID: LdapLookupGroupID,
-		groupIds:      LDAPLookupGroupIds,
+		lookup:        ldapLookup.LdapLookupUser,
+		lookupGroupID: ldapLookup.LdapLookupGroupID,
+		groupIds:      ldapLookup.LDAPLookupGroupIds,
 		stop:          make(chan struct{}),
 	}
 }
 
 // Default linux behaviour: a user is member of the primary group with the same name
-func LdapLookupUser(userName string) (*user.User, error) {
+func (LdapLookup) LdapLookupUser(userName string) (*user.User, error) {
 	log.Log(log.Security).Debug("Performing LDAP user lookup",
 		zap.String("username", userName),
 		zap.String("defaultUID", common.DefaultLdapUserUID))
@@ -277,7 +286,7 @@ func LdapLookupUser(userName string) (*user.User, error) {
 	}, nil
 }
 
-func LdapLookupGroupID(gid string) (*user.Group, error) {
+func (LdapLookup) LdapLookupGroupID(gid string) (*user.Group, error) {
 	log.Log(log.Security).Debug("Looking up LDAP group ID",
 		zap.String("groupID", gid))
 	group := user.Group{Gid: gid}
@@ -285,9 +294,8 @@ func LdapLookupGroupID(gid string) (*user.Group, error) {
 	return &group, nil
 }
 
-func LDAPLookupGroupIds(osUser *user.User) ([]string, error) {
-	ldapAccess := newLdapAccessImpl(&ldapConf)
-	sr, err := LdapSearch(ldapAccess, osUser.Username)
+func (lu LdapLookup) LDAPLookupGroupIds(osUser *user.User) ([]string, error) {
+	sr, err := ldapSearch(lu.access, lu.config, osUser.Username)
 	if err != nil {
 		log.Log(log.Security).Error("Failed to connect to LDAP for group lookup",
 			zap.String("user", osUser.Username),
@@ -310,20 +318,20 @@ func LDAPLookupGroupIds(osUser *user.User) ([]string, error) {
 	return groups, nil
 }
 
-// LdapSearch performs an LDAP search for the specified username
+// ldapSearch performs an LDAP search for the specified username
 // This replaces the old LDAPConn_Bind function with a more testable approach
-func LdapSearch(ldapAccess LdapAccess, userName string) (*ldap.SearchResult, error) {
-	var LDAP_URI string
-	if ldapConf.SSL {
-		LDAP_URI = "ldaps"
+func ldapSearch(ldapAccess LdapAccess, ldapConf LdapConfig, userName string) (*ldap.SearchResult, error) {
+	var ldapUri string
+	if ldapConf.useSsl {
+		ldapUri = "ldaps"
 	} else {
-		LDAP_URI = "ldap"
+		ldapUri = "ldap"
 	}
 
-	ldapaddr := fmt.Sprintf("%s://%s:%d", LDAP_URI, ldapConf.Host, ldapConf.Port)
+	ldapaddr := fmt.Sprintf("%s://%s:%d", ldapUri, ldapConf.Host, ldapConf.Port)
 	log.Log(log.Security).Debug("Attempting LDAP connection",
 		zap.String("address", ldapaddr),
-		zap.Bool("ssl", ldapConf.SSL),
+		zap.Bool("ssl", ldapConf.useSsl),
 		zap.Bool("insecureSkipVerify", ldapConf.Insecure))
 
 	l, err := ldapAccess.DialURL(ldapaddr,

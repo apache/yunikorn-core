@@ -29,106 +29,11 @@ import (
 	"testing"
 	"time"
 
-	"gotest.tools/v3/assert"
-
 	"github.com/go-ldap/ldap/v3"
+	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
 )
-
-// GetUserGroupCacheLdapMock returns a UserGroupCache with mocked LDAP functions for testing
-func GetUserGroupCacheLdapMock() *UserGroupCache {
-	return &UserGroupCache{
-		ugs:           map[string]*UserGroup{},
-		interval:      time.Second,
-		lookup:        mockLdapLookupUser,
-		lookupGroupID: mockLdapLookupGroupID,
-		groupIds:      mockLDAPLookupGroupIds,
-		stop:          make(chan struct{}),
-	}
-}
-
-// mockLdapLookupUser is a mock implementation of LdapLookupUser for testing
-func mockLdapLookupUser(userName string) (*user.User, error) {
-	// Similar to the test resolver, but with LDAP-specific behavior
-	if userName == Testuser1 || userName == Testuser {
-		return &user.User{
-			Uid:      "1000",
-			Gid:      "1000",
-			Username: userName,
-		}, nil
-	}
-	if userName == Testuser2 {
-		return &user.User{
-			Uid:      "100",
-			Gid:      "100",
-			Username: "testuser2",
-		}, nil
-	}
-	if userName == Testuser3 {
-		return &user.User{
-			Uid:      "1001",
-			Gid:      "1001",
-			Username: "testuser3",
-		}, nil
-	}
-	if userName == Testuser4 {
-		return &user.User{
-			Uid:      "901",
-			Gid:      "901",
-			Username: "testuser4",
-		}, nil
-	}
-	if userName == Testuser5 {
-		return &user.User{
-			Uid:      "1001",
-			Gid:      "1001",
-			Username: "testuser5",
-		}, nil
-	}
-	if userName == "invalid-gid-user" {
-		return &user.User{
-			Uid:      "1001",
-			Gid:      "1_001",
-			Username: "invalid-gid-user",
-		}, nil
-	}
-	// All other users fail
-	return nil, fmt.Errorf("lookup failed for user: %s", userName)
-}
-
-// mockLdapLookupGroupID is a mock implementation of LdapLookupGroupID for testing
-func mockLdapLookupGroupID(gid string) (*user.Group, error) {
-	// For testing, we'll use a simple pattern
-	if gid == "100" {
-		return nil, fmt.Errorf("lookup failed for group: %s", gid)
-	}
-	// Special case for invalid-gid-user
-	if gid == "1_001" {
-		return nil, fmt.Errorf("lookup failed for group: %s", gid)
-	}
-	group := user.Group{Gid: gid}
-	group.Name = "group" + gid
-	return &group, nil
-}
-
-// mockLDAPLookupGroupIds is a mock implementation of LDAPLookupGroupIds for testing
-func mockLDAPLookupGroupIds(osUser *user.User) ([]string, error) {
-	if osUser.Username == Testuser1 || osUser.Username == Testuser {
-		return []string{"1001"}, nil
-	}
-	if osUser.Username == Testuser2 {
-		return []string{"1001", "1002"}, nil
-	}
-	// Group list might return primary group ID also
-	if osUser.Username == Testuser3 {
-		return []string{"1002", "1001", "1003", "1004"}, nil
-	}
-	if osUser.Username == Testuser4 {
-		return []string{"901", "902"}, nil
-	}
-	return nil, fmt.Errorf("lookup failed for user: %s", osUser.Username)
-}
 
 // Mock LDAP search result for testing
 func mockLdapSearchResult(username string) (*ldap.SearchResult, error) {
@@ -201,6 +106,12 @@ type LdapAccessMock struct {
 	Error        error
 }
 
+type ConfigReaderMock struct{}
+
+func (ConfigReaderMock) ReadLdapConfig() (*LdapConfig, error) {
+	return &LdapConfig{}, nil
+}
+
 func (m *LdapAccessMock) DialURL(url string, options ...ldap.DialOpt) (*ldap.Conn, error) {
 	if m.DialURLFunc != nil {
 		return m.DialURLFunc(url, options...)
@@ -236,7 +147,7 @@ func newMockLdapAccess(searchResult *ldap.SearchResult, err error) *LdapAccessMo
 	}
 }
 
-// TestLdapSearch tests the new LdapSearch function with a mock LdapAccess
+// TestLdapSearch tests the new ldapSearch function with a mock LdapAccess
 func TestLdapSearch(t *testing.T) {
 	// Create a mock search result
 	mockResult := &ldap.SearchResult{
@@ -255,8 +166,8 @@ func TestLdapSearch(t *testing.T) {
 	// Create a mock LDAP access with the mock result
 	mockAccess := newMockLdapAccess(mockResult, nil)
 
-	// Call LdapSearch with the mock access
-	result, err := LdapSearch(mockAccess, "testuser")
+	// Call ldapSearch with the mock access
+	result, err := ldapSearch(mockAccess, LdapConfig{}, "testuser")
 
 	// Verify results
 	assert.NilError(t, err)
@@ -269,7 +180,7 @@ func TestLdapSearch(t *testing.T) {
 	assert.Equal(t, "CN=group2,OU=groups,DC=example,DC=com", result.Entries[0].Attributes[0].Values[1])
 }
 
-// TestLdapSearchError tests the error handling in LdapSearch
+// TestLdapSearchError tests the error handling in ldapSearch
 func TestLdapSearchError(t *testing.T) {
 	// Test cases for different error scenarios
 	testCases := []struct {
@@ -313,8 +224,8 @@ func TestLdapSearchError(t *testing.T) {
 				},
 			}
 
-			// Call LdapSearch with the mock access
-			result, err := LdapSearch(mockAccess, "testuser")
+			// Call ldapSearch with the mock access
+			result, err := ldapSearch(mockAccess, LdapConfig{}, "testuser")
 
 			// Verify error
 			assert.Assert(t, err != nil)
@@ -367,13 +278,16 @@ func TestLdapLookups(t *testing.T) {
 		},
 	}
 
+	lu := &LdapLookup{}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.testType == "user" {
-				u, err := LdapLookupUser(tt.id)
+			switch tt.testType {
+			case "user":
+				u, err := lu.LdapLookupUser(tt.id)
 				tt.validate(t, u, err)
-			} else if tt.testType == "group" {
-				g, err := LdapLookupGroupID(tt.id)
+			case "group":
+				g, err := lu.LdapLookupGroupID(tt.id)
 				tt.validate(t, g, err)
 			}
 		})
@@ -381,9 +295,6 @@ func TestLdapLookups(t *testing.T) {
 }
 
 func TestLDAPLookupGroupIds(t *testing.T) {
-	// Save the original newLdapAccessImpl function and ensure it's restored
-	defer resetLdapAccessFactory()
-
 	// Create a mock search result
 	mockResult := &ldap.SearchResult{
 		Entries: []*ldap.Entry{
@@ -398,53 +309,27 @@ func TestLDAPLookupGroupIds(t *testing.T) {
 		},
 	}
 
-	// Mock the newLdapAccessImpl function to return our mock
-	mockFactory := func(config *LdapResolverConfig) LdapAccess {
-		return newMockLdapAccess(mockResult, nil)
+	u := &user.User{Username: "testuser"}
+	lu := &LdapLookup{
+		access: newMockLdapAccess(mockResult, nil),
+		config: LdapConfig{},
 	}
 
-	// Replace the factory function
-	newLdapAccessImpl = mockFactory
-
-	u := &user.User{Username: "testuser"}
-	groups, err := LDAPLookupGroupIds(u)
+	groups, err := lu.LDAPLookupGroupIds(u)
 	assert.NilError(t, err)
 	assert.Assert(t, strings.Contains(strings.Join(groups, ","), "group1"))
 	assert.Assert(t, strings.Contains(strings.Join(groups, ","), "group2"))
 }
 
 func TestLDAPLookupGroupIdsError(t *testing.T) {
-	// Ensure we restore the original factory at the end of the test
-	defer resetLdapAccessFactory()
-
-	// Mock the newLdapAccessImpl function to return our mock with an error
-	mockFactory := func(config *LdapResolverConfig) LdapAccess {
-		return newMockLdapAccess(nil, errors.New("ldap error"))
-	}
-
-	// Replace the factory function
-	newLdapAccessImpl = mockFactory
-
 	u := &user.User{Username: "testuser"}
-	groups, err := LDAPLookupGroupIds(u)
+	lu := &LdapLookup{
+		access: newMockLdapAccess(nil, errors.New("ldap error")),
+		config: LdapConfig{},
+	}
+	groups, err := lu.LDAPLookupGroupIds(u)
 	assert.Error(t, err, "ldap error")
 	assert.Assert(t, groups == nil)
-}
-
-// Helper to reset ldapConf to defaults before each test
-func resetLdapConfDefaults() {
-	ldapConf = LdapResolverConfig{
-		Host:         common.DefaultLdapHost,
-		Port:         common.DefaultLdapPort,
-		BaseDN:       common.DefaultLdapBaseDN,
-		Filter:       common.DefaultLdapFilter,
-		GroupAttr:    common.DefaultLdapGroupAttr,
-		ReturnAttr:   common.DefaultLdapReturnAttr,
-		BindUser:     common.DefaultLdapBindUser,
-		BindPassword: common.DefaultLdapBindPassword,
-		Insecure:     common.DefaultLdapInsecure,
-		SSL:          common.DefaultLdapSSL,
-	}
 }
 
 //nolint:funlen // Table-driven test for coverage, helpers used to reduce length
@@ -452,12 +337,15 @@ func TestReadSecrets(t *testing.T) {
 	tests := getReadSecretsTestCases()
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resetLdapConfDefaults()
 			_, cleanup := tt.setupFunc(t)
 			defer cleanup()
-			result := readSecrets()
-			assert.Equal(t, tt.expectedResult, result)
-			tt.validateFunc(t)
+			reader := &configReaderImpl{}
+			ldapConf, err := reader.ReadLdapConfig()
+			assert.Equal(t, tt.expectedResult, err == nil)
+			if tt.nilConf && ldapConf == nil {
+				return
+			}
+			tt.validateFunc(t, ldapConf)
 		})
 	}
 }
@@ -467,13 +355,15 @@ func getReadSecretsTestCases() []struct {
 	name           string
 	setupFunc      func(t *testing.T) (string, func())
 	expectedResult bool
-	validateFunc   func(t *testing.T)
+	nilConf        bool
+	validateFunc   func(t *testing.T, conf *LdapConfig)
 } {
 	return []struct {
 		name           string
 		setupFunc      func(t *testing.T) (string, func())
 		expectedResult bool
-		validateFunc   func(t *testing.T)
+		nilConf        bool
+		validateFunc   func(t *testing.T, conf *LdapConfig)
 	}{
 		{
 			name: "Skips K8s metadata and directories",
@@ -492,7 +382,7 @@ func getReadSecretsTestCases() []struct {
 				return tmpDir, func() { common.LdapMountPath = origLdapMountPath }
 			},
 			expectedResult: false,
-			validateFunc: func(t *testing.T) {
+			validateFunc: func(t *testing.T, ldapConf *LdapConfig) {
 				assert.Equal(t, common.DefaultLdapHost, ldapConf.Host)
 				assert.Equal(t, common.DefaultLdapPort, ldapConf.Port)
 				assert.Equal(t, common.DefaultLdapBaseDN, ldapConf.BaseDN)
@@ -502,7 +392,7 @@ func getReadSecretsTestCases() []struct {
 				assert.Equal(t, common.DefaultLdapBindUser, ldapConf.BindUser)
 				assert.Equal(t, common.DefaultLdapBindPassword, ldapConf.BindPassword)
 				assert.Equal(t, common.DefaultLdapInsecure, ldapConf.Insecure)
-				assert.Equal(t, common.DefaultLdapSSL, ldapConf.SSL)
+				assert.Equal(t, common.DefaultLdapSSL, ldapConf.useSsl)
 			},
 		},
 		{
@@ -513,18 +403,8 @@ func getReadSecretsTestCases() []struct {
 				return "/nonexistent", func() { common.LdapMountPath = origLdapMountPath }
 			},
 			expectedResult: false,
-			validateFunc: func(t *testing.T) {
-				assert.Equal(t, common.DefaultLdapHost, ldapConf.Host)
-				assert.Equal(t, common.DefaultLdapPort, ldapConf.Port)
-				assert.Equal(t, common.DefaultLdapBaseDN, ldapConf.BaseDN)
-				assert.Equal(t, common.DefaultLdapFilter, ldapConf.Filter)
-				assert.Equal(t, common.DefaultLdapGroupAttr, ldapConf.GroupAttr)
-				assert.Equal(t, strings.Join(common.DefaultLdapReturnAttr, ","), strings.Join(ldapConf.ReturnAttr, ","))
-				assert.Equal(t, common.DefaultLdapBindUser, ldapConf.BindUser)
-				assert.Equal(t, common.DefaultLdapBindPassword, ldapConf.BindPassword)
-				assert.Equal(t, common.DefaultLdapInsecure, ldapConf.Insecure)
-				assert.Equal(t, common.DefaultLdapSSL, ldapConf.SSL)
-			},
+			nilConf:        true,
+			validateFunc:   func(t *testing.T, ldapConf *LdapConfig) {},
 		},
 		{
 			name: "Handles unknown key",
@@ -537,7 +417,7 @@ func getReadSecretsTestCases() []struct {
 				return tmpDir, func() { common.LdapMountPath = origLdapMountPath }
 			},
 			expectedResult: false,
-			validateFunc: func(t *testing.T) {
+			validateFunc: func(t *testing.T, ldapConf *LdapConfig) {
 				assert.Equal(t, common.DefaultLdapHost, ldapConf.Host)
 				assert.Equal(t, common.DefaultLdapPort, ldapConf.Port)
 				assert.Equal(t, common.DefaultLdapBaseDN, ldapConf.BaseDN)
@@ -547,7 +427,7 @@ func getReadSecretsTestCases() []struct {
 				assert.Equal(t, common.DefaultLdapBindUser, ldapConf.BindUser)
 				assert.Equal(t, common.DefaultLdapBindPassword, ldapConf.BindPassword)
 				assert.Equal(t, common.DefaultLdapInsecure, ldapConf.Insecure)
-				assert.Equal(t, common.DefaultLdapSSL, ldapConf.SSL)
+				assert.Equal(t, common.DefaultLdapSSL, ldapConf.useSsl)
 			},
 		},
 		{
@@ -565,7 +445,7 @@ func getReadSecretsTestCases() []struct {
 				return tmpDir, func() { common.LdapMountPath = origLdapMountPath }
 			},
 			expectedResult: false,
-			validateFunc: func(t *testing.T) {
+			validateFunc: func(t *testing.T, ldapConf *LdapConfig) {
 				// Assert that ldapConf.Port is set to DefaultLdapPort when invalid int value is provided
 				assert.Equal(t, common.DefaultLdapPort, ldapConf.Port)
 
@@ -578,7 +458,7 @@ func getReadSecretsTestCases() []struct {
 				assert.Equal(t, common.DefaultLdapBindUser, ldapConf.BindUser)
 				assert.Equal(t, common.DefaultLdapBindPassword, ldapConf.BindPassword)
 				assert.Equal(t, common.DefaultLdapInsecure, ldapConf.Insecure)
-				assert.Equal(t, common.DefaultLdapSSL, ldapConf.SSL)
+				assert.Equal(t, common.DefaultLdapSSL, ldapConf.useSsl)
 			},
 		},
 		{
@@ -610,7 +490,7 @@ func getReadSecretsTestCases() []struct {
 				return tmpDir, func() { common.LdapMountPath = origLdapMountPath }
 			},
 			expectedResult: true,
-			validateFunc: func(t *testing.T) {
+			validateFunc: func(t *testing.T, ldapConf *LdapConfig) {
 				assert.Equal(t, "myhost", ldapConf.Host)
 
 				// Use strconv to verify the port value to ensure the import is used
@@ -635,7 +515,7 @@ func getReadSecretsTestCases() []struct {
 				sslStr := "true"
 				expectedSSL, err := strconv.ParseBool(sslStr)
 				assert.NilError(t, err, "failed to convert ssl string to bool")
-				assert.Equal(t, expectedSSL, ldapConf.SSL)
+				assert.Equal(t, expectedSSL, ldapConf.useSsl)
 			},
 		},
 		{
@@ -652,7 +532,7 @@ func getReadSecretsTestCases() []struct {
 				return tmpDir, func() { common.LdapMountPath = origLdapMountPath }
 			},
 			expectedResult: false,
-			validateFunc: func(t *testing.T) {
+			validateFunc: func(_ *testing.T, _ *LdapConfig) {
 				// No specific validation needed - we're testing the return value
 			},
 		},
@@ -683,7 +563,7 @@ func getReadSecretsTestCases() []struct {
 				return tmpDir, func() { common.LdapMountPath = origLdapMountPath }
 			},
 			expectedResult: true,
-			validateFunc: func(t *testing.T) {
+			validateFunc: func(_ *testing.T, _ *LdapConfig) {
 				// No specific validation needed - we're testing the return value
 			},
 		},
@@ -717,17 +597,8 @@ func TestUserGroupCacheLdap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save original function and restore after test
-			origReadSecrets := readSecrets
-
-			// Mock readSecrets to return true (successful configuration)
-			readSecrets = func() bool {
-				return true
-			}
-			defer func() { readSecrets = origReadSecrets }()
-
 			// Get the LDAP user group cache
-			cache := GetUserGroupCacheLdap()
+			cache := GetUserGroupCacheLdap(&ConfigReaderMock{}, newMockLdapAccess(nil, nil))
 
 			// Run the validation function
 			tt.validateFunc(t, cache)
@@ -800,10 +671,10 @@ func TestLdapAccessImpl(t *testing.T) {
 	mockAccess.Close(&ldap.Conn{})
 }
 
-// TestLdapAccessImplMethods tests the LdapAccessImpl methods
+// TestLdapAccessImplMethods tests the ldapAccessImpl methods
 func TestLdapAccessImplMethods(t *testing.T) {
 	// Create a real implementation
-	impl := &LdapAccessImpl{}
+	impl := &ldapAccessImpl{}
 
 	// We can't actually connect to an LDAP server in unit tests,
 	// but we can verify the methods don't panic when called with nil

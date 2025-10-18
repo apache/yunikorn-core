@@ -27,66 +27,10 @@ import (
 
 	"gotest.tools/v3/assert"
 
-	"github.com/go-ldap/ldap/v3"
-
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
-
-// Helper function to set up the mock LDAP implementation for testing
-func setupMockLdap() {
-	// Save the original newLdapAccessImpl function
-	originalLdapAccessImpl := newLdapAccessImpl
-
-	// Replace with mock implementation
-	newLdapAccessImpl = func(config *LdapResolverConfig) LdapAccess {
-		// Use the mockLdapSearchResult function from usergroup_ldap_resolver_mock.go
-		return &LdapAccessMock{
-			SearchFunc: func(conn *ldap.Conn, searchRequest *ldap.SearchRequest) (*ldap.SearchResult, error) {
-				// Extract username from the search filter
-				username := ""
-				if searchRequest != nil && searchRequest.Filter != "" {
-					// Simple extraction - this assumes the filter format is consistent
-					parts := strings.Split(searchRequest.Filter, "=")
-					if len(parts) > 1 {
-						username = strings.TrimRight(parts[len(parts)-1], ")")
-					}
-				}
-				return mockLdapSearchResult(username)
-			},
-		}
-	}
-
-	// Mock readSecrets to return true (successful configuration)
-	originalReadSecrets := readSecrets
-	readSecrets = func() bool {
-		return true
-	}
-
-	// Store the original functions to be restored in teardown
-	originalFunctions["newLdapAccessImpl"] = originalLdapAccessImpl
-	originalFunctions["readSecrets"] = originalReadSecrets
-}
-
-// Helper function to tear down the mock LDAP implementation after testing
-func teardownMockLdap() {
-	// Restore the original functions
-	if originalImpl, ok := originalFunctions["newLdapAccessImpl"]; ok {
-		if factory, ok := originalImpl.(ldapAccessFactory); ok {
-			newLdapAccessImpl = factory
-		}
-	}
-
-	if originalRead, ok := originalFunctions["readSecrets"]; ok {
-		if readFunc, ok := originalRead.(func() bool); ok {
-			readSecrets = readFunc
-		}
-	}
-}
-
-// Map to store original functions for restoration
-var originalFunctions = make(map[string]interface{})
 
 func (c *UserGroupCache) getUGsize() int {
 	c.lock.RLock()
@@ -131,43 +75,29 @@ func TestGetUserGroupCache(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
-		setup    func()
-		teardown func()
 	}{
 		{
 			name:     "TestResolver",
 			resolver: testResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "OsResolver",
 			resolver: osResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "UnknownResolver",
 			resolver: unknownResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "LdapResolver",
 			resolver: ldapResolver,
-			setup:    setupMockLdap,
-			teardown: teardownMockLdap,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup the test environment
-			tc.setup()
-			defer tc.teardown()
-
 			// Get the cache with the resolver set
-			testCache := GetUserGroupCache(tc.resolver)
+			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			assert.Assert(t, testCache != nil, "Cache create failed")
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
 
@@ -189,42 +119,28 @@ func TestGetUserGroup(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
-		setup    func()
-		teardown func()
 	}{
 		{
 			name:     "TestResolver",
 			resolver: testResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "OsResolver",
 			resolver: osResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "UnknownResolver",
 			resolver: unknownResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "LdapResolver",
 			resolver: ldapResolver,
-			setup:    setupMockLdap,
-			teardown: teardownMockLdap,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup the test environment
-			tc.setup()
-			defer tc.teardown()
-
-			testCache := GetUserGroupCache(tc.resolver)
+			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			testCache.resetCache()
 			// test cache should be empty now
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
@@ -265,42 +181,28 @@ func TestBrokenUserGroup(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
-		setup    func()
-		teardown func()
 	}{
 		{
 			name:     "TestResolver",
 			resolver: testResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "OsResolver",
 			resolver: osResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "UnknownResolver",
 			resolver: unknownResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "LdapResolver",
 			resolver: ldapResolver,
-			setup:    setupMockLdap,
-			teardown: teardownMockLdap,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup the test environment
-			tc.setup()
-			defer tc.teardown()
-
-			testCache := GetUserGroupCache(tc.resolver)
+			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			testCache.resetCache()
 			// test cache should be empty now
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
@@ -349,42 +251,28 @@ func TestGetUserGroupFail(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
-		setup    func()
-		teardown func()
 	}{
 		{
 			name:     "TestResolver",
 			resolver: testResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "OsResolver",
 			resolver: osResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "UnknownResolver",
 			resolver: unknownResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "LdapResolver",
 			resolver: ldapResolver,
-			setup:    setupMockLdap,
-			teardown: teardownMockLdap,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup the test environment
-			tc.setup()
-			defer tc.teardown()
-
-			testCache := GetUserGroupCache(tc.resolver)
+			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			testCache.resetCache()
 			// test cache should be empty now
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
@@ -429,42 +317,28 @@ func TestCacheCleanUp(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
-		setup    func()
-		teardown func()
 	}{
 		{
 			name:     "TestResolver",
 			resolver: testResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "OsResolver",
 			resolver: osResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "UnknownResolver",
 			resolver: unknownResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "LdapResolver",
 			resolver: ldapResolver,
-			setup:    setupMockLdap,
-			teardown: teardownMockLdap,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup the test environment
-			tc.setup()
-			defer tc.teardown()
-
-			testCache := GetUserGroupCache(tc.resolver)
+			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			testCache.resetCache()
 			// test cache should be empty now
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
@@ -512,42 +386,28 @@ func TestIntervalCacheCleanUp(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
-		setup    func()
-		teardown func()
 	}{
 		{
 			name:     "TestResolver",
 			resolver: testResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "OsResolver",
 			resolver: osResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "UnknownResolver",
 			resolver: unknownResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "LdapResolver",
 			resolver: ldapResolver,
-			setup:    setupMockLdap,
-			teardown: teardownMockLdap,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup the test environment
-			tc.setup()
-			defer tc.teardown()
-
-			testCache := GetUserGroupCache(tc.resolver)
+			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			testCache.resetCache()
 			// test cache should be empty now
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
@@ -588,42 +448,28 @@ func TestConvertUGI(t *testing.T) {
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
-		setup    func()
-		teardown func()
 	}{
 		{
 			name:     "TestResolver",
 			resolver: testResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "OsResolver",
 			resolver: osResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "UnknownResolver",
 			resolver: unknownResolver,
-			setup:    func() {},
-			teardown: func() {},
 		},
 		{
 			name:     "LdapResolver",
 			resolver: ldapResolver,
-			setup:    setupMockLdap,
-			teardown: teardownMockLdap,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup the test environment
-			tc.setup()
-			defer tc.teardown()
-
-			testCache := GetUserGroupCache(tc.resolver)
+			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			testCache.resetCache()
 			// test cache should be empty now
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())

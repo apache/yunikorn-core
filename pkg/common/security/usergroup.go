@@ -79,7 +79,7 @@ const (
 // * OS resolver: uses the OS libraries to resolve user and group memberships
 // * Test resolver: fake resolution for testing
 // * Ldap resolver: uses the LDAP protocol to resolve user and group memberships
-func GetUserGroupCache(ugr configs.UserGroupResolver) *UserGroupCache {
+func GetUserGroupCache(ugr configs.UserGroupResolver, ldapConfigReader ConfigReader, ldapAccess LdapAccess) *UserGroupCache {
 	resolver := ugr.Type
 	once.Do(func() {
 		switch resolver {
@@ -91,7 +91,7 @@ func GetUserGroupCache(ugr configs.UserGroupResolver) *UserGroupCache {
 			instance = GetUserGroupCacheOS()
 		case Ldap:
 			log.Log(log.Security).Info("creating LDAP user group resolver")
-			instance = GetUserGroupCacheLdap()
+			instance = GetUserGroupCacheLdap(ldapConfigReader, ldapAccess)
 		default:
 			log.Log(log.Security).Info("creating UserGroupCache without resolver")
 			instance = GetUserGroupNoResolve()

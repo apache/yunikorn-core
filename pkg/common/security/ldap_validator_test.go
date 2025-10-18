@@ -116,10 +116,11 @@ func TestValidateReturnAttrValue(t *testing.T) {
 				assert.Assert(t, err != nil)
 			} else {
 				assert.NilError(t, err)
-				if tt.value == "memberOf" {
+				switch tt.value {
+				case "memberOf":
 					assert.Equal(t, 1, len(attrs))
 					assert.Equal(t, "memberOf", attrs[0])
-				} else if tt.value == "memberOf,cn,mail" {
+				case "memberOf,cn,mail":
 					assert.Equal(t, 3, len(attrs))
 					assert.Equal(t, "memberOf", attrs[0])
 					assert.Equal(t, "cn", attrs[1])
@@ -160,12 +161,12 @@ func TestValidateBoolValue(t *testing.T) {
 func TestValidateConfig(t *testing.T) {
 	tests := []struct {
 		name     string
-		config   *LdapResolverConfig
+		config   *LdapConfig
 		expected bool
 	}{
 		{
 			name: "Valid configuration",
-			config: &LdapResolverConfig{
+			config: &LdapConfig{
 				Host:         "ldap.example.com",
 				Port:         389,
 				BaseDN:       "dc=example,dc=com",
@@ -175,13 +176,13 @@ func TestValidateConfig(t *testing.T) {
 				BindUser:     "cn=admin,dc=example,dc=com",
 				BindPassword: "password",
 				Insecure:     false,
-				SSL:          false,
+				useSsl:       false,
 			},
 			expected: true,
 		},
 		{
 			name: "Invalid configuration - empty fields",
-			config: &LdapResolverConfig{
+			config: &LdapConfig{
 				Host:         "",
 				Port:         0,
 				BaseDN:       "",
@@ -191,13 +192,13 @@ func TestValidateConfig(t *testing.T) {
 				BindUser:     "",
 				BindPassword: "",
 				Insecure:     true,
-				SSL:          true,
+				useSsl:       true,
 			},
 			expected: false,
 		},
 		{
 			name: "Invalid configuration - missing placeholder in filter",
-			config: &LdapResolverConfig{
+			config: &LdapConfig{
 				Host:         "ldap.example.com",
 				Port:         389,
 				BaseDN:       "dc=example,dc=com",
@@ -207,7 +208,7 @@ func TestValidateConfig(t *testing.T) {
 				BindUser:     "cn=admin,dc=example,dc=com",
 				BindPassword: "password",
 				Insecure:     false,
-				SSL:          false,
+				useSsl:       false,
 			},
 			expected: false,
 		},
@@ -284,9 +285,10 @@ func TestValidateBaseDN(t *testing.T) {
 
 			for _, issue := range validator.issues {
 				if issue.Field == "BaseDN" {
-					if issue.Level == ValidationError {
+					switch issue.Level {
+					case ValidationError:
 						hasError = true
-					} else if issue.Level == ValidationWarning {
+					case ValidationWarning:
 						hasWarning = true
 					}
 				}
@@ -354,9 +356,10 @@ func TestValidateGroupAttr(t *testing.T) {
 
 			for _, issue := range validator.issues {
 				if issue.Field == "GroupAttr" {
-					if issue.Level == ValidationError {
+					switch issue.Level {
+					case ValidationError:
 						hasError = true
-					} else if issue.Level == ValidationWarning {
+					case ValidationWarning:
 						hasWarning = true
 					}
 				}
@@ -424,9 +427,10 @@ func TestValidateBindUser(t *testing.T) {
 
 			for _, issue := range validator.issues {
 				if issue.Field == "BindUser" {
-					if issue.Level == ValidationError {
+					switch issue.Level {
+					case ValidationError:
 						hasError = true
-					} else if issue.Level == ValidationWarning {
+					case ValidationWarning:
 						hasWarning = true
 					}
 				}
@@ -482,9 +486,10 @@ func TestValidateBindPassword(t *testing.T) {
 
 			for _, issue := range validator.issues {
 				if issue.Field == "BindPassword" {
-					if issue.Level == ValidationError {
+					switch issue.Level {
+					case ValidationError:
 						hasError = true
-					} else if issue.Level == ValidationWarning {
+					case ValidationWarning:
 						hasWarning = true
 					}
 				}
@@ -546,9 +551,10 @@ func TestValidateReturnAttr(t *testing.T) {
 
 			for _, issue := range validator.issues {
 				if issue.Field == "ReturnAttr" {
-					if issue.Level == ValidationError {
+					switch issue.Level {
+					case ValidationError:
 						hasError = true
-					} else if issue.Level == ValidationWarning {
+					case ValidationWarning:
 						hasWarning = true
 					}
 				}
@@ -616,9 +622,10 @@ func TestValidateHost(t *testing.T) {
 
 			for _, issue := range validator.issues {
 				if issue.Field == "Host" {
-					if issue.Level == ValidationError {
+					switch issue.Level {
+					case ValidationError:
 						hasError = true
-					} else if issue.Level == ValidationWarning {
+					case ValidationWarning:
 						hasWarning = true
 					}
 				}
@@ -680,9 +687,10 @@ func TestValidateFilter(t *testing.T) {
 
 			for _, issue := range validator.issues {
 				if issue.Field == "Filter" {
-					if issue.Level == ValidationError {
+					switch issue.Level {
+					case ValidationError:
 						hasError = true
-					} else if issue.Level == ValidationWarning {
+					case ValidationWarning:
 						hasWarning = true
 					}
 				}
@@ -775,13 +783,13 @@ func TestLdapValidatorAddIssue(t *testing.T) {
 func TestLdapValidatorValidateConsistency(t *testing.T) {
 	tests := []struct {
 		name          string
-		config        *LdapResolverConfig
+		config        *LdapConfig
 		expectWarning bool
 	}{
 		{
 			name: "No warnings",
-			config: &LdapResolverConfig{
-				SSL:      false,
+			config: &LdapConfig{
+				useSsl:   false,
 				Insecure: false,
 				Port:     389,
 			},
@@ -789,8 +797,8 @@ func TestLdapValidatorValidateConsistency(t *testing.T) {
 		},
 		{
 			name: "SSL with non-standard port",
-			config: &LdapResolverConfig{
-				SSL:      true,
+			config: &LdapConfig{
+				useSsl:   true,
 				Insecure: false,
 				Port:     389,
 			},
@@ -798,8 +806,8 @@ func TestLdapValidatorValidateConsistency(t *testing.T) {
 		},
 		{
 			name: "SSL with insecure",
-			config: &LdapResolverConfig{
-				SSL:      true,
+			config: &LdapConfig{
+				useSsl:   true,
 				Insecure: true,
 				Port:     636,
 			},
@@ -807,8 +815,8 @@ func TestLdapValidatorValidateConsistency(t *testing.T) {
 		},
 		{
 			name: "SSL with standard port",
-			config: &LdapResolverConfig{
-				SSL:      true,
+			config: &LdapConfig{
+				useSsl:   true,
 				Insecure: false,
 				Port:     636,
 			},
@@ -889,9 +897,10 @@ func TestValidatePort(t *testing.T) {
 
 			for _, issue := range validator.issues {
 				if issue.Field == "Port" {
-					if issue.Level == ValidationError {
+					switch issue.Level {
+					case ValidationError:
 						hasError = true
-					} else if issue.Level == ValidationWarning {
+					case ValidationWarning:
 						hasWarning = true
 					}
 				}

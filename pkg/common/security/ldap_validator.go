@@ -61,7 +61,7 @@ func NewLdapValidator() *LdapValidator {
 }
 
 // ValidateConfig validates the entire LDAP configuration
-func (v *LdapValidator) ValidateConfig(config *LdapResolverConfig) bool {
+func (v *LdapValidator) ValidateConfig(config *LdapConfig) bool {
 	v.validateHost(config.Host)
 	v.validatePort(config.Port)
 	v.validateBaseDN(config.BaseDN)
@@ -215,14 +215,14 @@ func (v *LdapValidator) validateBindPassword(bindPassword string) {
 }
 
 // validateConsistency performs cross-field validation
-func (v *LdapValidator) validateConsistency(config *LdapResolverConfig) {
+func (v *LdapValidator) validateConsistency(config *LdapConfig) {
 	// Check SSL and port consistency
-	if config.SSL && config.Port != 636 {
+	if config.useSsl && config.Port != 636 {
 		v.addIssue("Port", fmt.Sprintf("SSL is enabled but port is not the default LDAPS port (636), using: %d", config.Port), ValidationWarning)
 	}
 
 	// Check SSL and Insecure consistency
-	if config.SSL && config.Insecure {
+	if config.useSsl && config.Insecure {
 		v.addIssue("SSL/Insecure", "Both SSL and Insecure are enabled, which may indicate a security misconfiguration", ValidationWarning)
 	}
 }
@@ -265,9 +265,10 @@ func (v *LdapValidator) logIssues() {
 func hasBalancedParentheses(s string) bool {
 	count := 0
 	for _, c := range s {
-		if c == '(' {
+		switch c {
+		case '(':
 			count++
-		} else if c == ')' {
+		case ')':
 			count--
 			if count < 0 {
 				return false

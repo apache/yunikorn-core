@@ -2181,3 +2181,53 @@ partitions:
 	_, err = CreateConfig(data)
 	assert.ErrorContains(t, err, "group * max resource map[memory:90000 vcore:100000] of queue leaf is greater than immediate or ancestor parent maximum resource map[memory:10000 vcore:10000000]")
 }
+
+// TestUserGroupResolverConfig: tests the user group resolver configuration
+func TestUserGroupResolverConfig(t *testing.T) {
+	data := `
+partitions:
+  -
+    name: default
+    usergroupresolver:
+      type: ldap
+    placementrules:
+      - name: tag
+        value: namespace
+        create: true
+    queues:
+      - name: root
+        submitacl: '*'
+        properties:
+          application.sort.policy: fifo
+          sample: value2
+`
+	// validate the config and check after the update
+	config, err := CreateConfig(data)
+	assert.NilError(t, err)
+
+	// check if the user group resolver is set correctly
+	assert.Equal(t, "ldap", config.Partitions[0].UserGroupResolver.Type)
+
+	// partition with no user group resolver
+	data = `
+partitions:
+  -
+    name: default
+    placementrules:
+      - name: tag
+        value: namespace
+        create: true
+    queues:
+      - name: root
+        submitacl: '*'
+        properties:
+          application.sort.policy: fifo
+          sample: value2
+`
+	// validate the config and check after the update
+	config, err = CreateConfig(data)
+	assert.NilError(t, err)
+
+	// check if the user group resolver is set to empty
+	assert.Equal(t, "", config.Partitions[0].UserGroupResolver.Type)
+}

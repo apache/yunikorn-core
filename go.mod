@@ -24,7 +24,7 @@ go 1.23.0
 toolchain go1.23.7
 
 require (
-	github.com/apache/yunikorn-scheduler-interface v0.0.0-20250304214837-4513ff3a692d
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20251021140208-d3b357b98dcd
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -33,7 +33,7 @@ require (
 	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.45.0
-	github.com/sasha-s/go-deadlock v0.3.5
+	github.com/sasha-s/go-deadlock v0.3.6
 	go.uber.org/zap v1.27.0
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/exp v0.0.0-20250228200357-dead58393ab7
@@ -48,7 +48,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
-	github.com/petermattis/goid v0.0.0-20250303134427-723919f7f203 // indirect
+	github.com/petermattis/goid v0.0.0-20250813065127-a731cc31b4fe // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
@@ -58,7 +58,6 @@ require (
 )
 
 replace (
-	github.com/petermattis/goid => github.com/petermattis/goid v0.0.0-20250303134427-723919f7f203
 	golang.org/x/crypto => golang.org/x/crypto v0.35.0
 	golang.org/x/net => golang.org/x/net v0.43.0
 	golang.org/x/sys => golang.org/x/sys v0.35.0

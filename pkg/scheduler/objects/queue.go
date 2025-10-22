@@ -54,22 +54,23 @@ type Queue struct {
 	Name      string // Queue name as in the config etc.
 
 	// Private fields need protection
-	sortType            policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
-	children            map[string]*Queue         // Only for direct children, parent queue only
-	childPriorities     map[string]int32          // cached priorities for child queues
-	applications        map[string]*Application   // only for leaf queue
-	appPriorities       map[string]int32          // cached priorities for application
-	reservedApps        map[string]int            // applications reserved within this queue, with reservation count
-	parent              *Queue                    // link back to the parent in the scheduler
-	pending             *resources.Resource       // pending resource for the apps in the queue
-	allocatedResource   *resources.Resource       // allocated resource for the apps in the queue
-	preemptingResource  *resources.Resource       // preempting resource for the apps in the queue
-	prioritySortEnabled bool                      // whether priority is used for request sorting
-	priorityPolicy      policies.PriorityPolicy   // priority policy
-	priorityOffset      int32                     // priority offset for this queue relative to others
-	preemptionPolicy    policies.PreemptionPolicy // preemption policy
-	preemptionDelay     time.Duration             // time before preemption is considered
-	currentPriority     int32                     // the current scheduling priority of this queue
+	sortType              policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
+	children              map[string]*Queue         // Only for direct children, parent queue only
+	childPriorities       map[string]int32          // cached priorities for child queues
+	applications          map[string]*Application   // only for leaf queue
+	appPriorities         map[string]int32          // cached priorities for application
+	reservedApps          map[string]int            // applications reserved within this queue, with reservation count
+	parent                *Queue                    // link back to the parent in the scheduler
+	pending               *resources.Resource       // pending resource for the apps in the queue
+	allocatedResource     *resources.Resource       // allocated resource for the apps in the queue
+	preemptingResource    *resources.Resource       // preempting resource for the apps in the queue
+	prioritySortEnabled   bool                      // whether priority is used for request sorting
+	priorityPolicy        policies.PriorityPolicy   // priority policy
+	priorityOffset        int32                     // priority offset for this queue relative to others
+	preemptionPolicy      policies.PreemptionPolicy // preemption policy
+	preemptionDelay       time.Duration             // time before preemption is considered
+	currentPriority       int32                     // the current scheduling priority of this queue
+	partitionQueueManager PartitionQueueManager     // interface injected to access PartitionContext functionalities (to break circular dependency)
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
@@ -92,6 +93,11 @@ type Queue struct {
 	locking.RWMutex
 }
 
+// PartitionQueueManager is an interface to access PartitionContext methods needed by Queue
+type PartitionQueueManager interface {
+	GetApplication(appID string) *Application
+}
+
 // newBlankQueue creates a new empty queue objects with all values initialised.
 func newBlankQueue() *Queue {
 	return &Queue{
@@ -111,6 +117,15 @@ func newBlankQueue() *Queue {
 		preemptionDelay:        configs.DefaultPreemptionDelay,
 		preemptionPolicy:       policies.DefaultPreemptionPolicy,
 	}
+}
+
+func NewConfiguredRootQueue(conf configs.QueueConfig, partition PartitionQueueManager, silence bool) (*Queue, error) {
+	queue, err := NewConfiguredQueue(conf, nil, silence)
+	if err != nil {
+		return nil, err
+	}
+	queue.partitionQueueManager = partition
+	return queue, nil
 }
 
 // NewConfiguredQueue creates a new queue from scratch based on the configuration
@@ -1633,7 +1648,16 @@ func (sq *Queue) FindQueueByAppID(appID string) *Queue {
 	if sq.parent != nil {
 		return sq.parent.FindQueueByAppID(appID)
 	}
-	return sq.findQueueByAppIDInternal(appID)
+	if sq.partitionQueueManager == nil {
+		// should not happen but just in case
+		return sq.findQueueByAppIDInternal(appID)
+	}
+
+	if app := sq.partitionQueueManager.GetApplication(appID); app != nil {
+		return app.queue
+	}
+
+	return nil
 }
 
 func (sq *Queue) findQueueByAppIDInternal(appID string) *Queue {

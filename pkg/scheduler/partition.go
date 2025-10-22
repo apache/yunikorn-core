@@ -116,7 +116,7 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// Add the rest of the queue structure recursively
 	queueConf := conf.Queues[0]
 	var err error
-	if pc.root, err = objects.NewConfiguredQueue(queueConf, nil, silence); err != nil {
+	if pc.root, err = objects.NewConfiguredRootQueue(queueConf, pc, silence); err != nil {
 		return err
 	}
 	// recursively add the queues to the root

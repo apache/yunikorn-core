@@ -401,10 +401,10 @@ func (sq *Queue) setPreemptionSettings(oldMaxResource *resources.Resource, conf 
 	set := false
 	switch {
 	// Set max res earlier but not now
-	case resources.EqualsOrEmpty(newMaxResource, nil) && !resources.EqualsOrEmpty(oldMaxResource, nil):
+	case resources.IsZero(newMaxResource) && !resources.IsZero(oldMaxResource):
 		reset = true
 		// Set max res now but not earlier
-	case !resources.EqualsOrEmpty(newMaxResource, nil) && resources.EqualsOrEmpty(oldMaxResource, nil) && conf.Preemption.Delay != 0:
+	case !resources.IsZero(newMaxResource) && resources.IsZero(oldMaxResource) && conf.Preemption.Delay != 0:
 		set = true
 		// Set max res earlier and now as well
 	default:

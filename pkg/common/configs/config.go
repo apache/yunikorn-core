@@ -78,6 +78,11 @@ type QueueConfig struct {
 	ChildTemplate   ChildTemplate     `yaml:",omitempty" json:",omitempty"`
 	Queues          []QueueConfig     `yaml:",omitempty" json:",omitempty"`
 	Limits          []Limit           `yaml:",omitempty" json:",omitempty"`
+	Preemption      Preemption        `yaml:",omitempty" json:",omitempty"`
+}
+
+type Preemption struct {
+	Delay uint64 `yaml:",omitempty" json:",omitempty"`
 }
 
 type ChildTemplate struct {

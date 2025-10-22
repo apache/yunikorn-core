@@ -2239,12 +2239,14 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	assert.Assert(t, result3 == nil, "result3 not expected")
 	assert.Assert(t, !alloc2.IsPreempted(), "alloc2 should not have been preempted")
 	assertAllocationLog(t, ask3)
+	assert.Equal(t, preemptionAttemptsRemaining, 10)
 
 	// pass the time and try again
 	ask3.createTime = ask3.createTime.Add(-30 * time.Second)
 	result3 = app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result3 != nil && result3.Request != nil && result3.ResultType == Reserved, "alloc3 should be a reservation")
 	assert.Assert(t, alloc2.IsPreempted(), "alloc2 should have been preempted")
+	assert.Equal(t, preemptionAttemptsRemaining, 9)
 }
 
 func TestTryAllocatePreemptNode(t *testing.T) {

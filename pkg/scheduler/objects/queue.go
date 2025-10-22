@@ -54,23 +54,25 @@ type Queue struct {
 	Name      string // Queue name as in the config etc.
 
 	// Private fields need protection
-	sortType              policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
-	children              map[string]*Queue         // Only for direct children, parent queue only
-	childPriorities       map[string]int32          // cached priorities for child queues
-	applications          map[string]*Application   // only for leaf queue
-	appPriorities         map[string]int32          // cached priorities for application
-	reservedApps          map[string]int            // applications reserved within this queue, with reservation count
-	parent                *Queue                    // link back to the parent in the scheduler
-	pending               *resources.Resource       // pending resource for the apps in the queue
-	allocatedResource     *resources.Resource       // allocated resource for the apps in the queue
-	preemptingResource    *resources.Resource       // preempting resource for the apps in the queue
-	prioritySortEnabled   bool                      // whether priority is used for request sorting
-	priorityPolicy        policies.PriorityPolicy   // priority policy
-	priorityOffset        int32                     // priority offset for this queue relative to others
-	preemptionPolicy      policies.PreemptionPolicy // preemption policy
-	preemptionDelay       time.Duration             // time before preemption is considered
-	currentPriority       int32                     // the current scheduling priority of this queue
-	partitionQueueManager PartitionQueueManager     // interface injected to access PartitionContext functionalities (to break circular dependency)
+	sortType            policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
+	children            map[string]*Queue         // Only for direct children, parent queue only
+	childPriorities     map[string]int32          // cached priorities for child queues
+	applications        map[string]*Application   // only for leaf queue
+	appPriorities       map[string]int32          // cached priorities for application
+	reservedApps        map[string]int            // applications reserved within this queue, with reservation count
+	parent              *Queue                    // link back to the parent in the scheduler
+	pending             *resources.Resource       // pending resource for the apps in the queue
+	allocatedResource   *resources.Resource       // allocated resource for the apps in the queue
+	preemptingResource  *resources.Resource       // preempting resource for the apps in the queue
+	prioritySortEnabled bool                      // whether priority is used for request sorting
+	priorityPolicy      policies.PriorityPolicy   // priority policy
+	priorityOffset      int32                     // priority offset for this queue relative to others
+	preemptionPolicy    policies.PreemptionPolicy // preemption policy
+	preemptionDelay     time.Duration             // time before preemption is considered
+	currentPriority     int32                     // the current scheduling priority of this queue
+
+	// interface injected to access PartitionContext functionalities (to break circular dependency)
+	partitionQueueManager PartitionQueueManager
 
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation

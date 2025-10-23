@@ -2207,7 +2207,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	err = app1.AddAllocationAsk(ask1)
 	assert.NilError(t, err)
@@ -2217,7 +2217,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 
 	app2 := newApplication(appID2, "default", "root.parent.child2")
 	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
+	childQ2.AddApplication(app2)
 	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask3.allowPreemptOther = true
 	err = app2.AddAllocationAsk(ask3)
@@ -2289,7 +2289,7 @@ func createPreemptNodeTestSetup(t *testing.T) (func() NodeIterator, func(NodeID 
 
 	app0 := newApplication(appID0, "default", "root.unlimited")
 	app0.SetQueue(unlimitedQ)
-	unlimitedQ.applications[appID0] = app0
+	unlimitedQ.AddApplication(app0)
 	ask00 := newAllocationAsk("alloc0-0", appID0, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}))
 	err = app0.AddAllocationAsk(ask00)
 	assert.NilError(t, err)
@@ -2299,7 +2299,7 @@ func createPreemptNodeTestSetup(t *testing.T) (func() NodeIterator, func(NodeID 
 
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	err = app1.AddAllocationAsk(ask1)
 	assert.NilError(t, err)
@@ -2309,7 +2309,7 @@ func createPreemptNodeTestSetup(t *testing.T) (func() NodeIterator, func(NodeID 
 
 	app2 := newApplication(appID2, "default", "root.parent.child2")
 	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
+	childQ2.AddApplication(app2)
 	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask3.allowPreemptOther = true
 	err = app2.AddAllocationAsk(ask3)
@@ -2358,7 +2358,7 @@ func createPreemptNodeWithReservationsTestSetup(t *testing.T) (func() NodeIterat
 
 	app3 := newApplication(appID3, "default", "root.parent.child2")
 	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
+	childQ2.AddApplication(app3)
 	ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask4.allowPreemptOther = true
 	ask4.priority = math.MaxInt32

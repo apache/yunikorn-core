@@ -89,7 +89,40 @@ type Queue struct {
 	template               *template.Template
 	queueEvents            *schedEvt.QueueEvents
 
+	// appID -> queuePath index
+	appIndex *appQueueMapping
+
 	locking.RWMutex
+}
+
+// appQueueMapping is a thread safe mapping from applicationID to queuePath
+type appQueueMapping struct {
+	byAppID map[string]string
+	locking.RWMutex
+}
+
+func (aqm *appQueueMapping) addAppQueueMapping(appID, queuePath string) {
+	aqm.Lock()
+	defer aqm.Unlock()
+	aqm.byAppID[appID] = queuePath
+}
+
+func (aqm *appQueueMapping) findQueuePathByAppID(appID string) string {
+	aqm.RLock()
+	defer aqm.RUnlock()
+	return aqm.byAppID[appID]
+}
+
+func (aqm *appQueueMapping) removeAppQueueMapping(appID string) {
+	aqm.Lock()
+	defer aqm.Unlock()
+	delete(aqm.byAppID, appID)
+}
+
+func newAppQueueMapping() *appQueueMapping {
+	return &appQueueMapping{
+		byAppID: make(map[string]string),
+	}
 }
 
 // newBlankQueue creates a new empty queue objects with all values initialised.
@@ -110,6 +143,7 @@ func newBlankQueue() *Queue {
 		prioritySortEnabled:    true,
 		preemptionDelay:        configs.DefaultPreemptionDelay,
 		preemptionPolicy:       policies.DefaultPreemptionPolicy,
+		appIndex:               newAppQueueMapping(),
 	}
 }
 
@@ -789,6 +823,7 @@ func (sq *Queue) AddApplication(app *Application) {
 	appID := app.ApplicationID
 	sq.applications[appID] = app
 	sq.queueEvents.SendNewApplicationEvent(sq.QueuePath, appID)
+	sq.addAppQueueMapping(appID, sq.QueuePath)
 }
 
 // RemoveApplication removes the app from the list of tracked applications. Make sure that the app
@@ -843,6 +878,7 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	app.appEvents.SendRemoveApplicationEvent(appID)
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
+	sq.removeAppQueueMapping(appID)
 
 	log.Log(log.SchedQueue).Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
@@ -1627,13 +1663,7 @@ func (sq *Queue) GetApplication(appID string) *Application {
 
 // FindQueueByAppID searches the queue hierarchy for an application with the given appID and returns the queue it belongs to
 func (sq *Queue) FindQueueByAppID(appID string) *Queue {
-	if sq == nil {
-		return nil
-	}
-	if sq.parent != nil {
-		return sq.parent.FindQueueByAppID(appID)
-	}
-	return sq.findQueueByAppIDInternal(appID)
+	return sq.findQueueByAppID(appID)
 }
 
 func (sq *Queue) findQueueByAppIDInternal(appID string) *Queue {
@@ -2058,4 +2088,51 @@ func (sq *Queue) recalculatePriority() int32 {
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
+}
+
+func (sq *Queue) findRoot() *Queue {
+	if sq == nil {
+		return nil
+	}
+	if sq.parent != nil {
+		return sq.parent.findRoot()
+	}
+	return sq
+}
+
+func (sq *Queue) findQueueByAppID(appID string) *Queue {
+	path := sq.findQueuePathByAppID(appID)
+	if path == "" {
+		return nil
+	}
+	return sq.findQueueByPath(path)
+}
+
+func (sq *Queue) addAppQueueMapping(appID, queuePath string) {
+	root := sq.findRoot()
+	root.appIndex.addAppQueueMapping(appID, queuePath)
+}
+
+func (sq *Queue) removeAppQueueMapping(appID string) {
+	root := sq.findRoot()
+	root.appIndex.removeAppQueueMapping(appID)
+}
+
+func (sq *Queue) findQueuePathByAppID(appID string) string {
+	root := sq.findRoot()
+	return root.appIndex.findQueuePathByAppID(appID)
+}
+
+func (sq *Queue) findQueueByPath(path string) *Queue {
+	queue := sq.findRoot()
+	part := strings.Split(strings.ToLower(path), configs.DOT)
+	if len(part) < 1 {
+		return nil
+	}
+	for _, p := range part[1:] {
+		if queue = queue.GetChildQueue(p); queue == nil {
+			break
+		}
+	}
+	return queue
 }

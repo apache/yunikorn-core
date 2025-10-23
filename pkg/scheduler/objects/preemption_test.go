@@ -45,7 +45,7 @@ func creatApp1(
 ) (*Allocation, *Allocation, error) {
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(app1Rec))
 	ask1.createTime = time.Now().Add(-1 * time.Minute)
@@ -97,7 +97,7 @@ func creatApp2(
 ) (*Application, *Allocation, error) {
 	app2 := newApplication(appID2, "default", "root.parent.child2")
 	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
+	childQ2.AddApplication(app2)
 	ask3 := newAllocationAsk(allocID, appID2, resources.NewResourceFromMap(app2Res))
 	if err := app2.AddAllocationAsk(ask3); err != nil {
 		return nil, nil, err
@@ -115,7 +115,7 @@ func TestCheckPreconditions(t *testing.T) {
 	assert.NilError(t, err)
 	app := newApplication(appID1, "default", "root.child")
 	app.SetQueue(childQ)
-	childQ.applications[appID1] = app
+	childQ.AddApplication(app)
 	ask := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask.allowPreemptOther = true
 	ask.createTime = time.Now().Add(-1 * time.Minute)
@@ -457,7 +457,7 @@ func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
 	assert.NilError(t, err)
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 
 	for i := 1; i <= 6; i++ {
 		ask1 := newAllocationAsk("alloc"+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
@@ -662,7 +662,7 @@ func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 	assert.NilError(t, err)
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4, "pods": 1}))
 	ask1.createTime = time.Now().Add(-1 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
@@ -736,7 +736,7 @@ func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 
 	app3 := newApplication(appID3, "default", "root.parent.child3")
 	app3.SetQueue(childQ3)
-	childQ3.applications[appID3] = app3
+	childQ3.AddApplication(app3)
 
 	ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask4.createTime = time.Now()
@@ -801,7 +801,7 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	assert.NilError(t, err)
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask1.createTime = time.Now().Add(-2 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
@@ -823,7 +823,7 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 
 	app3 := newApplication(appID3, "default", "root.parent.child3")
 	app3.SetQueue(childQ3)
-	childQ3.applications[appID3] = app3
+	childQ3.AddApplication(app3)
 
 	ask4 := newAllocationAskPriority("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 1000)
 	ask4.createTime = time.Now()
@@ -892,7 +892,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *test
 
 	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
 	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
+	childQ2.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 200}))
 	ask1.createTime = time.Now().Add(-1 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
@@ -911,7 +911,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *test
 	assert.NilError(t, childQ2.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 	app2 := newApplication(appID2, "default", "root.parent.parent1.child1")
 	app2.SetQueue(childQ1)
-	childQ1.applications[appID2] = app2
+	childQ1.AddApplication(app2)
 	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	assert.NilError(t, app2.AddAllocationAsk(ask3))
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 2})
@@ -965,7 +965,7 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(
 
 	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
 	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
+	childQ2.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 200}))
 	ask1.createTime = time.Now().Add(-1 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
@@ -984,7 +984,7 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(
 	assert.NilError(t, childQ2.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 	app2 := newApplication(appID2, "default", "root.parent.parent1.child1")
 	app2.SetQueue(childQ1)
-	childQ1.applications[appID2] = app2
+	childQ1.AddApplication(app2)
 	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	assert.NilError(t, app2.AddAllocationAsk(ask3))
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 2})
@@ -1205,13 +1205,13 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreem
 func createVictimApplications(childQ2 *Queue) (*Application, *Application, *Application) {
 	app1 := newApplication(appID1, "default", "root.parent.parent2.child2")
 	app1.SetQueue(childQ2)
-	childQ2.applications[appID1] = app1
+	childQ2.AddApplication(app1)
 	app2 := newApplication(appID2, "default", "root.parent.parent2.child2")
 	app2.SetQueue(childQ2)
-	childQ2.applications[appID2] = app2
+	childQ2.AddApplication(app2)
 	app3 := newApplication(appID3, "default", "root.parent.parent2.child2")
 	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
+	childQ2.AddApplication(app3)
 	return app1, app2, app3
 }
 
@@ -1637,7 +1637,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChil
 
 	app1 := newApplication(appID1, "default", "root.parent.parent1.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	ask1.createTime = time.Now().Add(-2 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
@@ -1649,7 +1649,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChil
 
 	app2 := newApplication(appID2, "default", "root.parent.parent1.child1")
 	app2.SetQueue(childQ2)
-	childQ1.applications[appID2] = app2
+	childQ1.AddApplication(app2)
 	ask2 := newAllocationAsk("alloc2", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	ask2.createTime = time.Now().Add(-1 * time.Minute)
 	assert.NilError(t, app2.AddAllocationAsk(ask2))
@@ -1661,7 +1661,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChil
 
 	app3 := newApplication(appID3, "default", "root.parent.parent1.child2")
 	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
+	childQ2.AddApplication(app3)
 	ask3 := newAllocationAsk("alloc3", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	assert.NilError(t, app3.AddAllocationAsk(ask3))
 
@@ -1714,7 +1714,7 @@ func TestTryPreemption_OnNode_UGParent_With_GNotSetOnBothChilds(t *testing.T) {
 
 	app1 := newApplication(appID1, "default", "root.parent.parent1.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	ask1.createTime = time.Now().Add(-2 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
@@ -1726,7 +1726,7 @@ func TestTryPreemption_OnNode_UGParent_With_GNotSetOnBothChilds(t *testing.T) {
 
 	app2 := newApplication(appID2, "default", "root.parent.parent1.child1")
 	app2.SetQueue(childQ2)
-	childQ1.applications[appID2] = app2
+	childQ1.AddApplication(app2)
 	ask2 := newAllocationAsk("alloc2", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	ask2.createTime = time.Now().Add(-1 * time.Minute)
 	assert.NilError(t, app2.AddAllocationAsk(ask2))
@@ -1738,7 +1738,7 @@ func TestTryPreemption_OnNode_UGParent_With_GNotSetOnBothChilds(t *testing.T) {
 
 	app3 := newApplication(appID3, "default", "root.parent.parent1.child2")
 	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
+	childQ2.AddApplication(app3)
 	ask3 := newAllocationAsk("alloc3", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	assert.NilError(t, app3.AddAllocationAsk(ask3))
 
@@ -1785,7 +1785,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Si
 
 	app1 := newApplication(appID1, "default", "root.parent.parent1.child1")
 	app1.SetQueue(childQ1)
-	childQ1.applications[appID1] = app1
+	childQ1.AddApplication(app1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	ask1.createTime = time.Now().Add(-2 * time.Minute)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
@@ -1797,7 +1797,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Si
 
 	app2 := newApplication(appID2, "default", "root.parent.parent1.child1")
 	app2.SetQueue(childQ2)
-	childQ1.applications[appID2] = app2
+	childQ1.AddApplication(app2)
 	ask2 := newAllocationAsk("alloc2", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	ask2.createTime = time.Now().Add(-1 * time.Minute)
 	assert.NilError(t, app2.AddAllocationAsk(ask2))
@@ -1809,7 +1809,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Si
 
 	app3 := newApplication(appID3, "default", "root.parent.parent1.child2")
 	app3.SetQueue(childQ2)
-	childQ2.applications[appID3] = app3
+	childQ2.AddApplication(app3)
 	ask3 := newAllocationAsk("alloc3", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	assert.NilError(t, app3.AddAllocationAsk(ask3))
 

@@ -90,7 +90,6 @@ type Queue struct {
 	queueEvents                *schedEvt.QueueEvents
 	appQueueMapping            *AppQueueMapping // appID mapping to queues
 	quotaChangePreemptionDelay uint64
-	quotaChangePreemptionTimer *time.Timer
 
 	locking.RWMutex
 }
@@ -114,7 +113,6 @@ func newBlankQueue() *Queue {
 		preemptionDelay:            configs.DefaultPreemptionDelay,
 		preemptionPolicy:           policies.DefaultPreemptionPolicy,
 		quotaChangePreemptionDelay: 0,
-		quotaChangePreemptionTimer: nil,
 	}
 }
 
@@ -412,35 +410,28 @@ func (sq *Queue) setPreemptionSettings(oldMaxResource *resources.Resource, conf 
 		// Quota decrease
 		case resources.StrictlyGreaterThan(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0:
 			set = true
+			// Quota increase
+		case resources.StrictlyGreaterThan(newMaxResource, oldMaxResource) && conf.Preemption.Delay != 0:
+			reset = true
 			// Quota remains as is but delay has changed
 		case resources.Equals(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0 && sq.quotaChangePreemptionDelay != conf.Preemption.Delay:
 			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
-			sq.quotaChangePreemptionTimer.Reset(time.Duration(sq.quotaChangePreemptionDelay))
-		// Quota increase
 		default:
-			reset = true
+			// noop
 		}
 	}
 
 	// Set preemption settings
 	if set {
 		sq.quotaChangePreemptionDelay = conf.Preemption.Delay
-		sq.quotaChangePreemptionTimer = time.AfterFunc(time.Duration(sq.quotaChangePreemptionDelay), sq.tryPreemptionToEnforceQuota)
 	}
 
 	// Reset preemption settings
 	if reset {
 		if sq.quotaChangePreemptionDelay != 0 {
 			sq.quotaChangePreemptionDelay = 0
-			sq.quotaChangePreemptionTimer.Stop()
-			sq.quotaChangePreemptionTimer = nil
 		}
 	}
-}
-
-// tryPreemptionToEnforceQuota Try Preemption to enforce quota change if the quota change preemption delay is reached
-func (sq *Queue) tryPreemptionToEnforceQuota() {
-
 }
 
 // setResourcesFromConf sets the maxResource and guaranteedResource of the queue from the config.

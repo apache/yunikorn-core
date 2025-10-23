@@ -2252,19 +2252,16 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 
 	parent, err := createManagedQueueWithProps(root, "parent", false, getResourceConf(), getResourceConf())
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
-
-	var nilTimer *time.Timer
 	testCases := []struct {
 		name          string
 		conf          configs.QueueConfig
 		expectedDelay uint64
-		expectedTimer *time.Timer
 	}{{"first queue setup without delay", configs.QueueConfig{
 		Resources: configs.Resources{
 			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
-	}, 0, nilTimer},
+	}, 0},
 		{"increase max with delay", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "100000000"},
@@ -2272,7 +2269,7 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 			Preemption: configs.Preemption{
 				Delay: 500,
 			},
-		}, 0, nilTimer},
+		}, 0},
 		{"decrease max with delay", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "100"},
@@ -2280,7 +2277,7 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 			Preemption: configs.Preemption{
 				Delay: 500,
 			},
-		}, 500, time.AfterFunc(time.Duration(500), parent.tryPreemptionToEnforceQuota)},
+		}, 500},
 		{"max remains as is but delay changed", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "100"},
@@ -2288,7 +2285,16 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 			Preemption: configs.Preemption{
 				Delay: 200,
 			},
-		}, 200, time.AfterFunc(time.Duration(200), parent.tryPreemptionToEnforceQuota)},
+		}, 200},
+		{"unrelated config change, should not impact earlier set preemption settings", configs.QueueConfig{
+			Resources: configs.Resources{
+				Max:        map[string]string{"memory": "100"},
+				Guaranteed: map[string]string{"memory": "50"},
+			},
+			Preemption: configs.Preemption{
+				Delay: 200,
+			},
+		}, 200},
 		{"increase max again with delay", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "101"},
@@ -2296,7 +2302,7 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 			Preemption: configs.Preemption{
 				Delay: 200,
 			},
-		}, 0, nilTimer}}
+		}, 0}}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2304,11 +2310,6 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 			assert.NilError(t, err, "failed to apply conf: %v", err)
 			assert.Assert(t, parent.maxResource != nil)
 			assert.Equal(t, parent.quotaChangePreemptionDelay, tc.expectedDelay)
-			if tc.expectedTimer != nil {
-				assert.Equal(t, *parent.quotaChangePreemptionTimer, *tc.expectedTimer)
-			} else {
-				assert.Assert(t, parent.quotaChangePreemptionTimer == nil)
-			}
 		})
 	}
 }
@@ -2343,8 +2344,6 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetMaxResource()))
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetGuaranteedResource()))
 	assert.Equal(t, parent.quotaChangePreemptionDelay, uint64(0))
-	var expectedTimer *time.Timer
-	assert.Equal(t, parent.quotaChangePreemptionTimer, expectedTimer)
 
 	// case 0: managed leaf queue can't use template
 	leafConfig := configs.QueueConfig{
@@ -2371,8 +2370,6 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.NilError(t, err, "Resource creation failed")
 	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, childLeafGuaranteed))
 	assert.Equal(t, childLeaf.quotaChangePreemptionDelay, uint64(500))
-	leafExpectedTimer := time.AfterFunc(time.Duration(uint64(500)), childLeaf.tryPreemptionToEnforceQuota)
-	assert.Equal(t, *childLeaf.quotaChangePreemptionTimer, *leafExpectedTimer)
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
 	NonLeafConfig := configs.QueueConfig{
@@ -2390,8 +2387,6 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
 	assert.Equal(t, childNonLeaf.quotaChangePreemptionDelay, uint64(0))
-	var nonLeafExpectedTimer *time.Timer
-	assert.Equal(t, childNonLeaf.quotaChangePreemptionTimer, nonLeafExpectedTimer)
 
 	// case 2: do not send queue event when silence flag is set to true
 	events.Init()
@@ -2410,8 +2405,6 @@ func TestNewConfiguredQueue(t *testing.T) {
 	noEvents := eventSystem.Store.CountStoredEvents()
 	assert.Equal(t, noEvents, uint64(0), "expected 0 event, got %d", noEvents)
 	assert.Equal(t, rootQ.quotaChangePreemptionDelay, uint64(0))
-	var rootQTimer *time.Timer
-	assert.Equal(t, rootQ.quotaChangePreemptionTimer, rootQTimer)
 }
 
 func TestResetRunningState(t *testing.T) {

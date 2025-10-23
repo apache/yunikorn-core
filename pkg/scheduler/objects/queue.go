@@ -1666,24 +1666,6 @@ func (sq *Queue) FindQueueByAppID(appID string) *Queue {
 	return sq.findQueueByAppID(appID)
 }
 
-func (sq *Queue) findQueueByAppIDInternal(appID string) *Queue {
-	if sq == nil {
-		return nil
-	}
-	if sq.IsLeafQueue() {
-		if app := sq.GetApplication(appID); app != nil {
-			return sq
-		}
-		return nil
-	}
-	for _, queue := range sq.GetCopyOfChildren() {
-		if result := queue.findQueueByAppIDInternal(appID); result != nil {
-			return result
-		}
-	}
-	return nil
-}
-
 // getSortType return the queue sort type.
 func (sq *Queue) getSortType() policies.SortPolicy {
 	sq.RLock()

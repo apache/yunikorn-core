@@ -74,22 +74,24 @@ type Queue struct {
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
-	properties                 map[string]string
-	adminACL                   security.ACL        // admin ACL
-	submitACL                  security.ACL        // submit ACL
-	maxResource                *resources.Resource // When not set, max = nil
-	guaranteedResource         *resources.Resource // When not set, Guaranteed == 0
-	isLeaf                     bool                // this is a leaf queue or not (i.e. parent)
-	isManaged                  bool                // queue is part of the config, not auto created
-	stateMachine               *fsm.FSM            // the state of the queue for scheduling
-	stateTime                  time.Time           // last time the state was updated (needed for cleanup)
-	maxRunningApps             uint64
-	runningApps                uint64
-	allocatingAcceptedApps     map[string]bool
-	template                   *template.Template
-	queueEvents                *schedEvt.QueueEvents
-	appQueueMapping            *AppQueueMapping // appID mapping to queues
-	quotaChangePreemptionDelay uint64
+	properties                         map[string]string
+	adminACL                           security.ACL        // admin ACL
+	submitACL                          security.ACL        // submit ACL
+	maxResource                        *resources.Resource // When not set, max = nil
+	guaranteedResource                 *resources.Resource // When not set, Guaranteed == 0
+	isLeaf                             bool                // this is a leaf queue or not (i.e. parent)
+	isManaged                          bool                // queue is part of the config, not auto created
+	stateMachine                       *fsm.FSM            // the state of the queue for scheduling
+	stateTime                          time.Time           // last time the state was updated (needed for cleanup)
+	maxRunningApps                     uint64
+	runningApps                        uint64
+	allocatingAcceptedApps             map[string]bool
+	template                           *template.Template
+	queueEvents                        *schedEvt.QueueEvents
+	appQueueMapping                    *AppQueueMapping // appID mapping to queues
+	quotaChangePreemptionDelay         uint64
+	hasTriggerredQuotaChangePreemption bool
+	isQuotaChangePreemptionRunning     bool
 
 	locking.RWMutex
 }
@@ -2075,4 +2077,28 @@ func (sq *Queue) recalculatePriority() int32 {
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
+}
+
+func (sq *Queue) MarkTriggerredQuotaChangePreemption() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.hasTriggerredQuotaChangePreemption = true
+}
+
+func (sq *Queue) HasTriggerredQuotaChangePreemption() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.hasTriggerredQuotaChangePreemption
+}
+
+func (sq *Queue) MarkQuotaChangePreemptionRunning() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.isQuotaChangePreemptionRunning = true
+}
+
+func (sq *Queue) IsQuotaChangePreemptionRunning() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.isQuotaChangePreemptionRunning
 }

@@ -65,25 +65,33 @@ func createRootQueue(maxRes map[string]string) (*Queue, error) {
 	return createManagedQueueWithProps(nil, "root", true, maxRes, nil)
 }
 
+func createRootQueueWithAppQueueMapping(maxRes map[string]string, appQueueMapping *AppQueueMapping) (*Queue, error) {
+	return createManagedQueueWithAppQueueMapping(nil, "root", true, maxRes, appQueueMapping)
+}
+
 // wrapper around the create call using the one syntax for all queue types
 func createManagedQueue(parentSQ *Queue, name string, parent bool, maxRes map[string]string) (*Queue, error) {
 	return createManagedQueueWithProps(parentSQ, name, parent, maxRes, nil)
 }
 
+func createManagedQueueWithAppQueueMapping(parentSQ *Queue, name string, parent bool, maxRes map[string]string, appQueueMapping *AppQueueMapping) (*Queue, error) {
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, nil, uint64(0), appQueueMapping)
+}
+
 // create managed queue with props set
 func createManagedQueueWithProps(parentSQ *Queue, name string, parent bool, maxRes, props map[string]string) (*Queue, error) {
-	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, props, uint64(0))
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, props, uint64(0), nil)
 }
 
 func createManagedQueueMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, maxApps uint64) (*Queue, error) {
-	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, nil, maxApps)
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, nil, nil, maxApps, nil)
 }
 
-func createManagedQueueGuaranteed(parentSQ *Queue, name string, parent bool, maxRes, guarRes map[string]string) (*Queue, error) {
-	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, guarRes, nil, uint64(0))
+func createManagedQueueGuaranteed(parentSQ *Queue, name string, parent bool, maxRes, guarRes map[string]string, appQueueMapping *AppQueueMapping) (*Queue, error) {
+	return createManagedQueuePropsMaxApps(parentSQ, name, parent, maxRes, guarRes, nil, uint64(0), appQueueMapping)
 }
 
-func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, guarRes map[string]string, props map[string]string, maxApps uint64) (*Queue, error) {
+func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, maxRes map[string]string, guarRes map[string]string, props map[string]string, maxApps uint64, appQueueMapping *AppQueueMapping) (*Queue, error) {
 	queueConfig := configs.QueueConfig{
 		Name:            name,
 		Parent:          parent,
@@ -97,7 +105,7 @@ func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, m
 			Guaranteed: guarRes,
 		}
 	}
-	queue, err := NewConfiguredQueue(queueConfig, parentSQ, false)
+	queue, err := NewConfiguredQueue(queueConfig, parentSQ, false, appQueueMapping)
 	if err != nil {
 		return nil, err
 	}
@@ -118,8 +126,8 @@ func createManagedQueuePropsMaxApps(parentSQ *Queue, name string, parent bool, m
 
 // wrapper around the create call using the one syntax for all queue types
 // NOTE: test code uses a flag for parent=true, dynamic queues use leaf flag
-func createDynamicQueue(parentSQ *Queue, name string, parent bool) (*Queue, error) {
-	return NewDynamicQueue(name, !parent, parentSQ)
+func createDynamicQueue(parentSQ *Queue, name string, parent bool, appQueueMapping *AppQueueMapping) (*Queue, error) {
+	return NewDynamicQueue(name, !parent, parentSQ, appQueueMapping)
 }
 
 // Create application with minimal info

@@ -88,41 +88,9 @@ type Queue struct {
 	allocatingAcceptedApps map[string]bool
 	template               *template.Template
 	queueEvents            *schedEvt.QueueEvents
-
-	// appID -> queuePath index
-	appIndex *appQueueMapping
+	appQueueMapping        *AppQueueMapping // appID mapping to queues
 
 	locking.RWMutex
-}
-
-// appQueueMapping is a thread safe mapping from applicationID to queuePath
-type appQueueMapping struct {
-	byAppID map[string]string
-	locking.RWMutex
-}
-
-func (aqm *appQueueMapping) addAppQueueMapping(appID, queuePath string) {
-	aqm.Lock()
-	defer aqm.Unlock()
-	aqm.byAppID[appID] = queuePath
-}
-
-func (aqm *appQueueMapping) findQueuePathByAppID(appID string) string {
-	aqm.RLock()
-	defer aqm.RUnlock()
-	return aqm.byAppID[appID]
-}
-
-func (aqm *appQueueMapping) removeAppQueueMapping(appID string) {
-	aqm.Lock()
-	defer aqm.Unlock()
-	delete(aqm.byAppID, appID)
-}
-
-func newAppQueueMapping() *appQueueMapping {
-	return &appQueueMapping{
-		byAppID: make(map[string]string),
-	}
 }
 
 // newBlankQueue creates a new empty queue objects with all values initialised.
@@ -143,17 +111,17 @@ func newBlankQueue() *Queue {
 		prioritySortEnabled:    true,
 		preemptionDelay:        configs.DefaultPreemptionDelay,
 		preemptionPolicy:       policies.DefaultPreemptionPolicy,
-		appIndex:               newAppQueueMapping(),
 	}
 }
 
 // NewConfiguredQueue creates a new queue from scratch based on the configuration
 // lock free as it cannot be referenced yet.
 // If the silence flag is set to true, the function will neither log the queue creation nor send a queue event.
-func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool) (*Queue, error) {
+func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool, appQueueMapping *AppQueueMapping) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(conf.Name)
 	sq.QueuePath = strings.ToLower(conf.Name)
+	sq.appQueueMapping = appQueueMapping
 	if parent != nil {
 		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 	}
@@ -193,14 +161,14 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool) (
 
 // NewRecoveryQueue creates a recovery queue if it does not exist. The recovery queue
 // is a dynamic queue, but has an invalid name so that it cannot be directly referenced.
-func NewRecoveryQueue(parent *Queue) (*Queue, error) {
+func NewRecoveryQueue(parent *Queue, appQueueMapping *AppQueueMapping) (*Queue, error) {
 	if parent == nil {
 		return nil, errors.New("recovery queue cannot be created with nil parent")
 	}
 	if parent.GetQueuePath() != configs.RootQueue {
 		return nil, fmt.Errorf("recovery queue cannot be created with non-root parent: %s", parent.GetQueuePath())
 	}
-	queue, err := newDynamicQueueInternal(common.RecoveryQueue, true, parent)
+	queue, err := newDynamicQueueInternal(common.RecoveryQueue, true, parent, appQueueMapping)
 	if err == nil {
 		queue.Lock()
 		defer queue.Unlock()
@@ -213,7 +181,7 @@ func NewRecoveryQueue(parent *Queue) (*Queue, error) {
 // NewDynamicQueue creates a new queue to be added to the system based on the placement rules
 // A dynamically added queue can never be the root queue so parent must be set
 // lock free as it cannot be referenced yet
-func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
+func NewDynamicQueue(name string, leaf bool, parent *Queue, appQueueMapping *AppQueueMapping) (*Queue, error) {
 	// fail without a parent
 	if parent == nil {
 		return nil, fmt.Errorf("dynamic queue can not be added without parent: %s", name)
@@ -225,16 +193,17 @@ func NewDynamicQueue(name string, leaf bool, parent *Queue) (*Queue, error) {
 	if name == common.RecoveryQueue {
 		return nil, fmt.Errorf("dynamic queue cannot be root.@recovery@")
 	}
-	return newDynamicQueueInternal(name, leaf, parent)
+	return newDynamicQueueInternal(name, leaf, parent, appQueueMapping)
 }
 
-func newDynamicQueueInternal(name string, leaf bool, parent *Queue) (*Queue, error) {
+func newDynamicQueueInternal(name string, leaf bool, parent *Queue, appQueueMapping *AppQueueMapping) (*Queue, error) {
 	sq := newBlankQueue()
 	sq.Name = strings.ToLower(name)
 	sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 	sq.parent = parent
 	sq.isManaged = false
 	sq.isLeaf = leaf
+	sq.appQueueMapping = appQueueMapping
 
 	// add to the parent, we might have a partition lock already
 	// still need to make sure we lock the parent so we do not interfere with scheduling
@@ -823,7 +792,6 @@ func (sq *Queue) AddApplication(app *Application) {
 	appID := app.ApplicationID
 	sq.applications[appID] = app
 	sq.queueEvents.SendNewApplicationEvent(sq.QueuePath, appID)
-	sq.addAppQueueMapping(appID, sq.QueuePath)
 }
 
 // RemoveApplication removes the app from the list of tracked applications. Make sure that the app
@@ -878,7 +846,6 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	app.appEvents.SendRemoveApplicationEvent(appID)
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
-	sq.removeAppQueueMapping(appID)
 
 	log.Log(log.SchedQueue).Info("Application completed and removed from queue",
 		zap.String("queueName", sq.QueuePath),
@@ -2072,49 +2039,6 @@ func (sq *Queue) recalculatePriority() int32 {
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
 }
 
-func (sq *Queue) findRoot() *Queue {
-	if sq == nil {
-		return nil
-	}
-	if sq.parent != nil {
-		return sq.parent.findRoot()
-	}
-	return sq
-}
-
 func (sq *Queue) findQueueByAppID(appID string) *Queue {
-	path := sq.findQueuePathByAppID(appID)
-	if path == "" {
-		return nil
-	}
-	return sq.findQueueByPath(path)
-}
-
-func (sq *Queue) addAppQueueMapping(appID, queuePath string) {
-	root := sq.findRoot()
-	root.appIndex.addAppQueueMapping(appID, queuePath)
-}
-
-func (sq *Queue) removeAppQueueMapping(appID string) {
-	root := sq.findRoot()
-	root.appIndex.removeAppQueueMapping(appID)
-}
-
-func (sq *Queue) findQueuePathByAppID(appID string) string {
-	root := sq.findRoot()
-	return root.appIndex.findQueuePathByAppID(appID)
-}
-
-func (sq *Queue) findQueueByPath(path string) *Queue {
-	queue := sq.findRoot()
-	part := strings.Split(strings.ToLower(path), configs.DOT)
-	if len(part) < 1 {
-		return nil
-	}
-	for _, p := range part[1:] {
-		if queue = queue.GetChildQueue(p); queue == nil {
-			break
-		}
-	}
-	return queue
+	return sq.appQueueMapping.FindQueueByAppID(appID)
 }

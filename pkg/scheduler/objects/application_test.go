@@ -1040,7 +1040,7 @@ func TestUpdateAllocationResourcePending(t *testing.T) {
 	app := newApplication(appID1, "default", "root.a")
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create root queue")
-	queue, err := createDynamicQueue(root, "test", false)
+	queue, err := createDynamicQueue(root, "test", false, nil)
 	assert.NilError(t, err, "failed to create test queue")
 	app.SetQueue(queue)
 
@@ -1088,7 +1088,7 @@ func TestUpdateAllocationResourceAllocated(t *testing.T) {
 	app := newApplication(appID1, "default", "root.a")
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create root queue")
-	queue, err := createDynamicQueue(root, "test", false)
+	queue, err := createDynamicQueue(root, "test", false, nil)
 	assert.NilError(t, err, "failed to create test queue")
 	app.SetQueue(queue)
 
@@ -1138,7 +1138,7 @@ func TestQueueUpdate(t *testing.T) {
 
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create root queue")
-	queue, err := createDynamicQueue(root, "test", false)
+	queue, err := createDynamicQueue(root, "test", false, nil)
 	assert.NilError(t, err, "failed to create test queue")
 	app.SetQueue(queue)
 	assert.Equal(t, app.GetQueuePath(), "root.test")
@@ -2195,19 +2195,21 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
+	appQueueMapping := NewAppQueueMapping()
 
 	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "5"})
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "5"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "5"})
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "5"}, appQueueMapping)
 	assert.NilError(t, err)
 
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
 	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(appID1, childQ1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	err = app1.AddAllocationAsk(ask1)
 	assert.NilError(t, err)
@@ -2218,6 +2220,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	app2 := newApplication(appID2, "default", "root.parent.child2")
 	app2.SetQueue(childQ2)
 	childQ2.AddApplication(app2)
+	appQueueMapping.AddAppQueueMapping(appID2, childQ2)
 	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask3.allowPreemptOther = true
 	err = app2.AddAllocationAsk(ask3)
@@ -2276,20 +2279,23 @@ func createPreemptNodeTestSetup(t *testing.T) (func() NodeIterator, func(NodeID 
 		return nodeMap[nodeID]
 	}
 
+	appQueueMapping := NewAppQueueMapping()
+
 	rootQ, err := createRootQueue(map[string]string{"first": "40"})
 	assert.NilError(t, err)
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"})
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"}, appQueueMapping)
 	assert.NilError(t, err)
-	unlimitedQ, err := createManagedQueueGuaranteed(rootQ, "unlimited", false, nil, nil)
+	unlimitedQ, err := createManagedQueueGuaranteed(rootQ, "unlimited", false, nil, nil, appQueueMapping)
 	assert.NilError(t, err)
-	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "5"})
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "5"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "5"})
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "5"}, appQueueMapping)
 	assert.NilError(t, err)
 
 	app0 := newApplication(appID0, "default", "root.unlimited")
 	app0.SetQueue(unlimitedQ)
 	unlimitedQ.AddApplication(app0)
+	appQueueMapping.AddAppQueueMapping(appID0, unlimitedQ)
 	ask00 := newAllocationAsk("alloc0-0", appID0, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}))
 	err = app0.AddAllocationAsk(ask00)
 	assert.NilError(t, err)
@@ -2300,6 +2306,7 @@ func createPreemptNodeTestSetup(t *testing.T) (func() NodeIterator, func(NodeID 
 	app1 := newApplication(appID1, "default", "root.parent.child1")
 	app1.SetQueue(childQ1)
 	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(appID1, childQ1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	err = app1.AddAllocationAsk(ask1)
 	assert.NilError(t, err)
@@ -2310,6 +2317,7 @@ func createPreemptNodeTestSetup(t *testing.T) (func() NodeIterator, func(NodeID 
 	app2 := newApplication(appID2, "default", "root.parent.child2")
 	app2.SetQueue(childQ2)
 	childQ2.AddApplication(app2)
+	appQueueMapping.AddAppQueueMapping(appID2, childQ2)
 	ask3 := newAllocationAsk("alloc3", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	ask3.allowPreemptOther = true
 	err = app2.AddAllocationAsk(ask3)
@@ -3257,13 +3265,15 @@ func TestRequiredNodePreemption(t *testing.T) {
 	getNode := func(nodeID string) *Node {
 		return node
 	}
+	appQueueMapping := NewAppQueueMapping()
 
 	// set queue
 	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
-	childQ, err := createManagedQueue(rootQ, "default", false, map[string]string{"first": "20"})
+	childQ, err := createManagedQueueWithAppQueueMapping(rootQ, "default", false, map[string]string{"first": "20"}, appQueueMapping)
 	assert.NilError(t, err)
 	app.SetQueue(childQ)
+	appQueueMapping.AddAppQueueMapping(app.ApplicationID, childQ)
 
 	// add an ask
 	mockEvents := mock.NewEventSystem()

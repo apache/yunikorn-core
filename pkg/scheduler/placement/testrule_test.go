@@ -78,7 +78,7 @@ func initQueueStructure(data []byte) error {
 		return err
 	}
 	rootConf := conf.Partitions[0].Queues[0]
-	root, err = objects.NewConfiguredQueue(rootConf, nil, false)
+	root, err = objects.NewConfiguredQueue(rootConf, nil, false, nil)
 	if err != nil {
 		return err
 	}
@@ -87,7 +87,7 @@ func initQueueStructure(data []byte) error {
 
 func addQueue(conf []configs.QueueConfig, parent *objects.Queue) error {
 	for _, queueConf := range conf {
-		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent, false)
+		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent, false, nil)
 		if err != nil {
 			return err
 		}

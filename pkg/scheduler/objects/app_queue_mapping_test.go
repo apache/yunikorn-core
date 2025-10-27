@@ -20,16 +20,14 @@ package objects
 
 import (
 	"testing"
+
+	"gotest.tools/v3/assert"
 )
 
 func TestNewAppQueueMapping(t *testing.T) {
 	aqm := NewAppQueueMapping()
-	if aqm == nil {
-		t.Fatal("Expected non-nil AppQueueMapping")
-	}
-	if len(aqm.byAppID) != 0 {
-		t.Errorf("Expected empty byAppID map, got %d entries", len(aqm.byAppID))
-	}
+	assert.Assert(t, aqm != nil, "expected non-nil AppQueueMapping")
+	assert.Equal(t, 0, len(aqm.byAppID), "expected empty byAppID map")
 }
 func TestAppQueueMappingOperations(t *testing.T) {
 	aqm := NewAppQueueMapping()
@@ -38,19 +36,13 @@ func TestAppQueueMappingOperations(t *testing.T) {
 
 	// Test AddAppQueueMapping
 	aqm.AddAppQueueMapping(appID, queue)
-	if len(aqm.byAppID) != 1 {
-		t.Errorf("Expected 1 entry in byAppID map, got %d", len(aqm.byAppID))
-	}
+	assert.Equal(t, 1, len(aqm.byAppID), "expected 1 entry in byAppID map")
 
 	// Test FindQueueByAppID
 	foundQueue := aqm.FindQueueByAppID(appID)
-	if foundQueue != queue {
-		t.Errorf("Expected to find the correct queue for appID %s", appID)
-	}
+	assert.Equal(t, foundQueue, queue, "expected to find the correct queue for appID %s", appID)
 
 	// Test RemoveAppQueueMapping
 	aqm.RemoveAppQueueMapping(appID)
-	if len(aqm.byAppID) != 0 {
-		t.Errorf("Expected empty byAppID map after removal, got %d entries", len(aqm.byAppID))
-	}
+	assert.Equal(t, 0, len(aqm.byAppID), "expected 0 entries in byAppID map after removal")
 }

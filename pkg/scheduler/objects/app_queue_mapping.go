@@ -38,7 +38,7 @@ func (aqm *AppQueueMapping) AddAppQueueMapping(appID string, queue *Queue) {
 	aqm.byAppID[appID] = queue
 }
 
-func (aqm *AppQueueMapping) FindQueueByAppID(appID string) *Queue {
+func (aqm *AppQueueMapping) GetQueueByAppId(appID string) *Queue {
 	aqm.RLock()
 	defer aqm.RUnlock()
 	return aqm.byAppID[appID]

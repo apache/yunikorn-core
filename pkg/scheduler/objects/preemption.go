@@ -649,7 +649,7 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 
 	// preempt the victims
 	for _, victim := range finalVictims {
-		if victimQueue := p.queue.FindQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
+		if victimQueue := p.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
 			victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
 			victim.MarkPreempted()
 			log.Log(log.SchedPreemption).Info("Preempting task",

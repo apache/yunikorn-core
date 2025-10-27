@@ -1395,7 +1395,7 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 			zap.String("allocation name", ask.GetAllocationName()),
 			zap.Int("no.of victims", len(victims)))
 		for _, victim := range victims {
-			if victimQueue := sa.queue.FindQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
+			if victimQueue := sa.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
 				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
 			}
 			victim.MarkPreempted()

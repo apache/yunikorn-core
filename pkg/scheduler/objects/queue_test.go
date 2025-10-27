@@ -1853,19 +1853,19 @@ func TestFindQueueByAppID(t *testing.T) {
 	appQueueMapping.AddAppQueueMapping(appID1, leaf1)
 
 	// we should be able to find the queue from any other given the appID
-	assert.Equal(t, leaf1, root.FindQueueByAppID(appID1), "failed to find queue from root")
-	assert.Equal(t, leaf1, parent1.FindQueueByAppID(appID1), "failed to find queue from parent1")
-	assert.Equal(t, leaf1, parent2.FindQueueByAppID(appID1), "failed to find queue from parent2")
-	assert.Equal(t, leaf1, leaf1.FindQueueByAppID(appID1), "failed to find queue from leaf1")
-	assert.Equal(t, leaf1, leaf2.FindQueueByAppID(appID1), "failed to find queue from leaf2")
+	assert.Equal(t, leaf1, root.GetQueueByAppID(appID1), "failed to find queue from root")
+	assert.Equal(t, leaf1, parent1.GetQueueByAppID(appID1), "failed to find queue from parent1")
+	assert.Equal(t, leaf1, parent2.GetQueueByAppID(appID1), "failed to find queue from parent2")
+	assert.Equal(t, leaf1, leaf1.GetQueueByAppID(appID1), "failed to find queue from leaf1")
+	assert.Equal(t, leaf1, leaf2.GetQueueByAppID(appID1), "failed to find queue from leaf2")
 
 	// non-existent queue should be nil
 	var none *Queue = nil
-	assert.Equal(t, none, root.FindQueueByAppID("missing"), "found queue reference in root")
-	assert.Equal(t, none, parent1.FindQueueByAppID("missing"), "found queue reference in parent1")
-	assert.Equal(t, none, parent2.FindQueueByAppID("missing"), "found queue reference in parent2")
-	assert.Equal(t, none, leaf1.FindQueueByAppID("missing"), "found queue reference in leaf1")
-	assert.Equal(t, none, leaf2.FindQueueByAppID("missing"), "found queue reference in leaf2")
+	assert.Equal(t, none, root.GetQueueByAppID("missing"), "found queue reference in root")
+	assert.Equal(t, none, parent1.GetQueueByAppID("missing"), "found queue reference in parent1")
+	assert.Equal(t, none, parent2.GetQueueByAppID("missing"), "found queue reference in parent2")
+	assert.Equal(t, none, leaf1.GetQueueByAppID("missing"), "found queue reference in leaf1")
+	assert.Equal(t, none, leaf2.GetQueueByAppID("missing"), "found queue reference in leaf2")
 }
 
 // nolint: funlen

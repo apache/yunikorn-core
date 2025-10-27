@@ -1628,9 +1628,9 @@ func (sq *Queue) GetApplication(appID string) *Application {
 	return sq.applications[appID]
 }
 
-// FindQueueByAppID searches the queue hierarchy for an application with the given appID and returns the queue it belongs to
-func (sq *Queue) FindQueueByAppID(appID string) *Queue {
-	return sq.findQueueByAppID(appID)
+// GetQueueByAppID returns the queue that the application with the given appID belongs to
+func (sq *Queue) GetQueueByAppID(appID string) *Queue {
+	return sq.appQueueMapping.GetQueueByAppId(appID)
 }
 
 // getSortType return the queue sort type.
@@ -2037,8 +2037,4 @@ func (sq *Queue) recalculatePriority() int32 {
 	}
 	sq.currentPriority = curr
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
-}
-
-func (sq *Queue) findQueueByAppID(appID string) *Queue {
-	return sq.appQueueMapping.FindQueueByAppID(appID)
 }

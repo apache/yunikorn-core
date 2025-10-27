@@ -39,7 +39,7 @@ func TestAppQueueMappingOperations(t *testing.T) {
 	assert.Equal(t, 1, len(aqm.byAppID), "expected 1 entry in byAppID map")
 
 	// Test FindQueueByAppID
-	foundQueue := aqm.FindQueueByAppID(appID)
+	foundQueue := aqm.GetQueueByAppId(appID)
 	assert.Equal(t, foundQueue, queue, "expected to find the correct queue for appID %s", appID)
 
 	// Test RemoveAppQueueMapping

@@ -1368,6 +1368,7 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 			zap.String("allocationKey", ask.GetAllocationKey()),
 			zap.String("applicationID", sa.ApplicationID),
 			zap.String("queue", sa.queuePath))
+		ask.LogAllocationFailure(common.PreemptionMaxAttemptsExhausted, true)
 		return nil, false
 	}
 	preemptor := NewPreemptor(sa, headRoom, preemptionDelay, ask, iterator, nodesTried)

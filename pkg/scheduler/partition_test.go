@@ -1530,7 +1530,7 @@ func TestGetQueue(t *testing.T) {
 	}
 	var parent *objects.Queue
 	// manually add the queue in below the root
-	parent, err = objects.NewConfiguredQueue(parentConf, queue, false)
+	parent, err = objects.NewConfiguredQueue(parentConf, queue, false, partition.appQueueMapping)
 	assert.NilError(t, err, "failed to create parent queue")
 	queue = partition.GetQueue("root.unknown")
 	assert.Equal(t, queue, nilQueue, "partition returned not nil for non existing queue name request: %v", queue)

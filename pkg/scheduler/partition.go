@@ -66,6 +66,7 @@ type PartitionContext struct {
 	placeholderAllocations int                             // number of placeholder allocations
 	preemptionEnabled      bool                            // whether preemption is enabled or not
 	foreignAllocs          map[string]*objects.Allocation  // foreign (non-Yunikorn) allocations
+	appQueueMapping        *objects.AppQueueMapping        // appID mapping to queues
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -96,6 +97,7 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 		completedApplications: make(map[string]*objects.Application),
 		nodes:                 objects.NewNodeCollection(conf.Name),
 		foreignAllocs:         make(map[string]*objects.Allocation),
+		appQueueMapping:       objects.NewAppQueueMapping(),
 	}
 	pc.partitionManager = newPartitionManager(pc, cc)
 	if err := pc.initialPartitionFromConfig(conf, silence); err != nil {
@@ -116,7 +118,7 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	// Add the rest of the queue structure recursively
 	queueConf := conf.Queues[0]
 	var err error
-	if pc.root, err = objects.NewConfiguredQueue(queueConf, nil, silence); err != nil {
+	if pc.root, err = objects.NewConfiguredQueue(queueConf, nil, silence, pc.appQueueMapping); err != nil {
 		return err
 	}
 	// recursively add the queues to the root
@@ -204,7 +206,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 func (pc *PartitionContext) addQueue(conf []configs.QueueConfig, parent *objects.Queue, silence bool) error {
 	// create the queue at this level
 	for _, queueConf := range conf {
-		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent, silence)
+		thisQueue, err := objects.NewConfiguredQueue(queueConf, parent, silence, pc.appQueueMapping)
 		if err != nil {
 			return err
 		}
@@ -233,7 +235,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 		queue := pc.getQueueInternal(pathName)
 		var err error
 		if queue == nil {
-			queue, err = objects.NewConfiguredQueue(queueConfig, parent, false)
+			queue, err = objects.NewConfiguredQueue(queueConfig, parent, false, pc.appQueueMapping)
 		} else {
 			err = queue.ApplyConf(queueConfig)
 		}
@@ -386,6 +388,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	app.SetTerminatedCallback(pc.moveTerminatedApp)
 	queue.AddApplication(app)
 	pc.applications[appID] = app
+	pc.appQueueMapping.AddAppQueueMapping(appID, queue)
 
 	return nil
 }
@@ -404,6 +407,8 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 	if queue := app.GetQueue(); queue != nil {
 		queue.RemoveApplication(app)
 	}
+	// Remove appID mapping
+	pc.appQueueMapping.RemoveAppQueueMapping(appID)
 	// Remove all allocations
 	allocations := app.RemoveAllAllocations()
 	// Remove all allocations from node(s) (queues have been updated already)
@@ -509,7 +514,7 @@ func (pc *PartitionContext) GetPlacementRules() []*dao.RuleDAO {
 
 // createRecoveryQueue creates the recovery queue to add to the hierarchy
 func (pc *PartitionContext) createRecoveryQueue() (*objects.Queue, error) {
-	return objects.NewRecoveryQueue(pc.root)
+	return objects.NewRecoveryQueue(pc.root, pc.appQueueMapping)
 }
 
 // Create a queue with full hierarchy. This is called when a new queue is created from a placement rule.
@@ -543,7 +548,7 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 	for i := len(toCreate) - 1; i >= 0; i-- {
 		// everything is checked and there should be no errors
 		var err error
-		queue, err = objects.NewDynamicQueue(toCreate[i], i == 0, queue)
+		queue, err = objects.NewDynamicQueue(toCreate[i], i == 0, queue, pc.appQueueMapping)
 		if err != nil {
 			log.Log(log.SchedPartition).Warn("Queue auto create failed unexpected",
 				zap.String("queueName", toCreate[i]),

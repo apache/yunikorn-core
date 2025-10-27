@@ -124,7 +124,7 @@ func TestDynamicSubQueues(t *testing.T) {
 
 	// single parent under root
 	var parent *Queue
-	parent, err = createDynamicQueue(root, "parent", true)
+	parent, err = createDynamicQueue(root, "parent", true, nil)
 	assert.NilError(t, err, "failed to create parent queue")
 	if parent.IsLeafQueue() || parent.IsManaged() {
 		t.Errorf("parent queue is not marked as parent")
@@ -134,7 +134,7 @@ func TestDynamicSubQueues(t *testing.T) {
 	}
 	// add a leaf under the parent
 	var leaf *Queue
-	leaf, err = createDynamicQueue(parent, "leaf", false)
+	leaf, err = createDynamicQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
 	if len(parent.children) == 0 {
 		t.Error("leaf queue is not added to the parent queue")
@@ -377,10 +377,10 @@ func TestGetChildQueueInfo(t *testing.T) {
 		t.Errorf("managed leaf queues are not added to the parent queue, expected 10 children got %d", len(parent.children))
 	}
 
-	parent, err = createDynamicQueue(root, "parent-un", true)
+	parent, err = createDynamicQueue(root, "parent-un", true, nil)
 	assert.NilError(t, err, "failed to create dynamic parent queue")
 	for i := 0; i < 10; i++ {
-		_, err = createDynamicQueue(parent, "leaf-un-"+strconv.Itoa(i), false)
+		_, err = createDynamicQueue(parent, "leaf-un-"+strconv.Itoa(i), false, nil)
 		if err != nil {
 			t.Errorf("failed to create dynamic queue: %v", err)
 		}
@@ -1835,35 +1835,37 @@ func TestPreemptionDelay(t *testing.T) {
 }
 
 func TestFindQueueByAppID(t *testing.T) {
-	root, err := createRootQueue(nil)
+	appQueueMapping := NewAppQueueMapping()
+	root, err := createRootQueueWithAppQueueMapping(nil, appQueueMapping)
 	assert.NilError(t, err, "failed to create queue")
-	parent1, err := createManagedQueue(root, "parent1", true, nil)
+	parent1, err := createManagedQueueWithAppQueueMapping(root, "parent1", true, nil, appQueueMapping)
 	assert.NilError(t, err, "failed to create queue")
-	parent2, err := createManagedQueue(root, "parent2", true, nil)
+	parent2, err := createManagedQueueWithAppQueueMapping(root, "parent2", true, nil, appQueueMapping)
 	assert.NilError(t, err, "failed to create queue")
-	leaf1, err := createManagedQueue(parent1, "leaf1", false, nil)
+	leaf1, err := createManagedQueueWithAppQueueMapping(parent1, "leaf1", false, nil, appQueueMapping)
 	assert.NilError(t, err, "failed to create queue")
-	leaf2, err := createManagedQueue(parent2, "leaf2", false, nil)
+	leaf2, err := createManagedQueueWithAppQueueMapping(parent2, "leaf2", false, nil, appQueueMapping)
 	assert.NilError(t, err, "failed to create queue")
 
 	app := newApplication(appID1, "default", "root.parent.leaf")
 	app.pending = resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 10})
 	leaf1.AddApplication(app)
+	appQueueMapping.AddAppQueueMapping(appID1, leaf1)
 
 	// we should be able to find the queue from any other given the appID
-	assert.Equal(t, leaf1, root.FindQueueByAppID(appID1), "failed to find queue from root")
-	assert.Equal(t, leaf1, parent1.FindQueueByAppID(appID1), "failed to find queue from parent1")
-	assert.Equal(t, leaf1, parent2.FindQueueByAppID(appID1), "failed to find queue from parent2")
-	assert.Equal(t, leaf1, leaf1.FindQueueByAppID(appID1), "failed to find queue from leaf1")
-	assert.Equal(t, leaf1, leaf2.FindQueueByAppID(appID1), "failed to find queue from leaf2")
+	assert.Equal(t, leaf1, root.GetQueueByAppID(appID1), "failed to find queue from root")
+	assert.Equal(t, leaf1, parent1.GetQueueByAppID(appID1), "failed to find queue from parent1")
+	assert.Equal(t, leaf1, parent2.GetQueueByAppID(appID1), "failed to find queue from parent2")
+	assert.Equal(t, leaf1, leaf1.GetQueueByAppID(appID1), "failed to find queue from leaf1")
+	assert.Equal(t, leaf1, leaf2.GetQueueByAppID(appID1), "failed to find queue from leaf2")
 
 	// non-existent queue should be nil
 	var none *Queue = nil
-	assert.Equal(t, none, root.FindQueueByAppID("missing"), "found queue reference in root")
-	assert.Equal(t, none, parent1.FindQueueByAppID("missing"), "found queue reference in parent1")
-	assert.Equal(t, none, parent2.FindQueueByAppID("missing"), "found queue reference in parent2")
-	assert.Equal(t, none, leaf1.FindQueueByAppID("missing"), "found queue reference in leaf1")
-	assert.Equal(t, none, leaf2.FindQueueByAppID("missing"), "found queue reference in leaf2")
+	assert.Equal(t, none, root.GetQueueByAppID("missing"), "found queue reference in root")
+	assert.Equal(t, none, parent1.GetQueueByAppID("missing"), "found queue reference in parent1")
+	assert.Equal(t, none, parent2.GetQueueByAppID("missing"), "found queue reference in parent2")
+	assert.Equal(t, none, leaf1.GetQueueByAppID("missing"), "found queue reference in leaf1")
+	assert.Equal(t, none, leaf2.GetQueueByAppID("missing"), "found queue reference in leaf2")
 }
 
 // nolint: funlen
@@ -1878,13 +1880,13 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	alloc3 := createAllocation("ask3", appID2, nodeID1, true, true, -1000, false, res)
 	root, err := createRootQueue(map[string]string{siCommon.Memory: "1000"})
 	assert.NilError(t, err, "failed to create queue")
-	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar)
+	parent1, err := createManagedQueueGuaranteed(root, "parent1", true, parentMax, parentGuar, nil)
 	assert.NilError(t, err, "failed to create queue")
-	parent2, err := createManagedQueueGuaranteed(root, "parent2", true, parentMax, parentGuar)
+	parent2, err := createManagedQueueGuaranteed(root, "parent2", true, parentMax, parentGuar, nil)
 	assert.NilError(t, err, "failed to create queue")
-	leaf1, err := createManagedQueueGuaranteed(parent1, "leaf1", false, nil, nil)
+	leaf1, err := createManagedQueueGuaranteed(parent1, "leaf1", false, nil, nil, nil)
 	assert.NilError(t, err, "failed to create queue")
-	leaf2, err := createManagedQueueGuaranteed(parent2, "leaf2", false, nil, nil)
+	leaf2, err := createManagedQueueGuaranteed(parent2, "leaf2", false, nil, nil, nil)
 	assert.NilError(t, err, "failed to create queue")
 
 	// verify no victims when no allocations exist
@@ -2164,7 +2166,7 @@ func TestApplyConf(t *testing.T) {
 	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
-	child, err := NewDynamicQueue("child", true, parent)
+	child, err := NewDynamicQueue("child", true, parent, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
 	err = child.ApplyConf(childConf)
@@ -2264,7 +2266,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 			},
 		},
 	}
-	parent, err := NewConfiguredQueue(parentConfig, nil, false)
+	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, parent.Name, "parent_queue")
 	assert.Equal(t, parent.QueuePath, "parent_queue")
@@ -2284,7 +2286,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 			Guaranteed: getResourceConf(),
 		},
 	}
-	childLeaf, err := NewConfiguredQueue(leafConfig, parent, false)
+	childLeaf, err := NewConfiguredQueue(leafConfig, parent, false, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childLeaf.QueuePath, "parent_queue.leaf_queue")
 	assert.Assert(t, childLeaf.template == nil)
@@ -2301,7 +2303,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 		Name:   "nonleaf_queue",
 		Parent: true,
 	}
-	childNonLeaf, err := NewConfiguredQueue(NonLeafConfig, parent, false)
+	childNonLeaf, err := NewConfiguredQueue(NonLeafConfig, parent, false, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	assert.Equal(t, childNonLeaf.QueuePath, "parent_queue.nonleaf_queue")
 	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
@@ -2316,7 +2318,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 	rootConfig := configs.QueueConfig{
 		Name: "root",
 	}
-	_, err = NewConfiguredQueue(rootConfig, nil, true)
+	_, err = NewConfiguredQueue(rootConfig, nil, true, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	time.Sleep(time.Second)
 	noEvents := eventSystem.Store.CountStoredEvents()
@@ -2354,13 +2356,13 @@ func TestResetRunningState(t *testing.T) {
 
 func TestNewRecoveryQueue(t *testing.T) {
 	var err error
-	if _, err = NewRecoveryQueue(nil); err == nil {
+	if _, err = NewRecoveryQueue(nil, nil); err == nil {
 		t.Fatalf("recovery queue creation should fail with nil parent")
 	}
 
 	parent, err := createManagedQueueWithProps(nil, "parent", true, nil, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
-	if _, err = NewRecoveryQueue(parent); err == nil {
+	if _, err = NewRecoveryQueue(parent, nil); err == nil {
 		t.Fatalf("recovery queue creation should fail with non-root parent")
 	}
 
@@ -2370,9 +2372,9 @@ func TestNewRecoveryQueue(t *testing.T) {
 		Properties:    map[string]string{configs.ApplicationSortPolicy: "fair"},
 		ChildTemplate: configs.ChildTemplate{Properties: map[string]string{configs.ApplicationSortPolicy: "fair"}},
 	}
-	parent, err = NewConfiguredQueue(parentConfig, nil, false)
+	parent, err = NewConfiguredQueue(parentConfig, nil, false, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
-	recoveryQueue, err := NewRecoveryQueue(parent)
+	recoveryQueue, err := NewRecoveryQueue(parent, nil)
 	assert.NilError(t, err, "failed to create recovery queue: %v", err)
 	assert.Equal(t, common.RecoveryQueueFull, recoveryQueue.GetQueuePath(), "wrong queue name")
 	assert.Equal(t, policies.FifoSortPolicy, recoveryQueue.getSortType(), "wrong sort type")
@@ -2381,7 +2383,7 @@ func TestNewRecoveryQueue(t *testing.T) {
 func TestNewDynamicQueueDoesNotCreateRecovery(t *testing.T) {
 	parent, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
-	if _, err := NewDynamicQueue(common.RecoveryQueue, true, parent); err == nil {
+	if _, err := NewDynamicQueue(common.RecoveryQueue, true, parent, nil); err == nil {
 		t.Fatalf("invalid recovery queue %s was created", common.RecoveryQueueFull)
 	}
 }
@@ -2400,7 +2402,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.NilError(t, err)
 
 	// case 0: leaf can use template
-	childLeaf, err := NewDynamicQueue("leaf", true, parent)
+	childLeaf, err := NewDynamicQueue("leaf", true, parent, nil)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, childLeaf.template == nil)
 	assert.Equal(t, childLeaf.maxRunningApps, parent.template.GetMaxApplications())
@@ -2412,7 +2414,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, childLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 
 	// case 1: non-leaf can't use template but it can inherit template from parent
-	childNonLeaf, err := NewDynamicQueue("nonleaf_Test-a_b_#_c_#_d_/_e@dom:ain", false, parent)
+	childNonLeaf, err := NewDynamicQueue("nonleaf_Test-a_b_#_c_#_d_/_e@dom:ain", false, parent, nil)
 	assert.NilError(t, err, "failed to create dynamic queue: %v", err)
 	assert.Assert(t, reflect.DeepEqual(childNonLeaf.template, parent.template))
 	assert.Equal(t, len(childNonLeaf.properties), 0)
@@ -2423,7 +2425,7 @@ func TestNewDynamicQueue(t *testing.T) {
 	assert.Equal(t, childNonLeaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
 
 	// case 2: invalid queue name
-	_, err = NewDynamicQueue("invalid!queue", false, parent)
+	_, err = NewDynamicQueue("invalid!queue", false, parent, nil)
 	if err == nil {
 		t.Errorf("new dynamic queue should have failed to create, err is %v", err)
 	}

@@ -18,6 +18,12 @@
 
 package objects
 
+import (
+	"math"
+
+	"github.com/apache/yunikorn-core/pkg/common/resources"
+)
+
 type QuotaChangePreemptionContext struct {
 	queue *Queue
 }
@@ -47,4 +53,27 @@ func (qcp *QuotaChangePreemptionContext) tryPreemption() {
 
 	// quota change preemption has really evicted victims, so mark the flag
 	qcp.queue.MarkTriggerredQuotaChangePreemption()
+}
+
+// GetPreemptableResources Get the preemptable resources for the queue
+// Subtracting the usage from the max resource gives the preemptable resources.
+// It could contain both positive and negative values. Only negative values are preemptable.
+func (qcp *QuotaChangePreemptionContext) GetPreemptableResources() *resources.Resource {
+	maxRes := qcp.queue.CloneMaxResource()
+	used := resources.SubOnlyExisting(qcp.queue.GetAllocatedResource(), qcp.queue.GetPreemptingResource())
+	if maxRes.IsEmpty() || used.IsEmpty() {
+		return nil
+	}
+	actual := resources.SubOnlyExisting(maxRes, used)
+	preemptableResource := resources.NewResource()
+	// Keep only the resource type which needs to be preempted
+	for k, v := range actual.Resources {
+		if v < 0 {
+			preemptableResource.Resources[k] = resources.Quantity(math.Abs(float64(v)))
+		}
+	}
+	if preemptableResource.IsEmpty() {
+		return nil
+	}
+	return preemptableResource
 }

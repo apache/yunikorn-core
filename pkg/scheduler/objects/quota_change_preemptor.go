@@ -21,16 +21,23 @@ package objects
 import (
 	"math"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/log"
 )
 
 type QuotaChangePreemptionContext struct {
-	queue *Queue
+	queue               *Queue
+	preemptableResource *resources.Resource
+	allocations         []*Allocation
 }
 
 func NewQuotaChangePreemptor(queue *Queue) *QuotaChangePreemptionContext {
 	preemptor := &QuotaChangePreemptionContext{
-		queue: queue,
+		queue:               queue,
+		preemptableResource: nil,
+		allocations:         make([]*Allocation, 0),
 	}
 	return preemptor
 }
@@ -49,16 +56,23 @@ func (qcp *QuotaChangePreemptionContext) tryPreemption() {
 	// quota change preemption has started, so mark the flag
 	qcp.queue.MarkQuotaChangePreemptionRunning()
 
-	// Preemption logic goes here
+	// Get Preemptable Resource
+	qcp.preemptableResource = qcp.getPreemptableResources()
+
+	// Filter the allocations
+	qcp.allocations = qcp.filterAllocations()
+
+	// Sort the allocations
+	qcp.sortAllocations()
 
 	// quota change preemption has really evicted victims, so mark the flag
 	qcp.queue.MarkTriggerredQuotaChangePreemption()
 }
 
-// GetPreemptableResources Get the preemptable resources for the queue
+// getPreemptableResources Get the preemptable resources for the queue
 // Subtracting the usage from the max resource gives the preemptable resources.
 // It could contain both positive and negative values. Only negative values are preemptable.
-func (qcp *QuotaChangePreemptionContext) GetPreemptableResources() *resources.Resource {
+func (qcp *QuotaChangePreemptionContext) getPreemptableResources() *resources.Resource {
 	maxRes := qcp.queue.CloneMaxResource()
 	used := resources.SubOnlyExisting(qcp.queue.GetAllocatedResource(), qcp.queue.GetPreemptingResource())
 	if maxRes.IsEmpty() || used.IsEmpty() {
@@ -76,4 +90,51 @@ func (qcp *QuotaChangePreemptionContext) GetPreemptableResources() *resources.Re
 		return nil
 	}
 	return preemptableResource
+}
+
+// filterAllocations Filter the allocations running in the queue suitable for choosing as victims
+func (qcp *QuotaChangePreemptionContext) filterAllocations() []*Allocation {
+	if resources.IsZero(qcp.preemptableResource) {
+		return nil
+	}
+	var allocations []*Allocation
+	apps := qcp.queue.GetCopyOfApps()
+
+	// Traverse allocations running in the queue
+	for _, app := range apps {
+		appAllocations := app.GetAllAllocations()
+		for _, alloc := range appAllocations {
+			// at least one of a preemptable resource type should match with a potential victim
+			if !qcp.preemptableResource.MatchAny(alloc.GetAllocatedResource()) {
+				continue
+			}
+
+			// skip allocations which require a specific node
+			if alloc.GetRequiredNode() != "" {
+				continue
+			}
+
+			// skip already released allocations
+			if alloc.IsReleased() {
+				continue
+			}
+
+			// skip already preempted allocations
+			if alloc.IsPreempted() {
+				continue
+			}
+			allocations = append(allocations, alloc)
+		}
+	}
+	log.Log(log.ShedQuotaChangePreemption).Info("Filtering allocations",
+		zap.String("queue", qcp.queue.GetQueuePath()),
+		zap.Int("filtered allocations", len(allocations)),
+	)
+	return allocations
+}
+
+func (qcp *QuotaChangePreemptionContext) sortAllocations() {
+	if len(qcp.allocations) > 0 {
+		SortAllocations(qcp.allocations)
+	}
 }

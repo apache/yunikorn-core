@@ -19,8 +19,6 @@
 package objects
 
 import (
-	"sort"
-
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
@@ -70,19 +68,12 @@ func (p *PreemptionContext) filterAllocations() filteringResult {
 			continue
 		}
 
-		// atleast one of the required ask resource should match, otherwise skip
-		includeAllocation := false
-		for k := range p.requiredAsk.GetAllocatedResource().Resources {
-			if _, ok := allocation.GetAllocatedResource().Resources[k]; ok {
-				includeAllocation = true
-				break
-			}
-		}
-		if includeAllocation {
-			p.allocations = append(p.allocations, allocation)
-		} else {
+		// at least one of the required ask resource should match, otherwise skip
+		if !p.requiredAsk.GetAllocatedResource().MatchAny(allocation.GetAllocatedResource()) {
 			result.atLeastOneResNotMatched++
+			continue
 		}
+		p.allocations = append(p.allocations, allocation)
 	}
 
 	return result
@@ -94,54 +85,7 @@ func (p *PreemptionContext) filterAllocations() filteringResult {
 // 3. By Create time or age of the ask (younger ask placed first),
 // 4. By resource (ask with lesser allocated resources placed first)
 func (p *PreemptionContext) sortAllocations() {
-	sort.SliceStable(p.allocations, func(i, j int) bool {
-		l := p.allocations[i]
-		r := p.allocations[j]
-
-		// sort based on the type
-		lAskType := 1         // regular pod
-		if l.IsOriginator() { // driver/owner pod
-			lAskType = 3
-		} else if !l.IsAllowPreemptSelf() { // opted out pod
-			lAskType = 2
-		}
-		rAskType := 1
-		if r.IsOriginator() {
-			rAskType = 3
-		} else if !r.IsAllowPreemptSelf() {
-			rAskType = 2
-		}
-		if lAskType < rAskType {
-			return true
-		}
-		if lAskType > rAskType {
-			return false
-		}
-
-		// sort based on the priority
-		lPriority := l.GetPriority()
-		rPriority := r.GetPriority()
-		if lPriority < rPriority {
-			return true
-		}
-		if lPriority > rPriority {
-			return false
-		}
-
-		// sort based on the age
-		if !l.GetCreateTime().Equal(r.GetCreateTime()) {
-			return l.GetCreateTime().After(r.GetCreateTime())
-		}
-
-		// sort based on the allocated resource
-		lResource := l.GetAllocatedResource()
-		rResource := r.GetAllocatedResource()
-		if !resources.Equals(lResource, rResource) {
-			delta := resources.Sub(lResource, rResource)
-			return !resources.StrictlyGreaterThanZero(delta)
-		}
-		return true
-	})
+	SortAllocations(p.allocations)
 }
 
 func (p *PreemptionContext) GetVictims() []*Allocation {

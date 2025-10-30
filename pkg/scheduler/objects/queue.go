@@ -1337,6 +1337,49 @@ func (sq *Queue) sortQueues() []*Queue {
 	return sortedQueues
 }
 
+// GetSchedulingOrder returns a sorted shallow copy of the queues for this parent queue along with
+// their eligible applications that would be tried in the current scheduling cycle.
+// This follows the same logic as TryAllocate method.
+// Only queues with a pending resource request are considered. The queues are sorted using the
+// sorting type for the parent queue.
+// Lock free call all locks are taken when needed in called functions
+func (sq *Queue) GetSchedulingOrder() []*dao.SchedulingOrderDAO {
+	if sq.IsLeafQueue() {
+		// For leaf queues, return the queue with its eligible applications
+		appIDs := make([]string, 0)
+
+		// Process the apps (filters out app without pending requests) - same logic as TryAllocate
+		for _, app := range sq.sortApplications(false) {
+			runnableInQueue := sq.canRunApp(app.ApplicationID)
+			runnableByUserLimit := ugm.GetUserManager().CanRunApp(sq.QueuePath, app.ApplicationID, app.user)
+			app.updateRunnableStatus(runnableInQueue, runnableByUserLimit)
+			if app.IsAccepted() && (!runnableInQueue || !runnableByUserLimit) {
+				continue
+			}
+			appIDs = append(appIDs, app.ApplicationID)
+		}
+
+		// Only return this queue if it has eligible applications or pending resources
+		if len(appIDs) > 0 || resources.StrictlyGreaterThanZero(sq.GetPendingResource()) {
+			return []*dao.SchedulingOrderDAO{{
+				QueueName:      sq.QueuePath,
+				ApplicationIDs: appIDs,
+			}}
+		}
+		return nil
+	} else {
+		// For parent queues, process child queues - same logic as TryAllocate
+		result := make([]*dao.SchedulingOrderDAO, 0)
+
+		// Process each sorted child queue using the original sortQueues method
+		for _, child := range sq.sortQueues() {
+			childInfo := child.GetSchedulingOrder()
+			result = append(result, childInfo...)
+		}
+		return result
+	}
+}
+
 // getHeadRoom returns the headroom for the queue. This can never be more than the headroom for the parent.
 // In case there are no nodes in a newly started cluster and no queues have a limit configured this call
 // will return nil.

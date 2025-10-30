@@ -3016,6 +3016,119 @@ func TestSetMaxRESTResponseSize(t *testing.T) {
 	assert.Equal(t, uint64(10000), maxRESTResponseSize.Load())
 }
 
+func TestGetPartitionSchedulingOrderHandler(t *testing.T) {
+	// Setup partition with default configuration
+	part := setup(t, configDefault, 1)
+
+	// Create applications with pending requests to trigger scheduling order
+	app1 := addApp(t, "app-1", part, "root.default", false)
+	app2 := addApp(t, "app-2", part, "root.default", false)
+	app3 := addApp(t, "app-3", part, "root.default", false)
+
+	// Add pending allocation requests to applications
+	res1 := &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 100}, "vcore": {Value: 1}},
+	}
+	ask1 := objects.NewAllocationFromSI(&si.Allocation{
+		ApplicationID:    "app-1",
+		PartitionName:    part.Name,
+		ResourcePerAlloc: res1})
+	err := app1.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "ask should have been added to app-1")
+
+	res2 := &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 200}, "vcore": {Value: 2}},
+	}
+	ask2 := objects.NewAllocationFromSI(&si.Allocation{
+		ApplicationID:    "app-2",
+		PartitionName:    part.Name,
+		ResourcePerAlloc: res2})
+	err = app2.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "ask should have been added to app-2")
+
+	res3 := &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 150}, "vcore": {Value: 1}},
+	}
+	ask3 := objects.NewAllocationFromSI(&si.Allocation{
+		ApplicationID:    "app-3",
+		PartitionName:    part.Name,
+		ResourcePerAlloc: res3})
+	err = app3.AddAllocationAsk(ask3)
+	assert.NilError(t, err, "ask should have been added to app-3")
+
+	NewWebApp(schedulerContext.Load(), nil)
+
+	// Test successful scheduling order retrieval
+	var req *http.Request
+	req, err = createRequest(t, "/ws/v1/partition/default/schedulingorder", map[string]string{"partition": partitionNameWithoutClusterID})
+	assert.NilError(t, err, "Get Scheduling Order Handler request failed")
+	resp := &MockResponseWriter{}
+	var schedulingOrderDao []*dao.SchedulingOrderDAO
+	getPartitionSchedulingOrder(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &schedulingOrderDao)
+	assert.NilError(t, err, unmarshalError)
+
+	// Validate response structure and content
+	assert.Assert(t, len(schedulingOrderDao) > 0, "scheduling order should contain at least one queue")
+
+	// Verify that queues with pending resources are included
+	queueFound := false
+	for _, queueOrder := range schedulingOrderDao {
+		if queueOrder.QueueName == "root.default" {
+			queueFound = true
+			// Verify that applications with pending requests are included
+			assert.Assert(t, len(queueOrder.ApplicationIDs) >= 3, "queue root.default should have at least 3 applications")
+			// Check that our test applications are in the list
+			appFound1, appFound2, appFound3 := false, false, false
+			for _, appID := range queueOrder.ApplicationIDs {
+				if appID == "app-1" {
+					appFound1 = true
+				}
+				if appID == "app-2" {
+					appFound2 = true
+				}
+				if appID == "app-3" {
+					appFound3 = true
+				}
+			}
+			assert.Assert(t, appFound1, "app-1 should be in scheduling order")
+			assert.Assert(t, appFound2, "app-2 should be in scheduling order")
+			assert.Assert(t, appFound3, "app-3 should be in scheduling order")
+		}
+	}
+	assert.Assert(t, queueFound, "queue root.default should be found in scheduling order")
+
+	// Test nonexistent partition
+	req, err = createRequest(t, "/ws/v1/partition/default/schedulingorder", map[string]string{"partition": "notexists"})
+	assert.NilError(t, err, "Get Scheduling Order Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionSchedulingOrder(resp, req)
+	assertPartitionNotExists(t, resp)
+
+	// Test missing params name
+	req, err = http.NewRequest("GET", "/ws/v1/partition/default/schedulingorder", strings.NewReader(""))
+	assert.NilError(t, err, "Get Scheduling Order Handler request failed")
+	resp = &MockResponseWriter{}
+	getPartitionSchedulingOrder(resp, req)
+	assertParamsMissing(t, resp)
+
+	// Test empty scheduling order (partition with no pending requests)
+	// Create a new partition with no applications
+	emptyPart := setup(t, configDefault, 1)
+	// Add an application but without pending requests
+	addApp(t, "app-empty", emptyPart, "root.default", false)
+
+	req, err = createRequest(t, "/ws/v1/partition/default/schedulingorder", map[string]string{"partition": partitionNameWithoutClusterID})
+	assert.NilError(t, err, "Get Scheduling Order Handler request failed")
+	resp = &MockResponseWriter{}
+	var emptySchedulingOrderDao []*dao.SchedulingOrderDAO
+	getPartitionSchedulingOrder(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &emptySchedulingOrderDao)
+	assert.NilError(t, err, unmarshalError)
+	// Should return empty array when no queues have pending resources
+	assert.Equal(t, len(emptySchedulingOrderDao), 0, "scheduling order should be empty when no pending requests exist")
+}
+
 type ResponseRecorderWithDeadline struct {
 	*httptest.ResponseRecorder
 	setWriteFails   bool

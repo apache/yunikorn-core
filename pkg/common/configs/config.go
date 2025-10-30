@@ -45,13 +45,19 @@ type SchedulerConfig struct {
 // - a list of placement rule definition objects
 // - a list of users specifying limits on the partition
 // - the preemption configuration for the partition
+// - user group resolver type (os, ldap, "")
 type PartitionConfig struct {
-	Name           string
-	Queues         []QueueConfig
-	PlacementRules []PlacementRule           `yaml:",omitempty" json:",omitempty"`
-	Limits         []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption     PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
-	NodeSortPolicy NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
+	Name              string
+	Queues            []QueueConfig
+	PlacementRules    []PlacementRule           `yaml:",omitempty" json:",omitempty"`
+	Limits            []Limit                   `yaml:",omitempty" json:",omitempty"`
+	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
+	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
+	UserGroupResolver UserGroupResolver         `yaml:",omitempty" json:",omitempty"`
+}
+
+type UserGroupResolver struct {
+	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 }
 
 // The partition preemption configuration

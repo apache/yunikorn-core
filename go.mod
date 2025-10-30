@@ -25,6 +25,7 @@ toolchain go1.23.7
 
 require (
 	github.com/apache/yunikorn-scheduler-interface v0.0.0-20251021140208-d3b357b98dcd
+	github.com/go-ldap/ldap/v3 v3.4.11
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
@@ -44,13 +45,16 @@ require (
 )
 
 require (
+	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/go-asn1-ber/asn1-ber v1.5.8-0.20250403174932-29230038a667 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/petermattis/goid v0.0.0-20250813065127-a731cc31b4fe // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
+	golang.org/x/crypto v0.41.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/text v0.28.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250115164207-1a7da9e5054f // indirect

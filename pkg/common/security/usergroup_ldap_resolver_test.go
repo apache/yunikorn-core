@@ -165,9 +165,18 @@ func TestLdapSearch(t *testing.T) {
 
 	// Create a mock LDAP access with the mock result
 	mockAccess := newMockLdapAccess(mockResult, nil)
+	savedUrl := ""
+	mockAccess.DialURLFunc = func(url string, _ ...ldap.DialOpt) (*ldap.Conn, error) {
+		savedUrl = url
+		return &ldap.Conn{}, nil
+	}
 
 	// Call ldapSearch with the mock access
-	result, err := ldapSearch(mockAccess, LdapConfig{}, "testuser")
+	ldapConf := LdapConfig{
+		Host: "testhost",
+		Port: 1234,
+	}
+	result, err := ldapSearch(mockAccess, ldapConf, "testuser")
 
 	// Verify results
 	assert.NilError(t, err)
@@ -178,6 +187,17 @@ func TestLdapSearch(t *testing.T) {
 	assert.Equal(t, 2, len(result.Entries[0].Attributes[0].Values))
 	assert.Equal(t, "CN=group1,OU=groups,DC=example,DC=com", result.Entries[0].Attributes[0].Values[0])
 	assert.Equal(t, "CN=group2,OU=groups,DC=example,DC=com", result.Entries[0].Attributes[0].Values[1])
+	assert.Equal(t, "ldap://testhost:1234", savedUrl)
+
+	// check useSsl
+	ldapConf = LdapConfig{
+		Host:   "testhost",
+		Port:   1234,
+		useSsl: true,
+	}
+	_, err = ldapSearch(mockAccess, ldapConf, "testuser")
+	assert.NilError(t, err)
+	assert.Equal(t, "ldaps://testhost:1234", savedUrl)
 }
 
 // TestLdapSearchError tests the error handling in ldapSearch
@@ -599,7 +619,6 @@ func TestUserGroupCacheLdap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Get the LDAP user group cache
 			cache := GetUserGroupCacheLdap(&ConfigReaderMock{}, newMockLdapAccess(nil, nil))
-
 			// Run the validation function
 			tt.validateFunc(t, cache)
 		})

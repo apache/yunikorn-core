@@ -355,9 +355,6 @@ func validateReturnAttrValue(value string) ([]string, error) {
 		return nil, fmt.Errorf("returnAttr cannot be empty")
 	}
 	attrs := strings.Split(value, ",")
-	if len(attrs) == 0 {
-		return nil, fmt.Errorf("returnAttr must contain at least one attribute")
-	}
 	return attrs, nil
 }
 

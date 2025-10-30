@@ -36,7 +36,7 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 			Max: map[string]string{"memory": "1000"},
 		},
 	}
-	parent, err := NewConfiguredQueue(parentConfig, nil, false)
+	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
 	assert.NilError(t, err)
 
 	leafRes := configs.Resources{
@@ -45,34 +45,34 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 	leaf, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:      "leaf",
 		Resources: leafRes,
-	}, parent, false)
+	}, parent, false, nil)
 	assert.NilError(t, err)
 
 	dynamicLeaf, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:      "dynamic-leaf",
 		Resources: leafRes,
-	}, parent, false)
+	}, parent, false, nil)
 	assert.NilError(t, err)
 	dynamicLeaf.isManaged = false
 
 	alreadyPreemptionRunning, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:      "leaf-already-preemption-running",
 		Resources: leafRes,
-	}, parent, false)
+	}, parent, false, nil)
 	assert.NilError(t, err)
 	alreadyPreemptionRunning.MarkQuotaChangePreemptionRunning()
 
 	alreadyTriggeredPreemption, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:      "leaf-already-triggerred-running",
 		Resources: leafRes,
-	}, parent, false)
+	}, parent, false, nil)
 	assert.NilError(t, err)
 	alreadyTriggeredPreemption.MarkTriggerredQuotaChangePreemption()
 
 	usageExceededMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:      "leaf-usage-exceeded-max",
 		Resources: leafRes,
-	}, parent, false)
+	}, parent, false, nil)
 	assert.NilError(t, err)
 	usageExceededMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000})
 
@@ -104,7 +104,7 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 	leaf, err := NewConfiguredQueue(configs.QueueConfig{
 		Name: "leaf",
-	}, nil, false)
+	}, nil, false, nil)
 	assert.NilError(t, err)
 
 	testCases := []struct {
@@ -136,7 +136,7 @@ func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 func TestQuotaChangeFilterVictims(t *testing.T) {
 	leaf, err := NewConfiguredQueue(configs.QueueConfig{
 		Name: "leaf",
-	}, nil, false)
+	}, nil, false, nil)
 	assert.NilError(t, err)
 
 	node := NewNode(&si.NodeInfo{

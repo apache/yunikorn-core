@@ -662,6 +662,9 @@ func checkQueues(queue *QueueConfig, level int) error {
 			return fmt.Errorf("duplicate child name found with name '%s', level %d", child.Name, level)
 		}
 		queueMap[strings.ToLower(child.Name)] = true
+		if queue.Preemption.Delay != 0 && queue.Preemption.Delay <= 60 {
+			return fmt.Errorf("invalid preemption delay %d, must be greater than 60 seconds", queue.Preemption.Delay)
+		}
 	}
 
 	// recurse into the depth if this level passed

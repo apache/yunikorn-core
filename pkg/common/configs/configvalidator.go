@@ -758,6 +758,11 @@ func Validate(newConfig *SchedulerConfig) error {
 			return fmt.Errorf("duplicate partition name found with name %s", partition.Name)
 		}
 		partitionMap[strings.ToLower(partition.Name)] = true
+
+		if partition.TryNodesThreadCount <= 0 {
+			partition.TryNodesThreadCount = 1
+		}
+
 		// check the queue structure
 		err := checkQueuesStructure(&partition)
 		if err != nil {

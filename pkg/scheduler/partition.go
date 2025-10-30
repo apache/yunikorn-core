@@ -507,6 +507,11 @@ func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	return partitionQueueDAOInfo
 }
 
+// GetPartitionSchedulingOrder builds the sorted queue info for the whole queue structure to pass to the webservice
+func (pc *PartitionContext) GetPartitionSchedulingOrder() []*dao.SchedulingOrderDAO {
+	return pc.root.GetSchedulingOrder()
+}
+
 // GetPlacementRules returns the current active rule set as dao to expose to the webservice
 func (pc *PartitionContext) GetPlacementRules() []*dao.RuleDAO {
 	return pc.getPlacementManager().GetRulesDAO()

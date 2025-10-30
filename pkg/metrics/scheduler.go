@@ -68,6 +68,7 @@ type SchedulerMetrics struct {
 	tryPreemptionLatency  prometheus.Histogram
 	tryNodeEvaluation     prometheus.Histogram
 	lock                  locking.RWMutex
+	tryNodeCount          *prometheus.CounterVec
 }
 
 // InitSchedulerMetrics to initialize scheduler metrics
@@ -169,6 +170,13 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		},
 	)
 
+	s.tryNodeCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "trynode_count",
+			Help:      "Total number of nodes evaluated during scheduling cycle",
+		}, nil)
 	// Register the metrics
 	var metricsList = []prometheus.Collector{
 		s.containerAllocation,
@@ -181,6 +189,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		s.schedulingCycle,
 		s.tryNodeEvaluation,
 		s.tryPreemptionLatency,
+		s.tryNodeCount,
 	}
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
@@ -197,6 +206,7 @@ func (m *SchedulerMetrics) Reset() {
 	m.application.Reset()
 	m.applicationSubmission.Reset()
 	m.containerAllocation.Reset()
+	m.tryNodeCount.Reset()
 }
 
 func SinceInSeconds(start time.Time) float64 {
@@ -270,6 +280,19 @@ func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
 	err := m.containerAllocation.WithLabelValues(SchedulingError).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Counter.Value), nil
+	}
+	return -1, err
+}
+
+func (m *SchedulerMetrics) IncTryNodeCount() {
+	m.tryNodeCount.With(nil).Inc()
+}
+
+func (m *SchedulerMetrics) GetTryNodeCount() (int64, error) {
+	metricDto := &dto.Metric{}
+	err := m.tryNodeCount.With(nil).Write(metricDto)
+	if err == nil {
+		return int64(*metricDto.Counter.Value), nil
 	}
 	return -1, err
 }

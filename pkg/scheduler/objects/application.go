@@ -1013,11 +1013,10 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		// resource must fit in headroom otherwise skip the request (unless preemption could help)
 		if !headRoom.FitInMaxUndef(request.GetAllocatedResource()) {
 			// attempt preemption
-			if allowPreemption && *preemptAttemptsRemaining > 0 {
-				*preemptAttemptsRemaining--
+			if allowPreemption {
 				fullIterator := fullNodeIterator()
 				if fullIterator != nil {
-					if result, ok := sa.tryPreemption(headRoom, preemptionDelay, request, fullIterator, false); ok {
+					if result, ok := sa.tryPreemption(headRoom, preemptionDelay, preemptAttemptsRemaining, request, fullIterator, false); ok {
 						// preemption occurred, and possibly reservation
 						return result
 					}
@@ -1050,11 +1049,10 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			}
 
 			// no nodes qualify, attempt preemption
-			if allowPreemption && *preemptAttemptsRemaining > 0 {
-				*preemptAttemptsRemaining--
+			if allowPreemption {
 				fullIterator := fullNodeIterator()
 				if fullIterator != nil {
-					if result, ok := sa.tryPreemption(headRoom, preemptionDelay, request, fullIterator, true); ok {
+					if result, ok := sa.tryPreemption(headRoom, preemptionDelay, preemptAttemptsRemaining, request, fullIterator, true); ok {
 						// preemption occurred, and possibly reservation
 						return result
 					}
@@ -1364,7 +1362,15 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 	return nil
 }
 
-func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDelay time.Duration, ask *Allocation, iterator NodeIterator, nodesTried bool) (*AllocationResult, bool) {
+func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDelay time.Duration, preemptionAttemptsRemaining *int, ask *Allocation, iterator NodeIterator, nodesTried bool) (*AllocationResult, bool) {
+	if *preemptionAttemptsRemaining == 0 {
+		log.Log(log.SchedApplication).Debug("Max queue preemption attempts exhausted",
+			zap.String("allocationKey", ask.GetAllocationKey()),
+			zap.String("applicationID", sa.ApplicationID),
+			zap.String("queue", sa.queuePath))
+		ask.LogAllocationFailure(common.PreemptionMaxAttemptsExhausted, true)
+		return nil, false
+	}
 	preemptor := NewPreemptor(sa, headRoom, preemptionDelay, ask, iterator, nodesTried)
 
 	// validate prerequisites for preemption of an ask and mark ask for preemption if successful
@@ -1372,6 +1378,7 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 		ask.LogAllocationFailure(common.PreemptionPreconditionsFailed, true)
 		return nil, false
 	}
+	*preemptionAttemptsRemaining--
 
 	// track time spent trying preemption
 	tryPreemptionStart := time.Now()

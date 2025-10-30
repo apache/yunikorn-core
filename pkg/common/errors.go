@@ -35,9 +35,10 @@ var (
 
 // Constant messages for AllocationLog entries
 const (
-	PreemptionPreconditionsFailed = "Preemption preconditions failed"
-	PreemptionDoesNotGuarantee    = "Preemption queue guarantees check failed"
-	PreemptionShortfall           = "Preemption helped but short of resources"
-	PreemptionDoesNotHelp         = "Preemption does not help"
-	NoVictimForRequiredNode       = "No fit on required node, preemption does not help"
+	PreemptionPreconditionsFailed  = "Preemption preconditions failed"
+	PreemptionDoesNotGuarantee     = "Preemption queue guarantees check failed"
+	PreemptionShortfall            = "Preemption helped but short of resources"
+	PreemptionDoesNotHelp          = "Preemption does not help"
+	NoVictimForRequiredNode        = "No fit on required node, preemption does not help"
+	PreemptionMaxAttemptsExhausted = "Preemption max attempts exhausted"
 )

@@ -136,7 +136,7 @@ func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 func TestQuotaChangeFilterVictims(t *testing.T) {
 	leaf, err := NewConfiguredQueue(configs.QueueConfig{
 		Name: "leaf",
-	}, nil, false)
+	}, nil, false, nil)
 	assert.NilError(t, err)
 
 	node := NewNode(&si.NodeInfo{

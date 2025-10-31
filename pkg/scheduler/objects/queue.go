@@ -74,7 +74,6 @@ type Queue struct {
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
-<<<<<<< HEAD
 	properties                     map[string]string
 	adminACL                       security.ACL        // admin ACL
 	submitACL                      security.ACL        // submit ACL
@@ -95,28 +94,8 @@ type Queue struct {
 	isQuotaChangePreemptionRunning bool
 	unschedAskBackoff              uint64
 	askBackoffDelay                time.Duration
-=======
-	properties                         map[string]string
-	adminACL                           security.ACL        // admin ACL
-	submitACL                          security.ACL        // submit ACL
-	maxResource                        *resources.Resource // When not set, max = nil
-	guaranteedResource                 *resources.Resource // When not set, Guaranteed == 0
-	isLeaf                             bool                // this is a leaf queue or not (i.e. parent)
-	isManaged                          bool                // queue is part of the config, not auto created
-	stateMachine                       *fsm.FSM            // the state of the queue for scheduling
-	stateTime                          time.Time           // last time the state was updated (needed for cleanup)
-	maxRunningApps                     uint64
-	runningApps                        uint64
-	allocatingAcceptedApps             map[string]bool
-	template                           *template.Template
-	queueEvents                        *schedEvt.QueueEvents
-	appQueueMapping                    *AppQueueMapping // appID mapping to queues
-	quotaChangePreemptionDelay         uint64
-	hasTriggerredQuotaChangePreemption bool
-	isQuotaChangePreemptionRunning     bool
-	applicationsTried                  int64 // number of applications tried per scheduling cycle
-	nodesTried                         int64 // number of nodes tried per scheduling cycle
->>>>>>> 7ca44f3 (Rebased with master)
+	applicationsTried              int64 // number of applications tried per scheduling cycle
+	nodesTried                     int64 // number of nodes tried per scheduling cycle
 
 	locking.RWMutex
 }
@@ -1578,12 +1557,10 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 			if app.IsAccepted() && (!runnableInQueue || !runnableByUserLimit) {
 				continue
 			}
-<<<<<<< HEAD
 			deadline := app.GetBackoffDeadline()
 			if !deadline.IsZero() && time.Now().Before(deadline) {
 				continue
 			}
-=======
 
 			// Increment counter in root queue before calling app.tryAllocate
 			sq.incrementApplicationsTried()
@@ -1593,7 +1570,6 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 				countBefore = 0
 			}
 
->>>>>>> 7ca44f3 (Rebased with master)
 			result := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
 
 			countAfter, err := metrics.GetSchedulerMetrics().GetTryNodeCount()

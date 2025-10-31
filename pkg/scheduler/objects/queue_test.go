@@ -3142,3 +3142,43 @@ func TestQueueBackoffProperties(t *testing.T) {
 	assert.Equal(t, uint64(0), leaf3.GetMaxAppUnschedAskBackoff())
 	assert.Equal(t, 30*time.Second, leaf3.GetBackoffDelay())
 }
+
+func TestQueueCounters(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var parent *Queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+	var leaf *Queue
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	// check applications tried
+	leaf.incrementApplicationsTried()
+	assert.Equal(t, root.GetApplicationsTried(), int64(1), "root count should be 1")
+	assert.Equal(t, parent.GetApplicationsTried(), int64(1), "parent count should be 1")
+	assert.Equal(t, leaf.GetApplicationsTried(), int64(1), "leaf count should be 1")
+	leaf.ResetApplicationsTried()
+	assert.Equal(t, root.GetApplicationsTried(), int64(0), "root count should be 0 after reset")
+	assert.Equal(t, parent.GetApplicationsTried(), int64(0), "parent count should be 0 after reset")
+	assert.Equal(t, leaf.GetApplicationsTried(), int64(0), "leaf count should be 0 after reset")
+
+	// check nodes tried
+	leaf.addNodesTried(5)
+	assert.Equal(t, root.GetNodesTried(), int64(5), "root count should be 5")
+	assert.Equal(t, parent.GetNodesTried(), int64(5), "parent count should be 5")
+	assert.Equal(t, leaf.GetNodesTried(), int64(5), "leaf count should be 5")
+	leaf.ResetNodesTried()
+	assert.Equal(t, root.GetNodesTried(), int64(0), "root count should be 0 after reset")
+	assert.Equal(t, parent.GetNodesTried(), int64(0), "parent count should be 0 after reset")
+	assert.Equal(t, leaf.GetNodesTried(), int64(0), "leaf count should be 0 after reset")
+
+	// check nil queue
+	var nilQueue *Queue
+	nilQueue.incrementApplicationsTried()
+	nilQueue.addNodesTried(1)
+	nilQueue.ResetApplicationsTried()
+	nilQueue.ResetNodesTried()
+	assert.Equal(t, nilQueue.GetApplicationsTried(), int64(0))
+}

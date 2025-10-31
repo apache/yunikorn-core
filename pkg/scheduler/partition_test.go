@@ -4957,3 +4957,44 @@ func TestApplicationBackoff(t *testing.T) {
 	assert.Assert(t, !deadline.IsZero())
 	assert.Assert(t, deadline.After(beforeAlloc))
 }
+
+func TestGetPartitionQueueDAOInfo(t *testing.T) {
+	conf := configs.PartitionConfig{
+		Name: "default",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "parent",
+						Parent: true,
+						Queues: []configs.QueueConfig{
+							{
+								Name:   "leaf",
+								Parent: false,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	partition, err := newPartitionContext(conf, "test-rm", nil, true)
+	assert.NilError(t, err, "partition create failed")
+
+	daoInfo := partition.GetPartitionQueues()
+
+	assert.Equal(t, "default", daoInfo.Partition)
+	assert.Equal(t, "root", daoInfo.QueueName)
+	assert.Equal(t, 1, len(daoInfo.Children))
+
+	parentDAO := daoInfo.Children[0]
+	assert.Equal(t, "root.parent", parentDAO.QueueName)
+	assert.Equal(t, 1, len(parentDAO.Children))
+
+	leafDAO := parentDAO.Children[0]
+	assert.Equal(t, "root.parent.leaf", leafDAO.QueueName)
+	assert.Equal(t, 0, len(leafDAO.Children))
+}

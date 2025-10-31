@@ -3051,3 +3051,104 @@ func TestQueueBackoffProperties(t *testing.T) {
 	assert.Equal(t, uint64(0), leaf3.GetMaxAppUnschedAskBackoff())
 	assert.Equal(t, 30*time.Second, leaf3.GetBackoffDelay())
 }
+
+func TestGetSchedulingOrder(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	root.sortType = policies.FifoSortPolicy
+	assert.NilError(t, err, "queue create failed")
+
+	// setup queue hierarchy
+	parent1, err := createManagedQueue(root, "parent1", true, nil)
+	parent1.sortType = policies.FifoSortPolicy
+	assert.NilError(t, err, "failed to create parent1 queue")
+	parent2, err := createManagedQueue(root, "parent2", true, nil)
+	assert.NilError(t, err, "failed to create parent2 queue")
+
+	leaf1, err := createManagedQueue(parent1, "leaf1", false, nil)
+	assert.NilError(t, err, "failed to create leaf1 queue")
+	leaf2, err := createManagedQueue(parent1, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+	leaf3, err := createManagedQueue(parent2, "leaf3", false, nil)
+	assert.NilError(t, err, "failed to create leaf3 queue")
+
+	// resource for asks
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	// App1 in leaf1 with pending resources
+	app1 := newApplication("app1", "default", leaf1.QueuePath)
+	app1.queue = leaf1
+	leaf1.AddApplication(app1)
+	err = app1.AddAllocationAsk(newAllocationAsk("alloc-1", "app1", res))
+	assert.NilError(t, err, "failed to add allocation ask to app1")
+	leaf1.incPendingResource(res)
+
+	// App2 in leaf1 with no pending resources
+	app2 := newApplication("app2", "default", leaf1.QueuePath)
+	app2.queue = leaf1
+	leaf1.AddApplication(app2)
+
+	// App3 in leaf2 with pending resources
+	app3 := newApplication("app3", "default", leaf2.QueuePath)
+	app3.queue = leaf2
+	leaf2.AddApplication(app3)
+	err = app3.AddAllocationAsk(newAllocationAsk("alloc-3", "app3", res))
+	assert.NilError(t, err, "failed to add allocation ask to app3")
+	leaf2.incPendingResource(res)
+
+	// App4 in leaf3 with pending resources, but cannot run
+	app4 := newApplication("app4", "default", leaf3.QueuePath)
+	app4.queue = leaf3
+	leaf3.AddApplication(app4)
+	err = app4.AddAllocationAsk(newAllocationAsk("alloc-4", "app4", res))
+	assert.NilError(t, err, "failed to add allocation ask to app4")
+	leaf3.incPendingResource(res)
+	// Make app4 not runnable by setting queue to full
+	leaf3.maxRunningApps = 1
+	leaf3.runningApps = 1
+
+	// Get scheduling order from root
+	order := root.GetSchedulingOrder()
+
+	// Expected order based on FIFO:
+	// 1. parent1 -> leaf1 (app1)
+	// 2. parent1 -> leaf2 (app3)
+	// 3. parent2 -> leaf3 (no apps, because app4 is not runnable but queue has pending)
+	assert.Equal(t, len(order), 3, "incorrect number of scheduling order entries")
+
+	// Entry 1: leaf1
+	assert.Equal(t, order[0].QueueName, "root.parent1.leaf1")
+	assert.Equal(t, len(order[0].ApplicationIDs), 1, "leaf1 should have one app")
+	assert.Equal(t, order[0].ApplicationIDs[0], "app1")
+
+	// Entry 2: leaf2
+	assert.Equal(t, order[1].QueueName, "root.parent1.leaf2")
+	assert.Equal(t, len(order[1].ApplicationIDs), 1, "leaf2 should have one app")
+	assert.Equal(t, order[1].ApplicationIDs[0], "app3")
+
+	// Entry 3: leaf3
+	assert.Equal(t, order[2].QueueName, "root.parent2.leaf3")
+	assert.Equal(t, len(order[2].ApplicationIDs), 0, "leaf3 should have no runnable apps")
+
+	// Test a leaf queue directly
+	order = leaf1.GetSchedulingOrder()
+	assert.Equal(t, len(order), 1, "direct call on leaf1 failed")
+	assert.Equal(t, order[0].QueueName, "root.parent1.leaf1")
+	assert.Equal(t, len(order[0].ApplicationIDs), 1)
+	assert.Equal(t, order[0].ApplicationIDs[0], "app1")
+
+	// Test a leaf queue with no pending resources
+	leaf4, err := createManagedQueue(parent2, "leaf4", false, nil)
+	assert.NilError(t, err, "failed to create leaf4")
+	order = leaf4.GetSchedulingOrder()
+	assert.Equal(t, len(order), 0, "leaf queue with no pending resources should return nil/empty")
+
+	// Test a parent with no pending children
+	parent3, err := createManagedQueue(root, "parent3", true, nil)
+	assert.NilError(t, err, "failed to create parent3")
+	_, err = createManagedQueue(parent3, "leaf5", false, nil)
+	assert.NilError(t, err, "failed to create leaf5")
+	order = parent3.GetSchedulingOrder()
+	assert.Equal(t, len(order), 0, "parent with no pending children should return empty")
+}

@@ -67,6 +67,7 @@ type PartitionContext struct {
 	preemptionEnabled      bool                            // whether preemption is enabled or not
 	foreignAllocs          map[string]*objects.Allocation  // foreign (non-Yunikorn) allocations
 	appQueueMapping        *objects.AppQueueMapping        // appID mapping to queues
+	tryNodesThreadCount    int                             // number of threads executing tryNode concurrently
 
 	// The partition write lock must not be held while manipulating an application.
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
@@ -139,6 +140,7 @@ func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionCon
 	pc.userGroupCache = security.GetUserGroupCache(conf.UserGroupResolver, security.GetConfigReader(), security.GetLdapAccess())
 	pc.updateNodeSortingPolicy(conf, silence)
 	pc.updatePreemption(conf)
+	pc.updateTryNodesThreadCount(conf)
 
 	// update limit settings: start at the root
 	if !silence {
@@ -168,6 +170,10 @@ func (pc *PartitionContext) updatePreemption(conf configs.PartitionConfig) {
 	pc.preemptionEnabled = conf.Preemption.Enabled == nil || *conf.Preemption.Enabled
 }
 
+func (pc *PartitionContext) updateTryNodesThreadCount(conf configs.PartitionConfig) {
+	pc.tryNodesThreadCount = conf.TryNodesThreadCount
+}
+
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
 	// the following piece of code (before pc.Lock()) must be performed without locking
 	// to avoid lock order differences between PartitionContext and AppPlacementManager
@@ -185,6 +191,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	pc.Lock()
 	defer pc.Unlock()
 	pc.updatePreemption(conf)
+	pc.updateTryNodesThreadCount(conf)
 	// start at the root: there is only one queue
 	queueConf := conf.Queues[0]
 	root := pc.root
@@ -818,7 +825,7 @@ func (pc *PartitionContext) tryAllocate() *objects.AllocationResult {
 		return nil
 	}
 	// try allocating from the root down
-	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.IsPreemptionEnabled())
+	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.IsPreemptionEnabled(), pc.getTryNodesThreadCount())
 	if result != nil {
 		return pc.allocate(result)
 	}
@@ -1645,6 +1652,12 @@ func (pc *PartitionContext) IsPreemptionEnabled() bool {
 	pc.RLock()
 	defer pc.RUnlock()
 	return pc.preemptionEnabled
+}
+
+func (pc *PartitionContext) getTryNodesThreadCount() int {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.tryNodesThreadCount
 }
 
 func (pc *PartitionContext) moveTerminatedApp(appID string) {

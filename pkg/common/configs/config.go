@@ -47,13 +47,14 @@ type SchedulerConfig struct {
 // - the preemption configuration for the partition
 // - user group resolver type (os, ldap, "")
 type PartitionConfig struct {
-	Name              string
-	Queues            []QueueConfig
-	PlacementRules    []PlacementRule           `yaml:",omitempty" json:",omitempty"`
-	Limits            []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
-	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
-	UserGroupResolver UserGroupResolver         `yaml:",omitempty" json:",omitempty"`
+	Name                string
+	Queues              []QueueConfig
+	PlacementRules      []PlacementRule           `yaml:",omitempty" json:",omitempty"`
+	Limits              []Limit                   `yaml:",omitempty" json:",omitempty"`
+	Preemption          PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
+	NodeSortPolicy      NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
+	UserGroupResolver   UserGroupResolver         `yaml:",omitempty" json:",omitempty"`
+	TryNodesThreadCount int                       `yaml:",omitempty" json:",omitempty"`
 }
 
 type UserGroupResolver struct {

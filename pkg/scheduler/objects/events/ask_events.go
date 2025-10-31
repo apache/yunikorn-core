@@ -114,6 +114,15 @@ func (ae *AskEvents) SendPreemptedByScheduler(allocKey, appID, preemptorAllocKey
 	ae.eventSystem.AddEvent(event)
 }
 
+func (ae *AskEvents) SendPreemptedByQuotaChange(allocKey, appID, queuePath string, allocatedResource *resources.Resource) {
+	if !ae.eventSystem.IsEventTrackingEnabled() {
+		return
+	}
+	message := fmt.Sprintf("Preempted by Quota change enforcement process in %s", queuePath)
+	event := events.CreateRequestEventRecord(allocKey, appID, message, allocatedResource)
+	ae.eventSystem.AddEvent(event)
+}
+
 func NewAskEvents(evt events.EventSystem) *AskEvents {
 	return newAskEventsWithRate(evt, 15*time.Second, 1)
 }

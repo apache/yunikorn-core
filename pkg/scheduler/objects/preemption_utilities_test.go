@@ -133,6 +133,7 @@ func prepareAllocationAsks(t *testing.T, node *Node) []*Allocation {
 func removeAllocationAsks(node *Node, asks []*Allocation) {
 	for _, ask := range asks {
 		node.RemoveAllocation(ask.GetAllocationKey())
+		ask.preempted = false
 	}
 }
 

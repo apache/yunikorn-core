@@ -2243,7 +2243,14 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	assert.Assert(t, result3 == nil, "result3 not expected")
 	assert.Assert(t, !alloc2.IsPreempted(), "alloc2 should not have been preempted")
 	log := ask3.GetAllocationLog()
-	assert.Equal(t, log[0].Message, common.PreemptionMaxAttemptsExhausted)
+	var found bool
+	for _, entry := range log {
+		if entry.Message == common.PreemptionMaxAttemptsExhausted {
+			found = true
+			break
+		}
+	}
+	assert.Assert(t, found, "PreemptionMaxAttemptsExhausted message not found in allocation log")
 	assert.Equal(t, preemptionAttemptsRemaining, 0)
 
 	preemptionAttemptsRemaining = 10
@@ -3833,4 +3840,38 @@ func TestAppSubmissionTime(t *testing.T) {
 	alloc2.createTime = time.Unix(0, 30)
 	app.AddAllocation(alloc2)
 	assert.Equal(t, app.submissionTime, time.Unix(0, 30), "app submission time is not set properly")
+}
+
+func TestTryNodesInParallel(t *testing.T) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5})
+	iterator := getNodeIteratorFn(node1, node2)
+
+	app := newApplication(appID0, "default", "root.default")
+	queue, err := createRootQueue(map[string]string{"first": "5"})
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAsk(aKey, appID0, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	// successful allocation
+	result := app.tryNodesInParallel(ask, iterator(), 2)
+	assert.Assert(t, result != nil, "result should not be nil")
+	assert.Equal(t, Allocated, result.ResultType, "result type should be Allocated")
+	assert.Assert(t, result.NodeID == nodeID1 || result.NodeID == nodeID2, "result should be on node1 or node2")
+
+	// no nodes available
+	iterator = getNodeIteratorFn()
+	result = app.tryNodesInParallel(ask, iterator(), 2)
+	assert.Assert(t, result == nil, "result should be nil since no nodes are available")
+
+	// request larger than node capacity
+	largeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	largeAsk := newAllocationAsk("large-ask", appID0, largeRes)
+	iterator = getNodeIteratorFn(node1, node2)
+	result = app.tryNodesInParallel(largeAsk, iterator(), 2)
+	assert.Assert(t, result == nil, "result should be nil since request is larger than node capacity")
 }

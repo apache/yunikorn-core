@@ -20,6 +20,7 @@ package objects
 
 import (
 	"testing"
+	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -181,6 +182,80 @@ func TestQuotaChangeFilterVictims(t *testing.T) {
 			preemptor.preemptableResource = tc.preemptableResource
 			allocations := preemptor.filterAllocations()
 			assert.Equal(t, len(allocations), tc.expectedAllocationsCount)
+			removeAllocationAsks(node, asks)
+			removeAllocationFromQueue(leaf)
+		})
+	}
+}
+
+func TestQuotaChangePreemptVictims(t *testing.T) {
+	leaf, err := NewConfiguredQueue(configs.QueueConfig{
+		Name: "leaf",
+	}, nil, false, nil)
+	assert.NilError(t, err)
+
+	node := NewNode(&si.NodeInfo{
+		NodeID:     "node",
+		Attributes: nil,
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 100}},
+		},
+	})
+
+	createTime := time.Now()
+	suitableVictims := make([]*Allocation, 0)
+	notSuitableVictims := make([]*Allocation, 0)
+
+	alloc1 := createAllocation("ask1", "app1", node.NodeID, true, false, 10, false,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	alloc1.createTime = createTime.Add(-time.Minute * 3)
+	assert.Assert(t, node.TryAddAllocation(alloc1))
+	suitableVictims = append(suitableVictims, alloc1)
+	notSuitableVictims = append(notSuitableVictims, alloc1)
+
+	alloc2 := createAllocation("ask2", "app1", node.NodeID, true, false, 10, false,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	alloc2.createTime = createTime.Add(-time.Minute * 2)
+	assert.Assert(t, node.TryAddAllocation(alloc2))
+	suitableVictims = append(suitableVictims, alloc2)
+	notSuitableVictims = append(notSuitableVictims, alloc2)
+
+	alloc3 := createAllocation("ask3", "app1", node.NodeID, true, false, 10, false,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50}))
+	alloc3.createTime = createTime.Add(-time.Minute * 1)
+	assert.Assert(t, node.TryAddAllocation(alloc2))
+	notSuitableVictims = append(notSuitableVictims, alloc3)
+
+	testCases := []struct {
+		name                 string
+		queue                *Queue
+		preemptableResource  *resources.Resource
+		victims              []*Allocation
+		totalExpectedVictims int
+		expectedVictimsCount int
+	}{
+		{"no victims available", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), []*Allocation{}, 0, 0},
+		{"suitable victims available", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), suitableVictims, 2, 2},
+		{"not suitable victims available", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), notSuitableVictims, 3, 0},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			asks := tc.victims
+			assignAllocationsToQueue(asks, leaf)
+			preemptor := NewQuotaChangePreemptor(tc.queue)
+			preemptor.preemptableResource = tc.preemptableResource
+			preemptor.allocations = asks
+			preemptor.filterAllocations()
+			preemptor.sortAllocations()
+			preemptor.preemptVictims()
+			assert.Equal(t, len(preemptor.getVictims()), tc.totalExpectedVictims)
+			var victimsCount int
+			for _, a := range asks {
+				if a.IsPreempted() {
+					victimsCount++
+				}
+			}
+			assert.Equal(t, victimsCount, tc.expectedVictimsCount)
 			removeAllocationAsks(node, asks)
 			removeAllocationFromQueue(leaf)
 		})

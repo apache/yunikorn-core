@@ -184,6 +184,16 @@ func TestTryNodeEvaluation(t *testing.T) {
 	verifyHistogram(t, "trynode_evaluation_milliseconds", 60, 1)
 }
 
+func TestTryNodeCount(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTryNodeCount()
+	count, err := sm.GetTryNodeCount()
+	assert.NilError(t, err)
+	assert.Equal(t, int64(1), count)
+}
+
 func getSchedulerMetrics(t *testing.T) *SchedulerMetrics {
 	unregisterMetrics()
 	return InitSchedulerMetrics()
@@ -244,4 +254,5 @@ func unregisterMetrics() {
 	prometheus.Unregister(sm.tryNodeLatency)
 	prometheus.Unregister(sm.tryNodeEvaluation)
 	prometheus.Unregister(sm.tryPreemptionLatency)
+	prometheus.Unregister(sm.tryNodeCount)
 }

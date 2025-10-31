@@ -38,6 +38,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -4900,4 +4901,46 @@ func TestAppSchedulingOrderFIFO(t *testing.T) {
 	alloc = partition.tryAllocate()
 	assert.Assert(t, alloc != nil, "no allocation was made")
 	assert.Equal(t, "app2-alloc-3", alloc.Request.GetAllocationKey())
+}
+
+func TestGetPartitionQueueDAOInfo(t *testing.T) {
+	conf := configs.PartitionConfig{
+		Name: "default",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "parent",
+						Parent: true,
+						Queues: []configs.QueueConfig{
+							{
+								Name:   "leaf",
+								Parent: false,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	partition, err := newPartitionContext(conf, "test-rm", nil, true)
+	assert.NilError(t, err, "partition create failed")
+
+	var daoInfo dao.PartitionQueueDAOInfo
+	daoInfo = partition.GetPartitionQueues()
+
+	assert.Equal(t, "default", daoInfo.Partition)
+	assert.Equal(t, "root", daoInfo.QueueName)
+	assert.Equal(t, 1, len(daoInfo.Children))
+
+	parentDAO := daoInfo.Children[0]
+	assert.Equal(t, "root.parent", parentDAO.QueueName)
+	assert.Equal(t, 1, len(parentDAO.Children))
+
+	leafDAO := parentDAO.Children[0]
+	assert.Equal(t, "root.parent.leaf", leafDAO.QueueName)
+	assert.Equal(t, 0, len(leafDAO.Children))
 }

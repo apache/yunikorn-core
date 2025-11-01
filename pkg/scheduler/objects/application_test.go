@@ -2243,7 +2243,8 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	assert.Assert(t, result3 == nil, "result3 not expected")
 	assert.Assert(t, !alloc2.IsPreempted(), "alloc2 should not have been preempted")
 	log := ask3.GetAllocationLog()
-	assert.Equal(t, log[0].Message, common.PreemptionMaxAttemptsExhausted)
+	assert.Assert(t, logContains(log, common.PreemptionMaxAttemptsExhausted))
+	assert.Assert(t, logContains(log, common.PreemptionDoesNotHelp))
 	assert.Equal(t, preemptionAttemptsRemaining, 0)
 
 	preemptionAttemptsRemaining = 10
@@ -2261,6 +2262,15 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	assert.Assert(t, result3 != nil && result3.Request != nil && result3.ResultType == Reserved, "alloc3 should be a reservation")
 	assert.Assert(t, alloc2.IsPreempted(), "alloc2 should have been preempted")
 	assert.Equal(t, preemptionAttemptsRemaining, 9)
+}
+
+func logContains(log []*AllocationLogEntry, msg string) bool {
+	for _, entry := range log {
+		if entry.Message == msg {
+			return true
+		}
+	}
+	return false
 }
 
 func TestTryAllocatePreemptNode(t *testing.T) {

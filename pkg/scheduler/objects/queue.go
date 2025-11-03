@@ -395,41 +395,28 @@ func (sq *Queue) setPreemptionSettings(oldMaxResource *resources.Resource, conf 
 			zap.Error(err))
 		return
 	}
-	reset := false
-	set := false
+
 	switch {
 	// Set max res earlier but not now
 	case resources.IsZero(newMaxResource) && !resources.IsZero(oldMaxResource):
-		reset = true
+		sq.quotaChangePreemptionDelay = 0
 		// Set max res now but not earlier
 	case !resources.IsZero(newMaxResource) && resources.IsZero(oldMaxResource) && conf.Preemption.Delay != 0:
-		set = true
+		sq.quotaChangePreemptionDelay = conf.Preemption.Delay
 		// Set max res earlier and now as well
 	default:
 		switch {
 		// Quota decrease
 		case resources.StrictlyGreaterThan(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0:
-			set = true
+			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
 			// Quota increase
 		case resources.StrictlyGreaterThan(newMaxResource, oldMaxResource) && conf.Preemption.Delay != 0:
-			reset = true
+			sq.quotaChangePreemptionDelay = 0
 			// Quota remains as is but delay has changed
 		case resources.Equals(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0 && sq.quotaChangePreemptionDelay != conf.Preemption.Delay:
 			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
 		default:
 			// noop
-		}
-	}
-
-	// Set preemption settings
-	if set {
-		sq.quotaChangePreemptionDelay = conf.Preemption.Delay
-	}
-
-	// Reset preemption settings
-	if reset {
-		if sq.quotaChangePreemptionDelay != 0 {
-			sq.quotaChangePreemptionDelay = 0
 		}
 	}
 }

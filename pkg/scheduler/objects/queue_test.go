@@ -2250,18 +2250,33 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
-	parent, err := createManagedQueueWithProps(root, "parent", false, getResourceConf(), getResourceConf())
+	parent, err := createManagedQueueWithProps(root, "parent", false, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 	testCases := []struct {
 		name          string
 		conf          configs.QueueConfig
 		expectedDelay uint64
-	}{{"first queue setup without delay", configs.QueueConfig{
+	}{{"first time queue setup without delay", configs.QueueConfig{
 		Resources: configs.Resources{
 			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
 		},
 	}, 0},
+		{"clearing max resources", configs.QueueConfig{
+			Resources: configs.Resources{
+				Max:        nil,
+				Guaranteed: nil,
+			},
+		}, 0},
+		{"first time queue setup with delay", configs.QueueConfig{
+			Resources: configs.Resources{
+				Max:        getResourceConf(),
+				Guaranteed: getResourceConf(),
+			},
+			Preemption: configs.Preemption{
+				Delay: 100,
+			},
+		}, 100},
 		{"increase max with delay", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "100000000"},
@@ -2308,7 +2323,6 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err = parent.ApplyConf(tc.conf)
 			assert.NilError(t, err, "failed to apply conf: %v", err)
-			assert.Assert(t, parent.maxResource != nil)
 			assert.Equal(t, parent.quotaChangePreemptionDelay, tc.expectedDelay)
 		})
 	}

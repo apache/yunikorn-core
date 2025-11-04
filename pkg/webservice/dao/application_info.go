@@ -18,6 +18,8 @@
 
 package dao
 
+import "time"
+
 type ApplicationsDAOInfo struct {
 	Applications []ApplicationDAOInfo `json:"applications,omitempty"`
 }
@@ -44,6 +46,7 @@ type ApplicationDAOInfo struct {
 	MaxRequestPriority int32                   `json:"maxRequestPriority,omitempty"`
 	StartTime          int64                   `json:"startTime,omitempty"`
 	ResourceHistory    ResourceHistory         `json:"resourceHistory,omitempty"`
+	BackoffDeadline    *time.Time              `json:"backoffDeadline,omitempty"`
 }
 
 type StateDAOInfo struct {

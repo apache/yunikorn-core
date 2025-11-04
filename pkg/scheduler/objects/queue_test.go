@@ -2972,3 +2972,40 @@ func TestQueue_allocatedResFits_Other(t *testing.T) {
 		})
 	}
 }
+
+func TestQueueBackoffProperties(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+	parent, err := createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, uint64(0), parent.GetMaxAppUnschedAskBackoff())
+	assert.Equal(t, 30*time.Second, parent.GetBackoffDelay())
+
+	leaf, err := createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, uint64(0), leaf.GetMaxAppUnschedAskBackoff())
+	assert.Equal(t, 30*time.Second, leaf.GetBackoffDelay())
+
+	props := map[string]string{
+		configs.ApplicationUnschedulableAsksBackoffDelay: "123s",
+		configs.ApplicationUnschedulableAsksBackoff:      "12",
+	}
+	parent2, err := createManagedQueueWithProps(root, "parent2", true, nil, props)
+	assert.NilError(t, err, "failed to create parent queue")
+	assert.Equal(t, uint64(12), parent2.GetMaxAppUnschedAskBackoff())
+	assert.Equal(t, 123*time.Second, parent2.GetBackoffDelay())
+
+	leaf2, err := createManagedQueue(parent2, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+	assert.Equal(t, uint64(12), leaf2.GetMaxAppUnschedAskBackoff())
+	assert.Equal(t, 123*time.Second, leaf2.GetBackoffDelay())
+
+	props = map[string]string{
+		configs.ApplicationUnschedulableAsksBackoffDelay: "xyz",
+		configs.ApplicationUnschedulableAsksBackoff:      "-4",
+	}
+	leaf3, err := createManagedQueueWithProps(root, "parent2", false, nil, props)
+	assert.NilError(t, err, "failed to create leaf3 queue")
+	assert.Equal(t, uint64(0), leaf3.GetMaxAppUnschedAskBackoff())
+	assert.Equal(t, 30*time.Second, leaf3.GetBackoffDelay())
+}

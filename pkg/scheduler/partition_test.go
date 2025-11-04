@@ -4901,3 +4901,59 @@ func TestAppSchedulingOrderFIFO(t *testing.T) {
 	assert.Assert(t, alloc != nil, "no allocation was made")
 	assert.Equal(t, "app2-alloc-3", alloc.Request.GetAllocationKey())
 }
+
+func TestApplicationBackoff(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "default",
+						Parent: false,
+						Properties: map[string]string{
+							configs.ApplicationUnschedulableAsksBackoff: "2",
+						},
+					},
+				},
+			},
+		},
+	}
+	err = partition.updatePartitionDetails(conf)
+	assert.NilError(t, err, "unable to update partition config")
+
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	node1 := newNodeMaxResource(nodeID1, nodeRes)
+	err = partition.AddNode(node1)
+	assert.NilError(t, err)
+	node2 := newNodeMaxResource(nodeID2, nodeRes)
+	err = partition.AddNode(node2)
+	assert.NilError(t, err)
+
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "could not add application")
+
+	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
+	app1Ask1 := newAllocationAsk("alloc-1", appID1, askRes)
+	err = app.AddAllocationAsk(app1Ask1)
+	assert.NilError(t, err, "could not add ask")
+	app1Ask2 := newAllocationAsk("alloc-2", appID1, askRes)
+	err = app.AddAllocationAsk(app1Ask2)
+	assert.NilError(t, err, "could not add ask")
+	app1Ask3 := newAllocationAsk("alloc-3", appID1, askRes)
+	err = app.AddAllocationAsk(app1Ask3)
+	assert.NilError(t, err, "could not add ask")
+
+	beforeAlloc := time.Now()
+	partition.tryAllocate()
+	deadline := app.GetBackoffDeadline()
+	assert.Assert(t, !deadline.IsZero())
+	assert.Assert(t, deadline.After(beforeAlloc))
+}

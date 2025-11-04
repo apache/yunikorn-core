@@ -352,6 +352,12 @@ func getApplicationDAO(app *objects.Application) *dao.ApplicationDAOInfo {
 		PlaceholderResource: app.GetTrackedDAOMap("placeholderResource"),
 	}
 
+	backoffDeadline := app.GetBackoffDeadline()
+	var backoffDeadlinePtr *time.Time
+	if !backoffDeadline.IsZero() {
+		backoffDeadlinePtr = &backoffDeadline
+	}
+
 	return &dao.ApplicationDAOInfo{
 		ApplicationID:      app.ApplicationID,
 		UsedResource:       app.GetAllocatedResource().DAOMap(),
@@ -374,6 +380,7 @@ func getApplicationDAO(app *objects.Application) *dao.ApplicationDAOInfo {
 		MaxRequestPriority: app.GetAskMaxPriority(),
 		StartTime:          app.StartTime().UnixMilli(),
 		ResourceHistory:    resHistory,
+		BackoffDeadline:    backoffDeadlinePtr,
 	}
 }
 

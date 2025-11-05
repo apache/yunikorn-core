@@ -1468,7 +1468,8 @@ func (sq *Queue) canRunApp(appID string) bool {
 // resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() NodeIterator, getnode func(string) *Node, allowPreemption bool) *AllocationResult {
+func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() NodeIterator,
+	getnode func(string) *Node, allowPreemption bool, tryNodesThreadCount int) *AllocationResult {
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
@@ -1483,13 +1484,16 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 			if app.IsAccepted() && (!runnableInQueue || !runnableByUserLimit) {
 				continue
 			}
-			result := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
+			startTime := time.Now()
+			result := app.tryAllocate(headRoom, allowPreemption, tryNodesThreadCount, preemptionDelay,
+				&preemptAttemptsRemaining, iterator, fullIterator, getnode)
 			if result != nil {
 				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("resultType", result.ResultType),
-					zap.Stringer("allocation", result.Request))
+					zap.Stringer("allocation", result.Request),
+					zap.Int64("timeTakenInMicroSecs:", time.Since(startTime).Microseconds()))
 				// if the app is still in Accepted state we're allocating placeholders.
 				// we want to count these apps as running
 				if app.IsAccepted() {
@@ -1501,7 +1505,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			result := child.TryAllocate(iterator, fullIterator, getnode, allowPreemption)
+			result := child.TryAllocate(iterator, fullIterator, getnode, allowPreemption, tryNodesThreadCount)
 			if result != nil {
 				return result
 			}

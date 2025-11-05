@@ -982,7 +982,9 @@ func (sa *Application) canReplace(request *Allocation) bool {
 }
 
 // tryAllocate will perform a regular allocation of a pending request, includes placeholders.
-func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption bool, preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator, fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) *AllocationResult {
+func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption bool, tryNodesThreadCount int,
+	preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator,
+	fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) *AllocationResult {
 	sa.Lock()
 	defer sa.Unlock()
 	if sa.sortedRequests == nil {
@@ -1043,8 +1045,15 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 
 		iterator := nodeIterator()
 		if iterator != nil {
-			if result := sa.tryNodes(request, iterator); result != nil {
-				// have a candidate return it
+			var result *AllocationResult
+
+			if tryNodesThreadCount > 1 {
+				result = sa.tryNodesInParallel(request, iterator, tryNodesThreadCount)
+			} else {
+				result = sa.tryNodes(request, iterator)
+			}
+
+			if result != nil {
 				return result
 			}
 
@@ -1460,6 +1469,171 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 
 // Try all the nodes for a request. The resultType is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
+func (sa *Application) tryNodesInParallel(ask *Allocation, iterator NodeIterator, tryNodesThreadCount int) *AllocationResult { //nolint:funlen
+	var nodeToReserve *Node
+	scoreReserved := math.Inf(1)
+	allocKey := ask.GetAllocationKey()
+	reserved := sa.reservations[allocKey]
+	var allocResult *AllocationResult
+	var predicateErrors map[string]int
+
+	var mu sync.Mutex
+
+	// Channel to signal completion
+	done := make(chan struct{})
+	defer close(done)
+
+	// Function to process each batch
+	processBatch := func(batch []*Node) {
+		var wg sync.WaitGroup
+		semaphore := make(chan struct{}, tryNodesThreadCount)
+		candidateNodes := make([]*Node, len(batch))
+		errors := make([]error, len(batch))
+
+		for idx, node := range batch {
+			wg.Add(1)
+			semaphore <- struct{}{}
+			go func(idx int, node *Node) {
+				defer wg.Done()
+				defer func() { <-semaphore }()
+				dryRunResult, err := sa.tryNodeDryRun(node, ask)
+
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					errors[idx] = err
+				} else if dryRunResult != nil {
+					candidateNodes[idx] = node
+				}
+			}(idx, node)
+		}
+
+		wg.Wait()
+
+		for _, err := range errors {
+			if err != nil {
+				mu.Lock()
+				if predicateErrors == nil {
+					predicateErrors = make(map[string]int)
+				}
+				predicateErrors[err.Error()]++
+				mu.Unlock()
+			}
+		}
+
+		// Process dry-run candidateNodes sequentially within the batch
+		for _, candidateNode := range candidateNodes {
+			if candidateNode == nil {
+				continue
+			}
+			tryNodeStart := time.Now()
+			result, err := sa.tryNode(candidateNode, ask)
+			if err != nil {
+				if predicateErrors == nil {
+					predicateErrors = make(map[string]int)
+				}
+				predicateErrors[err.Error()]++
+			} else if result != nil {
+				metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
+				if reserved != nil {
+					if reserved.nodeID != candidateNode.NodeID {
+						log.Log(log.SchedApplication).Debug("allocate picking reserved alloc during non reserved allocate",
+							zap.String("appID", sa.ApplicationID),
+							zap.String("reserved nodeID", reserved.nodeID),
+							zap.String("allocationKey", allocKey))
+						result.ReservedNodeID = reserved.nodeID
+					} else {
+						log.Log(log.SchedApplication).Debug("allocate found reserved alloc during non reserved allocate",
+							zap.String("appID", sa.ApplicationID),
+							zap.String("nodeID", candidateNode.NodeID),
+							zap.String("allocationKey", allocKey))
+					}
+					result.ResultType = AllocatedReserved
+					allocResult = result
+					return
+				}
+				allocResult = result
+				return
+			}
+			askAge := time.Since(ask.GetCreateTime())
+			if reserved == nil && askAge > reservationDelay {
+				log.Log(log.SchedApplication).Debug("app reservation check",
+					zap.String("allocationKey", allocKey),
+					zap.Time("createTime", ask.GetCreateTime()),
+					zap.Duration("askAge", askAge),
+					zap.Duration("reservationDelay", reservationDelay))
+				score := candidateNode.GetFitInScoreForAvailableResource(ask.GetAllocatedResource())
+				if score < scoreReserved {
+					scoreReserved = score
+					nodeToReserve = candidateNode
+				}
+			}
+		}
+	}
+
+	// Iterate over nodes and process in batches
+	var batch []*Node
+	iterator.ForEachNode(func(node *Node) bool {
+		batch = append(batch, node)
+		if len(batch) >= tryNodesThreadCount {
+			processBatch(batch)
+			batch = nil
+			if allocResult != nil {
+				return false // Exit iteration if an allocation has been made
+			}
+		}
+		return true
+	})
+	// Process any remaining nodes in the last batch
+	if len(batch) > 0 && allocResult == nil {
+		processBatch(batch)
+	}
+
+	if allocResult != nil {
+		return allocResult
+	}
+
+	if predicateErrors != nil {
+		ask.SendPredicatesFailedEvent(predicateErrors)
+	}
+
+	if nodeToReserve != nil && !nodeToReserve.IsReserved() {
+		log.Log(log.SchedApplication).Debug("found candidate node for app reservation",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("nodeID", nodeToReserve.NodeID),
+			zap.String("allocationKey", allocKey),
+			zap.Int("reservations", len(sa.reservations)))
+		if nodeToReserve.preReserveConditions(ask) != nil {
+			return nil
+		}
+		return newReservedAllocationResult(nodeToReserve.NodeID, ask)
+	}
+
+	return nil
+}
+
+func (sa *Application) tryNodeDryRun(node *Node, ask *Allocation) (*AllocationResult, error) {
+	toAllocate := ask.GetAllocatedResource()
+	allocationKey := ask.GetAllocationKey()
+
+	if !node.IsSchedulable() || !node.FitInNode(ask.GetAllocatedResource()) {
+		return nil, nil
+	}
+
+	// create the key for the reservation
+	if !node.preAllocateCheck(toAllocate, allocationKey) {
+		// skip schedule onto node
+		return nil, nil
+	}
+	// skip the node if conditions can not be satisfied
+	if err := node.preAllocateConditions(ask); err != nil {
+		return nil, err
+	}
+
+	result := newAllocatedAllocationResult(node.NodeID, ask)
+	return result, nil
+}
+
 func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *AllocationResult {
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)

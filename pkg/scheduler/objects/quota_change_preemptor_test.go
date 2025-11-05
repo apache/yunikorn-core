@@ -103,7 +103,7 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 	leaf, err := NewConfiguredQueue(configs.QueueConfig{
 		Name: "leaf",
-	}, nil, false)
+	}, nil, false, nil)
 	assert.NilError(t, err)
 
 	testCases := []struct {

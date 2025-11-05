@@ -74,21 +74,22 @@ type Queue struct {
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
-	properties             map[string]string
-	adminACL               security.ACL        // admin ACL
-	submitACL              security.ACL        // submit ACL
-	maxResource            *resources.Resource // When not set, max = nil
-	guaranteedResource     *resources.Resource // When not set, Guaranteed == 0
-	isLeaf                 bool                // this is a leaf queue or not (i.e. parent)
-	isManaged              bool                // queue is part of the config, not auto created
-	stateMachine           *fsm.FSM            // the state of the queue for scheduling
-	stateTime              time.Time           // last time the state was updated (needed for cleanup)
-	maxRunningApps         uint64
-	runningApps            uint64
-	allocatingAcceptedApps map[string]bool
-	template               *template.Template
-	queueEvents            *schedEvt.QueueEvents
-	appQueueMapping        *AppQueueMapping // appID mapping to queues
+	properties                 map[string]string
+	adminACL                   security.ACL        // admin ACL
+	submitACL                  security.ACL        // submit ACL
+	maxResource                *resources.Resource // When not set, max = nil
+	guaranteedResource         *resources.Resource // When not set, Guaranteed == 0
+	isLeaf                     bool                // this is a leaf queue or not (i.e. parent)
+	isManaged                  bool                // queue is part of the config, not auto created
+	stateMachine               *fsm.FSM            // the state of the queue for scheduling
+	stateTime                  time.Time           // last time the state was updated (needed for cleanup)
+	maxRunningApps             uint64
+	runningApps                uint64
+	allocatingAcceptedApps     map[string]bool
+	template                   *template.Template
+	queueEvents                *schedEvt.QueueEvents
+	appQueueMapping            *AppQueueMapping // appID mapping to queues
+	quotaChangePreemptionDelay uint64
 
 	locking.RWMutex
 }
@@ -96,21 +97,22 @@ type Queue struct {
 // newBlankQueue creates a new empty queue objects with all values initialised.
 func newBlankQueue() *Queue {
 	return &Queue{
-		children:               make(map[string]*Queue),
-		childPriorities:        make(map[string]int32),
-		applications:           make(map[string]*Application),
-		appPriorities:          make(map[string]int32),
-		reservedApps:           make(map[string]int),
-		allocatingAcceptedApps: make(map[string]bool),
-		properties:             make(map[string]string),
-		stateMachine:           NewObjectState(),
-		allocatedResource:      resources.NewResource(),
-		preemptingResource:     resources.NewResource(),
-		pending:                resources.NewResource(),
-		currentPriority:        configs.MinPriority,
-		prioritySortEnabled:    true,
-		preemptionDelay:        configs.DefaultPreemptionDelay,
-		preemptionPolicy:       policies.DefaultPreemptionPolicy,
+		children:                   make(map[string]*Queue),
+		childPriorities:            make(map[string]int32),
+		applications:               make(map[string]*Application),
+		appPriorities:              make(map[string]int32),
+		reservedApps:               make(map[string]int),
+		allocatingAcceptedApps:     make(map[string]bool),
+		properties:                 make(map[string]string),
+		stateMachine:               NewObjectState(),
+		allocatedResource:          resources.NewResource(),
+		preemptingResource:         resources.NewResource(),
+		pending:                    resources.NewResource(),
+		currentPriority:            configs.MinPriority,
+		prioritySortEnabled:        true,
+		preemptionDelay:            configs.DefaultPreemptionDelay,
+		preemptionPolicy:           policies.DefaultPreemptionPolicy,
+		quotaChangePreemptionDelay: 0,
 	}
 }
 
@@ -155,7 +157,6 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool, a
 			zap.String("queueName", sq.QueuePath))
 		sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
 	}
-
 	return sq, nil
 }
 
@@ -372,15 +373,52 @@ func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) error {
 
 	// Load the max & guaranteed resources and maxApps for all but the root queue
 	if sq.Name != configs.RootQueue {
+		oldMaxResource := sq.maxResource
 		if err = sq.setResourcesFromConf(conf.Resources); err != nil {
 			return err
 		}
 		sq.maxRunningApps = conf.MaxApplications
 		sq.updateMaxRunningAppsMetrics()
+		sq.setPreemptionSettings(oldMaxResource, conf)
 	}
 
 	sq.properties = conf.Properties
 	return nil
+}
+
+// setPreemptionSettings Set Quota change preemption settings
+func (sq *Queue) setPreemptionSettings(oldMaxResource *resources.Resource, conf configs.QueueConfig) {
+	newMaxResource, err := resources.NewResourceFromConf(conf.Resources.Max)
+	if err != nil {
+		log.Log(log.SchedQueue).Error("parsing failed on max resources this should not happen",
+			zap.String("queue", sq.QueuePath),
+			zap.Error(err))
+		return
+	}
+
+	switch {
+	// Set max res earlier but not now
+	case resources.IsZero(newMaxResource) && !resources.IsZero(oldMaxResource):
+		sq.quotaChangePreemptionDelay = 0
+		// Set max res now but not earlier
+	case !resources.IsZero(newMaxResource) && resources.IsZero(oldMaxResource) && conf.Preemption.Delay != 0:
+		sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+		// Set max res earlier and now as well
+	default:
+		switch {
+		// Quota decrease
+		case resources.StrictlyGreaterThan(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0:
+			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+			// Quota increase
+		case resources.StrictlyGreaterThan(newMaxResource, oldMaxResource) && conf.Preemption.Delay != 0:
+			sq.quotaChangePreemptionDelay = 0
+			// Quota remains as is but delay has changed
+		case resources.Equals(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0 && sq.quotaChangePreemptionDelay != conf.Preemption.Delay:
+			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+		default:
+			// noop
+		}
+	}
 }
 
 // setResourcesFromConf sets the maxResource and guaranteedResource of the queue from the config.

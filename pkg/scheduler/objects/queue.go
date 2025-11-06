@@ -1550,22 +1550,43 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 	return nil
 }
 
-// GetQueueOutstandingRequests builds a slice of pending allocation asks that fits into the queue's headroom.
-func (sq *Queue) GetQueueOutstandingRequests(total *[]*Allocation) {
+// GetOutstandingRequests builds a slice of pending allocation asks that fits into the queue's headroom.
+// This method can only be called for the root of the queue hierarchy. Otherwise it returns nil.
+func (sq *Queue) GetOutstandingRequests() []*Allocation {
+	total := make([]*Allocation, 0)
+	if sq.parent != nil {
+		return nil
+	}
+
+	for _, child := range sq.sortQueues() {
+		_ = child.getOutStandingRequestsInternal(resources.NewResource(), &total)
+	}
+	return total
+}
+
+func (sq *Queue) getOutStandingRequestsInternal(parentHeadroom *resources.Resource, total *[]*Allocation) *resources.Resource {
+	headRoom := sq.internalHeadRoom(parentHeadroom)
+	outstandingTotal := resources.NewResource() // accumulated resource usage of all collected asks on this level
+
 	if sq.IsLeafQueue() {
-		headRoom := sq.getMaxHeadRoom()
 		// while calculating outstanding requests, we calculate all the requests that can fit into the queue's headroom,
 		// all these requests are qualified to trigger the up scaling.
 		for _, app := range sq.sortApplications(false) {
 			// calculate the users' headroom
 			userHeadroom := ugm.GetUserManager().Headroom(app.queuePath, app.ApplicationID, app.user)
-			app.getOutstandingRequests(headRoom, userHeadroom, total)
+			appTotal := app.getOutstandingRequests(headRoom, userHeadroom, total)
+			outstandingTotal.AddTo(appTotal)
+			headRoom = resources.SubOnlyExisting(headRoom, appTotal)
 		}
 	} else {
 		for _, child := range sq.sortQueues() {
-			child.GetQueueOutstandingRequests(total)
+			queueTotal := child.getOutStandingRequestsInternal(headRoom, total)
+			outstandingTotal.AddTo(queueTotal)
+			headRoom = resources.SubOnlyExisting(headRoom, queueTotal)
 		}
 	}
+
+	return outstandingTotal
 }
 
 // TryReservedAllocate tries to allocate a reservation.

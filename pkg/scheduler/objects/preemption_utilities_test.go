@@ -149,11 +149,18 @@ func assignAllocationsToQueue(allocations []*Allocation, queue *Queue) {
 			app = queue.applications[allocation.applicationID]
 		}
 		app.AddAllocation(allocation)
+		queue.IncAllocatedResource(allocation.GetAllocatedResource())
 	}
 }
 
-func removeAllocationFromQueue(queue *Queue) {
+func resetQueue(queue *Queue) {
 	queue.applications = make(map[string]*Application)
+	queue.maxResource = nil
+	queue.allocatedResource = nil
+	queue.guaranteedResource = nil
+	queue.hasTriggerredQuotaChangePreemption = false
+	queue.isQuotaChangePreemptionRunning = false
+	queue.preemptingResource = nil
 }
 
 // regular pods

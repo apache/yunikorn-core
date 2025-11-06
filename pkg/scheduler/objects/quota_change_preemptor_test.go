@@ -20,7 +20,6 @@ package objects
 
 import (
 	"testing"
-	"time"
 
 	"time"
 
@@ -185,12 +184,12 @@ func TestQuotaChangeFilterVictims(t *testing.T) {
 			allocations := preemptor.filterAllocations()
 			assert.Equal(t, len(allocations), tc.expectedAllocationsCount)
 			removeAllocationAsks(node, asks)
-			removeAllocationFromQueue(leaf)
+			resetQueue(leaf)
 		})
 	}
 }
 
-func TestQuotaChangePreemptVictims(t *testing.T) {
+func TestQuotaChangeTryPreemption(t *testing.T) {
 	leaf, err := NewConfiguredQueue(configs.QueueConfig{
 		Name: "leaf",
 	}, nil, false, nil)
@@ -204,52 +203,61 @@ func TestQuotaChangePreemptVictims(t *testing.T) {
 		},
 	})
 
-	createTime := time.Now()
 	suitableVictims := make([]*Allocation, 0)
-	notSuitableVictims := make([]*Allocation, 0)
+	oversizedVictims := make([]*Allocation, 0)
+	overflowVictims := make([]*Allocation, 0)
+	shortfallVictims := make([]*Allocation, 0)
 
-	alloc1 := createAllocation("ask1", "app1", node.NodeID, true, false, 10, false,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	alloc1.createTime = createTime.Add(-time.Minute * 3)
-	assert.Assert(t, node.TryAddAllocation(alloc1))
-	suitableVictims = append(suitableVictims, alloc1)
-	notSuitableVictims = append(notSuitableVictims, alloc1)
+	suitableVictims = append(suitableVictims, createVictim(t, "ask1", node, 5, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims = append(suitableVictims, createVictim(t, "ask2", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
 
-	alloc2 := createAllocation("ask2", "app2", node.NodeID, true, false, 10, false,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	alloc2.createTime = createTime.Add(-time.Minute * 2)
-	assert.Assert(t, node.TryAddAllocation(alloc2))
-	suitableVictims = append(suitableVictims, alloc2)
-	notSuitableVictims = append(notSuitableVictims, alloc2)
+	oversizedVictims = append(oversizedVictims, createVictim(t, "ask21", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9})))
+	oversizedVictims = append(oversizedVictims, createVictim(t, "ask3", node, 3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})))
 
-	alloc3 := createAllocation("ask3", "app3", node.NodeID, true, false, 10, false,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50}))
-	alloc3.createTime = createTime.Add(-time.Minute * 1)
-	assert.Assert(t, node.TryAddAllocation(alloc3))
-	notSuitableVictims = append(notSuitableVictims, alloc3)
+	overflowVictims = append(overflowVictims, createVictim(t, "ask4", node, 3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})))
+	overflowVictims = append(overflowVictims, createVictim(t, "ask41", node, 2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})))
+	overflowVictims = append(overflowVictims, createVictim(t, "ask42", node, 1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9})))
 
+	shortfallVictims = append(shortfallVictims, createVictim(t, "ask5", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})))
+	shortfallVictims = append(shortfallVictims, createVictim(t, "ask51", node, 3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})))
+	shortfallVictims = append(shortfallVictims, createVictim(t, "ask52", node, 2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})))
+	shortfallVictims = append(shortfallVictims, createVictim(t, "ask53", node, 1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4})))
+
+	oldMax := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20})
+	newMax := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	preemptable := newMax
+	guaranteed := preemptable
+	lowerGuaranteed := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	testCases := []struct {
 		name                 string
 		queue                *Queue
+		oldMax               *resources.Resource
+		newMax               *resources.Resource
+		guaranteed           *resources.Resource
 		preemptableResource  *resources.Resource
 		victims              []*Allocation
 		totalExpectedVictims int
 		expectedVictimsCount int
 	}{
-		{"no victims available", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), []*Allocation{}, 0, 0},
-		{"suitable victims available", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), suitableVictims, 2, 2},
-		{"not suitable victims available", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), notSuitableVictims, 3, 0},
+		{"no victims available", leaf, oldMax, newMax, nil, preemptable, []*Allocation{}, 0, 0},
+		{"suitable victims available", leaf, oldMax, newMax, nil, preemptable, suitableVictims, 2, 1},
+		{"skip over sized victims", leaf, oldMax, newMax, nil, preemptable, oversizedVictims, 2, 1},
+		{"guaranteed not set, victims total resource might go over the requirement a bit", leaf, oldMax, newMax, nil, preemptable, overflowVictims, 3, 2},
+		{"guaranteed set but lower than max, victims total resource might go over the requirement a bit", leaf, oldMax, newMax, lowerGuaranteed, preemptable, overflowVictims, 3, 2},
+		{"best effort - guaranteed set and equals max, victims total resource might fall below the requirement a bit", leaf, oldMax, newMax, guaranteed, preemptable, shortfallVictims, 4, 2},
+		{"best effort - guaranteed set, max not set earlier but now, victims total resource might fall below the requirement a bit", leaf, nil, newMax, guaranteed, preemptable, shortfallVictims, 4, 2},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			leaf.maxResource = tc.oldMax
+			leaf.guaranteedResource = tc.guaranteed
 			asks := tc.victims
 			assignAllocationsToQueue(asks, leaf)
+			leaf.maxResource = tc.newMax
+			leaf.guaranteedResource = tc.guaranteed
 			preemptor := NewQuotaChangePreemptor(tc.queue)
-			preemptor.preemptableResource = tc.preemptableResource
 			preemptor.allocations = asks
-			preemptor.filterAllocations()
-			preemptor.sortAllocations()
-			preemptor.preemptVictims()
+			preemptor.tryPreemption()
 			assert.Equal(t, len(preemptor.getVictims()), tc.totalExpectedVictims)
 			var victimsCount int
 			for _, a := range asks {
@@ -259,7 +267,15 @@ func TestQuotaChangePreemptVictims(t *testing.T) {
 			}
 			assert.Equal(t, victimsCount, tc.expectedVictimsCount)
 			removeAllocationAsks(node, asks)
-			removeAllocationFromQueue(leaf)
+			resetQueue(leaf)
 		})
 	}
+}
+
+func createVictim(t *testing.T, allocKey string, node *Node, adjustment int, allocRes *resources.Resource) *Allocation {
+	createTime := time.Now()
+	allocation := createAllocation(allocKey, "app1", node.NodeID, true, false, 10, false, allocRes)
+	allocation.createTime = createTime.Add(-time.Minute * time.Duration(adjustment))
+	assert.Assert(t, node.TryAddAllocation(allocation))
+	return allocation
 }

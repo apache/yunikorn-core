@@ -2324,6 +2324,16 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 			err = parent.ApplyConf(tc.conf)
 			assert.NilError(t, err, "failed to apply conf: %v", err)
 			assert.Equal(t, parent.quotaChangePreemptionDelay, tc.expectedDelay)
+			parent.TryAllocate(nil, nil, nil, false)
+			if tc.expectedDelay != uint64(0) {
+				assert.Equal(t, parent.quotaChangePreemptionStartTime.IsZero(), false)
+				assert.Equal(t, parent.HasTriggerredQuotaChangePreemption(), true)
+			} else {
+				assert.Equal(t, parent.quotaChangePreemptionStartTime.IsZero(), true)
+				assert.Equal(t, parent.HasTriggerredQuotaChangePreemption(), false)
+			}
+			// reset to default value
+			parent.hasTriggerredQuotaChangePreemption = false
 		})
 	}
 }

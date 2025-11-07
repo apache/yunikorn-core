@@ -90,6 +90,7 @@ type Queue struct {
 	queueEvents                        *schedEvt.QueueEvents
 	appQueueMapping                    *AppQueueMapping // appID mapping to queues
 	quotaChangePreemptionDelay         uint64
+	quotaChangePreemptionStartTime     time.Time
 	hasTriggerredQuotaChangePreemption bool
 	isQuotaChangePreemptionRunning     bool
 
@@ -99,22 +100,23 @@ type Queue struct {
 // newBlankQueue creates a new empty queue objects with all values initialised.
 func newBlankQueue() *Queue {
 	return &Queue{
-		children:                   make(map[string]*Queue),
-		childPriorities:            make(map[string]int32),
-		applications:               make(map[string]*Application),
-		appPriorities:              make(map[string]int32),
-		reservedApps:               make(map[string]int),
-		allocatingAcceptedApps:     make(map[string]bool),
-		properties:                 make(map[string]string),
-		stateMachine:               NewObjectState(),
-		allocatedResource:          resources.NewResource(),
-		preemptingResource:         resources.NewResource(),
-		pending:                    resources.NewResource(),
-		currentPriority:            configs.MinPriority,
-		prioritySortEnabled:        true,
-		preemptionDelay:            configs.DefaultPreemptionDelay,
-		preemptionPolicy:           policies.DefaultPreemptionPolicy,
-		quotaChangePreemptionDelay: 0,
+		children:                       make(map[string]*Queue),
+		childPriorities:                make(map[string]int32),
+		applications:                   make(map[string]*Application),
+		appPriorities:                  make(map[string]int32),
+		reservedApps:                   make(map[string]int),
+		allocatingAcceptedApps:         make(map[string]bool),
+		properties:                     make(map[string]string),
+		stateMachine:                   NewObjectState(),
+		allocatedResource:              resources.NewResource(),
+		preemptingResource:             resources.NewResource(),
+		pending:                        resources.NewResource(),
+		currentPriority:                configs.MinPriority,
+		prioritySortEnabled:            true,
+		preemptionDelay:                configs.DefaultPreemptionDelay,
+		preemptionPolicy:               policies.DefaultPreemptionPolicy,
+		quotaChangePreemptionDelay:     0,
+		quotaChangePreemptionStartTime: time.Time{},
 	}
 }
 
@@ -402,21 +404,26 @@ func (sq *Queue) setPreemptionSettings(oldMaxResource *resources.Resource, conf 
 	// Set max res earlier but not now
 	case resources.IsZero(newMaxResource) && !resources.IsZero(oldMaxResource):
 		sq.quotaChangePreemptionDelay = 0
+		sq.quotaChangePreemptionStartTime = time.Time{}
 		// Set max res now but not earlier
 	case !resources.IsZero(newMaxResource) && resources.IsZero(oldMaxResource) && conf.Preemption.Delay != 0:
 		sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+		sq.quotaChangePreemptionStartTime = time.Now().Add(time.Duration(int64(sq.quotaChangePreemptionDelay)) * time.Second) //nolint:gosec
 		// Set max res earlier and now as well
 	default:
 		switch {
 		// Quota decrease
 		case resources.StrictlyGreaterThan(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0:
 			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+			sq.quotaChangePreemptionStartTime = time.Now().Add(time.Duration(sq.quotaChangePreemptionDelay) * time.Second) //nolint:gosec
 			// Quota increase
 		case resources.StrictlyGreaterThan(newMaxResource, oldMaxResource) && conf.Preemption.Delay != 0:
 			sq.quotaChangePreemptionDelay = 0
+			sq.quotaChangePreemptionStartTime = time.Time{}
 			// Quota remains as is but delay has changed
 		case resources.Equals(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0 && sq.quotaChangePreemptionDelay != conf.Preemption.Delay:
 			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+			sq.quotaChangePreemptionStartTime = time.Now().Add(time.Duration(sq.quotaChangePreemptionDelay) * time.Second) //nolint:gosec
 		default:
 			// noop
 		}
@@ -1505,6 +1512,15 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 				}
 				return result
 			}
+		}
+
+		// Should we trigger preemption to enforce new quota?
+		if sq.quotaChangePreemptionDelay != 0 && !sq.quotaChangePreemptionStartTime.IsZero() && time.Now().Before(sq.quotaChangePreemptionStartTime) {
+			log.Log(log.SchedQueue).Info("Trigger preemption to enforce new max resources",
+				zap.String("queueName", sq.QueuePath),
+				zap.String("max resources", sq.maxResource.String()))
+			preemptor := NewQuotaChangePreemptor(sq)
+			preemptor.tryPreemption()
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)

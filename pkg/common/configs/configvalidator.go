@@ -663,7 +663,7 @@ func checkQueues(queue *QueueConfig, level int) error {
 		}
 		queueMap[strings.ToLower(child.Name)] = true
 		if queue.Preemption.Delay != 0 && queue.Preemption.Delay <= 60 {
-			return fmt.Errorf("invalid preemption delay %d, must be greater than 60 seconds", queue.Preemption.Delay)
+			return fmt.Errorf("invalid preemption delay %d, must be between 60 and %d", queue.Preemption.Delay, uint64(math.MaxUint64))
 		}
 	}
 

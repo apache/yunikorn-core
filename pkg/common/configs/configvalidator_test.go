@@ -2343,7 +2343,7 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				},
 			},
 			level:            1,
-			expectedErrorMsg: "invalid preemption delay 10, must be greater than 60 seconds",
+			expectedErrorMsg: "invalid preemption delay 10, must be between 60 and 18446744073709551615",
 		},
 		{
 			name: "Setting Preemption delay on root queue would be ignored",

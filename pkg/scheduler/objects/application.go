@@ -1565,6 +1565,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 			return true
 		}
 		tryNodeStart := time.Now()
+		metrics.GetSchedulerMetrics().IncTryNodeCount()
 		result, err := sa.tryNode(node, ask)
 		if err != nil {
 			if predicateErrors == nil {

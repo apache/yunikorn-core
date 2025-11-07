@@ -1614,6 +1614,124 @@ func TestTryAllocate(t *testing.T) {
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.Multiply(res, 3), expectedQueuesMaxLimits)
 }
 
+func TestApplicationsTriedCount(t *testing.T) {
+	setupUGM()
+	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	if result := partition.tryAllocate(); result != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %s", result)
+	}
+
+	app := newApplication(appID1, "default", "root.leaf")
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "18"})
+	assert.NilError(t, err, "failed to create resource")
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+	err = app.AddAllocationAsk(newAllocationAsk(allocKey, appID1, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+
+	app = newApplication(appID2, "default", "root.leaf")
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-2 to partition")
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "16"})
+	assert.NilError(t, err, "failed to create resource")
+	err = app.AddAllocationAsk(newAllocationAsk(allocKey2, appID2, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
+
+	app = newApplication(appID3, "default", "root.leaf")
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-3 to partition")
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "4"})
+	assert.NilError(t, err, "failed to create resource")
+	err = app.AddAllocationAsk(newAllocationAsk(allocKey3, appID3, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-3")
+
+	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
+	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
+	expectedQueuesMaxLimits["root.leaf"] = make(map[string]interface{})
+	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
+	expectedQueuesMaxLimits["root.leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
+	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
+	expectedQueuesMaxLimits["root.leaf"][maxapplications] = uint64(1)
+	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), nil, expectedQueuesMaxLimits)
+
+	// first allocation should be app-1 and alloc-2
+	result := partition.tryAllocate()
+	if result == nil || result.Request == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, result.ResultType, objects.Allocated, "result type is not the expected allocated")
+	assert.Equal(t, result.Request.GetApplicationID(), appID3, "expected application app-2 to be allocated")
+	assert.Equal(t, result.Request.GetAllocationKey(), allocKey3, "expected ask alloc-2 to be allocated")
+	assert.Equal(t, partition.root.GetApplicationsTried(), int64(3), "expected 3 applications to be tried")
+}
+
+func TestNodesTriedCount(t *testing.T) {
+	setupUGM()
+	partition, err := newConfiguredPartition()
+	assert.NilError(t, err, "test partition create failed with error")
+	var res1 *resources.Resource
+	res1, err = resources.NewResourceFromConf(map[string]string{"vcore": "2"})
+	assert.NilError(t, err, "failed to create basic resource")
+	err = partition.AddNode(newNodeMaxResource("node-1", res1))
+	assert.NilError(t, err, "test node1 add failed unexpected")
+
+	var res2 *resources.Resource
+	res2, err = resources.NewResourceFromConf(map[string]string{"vcore": "3"})
+	assert.NilError(t, err, "failed to create basic resource")
+	err = partition.AddNode(newNodeMaxResource("node-2", res2))
+	assert.NilError(t, err, "test node2 add failed unexpected")
+
+	var res3 *resources.Resource
+	res3, err = resources.NewResourceFromConf(map[string]string{"vcore": "5"})
+	assert.NilError(t, err, "failed to create basic resource")
+	err = partition.AddNode(newNodeMaxResource("node-3", res3))
+	assert.NilError(t, err, "test node3 add failed unexpected")
+
+	var res4 *resources.Resource
+	res4, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "failed to create basic resource")
+	err = partition.AddNode(newNodeMaxResource("node-4", res4))
+	assert.NilError(t, err, "test node4 add failed unexpected")
+
+	assert.Assert(t, partition != nil, "partition create failed")
+	if result := partition.tryAllocate(); result != nil {
+		t.Fatalf("empty cluster allocate returned allocation: %s", result)
+	}
+
+	app := newApplication(appID1, "default", "root.leaf")
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "4"})
+	assert.NilError(t, err, "failed to create resource")
+	// add to the partition
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+	err = app.AddAllocationAsk(newAllocationAsk(allocKey, appID1, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+
+	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
+	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
+	expectedQueuesMaxLimits["root.leaf"] = make(map[string]interface{})
+	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
+	expectedQueuesMaxLimits["root.leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
+	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
+	expectedQueuesMaxLimits["root.leaf"][maxapplications] = uint64(1)
+	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), nil, expectedQueuesMaxLimits)
+
+	// first allocation should be app-1 and alloc-2
+	result := partition.tryAllocate()
+	if result == nil || result.Request == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, result.ResultType, objects.Allocated, "result type is not the expected allocated")
+	assert.Equal(t, result.Request.GetApplicationID(), appID1, "expected application app-2 to be allocated")
+	assert.Equal(t, result.Request.GetAllocationKey(), allocKey, "expected ask alloc-2 to be allocated")
+	assert.Equal(t, partition.root.GetApplicationsTried(), int64(1), "expected 1 applications to be tried")
+	assert.Equal(t, partition.root.GetNodesTried(), int64(1), "expected 1 nodes to be tried")
+}
+
 // allocate ask request with required node
 func TestRequiredNodeReservation(t *testing.T) {
 	setupUGM()

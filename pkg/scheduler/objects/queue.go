@@ -74,6 +74,7 @@ type Queue struct {
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
+<<<<<<< HEAD
 	properties                     map[string]string
 	adminACL                       security.ACL        // admin ACL
 	submitACL                      security.ACL        // submit ACL
@@ -94,6 +95,28 @@ type Queue struct {
 	isQuotaChangePreemptionRunning bool
 	unschedAskBackoff              uint64
 	askBackoffDelay                time.Duration
+=======
+	properties                         map[string]string
+	adminACL                           security.ACL        // admin ACL
+	submitACL                          security.ACL        // submit ACL
+	maxResource                        *resources.Resource // When not set, max = nil
+	guaranteedResource                 *resources.Resource // When not set, Guaranteed == 0
+	isLeaf                             bool                // this is a leaf queue or not (i.e. parent)
+	isManaged                          bool                // queue is part of the config, not auto created
+	stateMachine                       *fsm.FSM            // the state of the queue for scheduling
+	stateTime                          time.Time           // last time the state was updated (needed for cleanup)
+	maxRunningApps                     uint64
+	runningApps                        uint64
+	allocatingAcceptedApps             map[string]bool
+	template                           *template.Template
+	queueEvents                        *schedEvt.QueueEvents
+	appQueueMapping                    *AppQueueMapping // appID mapping to queues
+	quotaChangePreemptionDelay         uint64
+	hasTriggerredQuotaChangePreemption bool
+	isQuotaChangePreemptionRunning     bool
+	applicationsTried                  int64 // number of applications tried per scheduling cycle
+	nodesTried                         int64 // number of nodes tried per scheduling cycle
+>>>>>>> 7ca44f3 (Rebased with master)
 
 	locking.RWMutex
 }
@@ -1555,17 +1578,39 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 			if app.IsAccepted() && (!runnableInQueue || !runnableByUserLimit) {
 				continue
 			}
+<<<<<<< HEAD
 			deadline := app.GetBackoffDeadline()
 			if !deadline.IsZero() && time.Now().Before(deadline) {
 				continue
 			}
+=======
+
+			// Increment counter in root queue before calling app.tryAllocate
+			sq.incrementApplicationsTried()
+			countBefore, err := metrics.GetSchedulerMetrics().GetTryNodeCount()
+			if err != nil {
+				// if metric read fails, default to 0 to avoid disrupting scheduling
+				countBefore = 0
+			}
+
+>>>>>>> 7ca44f3 (Rebased with master)
 			result := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
+
+			countAfter, err := metrics.GetSchedulerMetrics().GetTryNodeCount()
+			if err != nil {
+				// if metric read fails, default to 0 to avoid disrupting scheduling
+				countAfter = 0
+			}
+			sq.addNodesTried(countAfter - countBefore)
+
 			if result != nil {
 				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("resultType", result.ResultType),
-					zap.Stringer("allocation", result.Request))
+					zap.Stringer("allocation", result.Request),
+					zap.Int64("applicationsTried:", sq.GetApplicationsTried()),
+					zap.Int64("nodesTried", sq.GetNodesTried()))
 				// if the app is still in Accepted state we're allocating placeholders.
 				// we want to count these apps as running
 				if app.IsAccepted() {
@@ -2212,4 +2257,87 @@ func (sq *Queue) GetBackoffDelay() time.Duration {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.askBackoffDelay
+}
+
+func (sq *Queue) addNodesTried(count int64) {
+	if sq == nil {
+		return
+	}
+	// Find the root queue and increment its counter
+	root := sq
+	for root.parent != nil {
+		root = root.parent
+	}
+	root.Lock()
+	defer root.Unlock()
+	root.nodesTried += count
+}
+
+func (sq *Queue) GetNodesTried() int64 {
+	if sq == nil {
+		return 0
+	}
+	root := sq
+	for root.parent != nil {
+		root = root.parent
+	}
+	root.Lock()
+	defer root.Unlock()
+	return root.nodesTried
+}
+
+func (sq *Queue) ResetNodesTried() {
+	if sq == nil {
+		return
+	}
+	root := sq
+	for root.parent != nil {
+		root = root.parent
+	}
+	root.Lock()
+	defer root.Unlock()
+	root.nodesTried = 0
+}
+
+// Increment the root queue's counter for application allocation attempts
+func (sq *Queue) incrementApplicationsTried() {
+	if sq == nil {
+		return
+	}
+	// Find the root queue and increment its counter
+	root := sq
+	for root.parent != nil {
+		root = root.parent
+	}
+	root.Lock()
+	defer root.Unlock()
+	root.applicationsTried++
+}
+
+// Retrieve the count of tryAllocate calls made during the current scheduling cycle
+func (sq *Queue) GetApplicationsTried() int64 {
+	if sq == nil {
+		return 0
+	}
+	root := sq
+	for root.parent != nil {
+		root = root.parent
+	}
+	root.Lock()
+	defer root.Unlock()
+	return root.applicationsTried
+}
+
+// Clear the application allocation attempts counter for the new scheduling cycle
+func (sq *Queue) ResetApplicationsTried() {
+	if sq == nil {
+		return
+	}
+	root := sq
+	for root.parent != nil {
+		root = root.parent
+	}
+	root.Lock()
+	defer root.Unlock()
+	root.applicationsTried = 0
 }

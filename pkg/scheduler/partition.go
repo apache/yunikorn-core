@@ -851,6 +851,11 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.AllocationResult {
 		// nothing to do just return
 		return nil
 	}
+
+	// Reset the tryAllocate call counter at the beginning of each scheduling cycle
+	pc.root.ResetApplicationsTried()
+	pc.root.ResetNodesTried()
+
 	// try allocating from the root down
 	result := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
 	if result != nil {

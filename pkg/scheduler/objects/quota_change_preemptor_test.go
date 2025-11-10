@@ -99,3 +99,35 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 		})
 	}
 }
+
+func TestQuotaChangeGetPreemptableResource(t *testing.T) {
+	leaf, err := NewConfiguredQueue(configs.QueueConfig{
+		Name: "leaf",
+	}, nil, false, nil)
+	assert.NilError(t, err)
+
+	testCases := []struct {
+		name         string
+		queue        *Queue
+		maxResource  *resources.Resource
+		usedResource *resources.Resource
+		preemptable  *resources.Resource
+	}{
+		{"nil max and nil used", leaf, nil, nil, nil},
+		{"nil max", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil},
+		{"nil used", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil, nil},
+		{"used below max", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500}), nil},
+		{"used above max", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"used above max in specific res type", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"used above max and below max in specific res type", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"used res type but max undefined", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 150}), nil},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.queue.maxResource = tc.maxResource
+			tc.queue.allocatedResource = tc.usedResource
+			preemptor := NewQuotaChangePreemptor(tc.queue)
+			assert.Equal(t, resources.Equals(preemptor.GetPreemptableResources(), tc.preemptable), true)
+		})
+	}
+}

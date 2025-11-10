@@ -147,7 +147,7 @@ func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 	log.Log(log.ShedQuotaChangePreemption).Info("Found victims for quota change preemption",
 		zap.String("queue", qcp.queue.GetQueuePath()),
 		zap.Int("total victims", len(qcp.allocations)))
-	var apps map[*Application][]*Allocation
+	apps := make(map[*Application][]*Allocation)
 	victimsTotalResource := resources.NewResource()
 	selectedVictimsTotalResource := resources.NewResource()
 	for _, victim := range qcp.allocations {
@@ -155,7 +155,6 @@ func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 		if qcp.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
 			application := qcp.queue.GetApplication(victim.applicationID)
 			if _, ok := apps[application]; !ok {
-				apps = map[*Application][]*Allocation{application: {}}
 				apps[application] = []*Allocation{}
 			}
 			apps[application] = append(apps[application], victim)

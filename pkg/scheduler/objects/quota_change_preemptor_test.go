@@ -213,14 +213,14 @@ func TestQuotaChangePreemptVictims(t *testing.T) {
 	suitableVictims = append(suitableVictims, alloc1)
 	notSuitableVictims = append(notSuitableVictims, alloc1)
 
-	alloc2 := createAllocation("ask2", "app1", node.NodeID, true, false, 10, false,
+	alloc2 := createAllocation("ask2", "app2", node.NodeID, true, false, 10, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc2.createTime = createTime.Add(-time.Minute * 2)
 	assert.Assert(t, node.TryAddAllocation(alloc2))
 	suitableVictims = append(suitableVictims, alloc2)
 	notSuitableVictims = append(notSuitableVictims, alloc2)
 
-	alloc3 := createAllocation("ask3", "app1", node.NodeID, true, false, 10, false,
+	alloc3 := createAllocation("ask3", "app3", node.NodeID, true, false, 10, false,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50}))
 	alloc3.createTime = createTime.Add(-time.Minute * 1)
 	assert.Assert(t, node.TryAddAllocation(alloc2))

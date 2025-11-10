@@ -168,7 +168,7 @@ func TestCheckPreconditions(t *testing.T) {
 	preemptionAttemptsRemaining := 1
 	result := app.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}), true, 1*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Check(t, result == nil, "unexpected result")
-	assertAllocationLog(t, ask)
+	assertAllocationLog(t, ask, []string{common.PreemptionPreconditionsFailed, common.PreemptionDoesNotHelp})
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)
 	assert.Assert(t, preemptor.CheckPreconditions(), "preconditions failed")
 	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded on successive run")
@@ -255,7 +255,7 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 			} else {
 				assert.Equal(t, result == nil, true, "unexpected resultType")
 				assert.Equal(t, len(ask3.GetAllocationLog()), 1)
-				assert.Equal(t, ask3.GetAllocationLog()[0].Message, common.PreemptionDoesNotGuarantee)
+				assertAllocationLog(t, ask3, []string{common.PreemptionDoesNotGuarantee})
 			}
 		})
 	}
@@ -599,8 +599,7 @@ func TestTryPreemption_VictimsAvailable_InsufficientResource(t *testing.T) {
 	assert.Equal(t, ok, false, "no victims found")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
-	log := ask3.GetAllocationLog()
-	assert.Equal(t, log[0].Message, common.PreemptionShortfall)
+	assertAllocationLog(t, ask3, []string{common.PreemptionShortfall})
 }
 
 // TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -650,8 +649,7 @@ func TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource(t *testing.T
 	assert.Equal(t, ok, false, "no victims found")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
-	log := ask3.GetAllocationLog()
-	assert.Equal(t, log[0].Message, common.PreemptionShortfall)
+	assertAllocationLog(t, ask3, []string{common.PreemptionShortfall})
 }
 
 // TestTryPreemption_VictimsAvailableOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
@@ -718,8 +716,7 @@ func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 	assert.Equal(t, ok, false, "no victims found")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
-	log := ask3.GetAllocationLog()
-	assert.Equal(t, log[0].Message, common.PreemptionShortfall)
+	assertAllocationLog(t, ask3, []string{common.PreemptionShortfall})
 }
 
 // TestTryPreemption_OnQueue_VictimsOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.xw

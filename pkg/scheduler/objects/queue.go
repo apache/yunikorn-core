@@ -1516,11 +1516,13 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 
 		// Should we trigger preemption to enforce new quota?
 		if sq.quotaChangePreemptionDelay != 0 && !sq.quotaChangePreemptionStartTime.IsZero() && time.Now().Before(sq.quotaChangePreemptionStartTime) {
-			log.Log(log.SchedQueue).Info("Trigger preemption to enforce new max resources",
-				zap.String("queueName", sq.QueuePath),
-				zap.String("max resources", sq.maxResource.String()))
-			preemptor := NewQuotaChangePreemptor(sq)
-			preemptor.tryPreemption()
+			go func() {
+				log.Log(log.SchedQueue).Info("Trigger preemption to enforce new max resources",
+					zap.String("queueName", sq.QueuePath),
+					zap.String("max resources", sq.maxResource.String()))
+				preemptor := NewQuotaChangePreemptor(sq)
+				preemptor.tryPreemption()
+			}()
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)

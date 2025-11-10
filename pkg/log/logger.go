@@ -54,42 +54,43 @@ const (
 
 // Defined loggers: when adding new loggers, ids must be sequential, and all must be added to the loggers slice in the same order
 var (
-	Core             = &LoggerHandle{id: 0, name: "core"}
-	Test             = &LoggerHandle{id: 1, name: "test"}
-	Deprecation      = &LoggerHandle{id: 2, name: "deprecation"}
-	Config           = &LoggerHandle{id: 3, name: "core.config"}
-	Entrypoint       = &LoggerHandle{id: 4, name: "core.entrypoint"}
-	Events           = &LoggerHandle{id: 5, name: "core.events"}
-	OpenTracing      = &LoggerHandle{id: 6, name: "core.opentracing"}
-	Resources        = &LoggerHandle{id: 7, name: "core.resources"}
-	REST             = &LoggerHandle{id: 8, name: "core.rest"}
-	RMProxy          = &LoggerHandle{id: 9, name: "core.rmproxy"}
-	RPC              = &LoggerHandle{id: 10, name: "core.rpc"}
-	Metrics          = &LoggerHandle{id: 11, name: "core.metrics"}
-	Scheduler        = &LoggerHandle{id: 12, name: "core.scheduler"}
-	SchedAllocation  = &LoggerHandle{id: 13, name: "core.scheduler.allocation"}
-	SchedApplication = &LoggerHandle{id: 14, name: "core.scheduler.application"}
-	SchedAppUsage    = &LoggerHandle{id: 15, name: "core.scheduler.application.usage"}
-	SchedContext     = &LoggerHandle{id: 16, name: "core.scheduler.context"}
-	SchedFSM         = &LoggerHandle{id: 17, name: "core.scheduler.fsm"}
-	SchedHealth      = &LoggerHandle{id: 18, name: "core.scheduler.health"}
-	SchedNode        = &LoggerHandle{id: 19, name: "core.scheduler.node"}
-	SchedPartition   = &LoggerHandle{id: 20, name: "core.scheduler.partition"}
-	SchedPreemption  = &LoggerHandle{id: 21, name: "core.scheduler.preemption"}
-	SchedQueue       = &LoggerHandle{id: 22, name: "core.scheduler.queue"}
-	SchedReservation = &LoggerHandle{id: 23, name: "core.scheduler.reservation"}
-	SchedUGM         = &LoggerHandle{id: 24, name: "core.scheduler.ugm"}
-	SchedNodesUsage  = &LoggerHandle{id: 25, name: "core.scheduler.nodesusage"}
-	Security         = &LoggerHandle{id: 26, name: "core.security"}
-	Utils            = &LoggerHandle{id: 27, name: "core.utils"}
-	Diagnostics      = &LoggerHandle{id: 28, name: "core.diagnostics"}
+	Core                      = &LoggerHandle{id: 0, name: "core"}
+	Test                      = &LoggerHandle{id: 1, name: "test"}
+	Deprecation               = &LoggerHandle{id: 2, name: "deprecation"}
+	Config                    = &LoggerHandle{id: 3, name: "core.config"}
+	Entrypoint                = &LoggerHandle{id: 4, name: "core.entrypoint"}
+	Events                    = &LoggerHandle{id: 5, name: "core.events"}
+	OpenTracing               = &LoggerHandle{id: 6, name: "core.opentracing"}
+	Resources                 = &LoggerHandle{id: 7, name: "core.resources"}
+	REST                      = &LoggerHandle{id: 8, name: "core.rest"}
+	RMProxy                   = &LoggerHandle{id: 9, name: "core.rmproxy"}
+	RPC                       = &LoggerHandle{id: 10, name: "core.rpc"}
+	Metrics                   = &LoggerHandle{id: 11, name: "core.metrics"}
+	Scheduler                 = &LoggerHandle{id: 12, name: "core.scheduler"}
+	SchedAllocation           = &LoggerHandle{id: 13, name: "core.scheduler.allocation"}
+	SchedApplication          = &LoggerHandle{id: 14, name: "core.scheduler.application"}
+	SchedAppUsage             = &LoggerHandle{id: 15, name: "core.scheduler.application.usage"}
+	SchedContext              = &LoggerHandle{id: 16, name: "core.scheduler.context"}
+	SchedFSM                  = &LoggerHandle{id: 17, name: "core.scheduler.fsm"}
+	SchedHealth               = &LoggerHandle{id: 18, name: "core.scheduler.health"}
+	SchedNode                 = &LoggerHandle{id: 19, name: "core.scheduler.node"}
+	SchedPartition            = &LoggerHandle{id: 20, name: "core.scheduler.partition"}
+	SchedPreemption           = &LoggerHandle{id: 21, name: "core.scheduler.preemption"}
+	SchedQueue                = &LoggerHandle{id: 22, name: "core.scheduler.queue"}
+	SchedReservation          = &LoggerHandle{id: 23, name: "core.scheduler.reservation"}
+	SchedUGM                  = &LoggerHandle{id: 24, name: "core.scheduler.ugm"}
+	SchedNodesUsage           = &LoggerHandle{id: 25, name: "core.scheduler.nodesusage"}
+	Security                  = &LoggerHandle{id: 26, name: "core.security"}
+	Utils                     = &LoggerHandle{id: 27, name: "core.utils"}
+	Diagnostics               = &LoggerHandle{id: 28, name: "core.diagnostics"}
+	ShedQuotaChangePreemption = &LoggerHandle{id: 29, name: "core.scheduler.preemption.quotachange"}
 )
 
 // this tracks all the known logger handles, used to preallocate the real logger instances when configuration changes
 var loggers = []*LoggerHandle{
 	Core, Test, Deprecation, Config, Entrypoint, Events, OpenTracing, Resources, REST, RMProxy, RPC, Metrics,
 	Scheduler, SchedAllocation, SchedApplication, SchedAppUsage, SchedContext, SchedFSM, SchedHealth, SchedNode,
-	SchedPartition, SchedPreemption, SchedQueue, SchedReservation, SchedUGM, SchedNodesUsage, Security, Utils, Diagnostics,
+	SchedPartition, SchedPreemption, SchedQueue, SchedReservation, SchedUGM, SchedNodesUsage, Security, Utils, Diagnostics, ShedQuotaChangePreemption,
 }
 
 // structure to hold all current logger configuration state

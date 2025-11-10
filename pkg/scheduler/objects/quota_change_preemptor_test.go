@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 func TestQuotaChangeCheckPreconditions(t *testing.T) {
@@ -127,7 +128,61 @@ func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 			tc.queue.maxResource = tc.maxResource
 			tc.queue.allocatedResource = tc.usedResource
 			preemptor := NewQuotaChangePreemptor(tc.queue)
-			assert.Equal(t, resources.Equals(preemptor.GetPreemptableResources(), tc.preemptable), true)
+			assert.Equal(t, resources.Equals(preemptor.getPreemptableResources(), tc.preemptable), true)
+		})
+	}
+}
+
+func TestQuotaChangeFilterVictims(t *testing.T) {
+	leaf, err := NewConfiguredQueue(configs.QueueConfig{
+		Name: "leaf",
+	}, nil, false, nil)
+	assert.NilError(t, err)
+
+	node := NewNode(&si.NodeInfo{
+		NodeID:     "node",
+		Attributes: nil,
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 100}},
+		},
+	})
+	testCases := []struct {
+		name                     string
+		queue                    *Queue
+		preemptableResource      *resources.Resource
+		irrelevantAllocations    []bool
+		expectedAllocationsCount int
+	}{
+		{"nil preemptable resource", leaf, nil, []bool{false, false, false}, 0},
+		{"not even single res type in preemptable resource matches", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100}), []bool{false, false, false}, 0},
+		{"res type in preemptable resource matches", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), []bool{false, false, false}, 10},
+		{"irrelevant - required node allocations", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), []bool{true, false, false}, 8},
+		{"irrelevant - already preempted allocations", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), []bool{false, true, false}, 8},
+		{"irrelevant - already released allocations", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), []bool{false, false, true}, 8},
+		{"combine irrelevant allocations", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), []bool{true, true, true}, 4},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			asks := prepareAllocationAsks(t, node)
+			assignAllocationsToQueue(asks, leaf)
+			if tc.irrelevantAllocations[0] {
+				asks[0].SetRequiredNode("node2")
+				asks[1].SetRequiredNode("node2")
+			}
+			if tc.irrelevantAllocations[1] {
+				asks[2].MarkPreempted()
+				asks[3].MarkPreempted()
+			}
+			if tc.irrelevantAllocations[2] {
+				asks[4].SetReleased(true)
+				asks[5].SetReleased(true)
+			}
+			preemptor := NewQuotaChangePreemptor(tc.queue)
+			preemptor.preemptableResource = tc.preemptableResource
+			allocations := preemptor.filterAllocations()
+			assert.Equal(t, len(allocations), tc.expectedAllocationsCount)
+			removeAllocationAsks(node, asks)
+			removeAllocationFromQueue(leaf)
 		})
 	}
 }

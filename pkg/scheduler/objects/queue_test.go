@@ -2274,9 +2274,9 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 				Guaranteed: getResourceConf(),
 			},
 			Preemption: configs.Preemption{
-				Delay: 100,
+				Delay: 1,
 			},
-		}, 100},
+		}, 1},
 		{"increase max with delay", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "100000000"},
@@ -2290,26 +2290,26 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 				Max: map[string]string{"memory": "100"},
 			},
 			Preemption: configs.Preemption{
-				Delay: 500,
+				Delay: 2,
 			},
-		}, 500},
+		}, 2},
 		{"max remains as is but delay changed", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "100"},
 			},
 			Preemption: configs.Preemption{
-				Delay: 200,
+				Delay: 2,
 			},
-		}, 200},
+		}, 2},
 		{"unrelated config change, should not impact earlier set preemption settings", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max:        map[string]string{"memory": "100"},
 				Guaranteed: map[string]string{"memory": "50"},
 			},
 			Preemption: configs.Preemption{
-				Delay: 200,
+				Delay: 2,
 			},
-		}, 200},
+		}, 2},
 		{"increase max again with delay", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "101"},
@@ -2323,9 +2323,13 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err = parent.ApplyConf(tc.conf)
 			assert.NilError(t, err, "failed to apply conf: %v", err)
+			used, err := resources.NewResourceFromConf(tc.conf.Resources.Max)
+			assert.NilError(t, err, "failed to set allocated resource: %v", err)
+			parent.allocatedResource = resources.Multiply(used, 2)
 			assert.Equal(t, parent.quotaChangePreemptionDelay, tc.expectedDelay)
+			time.Sleep(time.Duration(int64(tc.expectedDelay)+1) * time.Second)
 			parent.TryAllocate(nil, nil, nil, false)
-			time.Sleep(time.Millisecond * 10)
+			time.Sleep(time.Millisecond * 100)
 			if tc.expectedDelay != uint64(0) {
 				assert.Equal(t, parent.quotaChangePreemptionStartTime.IsZero(), false)
 				assert.Equal(t, parent.HasTriggerredQuotaChangePreemption(), true)
@@ -2335,6 +2339,7 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 			}
 			// reset to default value
 			parent.hasTriggerredQuotaChangePreemption = false
+			parent.isQuotaChangePreemptionRunning = false
 		})
 	}
 }

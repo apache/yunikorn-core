@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -46,6 +47,8 @@ import (
 
 var (
 	maxPreemptionsPerQueue = 10 // maximum number of asks to attempt to preempt for in a single queue
+	rateLimitedQueueLog    *log.RateLimitedLogger
+	initQueueLogOnce       sync.Once
 )
 
 // Queue structure inside Scheduler
@@ -1515,13 +1518,18 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 		}
 
 		// Should we trigger preemption to enforce new quota?
-		if sq.quotaChangePreemptionDelay != 0 && !sq.quotaChangePreemptionStartTime.IsZero() && time.Now().Before(sq.quotaChangePreemptionStartTime) {
+		if sq.quotaChangePreemptionDelay != 0 && !sq.quotaChangePreemptionStartTime.IsZero() && time.Now().After(sq.quotaChangePreemptionStartTime) {
 			go func() {
-				log.Log(log.SchedQueue).Info("Trigger preemption to enforce new max resources",
+				getRateLimitedQueueLog().Info("Trigger preemption to enforce new max resources",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("max resources", sq.maxResource.String()))
 				preemptor := NewQuotaChangePreemptor(sq)
-				preemptor.tryPreemption()
+				if preemptor.CheckPreconditions() {
+					getRateLimitedQueueLog().Info("Preconditions has passed to trigger preemption to enforce new max resources",
+						zap.String("queueName", sq.QueuePath),
+						zap.String("max resources", sq.maxResource.String()))
+					preemptor.tryPreemption()
+				}
 			}()
 		}
 	} else {
@@ -2125,4 +2133,12 @@ func (sq *Queue) IsQuotaChangePreemptionRunning() bool {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.isQuotaChangePreemptionRunning
+}
+
+// getRateLimitedQueueLog Initialize the rate limited Queue logger only once
+func getRateLimitedQueueLog() *log.RateLimitedLogger {
+	initQueueLogOnce.Do(func() {
+		rateLimitedQueueLog = log.NewRateLimitedLogger(log.SchedQueue, time.Microsecond)
+	})
+	return rateLimitedQueueLog
 }

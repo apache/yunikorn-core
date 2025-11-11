@@ -878,6 +878,21 @@ func StrictlyGreaterThanOrEquals(larger, smaller *Resource) bool {
 // Types defined in smaller that are not in the defined resource are ignored.
 // Two resources that are equal are not considered strictly larger than each other.
 func (r *Resource) StrictlyGreaterThanOnlyExisting(smaller *Resource) bool {
+	return r.internalStrictlyOnlyExisting(smaller, false)
+}
+
+// StrictlyGreaterThanOrEqualsOnlyExisting returns true if all quantities for types in the defined resource are greater than or equals
+// the quantity for the same type in smaller.
+// Types defined in smaller that are not in the defined resource are ignored.
+func (r *Resource) StrictlyGreaterThanOrEqualsOnlyExisting(smaller *Resource) bool {
+	return r.internalStrictlyOnlyExisting(smaller, true)
+}
+
+// internalStrictlyOnlyExisting When doEqualsCheck is false, it returns true if all quantities for types in the defined resource are greater than
+// the quantity for the same type in smaller. When doEqualsCheck is true, it returns true if all quantities for types in the defined resource are greater than
+// or equals the quantity for the same type in smaller.
+// Types defined in smaller that are not in the defined resource are ignored.
+func (r *Resource) internalStrictlyOnlyExisting(smaller *Resource, doEqualsCheck bool) bool {
 	if r == nil {
 		r = Zero
 	}
@@ -887,6 +902,9 @@ func (r *Resource) StrictlyGreaterThanOnlyExisting(smaller *Resource) bool {
 
 	// keep track of the number of not equal values
 	notEqual := false
+
+	// keep track of the number of equal values
+	equal := false
 
 	// Is larger and smaller completely disjoint?
 	atleastOneResourcePresent := false
@@ -905,6 +923,9 @@ func (r *Resource) StrictlyGreaterThanOnlyExisting(smaller *Resource) bool {
 			if val > v {
 				return false
 			}
+			if val <= v {
+				equal = true
+			}
 			if val != v {
 				notEqual = true
 			}
@@ -915,7 +936,11 @@ func (r *Resource) StrictlyGreaterThanOnlyExisting(smaller *Resource) bool {
 	case smaller.IsEmpty() && !r.IsEmpty():
 		return isAllPositiveInLarger
 	case atleastOneResourcePresent:
-		return notEqual
+		if doEqualsCheck {
+			return equal
+		} else {
+			return notEqual
+		}
 	default:
 		// larger and smaller is completely disjoint. none of the resource match.
 		return !r.IsEmpty() && !smaller.IsEmpty()

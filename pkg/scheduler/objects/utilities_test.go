@@ -26,7 +26,6 @@ import (
 	"github.com/google/btree"
 	"gotest.tools/v3/assert"
 
-	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
@@ -318,20 +317,17 @@ func assertUserResourcesAndGroupResources(t *testing.T, userGroup security.UserG
 	}
 }
 
-func assertAllocationLog(t *testing.T, ask *Allocation) {
+func assertAllocationLog(t *testing.T, ask *Allocation, message []string) {
 	log := ask.GetAllocationLog()
-	preemptionPreconditionsFailed := false
-	PreemptionDoesNotHelp := false
+	logged := false
 	for _, l := range log {
-		switch l.Message {
-		case common.PreemptionPreconditionsFailed:
-			preemptionPreconditionsFailed = true
-		case common.PreemptionDoesNotHelp:
-			PreemptionDoesNotHelp = true
+		for _, m := range message {
+			if l.Message == m {
+				logged = true
+			}
 		}
 	}
-	assert.Assert(t, preemptionPreconditionsFailed)
-	assert.Assert(t, PreemptionDoesNotHelp)
+	assert.Assert(t, logged)
 }
 
 func getNodeIteratorFn(nodes ...*Node) func() NodeIterator {

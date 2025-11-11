@@ -2242,8 +2242,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	result3 := app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), true, 30*time.Second, &maxAttemptsExhausted, iterator, iterator, getNode)
 	assert.Assert(t, result3 == nil, "result3 not expected")
 	assert.Assert(t, !alloc2.IsPreempted(), "alloc2 should not have been preempted")
-	log := ask3.GetAllocationLog()
-	assert.Equal(t, log[0].Message, common.PreemptionMaxAttemptsExhausted)
+	assertAllocationLog(t, ask3, []string{common.PreemptionMaxAttemptsExhausted, common.PreemptionDoesNotHelp})
 	assert.Equal(t, maxAttemptsExhausted, 0)
 
 	maxAttemptsDecrease := 10
@@ -2252,7 +2251,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	result3 = app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), true, 30*time.Second, &maxAttemptsDecrease, iterator, iterator, getNode)
 	assert.Assert(t, result3 == nil, "result3 not expected")
 	assert.Assert(t, !alloc2.IsPreempted(), "alloc2 should not have been preempted")
-	assertAllocationLog(t, ask3)
+	assertAllocationLog(t, ask3, []string{common.PreemptionPreconditionsFailed, common.PreemptionDoesNotHelp})
 	assert.Equal(t, maxAttemptsDecrease, 10)
 
 	// pass the time and try again
@@ -2271,7 +2270,7 @@ func TestTryAllocatePreemptNode(t *testing.T) {
 	result3 := app2.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 18}), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Assert(t, result3 == nil, "result3 expected")
 	assert.Assert(t, !allocs[1].IsPreempted(), "alloc1 should have been preempted")
-	assertAllocationLog(t, ask3)
+	assertAllocationLog(t, ask3, []string{common.PreemptionPreconditionsFailed, common.PreemptionDoesNotHelp})
 
 	// pass the time and try again
 	ask3.createTime = ask3.createTime.Add(-30 * time.Second)

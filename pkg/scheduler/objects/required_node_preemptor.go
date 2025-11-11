@@ -70,7 +70,10 @@ func (p *PreemptionContext) filterAllocations() filteringResult {
 
 		// at least one of the required ask resource should match, otherwise skip
 		if !p.requiredAsk.GetAllocatedResource().MatchAny(allocation.GetAllocatedResource()) {
+<<<<<<< HEAD
 			result.atLeastOneResNotMatched++
+=======
+>>>>>>> 8d0affe ([YUNIKORN-3143] Victim ordering and selection)
 			continue
 		}
 		p.allocations = append(p.allocations, allocation)

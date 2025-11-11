@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type QuotaChangePreemptionContext struct {
@@ -137,4 +138,59 @@ func (qcp *QuotaChangePreemptionContext) sortAllocations() {
 	if len(qcp.allocations) > 0 {
 		SortAllocations(qcp.allocations)
 	}
+}
+
+func (qcp *QuotaChangePreemptionContext) preemptVictims() {
+	if len(qcp.allocations) == 0 {
+		return
+	}
+	log.Log(log.ShedQuotaChangePreemption).Info("Found victims for quota change preemption",
+		zap.String("queue", qcp.queue.GetQueuePath()),
+		zap.Int("total victims", len(qcp.allocations)))
+	apps := make(map[*Application][]*Allocation)
+	victimsTotalResource := resources.NewResource()
+	selectedVictimsTotalResource := resources.NewResource()
+	for _, victim := range qcp.allocations {
+		// stop collecting the victims once ask resource requirement met
+		if qcp.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
+			application := qcp.queue.GetApplication(victim.applicationID)
+			if _, ok := apps[application]; !ok {
+				apps[application] = []*Allocation{}
+			}
+			apps[application] = append(apps[application], victim)
+			selectedVictimsTotalResource.AddTo(victim.GetAllocatedResource())
+		}
+		victimsTotalResource.AddTo(victim.GetAllocatedResource())
+	}
+
+	if qcp.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) ||
+		selectedVictimsTotalResource.StrictlyGreaterThanOnlyExisting(qcp.preemptableResource) {
+		// either there is a shortfall or exceeding little above than required, so try "best effort" approach later
+		return
+	}
+
+	for app, victims := range apps {
+		if len(victims) > 0 {
+			qcp.queue.MarkTriggerredQuotaChangePreemption()
+			for _, victim := range victims {
+				log.Log(log.ShedQuotaChangePreemption).Info("Preempting victims for quota change preemption",
+					zap.String("queue", qcp.queue.GetQueuePath()),
+					zap.String("victim allocation key", victim.allocationKey),
+					zap.String("victim allocated resources", victim.GetAllocatedResource().String()),
+					zap.String("victim application", victim.applicationID),
+					zap.String("victim node", victim.GetNodeID()),
+				)
+				qcp.queue.IncPreemptingResource(victim.GetAllocatedResource())
+				victim.MarkPreempted()
+				victim.SendPreemptedByQuotaChangeEvent(qcp.queue.GetQueuePath())
+			}
+			app.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
+				"preempting allocations to enforce new max quota for queue : "+qcp.queue.GetQueuePath())
+		}
+	}
+}
+
+// only for testing
+func (qcp *QuotaChangePreemptionContext) getVictims() []*Allocation {
+	return qcp.allocations
 }

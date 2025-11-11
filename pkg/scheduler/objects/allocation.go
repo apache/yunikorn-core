@@ -481,6 +481,11 @@ func (a *Allocation) SendPreemptedBySchedulerEvent(preemptorAllocKey, preemptorA
 	a.askEvents.SendPreemptedByScheduler(a.allocationKey, a.applicationID, preemptorAllocKey, preemptorAppId, preemptorQueuePath, a.GetAllocatedResource())
 }
 
+// SendPreemptedByQuotaChangeEvent updates the event system with the Quota change preemption event.
+func (a *Allocation) SendPreemptedByQuotaChangeEvent(queuePath string) {
+	a.askEvents.SendPreemptedByQuotaChange(a.allocationKey, a.applicationID, queuePath, a.GetAllocatedResource())
+}
+
 // GetAllocationLog returns a list of log entries corresponding to allocation preconditions not being met.
 func (a *Allocation) GetAllocationLog() []*AllocationLogEntry {
 	a.RLock()

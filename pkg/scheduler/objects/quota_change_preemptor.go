@@ -30,6 +30,9 @@ import (
 
 type QuotaChangePreemptionContext struct {
 	queue               *Queue
+	maxResource         *resources.Resource
+	guaranteedResource  *resources.Resource
+	allocatedResource   *resources.Resource
 	preemptableResource *resources.Resource
 	allocations         []*Allocation
 }
@@ -37,9 +40,13 @@ type QuotaChangePreemptionContext struct {
 func NewQuotaChangePreemptor(queue *Queue) *QuotaChangePreemptionContext {
 	preemptor := &QuotaChangePreemptionContext{
 		queue:               queue,
+		maxResource:         queue.CloneMaxResource(),
+		guaranteedResource:  queue.GetGuaranteedResource().Clone(),
+		allocatedResource:   queue.GetAllocatedResource().Clone(),
 		preemptableResource: nil,
 		allocations:         make([]*Allocation, 0),
 	}
+
 	return preemptor
 }
 
@@ -47,7 +54,7 @@ func (qcp *QuotaChangePreemptionContext) CheckPreconditions() bool {
 	if !qcp.queue.IsLeafQueue() || !qcp.queue.IsManaged() || qcp.queue.HasTriggerredQuotaChangePreemption() || qcp.queue.IsQuotaChangePreemptionRunning() {
 		return false
 	}
-	if qcp.queue.GetMaxResource().StrictlyGreaterThanOnlyExisting(qcp.queue.GetAllocatedResource()) {
+	if qcp.maxResource.StrictlyGreaterThanOnlyExisting(qcp.queue.GetAllocatedResource()) {
 		return false
 	}
 	return true
@@ -66,6 +73,9 @@ func (qcp *QuotaChangePreemptionContext) tryPreemption() {
 	// Sort the allocations
 	qcp.sortAllocations()
 
+	// Preempt the victims
+	qcp.preemptVictims()
+
 	// quota change preemption has really evicted victims, so mark the flag
 	qcp.queue.MarkTriggerredQuotaChangePreemption()
 }
@@ -75,7 +85,7 @@ func (qcp *QuotaChangePreemptionContext) tryPreemption() {
 // It could contain both positive and negative values. Only negative values are preemptable.
 func (qcp *QuotaChangePreemptionContext) getPreemptableResources() *resources.Resource {
 	maxRes := qcp.queue.CloneMaxResource()
-	used := resources.SubOnlyExisting(qcp.queue.GetAllocatedResource(), qcp.queue.GetPreemptingResource())
+	used := resources.SubOnlyExisting(qcp.allocatedResource, qcp.queue.GetPreemptingResource())
 	if maxRes.IsEmpty() || used.IsEmpty() {
 		return nil
 	}
@@ -134,12 +144,17 @@ func (qcp *QuotaChangePreemptionContext) filterAllocations() []*Allocation {
 	return allocations
 }
 
+// sortAllocations Sort the allocations running in the queue
 func (qcp *QuotaChangePreemptionContext) sortAllocations() {
 	if len(qcp.allocations) > 0 {
 		SortAllocations(qcp.allocations)
 	}
 }
 
+// preemptVictims Preempt the victims to enforce the new max resources.
+// When both max and guaranteed resources are set and equal, to comply with law of preemption "Ensure usage doesn't go below guaranteed resources",
+// preempt victims on best effort basis. So, preempt victims as close as possible to the required resource.
+// Otherwise, exceeding above the required resources slightly is acceptable for now.
 func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 	if len(qcp.allocations) == 0 {
 		return
@@ -149,24 +164,39 @@ func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 		zap.Int("total victims", len(qcp.allocations)))
 	apps := make(map[*Application][]*Allocation)
 	victimsTotalResource := resources.NewResource()
-	selectedVictimsTotalResource := resources.NewResource()
+	isGuaranteedAndMaxEquals := qcp.maxResource != nil && qcp.guaranteedResource != nil && resources.Equals(qcp.maxResource, qcp.guaranteedResource)
+	log.Log(log.ShedQuotaChangePreemption).Info("Found victims for quota change preemption",
+		zap.String("queue", qcp.queue.GetQueuePath()),
+		zap.Int("total victims", len(qcp.allocations)),
+		zap.String("max resources", qcp.maxResource.String()),
+		zap.String("guaranteed resources", qcp.guaranteedResource.String()),
+		zap.String("allocated resources", qcp.allocatedResource.String()),
+		zap.String("preemptable resources", qcp.preemptableResource.String()),
+		zap.Bool("isGuaranteedSet", isGuaranteedAndMaxEquals),
+	)
 	for _, victim := range qcp.allocations {
-		// stop collecting the victims once ask resource requirement met
-		if qcp.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
-			application := qcp.queue.GetApplication(victim.applicationID)
-			if _, ok := apps[application]; !ok {
-				apps[application] = []*Allocation{}
-			}
-			apps[application] = append(apps[application], victim)
-			selectedVictimsTotalResource.AddTo(victim.GetAllocatedResource())
+		if !qcp.preemptableResource.FitInMaxUndef(victim.GetAllocatedResource()) {
+			continue
 		}
-		victimsTotalResource.AddTo(victim.GetAllocatedResource())
-	}
+		application := qcp.queue.GetApplication(victim.applicationID)
 
-	if qcp.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) ||
-		selectedVictimsTotalResource.StrictlyGreaterThanOnlyExisting(qcp.preemptableResource) {
-		// either there is a shortfall or exceeding little above than required, so try "best effort" approach later
-		return
+		// Keep collecting the victims until preemptable resource reaches and subtract the usage
+		if qcp.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
+			apps[application] = append(apps[application], victim)
+			qcp.allocatedResource.SubFrom(victim.GetAllocatedResource())
+		}
+
+		// Has usage gone below the guaranteed resources?
+		// If yes, revert the recently added victim steps completely and try next victim.
+		if isGuaranteedAndMaxEquals && !qcp.allocatedResource.StrictlyGreaterThanOnlyExisting(qcp.guaranteedResource) {
+			victims := apps[application]
+			exceptRecentlyAddedVictims := victims[:len(victims)-1]
+			apps[application] = exceptRecentlyAddedVictims
+			qcp.allocatedResource.AddTo(victim.GetAllocatedResource())
+			victimsTotalResource.SubFrom(victim.GetAllocatedResource())
+		} else {
+			victimsTotalResource.AddTo(victim.GetAllocatedResource())
+		}
 	}
 
 	for app, victims := range apps {

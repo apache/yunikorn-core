@@ -51,7 +51,7 @@ func NewQuotaChangePreemptor(queue *Queue) *QuotaChangePreemptionContext {
 }
 
 func (qcp *QuotaChangePreemptionContext) CheckPreconditions() bool {
-	if !qcp.queue.IsLeafQueue() || !qcp.queue.IsManaged() || qcp.queue.HasTriggerredQuotaChangePreemption() || qcp.queue.IsQuotaChangePreemptionRunning() {
+	if !qcp.queue.IsLeafQueue() || !qcp.queue.IsManaged() || qcp.queue.IsQuotaChangePreemptionRunning() {
 		return false
 	}
 	if qcp.maxResource.StrictlyGreaterThanOnlyExisting(qcp.queue.GetAllocatedResource()) {
@@ -62,7 +62,7 @@ func (qcp *QuotaChangePreemptionContext) CheckPreconditions() bool {
 
 func (qcp *QuotaChangePreemptionContext) tryPreemption() {
 	// quota change preemption has started, so mark the flag
-	qcp.queue.MarkQuotaChangePreemptionRunning()
+	qcp.queue.MarkQuotaChangePreemptionRunning(true)
 
 	// Get Preemptable Resource
 	qcp.preemptableResource = qcp.getPreemptableResources()
@@ -76,8 +76,11 @@ func (qcp *QuotaChangePreemptionContext) tryPreemption() {
 	// Preempt the victims
 	qcp.preemptVictims()
 
-	// quota change preemption has really evicted victims, so mark the flag
-	qcp.queue.MarkTriggerredQuotaChangePreemption()
+	// quota change preemption has ended, so mark the flag
+	qcp.queue.MarkQuotaChangePreemptionRunning(false)
+
+	// reset settings
+	qcp.queue.resetPreemptionSettings()
 }
 
 // getPreemptableResources Get the preemptable resources for the queue
@@ -201,7 +204,6 @@ func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 
 	for app, victims := range apps {
 		if len(victims) > 0 {
-			qcp.queue.MarkTriggerredQuotaChangePreemption()
 			for _, victim := range victims {
 				log.Log(log.ShedQuotaChangePreemption).Info("Preempting victims for quota change preemption",
 					zap.String("queue", qcp.queue.GetQueuePath()),

@@ -62,14 +62,7 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 		Resources: leafRes,
 	}, parent, false, nil)
 	assert.NilError(t, err)
-	alreadyPreemptionRunning.MarkQuotaChangePreemptionRunning()
-
-	alreadyTriggeredPreemption, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:      "leaf-already-triggerred-running",
-		Resources: leafRes,
-	}, parent, false, nil)
-	assert.NilError(t, err)
-	alreadyTriggeredPreemption.MarkTriggerredQuotaChangePreemption()
+	alreadyPreemptionRunning.MarkQuotaChangePreemptionRunning(true)
 
 	usageExceededMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:      "leaf-usage-exceeded-max",
@@ -87,18 +80,12 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 		{"leaf queue", leaf, false},
 		{"dynamic leaf queue", dynamicLeaf, false},
 		{"leaf queue, already preemption process started or running", alreadyPreemptionRunning, false},
-		{"leaf queue, already triggerred preemption", alreadyTriggeredPreemption, false},
 		{"leaf queue, usage exceeded max resources", usageExceededMaxQueue, true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			preemptor := NewQuotaChangePreemptor(tc.queue)
 			assert.Equal(t, preemptor.CheckPreconditions(), tc.preconditionResult)
-			if tc.preconditionResult {
-				preemptor.tryPreemption()
-				assert.Equal(t, tc.queue.HasTriggerredQuotaChangePreemption(), true)
-				assert.Equal(t, tc.queue.IsQuotaChangePreemptionRunning(), true)
-			}
 		})
 	}
 }

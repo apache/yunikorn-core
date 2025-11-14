@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -47,8 +46,6 @@ import (
 
 var (
 	maxPreemptionsPerQueue = 10 // maximum number of asks to attempt to preempt for in a single queue
-	rateLimitedQueueLog    *log.RateLimitedLogger
-	initQueueLogOnce       sync.Once
 )
 
 // Queue structure inside Scheduler
@@ -77,25 +74,24 @@ type Queue struct {
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
-	properties                         map[string]string
-	adminACL                           security.ACL        // admin ACL
-	submitACL                          security.ACL        // submit ACL
-	maxResource                        *resources.Resource // When not set, max = nil
-	guaranteedResource                 *resources.Resource // When not set, Guaranteed == 0
-	isLeaf                             bool                // this is a leaf queue or not (i.e. parent)
-	isManaged                          bool                // queue is part of the config, not auto created
-	stateMachine                       *fsm.FSM            // the state of the queue for scheduling
-	stateTime                          time.Time           // last time the state was updated (needed for cleanup)
-	maxRunningApps                     uint64
-	runningApps                        uint64
-	allocatingAcceptedApps             map[string]bool
-	template                           *template.Template
-	queueEvents                        *schedEvt.QueueEvents
-	appQueueMapping                    *AppQueueMapping // appID mapping to queues
-	quotaChangePreemptionDelay         uint64
-	quotaChangePreemptionStartTime     time.Time
-	hasTriggerredQuotaChangePreemption bool
-	isQuotaChangePreemptionRunning     bool
+	properties                     map[string]string
+	adminACL                       security.ACL        // admin ACL
+	submitACL                      security.ACL        // submit ACL
+	maxResource                    *resources.Resource // When not set, max = nil
+	guaranteedResource             *resources.Resource // When not set, Guaranteed == 0
+	isLeaf                         bool                // this is a leaf queue or not (i.e. parent)
+	isManaged                      bool                // queue is part of the config, not auto created
+	stateMachine                   *fsm.FSM            // the state of the queue for scheduling
+	stateTime                      time.Time           // last time the state was updated (needed for cleanup)
+	maxRunningApps                 uint64
+	runningApps                    uint64
+	allocatingAcceptedApps         map[string]bool
+	template                       *template.Template
+	queueEvents                    *schedEvt.QueueEvents
+	appQueueMapping                *AppQueueMapping // appID mapping to queues
+	quotaChangePreemptionDelay     uint64
+	quotaChangePreemptionStartTime time.Time
+	isQuotaChangePreemptionRunning bool
 
 	locking.RWMutex
 }
@@ -431,6 +427,28 @@ func (sq *Queue) setPreemptionSettings(oldMaxResource *resources.Resource, conf 
 			// noop
 		}
 	}
+}
+
+// resetPreemptionSettings Reset Quota change preemption settings
+func (sq *Queue) resetPreemptionSettings() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.quotaChangePreemptionDelay = 0
+	sq.quotaChangePreemptionStartTime = time.Time{}
+}
+
+// shouldTriggerPreemption Should preemption be triggered or not to enforce new max quota?
+func (sq *Queue) shouldTriggerPreemption() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.quotaChangePreemptionDelay != 0 && !sq.quotaChangePreemptionStartTime.IsZero() && time.Now().After(sq.quotaChangePreemptionStartTime)
+}
+
+// getPreemptionSettings Get preemption settings. Only for testing
+func (sq *Queue) getPreemptionSettings() (uint64, time.Time) {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.quotaChangePreemptionDelay, sq.quotaChangePreemptionStartTime
 }
 
 // setResourcesFromConf sets the maxResource and guaranteedResource of the queue from the config.
@@ -1518,14 +1536,14 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 		}
 
 		// Should we trigger preemption to enforce new quota?
-		if sq.quotaChangePreemptionDelay != 0 && !sq.quotaChangePreemptionStartTime.IsZero() && time.Now().After(sq.quotaChangePreemptionStartTime) {
+		if sq.shouldTriggerPreemption() {
 			go func() {
-				getRateLimitedQueueLog().Info("Trigger preemption to enforce new max resources",
+				log.Log(log.SchedQueue).Info("Trigger preemption to enforce new max resources",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("max resources", sq.maxResource.String()))
 				preemptor := NewQuotaChangePreemptor(sq)
 				if preemptor.CheckPreconditions() {
-					getRateLimitedQueueLog().Info("Preconditions has passed to trigger preemption to enforce new max resources",
+					log.Log(log.SchedQueue).Info("Preconditions has passed to trigger preemption to enforce new max resources",
 						zap.String("queueName", sq.QueuePath),
 						zap.String("max resources", sq.maxResource.String()))
 					preemptor.tryPreemption()
@@ -2111,34 +2129,14 @@ func (sq *Queue) recalculatePriority() int32 {
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
 }
 
-func (sq *Queue) MarkTriggerredQuotaChangePreemption() {
+func (sq *Queue) MarkQuotaChangePreemptionRunning(run bool) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.hasTriggerredQuotaChangePreemption = true
-}
-
-func (sq *Queue) HasTriggerredQuotaChangePreemption() bool {
-	sq.RLock()
-	defer sq.RUnlock()
-	return sq.hasTriggerredQuotaChangePreemption
-}
-
-func (sq *Queue) MarkQuotaChangePreemptionRunning() {
-	sq.Lock()
-	defer sq.Unlock()
-	sq.isQuotaChangePreemptionRunning = true
+	sq.isQuotaChangePreemptionRunning = run
 }
 
 func (sq *Queue) IsQuotaChangePreemptionRunning() bool {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.isQuotaChangePreemptionRunning
-}
-
-// getRateLimitedQueueLog Initialize the rate limited Queue logger only once
-func getRateLimitedQueueLog() *log.RateLimitedLogger {
-	initQueueLogOnce.Do(func() {
-		rateLimitedQueueLog = log.NewRateLimitedLogger(log.SchedQueue, time.Microsecond)
-	})
-	return rateLimitedQueueLog
 }

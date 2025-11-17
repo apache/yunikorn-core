@@ -74,26 +74,26 @@ type Queue struct {
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
-	properties                         map[string]string
-	adminACL                           security.ACL        // admin ACL
-	submitACL                          security.ACL        // submit ACL
-	maxResource                        *resources.Resource // When not set, max = nil
-	guaranteedResource                 *resources.Resource // When not set, Guaranteed == 0
-	isLeaf                             bool                // this is a leaf queue or not (i.e. parent)
-	isManaged                          bool                // queue is part of the config, not auto created
-	stateMachine                       *fsm.FSM            // the state of the queue for scheduling
-	stateTime                          time.Time           // last time the state was updated (needed for cleanup)
-	maxRunningApps                     uint64
-	runningApps                        uint64
-	allocatingAcceptedApps             map[string]bool
-	template                           *template.Template
-	queueEvents                        *schedEvt.QueueEvents
-	appQueueMapping                    *AppQueueMapping // appID mapping to queues
-	quotaChangePreemptionDelay         uint64
-	hasTriggerredQuotaChangePreemption bool
-	isQuotaChangePreemptionRunning     bool
-	unschedAskBackoff                  uint64
-	askBackoffDelay                    time.Duration
+	properties                     map[string]string
+	adminACL                       security.ACL        // admin ACL
+	submitACL                      security.ACL        // submit ACL
+	maxResource                    *resources.Resource // When not set, max = nil
+	guaranteedResource             *resources.Resource // When not set, Guaranteed == 0
+	isLeaf                         bool                // this is a leaf queue or not (i.e. parent)
+	isManaged                      bool                // queue is part of the config, not auto created
+	stateMachine                   *fsm.FSM            // the state of the queue for scheduling
+	stateTime                      time.Time           // last time the state was updated (needed for cleanup)
+	maxRunningApps                 uint64
+	runningApps                    uint64
+	allocatingAcceptedApps         map[string]bool
+	template                       *template.Template
+	queueEvents                    *schedEvt.QueueEvents
+	appQueueMapping                *AppQueueMapping // appID mapping to queues
+	quotaChangePreemptionDelay     uint64
+	quotaChangePreemptionStartTime time.Time
+	isQuotaChangePreemptionRunning bool
+  unschedAskBackoff              uint64
+	askBackoffDelay                time.Duration
 
 	locking.RWMutex
 }
@@ -101,23 +101,24 @@ type Queue struct {
 // newBlankQueue creates a new empty queue objects with all values initialised.
 func newBlankQueue() *Queue {
 	return &Queue{
-		children:                   make(map[string]*Queue),
-		childPriorities:            make(map[string]int32),
-		applications:               make(map[string]*Application),
-		appPriorities:              make(map[string]int32),
-		reservedApps:               make(map[string]int),
-		allocatingAcceptedApps:     make(map[string]bool),
-		properties:                 make(map[string]string),
-		stateMachine:               NewObjectState(),
-		allocatedResource:          resources.NewResource(),
-		preemptingResource:         resources.NewResource(),
-		pending:                    resources.NewResource(),
-		currentPriority:            configs.MinPriority,
-		prioritySortEnabled:        true,
-		preemptionDelay:            configs.DefaultPreemptionDelay,
-		preemptionPolicy:           policies.DefaultPreemptionPolicy,
-		quotaChangePreemptionDelay: 0,
-		askBackoffDelay:            configs.DefaultAskBackOffDelay,
+		children:                       make(map[string]*Queue),
+		childPriorities:                make(map[string]int32),
+		applications:                   make(map[string]*Application),
+		appPriorities:                  make(map[string]int32),
+		reservedApps:                   make(map[string]int),
+		allocatingAcceptedApps:         make(map[string]bool),
+		properties:                     make(map[string]string),
+		stateMachine:                   NewObjectState(),
+		allocatedResource:              resources.NewResource(),
+		preemptingResource:             resources.NewResource(),
+		pending:                        resources.NewResource(),
+		currentPriority:                configs.MinPriority,
+		prioritySortEnabled:            true,
+		preemptionDelay:                configs.DefaultPreemptionDelay,
+		preemptionPolicy:               policies.DefaultPreemptionPolicy,
+		quotaChangePreemptionDelay:     0,
+		quotaChangePreemptionStartTime: time.Time{},
+    askBackoffDelay:                configs.DefaultAskBackOffDelay,
 	}
 }
 
@@ -424,25 +425,52 @@ func (sq *Queue) setPreemptionSettings(oldMaxResource *resources.Resource, conf 
 	// Set max res earlier but not now
 	case resources.IsZero(newMaxResource) && !resources.IsZero(oldMaxResource):
 		sq.quotaChangePreemptionDelay = 0
+		sq.quotaChangePreemptionStartTime = time.Time{}
 		// Set max res now but not earlier
 	case !resources.IsZero(newMaxResource) && resources.IsZero(oldMaxResource) && conf.Preemption.Delay != 0:
 		sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+		sq.quotaChangePreemptionStartTime = time.Now().Add(time.Duration(int64(sq.quotaChangePreemptionDelay)) * time.Second) //nolint:gosec
 		// Set max res earlier and now as well
 	default:
 		switch {
 		// Quota decrease
 		case resources.StrictlyGreaterThan(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0:
 			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+			sq.quotaChangePreemptionStartTime = time.Now().Add(time.Duration(sq.quotaChangePreemptionDelay) * time.Second) //nolint:gosec
 			// Quota increase
 		case resources.StrictlyGreaterThan(newMaxResource, oldMaxResource) && conf.Preemption.Delay != 0:
 			sq.quotaChangePreemptionDelay = 0
+			sq.quotaChangePreemptionStartTime = time.Time{}
 			// Quota remains as is but delay has changed
 		case resources.Equals(oldMaxResource, newMaxResource) && conf.Preemption.Delay != 0 && sq.quotaChangePreemptionDelay != conf.Preemption.Delay:
 			sq.quotaChangePreemptionDelay = conf.Preemption.Delay
+			sq.quotaChangePreemptionStartTime = time.Now().Add(time.Duration(sq.quotaChangePreemptionDelay) * time.Second) //nolint:gosec
 		default:
 			// noop
 		}
 	}
+}
+
+// resetPreemptionSettings Reset Quota change preemption settings
+func (sq *Queue) resetPreemptionSettings() {
+	sq.Lock()
+	defer sq.Unlock()
+	sq.quotaChangePreemptionDelay = 0
+	sq.quotaChangePreemptionStartTime = time.Time{}
+}
+
+// shouldTriggerPreemption Should preemption be triggered or not to enforce new max quota?
+func (sq *Queue) shouldTriggerPreemption() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.quotaChangePreemptionDelay != 0 && !sq.quotaChangePreemptionStartTime.IsZero() && time.Now().After(sq.quotaChangePreemptionStartTime)
+}
+
+// getPreemptionSettings Get preemption settings. Only for testing
+func (sq *Queue) getPreemptionSettings() (uint64, time.Time) {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.quotaChangePreemptionDelay, sq.quotaChangePreemptionStartTime
 }
 
 // setResourcesFromConf sets the maxResource and guaranteedResource of the queue from the config.
@@ -1374,6 +1402,12 @@ func (sq *Queue) GetMaxResource() *resources.Resource {
 	return sq.internalGetMax(limit)
 }
 
+func (sq *Queue) CloneMaxResource() *resources.Resource {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.maxResource.Clone()
+}
+
 // GetFairMaxResource computes the fair max resources for a given queue.
 // Starting with the root, descend down to the target queue allowing children to override Resource values .
 // If the root includes an explicit 0 value for a Resource, do not include it in the accumulator and treat it as missing.
@@ -1539,6 +1573,22 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 				}
 				return result
 			}
+		}
+
+		// Should we trigger preemption to enforce new quota?
+		if sq.shouldTriggerPreemption() {
+			go func() {
+				log.Log(log.SchedQueue).Info("Trigger preemption to enforce new max resources",
+					zap.String("queueName", sq.QueuePath),
+					zap.String("max resources", sq.maxResource.String()))
+				preemptor := NewQuotaChangePreemptor(sq)
+				if preemptor.CheckPreconditions() {
+					log.Log(log.SchedQueue).Info("Preconditions has passed to trigger preemption to enforce new max resources",
+						zap.String("queueName", sq.QueuePath),
+						zap.String("max resources", sq.maxResource.String()))
+					preemptor.tryPreemption()
+				}
+			}()
 		}
 	} else {
 		// process the child queues (filters out queues without pending requests)
@@ -2119,22 +2169,10 @@ func (sq *Queue) recalculatePriority() int32 {
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, curr)
 }
 
-func (sq *Queue) MarkTriggerredQuotaChangePreemption() {
+func (sq *Queue) MarkQuotaChangePreemptionRunning(run bool) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.hasTriggerredQuotaChangePreemption = true
-}
-
-func (sq *Queue) HasTriggerredQuotaChangePreemption() bool {
-	sq.RLock()
-	defer sq.RUnlock()
-	return sq.hasTriggerredQuotaChangePreemption
-}
-
-func (sq *Queue) MarkQuotaChangePreemptionRunning() {
-	sq.Lock()
-	defer sq.Unlock()
-	sq.isQuotaChangePreemptionRunning = true
+	sq.isQuotaChangePreemptionRunning = run
 }
 
 func (sq *Queue) IsQuotaChangePreemptionRunning() bool {

@@ -2274,9 +2274,9 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 				Guaranteed: getResourceConf(),
 			},
 			Preemption: configs.Preemption{
-				Delay: 100,
+				Delay: 1,
 			},
-		}, 100},
+		}, 1},
 		{"increase max with delay", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "100000000"},
@@ -2290,26 +2290,26 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 				Max: map[string]string{"memory": "100"},
 			},
 			Preemption: configs.Preemption{
-				Delay: 500,
+				Delay: 2,
 			},
-		}, 500},
+		}, 2},
 		{"max remains as is but delay changed", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "100"},
 			},
 			Preemption: configs.Preemption{
-				Delay: 200,
+				Delay: 2,
 			},
-		}, 200},
+		}, 2},
 		{"unrelated config change, should not impact earlier set preemption settings", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max:        map[string]string{"memory": "100"},
 				Guaranteed: map[string]string{"memory": "50"},
 			},
 			Preemption: configs.Preemption{
-				Delay: 200,
+				Delay: 2,
 			},
-		}, 200},
+		}, 2},
 		{"increase max again with delay", configs.QueueConfig{
 			Resources: configs.Resources{
 				Max: map[string]string{"memory": "101"},
@@ -2323,7 +2323,49 @@ func TestQuotaChangePreemptionSettings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			err = parent.ApplyConf(tc.conf)
 			assert.NilError(t, err, "failed to apply conf: %v", err)
-			assert.Equal(t, parent.quotaChangePreemptionDelay, tc.expectedDelay)
+
+			// assert the preemption settings
+			delay, sTime := parent.getPreemptionSettings()
+			assert.Equal(t, delay, tc.expectedDelay)
+			if tc.expectedDelay != uint64(0) {
+				assert.Equal(t, sTime.IsZero(), false)
+			} else {
+				assert.Equal(t, sTime.IsZero(), true)
+			}
+			assert.Equal(t, parent.shouldTriggerPreemption(), false)
+
+			used, err := resources.NewResourceFromConf(tc.conf.Resources.Max)
+			assert.NilError(t, err, "failed to set allocated resource: %v", err)
+			parent.allocatedResource = resources.Multiply(used, 2)
+
+			// Wait till delay expires to let trigger preemption automatically
+			time.Sleep(time.Duration(int64(tc.expectedDelay)+1) * time.Second)
+			if tc.expectedDelay != uint64(0) {
+				assert.Equal(t, parent.shouldTriggerPreemption(), true)
+			}
+			parent.TryAllocate(nil, nil, nil, false)
+
+			// preemption settings should be same as before even now as trigger is async process
+			delay, sTime = parent.getPreemptionSettings()
+			assert.Equal(t, delay, tc.expectedDelay)
+			if tc.expectedDelay != uint64(0) {
+				assert.Equal(t, sTime.IsZero(), false)
+				assert.Equal(t, parent.shouldTriggerPreemption(), true)
+			} else {
+				assert.Equal(t, sTime.IsZero(), true)
+			}
+
+			time.Sleep(time.Millisecond * 100)
+
+			// preemption should have been triggered by now, assert preemption settings to ensure values are reset
+			if tc.expectedDelay != uint64(0) {
+				delay, sTime = parent.getPreemptionSettings()
+				assert.Equal(t, sTime.IsZero(), true)
+				assert.Equal(t, delay, uint64(0))
+
+				// since preemption settings are set, preemption should not be triggerred again during tryAllocate
+				assert.Equal(t, parent.shouldTriggerPreemption(), false)
+			}
 		})
 	}
 }

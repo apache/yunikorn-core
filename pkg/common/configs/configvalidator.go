@@ -88,6 +88,9 @@ var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
 // The rule maps to a go identifier check that regexp only
 var RuleNameRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_]*$`)
 
+// Minimum Quota change preemption delay
+var minQuotaChangePreemptionDelay uint64 = 60
+
 type placementStaticPath struct {
 	path           string
 	ruleChain      string
@@ -665,8 +668,8 @@ func checkQueues(queue *QueueConfig, level int) error {
 			return fmt.Errorf("duplicate child name found with name '%s', level %d", child.Name, level)
 		}
 		queueMap[strings.ToLower(child.Name)] = true
-		if queue.Preemption.Delay != 0 && queue.Preemption.Delay <= 60 {
-			return fmt.Errorf("invalid preemption delay %d, must be greater than 60 seconds", queue.Preemption.Delay)
+		if queue.Preemption.Delay != 0 && queue.Preemption.Delay <= minQuotaChangePreemptionDelay {
+			return fmt.Errorf("invalid preemption delay %d, must be between %d and %d", queue.Preemption.Delay, minQuotaChangePreemptionDelay, uint64(math.MaxUint64))
 		}
 	}
 

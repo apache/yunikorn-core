@@ -92,7 +92,7 @@ type Queue struct {
 	quotaChangePreemptionDelay     uint64
 	quotaChangePreemptionStartTime time.Time
 	isQuotaChangePreemptionRunning bool
-  unschedAskBackoff              uint64
+	unschedAskBackoff              uint64
 	askBackoffDelay                time.Duration
 
 	locking.RWMutex
@@ -118,7 +118,7 @@ func newBlankQueue() *Queue {
 		preemptionPolicy:               policies.DefaultPreemptionPolicy,
 		quotaChangePreemptionDelay:     0,
 		quotaChangePreemptionStartTime: time.Time{},
-    askBackoffDelay:                configs.DefaultAskBackOffDelay,
+		askBackoffDelay:                configs.DefaultAskBackOffDelay,
 	}
 }
 

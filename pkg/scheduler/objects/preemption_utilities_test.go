@@ -158,7 +158,6 @@ func resetQueue(queue *Queue) {
 	queue.maxResource = nil
 	queue.allocatedResource = nil
 	queue.guaranteedResource = nil
-	queue.hasTriggerredQuotaChangePreemption = false
 	queue.isQuotaChangePreemptionRunning = false
 	queue.preemptingResource = nil
 }

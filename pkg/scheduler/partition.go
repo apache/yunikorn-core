@@ -507,11 +507,6 @@ func (pc *PartitionContext) GetPartitionQueues() dao.PartitionQueueDAOInfo {
 	return partitionQueueDAOInfo
 }
 
-// GetPartitionSchedulingOrder builds the sorted queue info for the whole queue structure to pass to the webservice
-func (pc *PartitionContext) GetPartitionSchedulingOrder() []*dao.SchedulingOrderDAO {
-	return pc.root.GetSchedulingOrder()
-}
-
 // GetPlacementRules returns the current active rule set as dao to expose to the webservice
 func (pc *PartitionContext) GetPlacementRules() []*dao.RuleDAO {
 	return pc.getPlacementManager().GetRulesDAO()
@@ -1719,4 +1714,32 @@ func (pc *PartitionContext) getReservationCount() int {
 	pc.RLock()
 	defer pc.RUnlock()
 	return pc.reservations
+}
+
+// GetOrderLog returns a snapshot of applications with pending requests grouped by queue
+func (pc *PartitionContext) GetOrderLog() []*dao.OrderLogEntry {
+	pc.RLock()
+	defer pc.RUnlock()
+
+	// Build a map of queue -> applications with pending requests
+	queueAppMap := make(map[string][]string)
+
+	for _, app := range pc.applications {
+		// Only include apps with pending resources
+		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+			queuePath := app.GetQueuePath()
+			queueAppMap[queuePath] = append(queueAppMap[queuePath], app.ApplicationID)
+		}
+	}
+
+	// Convert map to slice
+	result := make([]*dao.OrderLogEntry, 0, len(queueAppMap))
+	for queueName, appIDs := range queueAppMap {
+		result = append(result, &dao.OrderLogEntry{
+			QueueName:      queueName,
+			ApplicationIDs: appIDs,
+		})
+	}
+
+	return result
 }

@@ -118,6 +118,7 @@ type Application struct {
 	hasPlaceholderAlloc  bool                        // Whether there is at least one allocated placeholder
 	runnableInQueue      bool                        // whether the application is runnable/schedulable in the queue. Default is true.
 	runnableByUserLimit  bool                        // whether the application is runnable/schedulable based on user/group quota. Default is true.
+	backoffDeadline      time.Time                   // no scheduling from this application until this deadline
 
 	rmEventHandler        handler.EventHandler
 	rmID                  string
@@ -990,8 +991,18 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	}
 	// calculate the users' headroom, includes group check which requires the applicationID
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
+	unschedulable := uint64(0)
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
+		backoffThreshold := sa.queue.GetMaxAppUnschedAskBackoff()
+		if backoffThreshold > 0 && unschedulable >= backoffThreshold {
+			log.Log(log.SchedApplication).Info("too many unschedulable asks in the application, waiting",
+				zap.String("application ID", sa.ApplicationID),
+				zap.Uint64("number of unschedulable asks", unschedulable))
+			delay := sa.queue.GetBackoffDelay()
+			sa.backoffDeadline = time.Now().Add(delay)
+			return nil
+		}
 		if request.IsAllocated() {
 			continue
 		}
@@ -1060,6 +1071,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 				request.LogAllocationFailure(common.PreemptionDoesNotHelp, true)
 			}
 		}
+		unschedulable++
 	}
 	// no requests fit, skip to next app
 	return nil
@@ -2304,4 +2316,17 @@ func (sa *Application) GetSubmissionTime() time.Time {
 	sa.RLock()
 	defer sa.RUnlock()
 	return sa.submissionTime
+}
+
+func (sa *Application) GetBackoffDeadline() time.Time {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.backoffDeadline
+}
+
+// SetBackoffDeadline sets the backoff deadline. Only used for testing.
+func (sa *Application) SetBackoffDeadline(deadline time.Time) {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.backoffDeadline = deadline
 }

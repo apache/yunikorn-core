@@ -1865,6 +1865,14 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.Equal(t, appsDao.Partition, "default")
 	assert.Equal(t, appsDao.QueueName, "root.default")
 	assert.Equal(t, len(appsDao.Allocations), 0)
+	assert.Assert(t, appsDao.BackoffDeadline == nil)
+	deadline := time.Unix(123, 0)
+	app.SetBackoffDeadline(deadline)
+	resp = &MockResponseWriter{}
+	getApplication(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appsDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.Assert(t, deadline.Equal(*appsDao.BackoffDeadline))
 
 	// test nonexistent partition
 	var req1 *http.Request

@@ -41,12 +41,14 @@ const (
 	DotReplace       = "_dot_"
 	DefaultPartition = "default"
 
-	ApplicationSortPolicy   = "application.sort.policy"
-	ApplicationSortPriority = "application.sort.priority"
-	PriorityPolicy          = "priority.policy"
-	PriorityOffset          = "priority.offset"
-	PreemptionPolicy        = "preemption.policy"
-	PreemptionDelay         = "preemption.delay"
+	ApplicationSortPolicy                    = "application.sort.policy"
+	ApplicationSortPriority                  = "application.sort.priority"
+	ApplicationUnschedulableAsksBackoff      = "application.unschedasks.backoff"
+	ApplicationUnschedulableAsksBackoffDelay = "application.unschedasks.backoff.delay"
+	PriorityPolicy                           = "priority.policy"
+	PriorityOffset                           = "priority.offset"
+	PreemptionPolicy                         = "preemption.policy"
+	PreemptionDelay                          = "preemption.delay"
 
 	// app sort priority values
 	ApplicationSortPriorityEnabled  = "enabled"
@@ -66,6 +68,7 @@ var MinPriority int32 = math.MinInt32
 var MaxPriority int32 = math.MaxInt32
 
 var DefaultPreemptionDelay = 30 * time.Second
+var DefaultAskBackOffDelay = 30 * time.Second
 
 // A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
 // The queue name must thus allow for at least that length with the replacement of dots.

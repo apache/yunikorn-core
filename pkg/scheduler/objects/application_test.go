@@ -72,6 +72,7 @@ func TestNewApplication(t *testing.T) {
 	assert.Equal(t, app.Partition, "", "partition name should not be set was not set in SI")
 	assert.Equal(t, app.rmID, "", "RM ID should not be set was not passed in")
 	assert.Equal(t, app.rmEventHandler, handler.EventHandler(nil), "event handler should be nil")
+	assert.Equal(t, app.backoffDeadline, time.Time{})
 	// just check one of the resources...
 	assert.Assert(t, resources.IsZero(app.placeholderAsk), "placeholder ask should be zero")
 	assert.Assert(t, app.IsNew(), "new application must be in new state")
@@ -3832,4 +3833,48 @@ func TestAppSubmissionTime(t *testing.T) {
 	alloc2.createTime = time.Unix(0, 30)
 	app.AddAllocation(alloc2)
 	assert.Equal(t, app.submissionTime, time.Unix(0, 30), "app submission time is not set properly")
+}
+
+func TestApplicationBackoff(t *testing.T) {
+	rootQ, err := createRootQueue(map[string]string{"first": "10"})
+	assert.NilError(t, err, "unexpected error when creating root queue")
+	props := map[string]string{
+		configs.ApplicationUnschedulableAsksBackoff: "2",
+	}
+	leaf, err := createManagedQueueWithProps(rootQ, "leaf", false, map[string]string{"first": "5"}, props)
+	assert.NilError(t, err, "unexpected error when creating leaf queue")
+
+	// create app
+	app := newApplication(appID0, "default", "root.leaf")
+	app.SetQueue(leaf)
+
+	// create asks
+	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})
+	ask1 := newAllocationAsk(aKey, appID0, askRes)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err)
+	ask2 := newAllocationAsk(aKey2, appID0, askRes)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err)
+	ask3 := newAllocationAsk(aKey3, appID0, askRes)
+	err = app.AddAllocationAsk(ask3)
+	assert.NilError(t, err)
+
+	// create nodes (enough cluster capacity, but asks cannot be placed)
+	node1 := newNode("node1", map[string]resources.Quantity{"first": 5})
+	node2 := newNode("node1", map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{
+		"node1": node1,
+		"node2": node2,
+	}
+	iterator := getNodeIteratorFn(node1, node2)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+	preemptionAttemptsRemaining := 0
+	beforeTryAlloc := time.Now()
+	available := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	result := app.tryAllocate(available, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	assert.Assert(t, result == nil)
+	assert.Assert(t, app.GetBackoffDeadline().After(beforeTryAlloc))
 }

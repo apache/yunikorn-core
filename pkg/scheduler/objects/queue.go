@@ -92,6 +92,8 @@ type Queue struct {
 	quotaChangePreemptionDelay     uint64
 	quotaChangePreemptionStartTime time.Time
 	isQuotaChangePreemptionRunning bool
+	unschedAskBackoff              uint64
+	askBackoffDelay                time.Duration
 
 	locking.RWMutex
 }
@@ -116,6 +118,7 @@ func newBlankQueue() *Queue {
 		preemptionPolicy:               policies.DefaultPreemptionPolicy,
 		quotaChangePreemptionDelay:     0,
 		quotaChangePreemptionStartTime: time.Time{},
+		askBackoffDelay:                configs.DefaultAskBackOffDelay,
 	}
 }
 
@@ -315,6 +318,25 @@ func filterParentProperty(key string, value string) string {
 		}
 	}
 	return value
+}
+
+func unschedulableAskBackoff(value string) (uint64, error) {
+	intValue, err := strconv.ParseUint(value, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	return intValue, nil
+}
+
+func backoffDelay(value string) (time.Duration, error) {
+	result, err := time.ParseDuration(value)
+	if err != nil {
+		return configs.DefaultAskBackOffDelay, err
+	}
+	if int64(result) <= int64(0) {
+		return configs.DefaultAskBackOffDelay, fmt.Errorf("%s must be positive: %s", configs.ApplicationUnschedulableAsksBackoffDelay, value)
+	}
+	return result, nil
 }
 
 // ApplyConf is the locked version of applyConf
@@ -616,6 +638,20 @@ func (sq *Queue) UpdateQueueProperties() {
 						zap.Error(err))
 				}
 			}
+		case configs.ApplicationUnschedulableAsksBackoff:
+			unschedAskBackoff, err := unschedulableAskBackoff(value)
+			if err != nil {
+				log.Log(log.SchedQueue).Debug("unschedulable ask backoff configuration error",
+					zap.Error(err))
+			}
+			sq.unschedAskBackoff = unschedAskBackoff
+		case configs.ApplicationUnschedulableAsksBackoffDelay:
+			askBackoffDelay, err := backoffDelay(value)
+			if err != nil {
+				log.Log(log.SchedQueue).Debug("unschedulable ask backoff delay configuration error",
+					zap.Error(err))
+			}
+			sq.askBackoffDelay = askBackoffDelay
 		default:
 			// skip unknown properties just log them
 			log.Log(log.SchedQueue).Debug("queue property skipped",
@@ -1519,6 +1555,10 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 			if app.IsAccepted() && (!runnableInQueue || !runnableByUserLimit) {
 				continue
 			}
+			deadline := app.GetBackoffDeadline()
+			if !deadline.IsZero() && time.Now().Before(deadline) {
+				continue
+			}
 			result := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
 			if result != nil {
 				log.Log(log.SchedQueue).Info("allocation found on queue",
@@ -2139,4 +2179,16 @@ func (sq *Queue) IsQuotaChangePreemptionRunning() bool {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.isQuotaChangePreemptionRunning
+}
+
+func (sq *Queue) GetMaxAppUnschedAskBackoff() uint64 {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.unschedAskBackoff
+}
+
+func (sq *Queue) GetBackoffDelay() time.Duration {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.askBackoffDelay
 }

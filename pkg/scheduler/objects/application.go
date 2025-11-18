@@ -945,11 +945,12 @@ func (sa *Application) canAllocationReserve(alloc *Allocation) error {
 	return nil
 }
 
-func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*Allocation) {
+func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*Allocation) *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
+	resTotal := resources.NewResource()
 	if sa.sortedRequests == nil {
-		return
+		return resTotal
 	}
 	for _, request := range sa.sortedRequests {
 		if request.IsAllocated() || !request.IsSchedulingAttempted() {
@@ -961,11 +962,13 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 			if !request.HasTriggeredScaleUp() && request.requiredNode == common.Empty && !sa.canReplace(request) {
 				// if headroom is still enough for the resources
 				*total = append(*total, request)
+				resTotal.AddTo(request.GetAllocatedResource())
 			}
 			headRoom = resources.SubOnlyExisting(headRoom, request.GetAllocatedResource())
 			userHeadRoom = resources.SubOnlyExisting(userHeadRoom, request.GetAllocatedResource())
 		}
 	}
+	return resTotal
 }
 
 // canReplace returns true if there is a placeholder for the task group available for the request.

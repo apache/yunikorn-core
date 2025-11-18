@@ -805,9 +805,7 @@ func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		return nil
 	}
-	outstanding := make([]*objects.Allocation, 0)
-	pc.root.GetQueueOutstandingRequests(&outstanding)
-	return outstanding
+	return pc.root.GetOutstandingRequests()
 }
 
 // Try regular allocation for the partition

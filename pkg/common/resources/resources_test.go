@@ -1614,7 +1614,7 @@ func TestGetShares(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.message, func(t *testing.T) {
-			shares := getShares(tc.res, tc.total)
+			shares := GetShares(tc.res, tc.total)
 			if !reflect.DeepEqual(shares, tc.expected) {
 				t.Errorf("incorrect shares for %s, expected %v got: %v", tc.message, tc.expected, shares)
 			}

@@ -2399,3 +2399,30 @@ func TestResource_Prune(t *testing.T) {
 		})
 	}
 }
+
+func TestResource_ExtractLatestIfModified(t *testing.T) {
+	var tests = []struct {
+		caseName string
+		old      *Resource
+		new      *Resource
+		latest   *Resource
+	}{
+		{"nil case", nil, nil, nil},
+		{"nil with non empty", nil, NewResourceFromMap(map[string]Quantity{"first": 1}), nil},
+		{"non empty case", NewResourceFromMap(map[string]Quantity{"first": 1}), NewResourceFromMap(map[string]Quantity{"first": 2}), NewResourceFromMap(map[string]Quantity{"first": 2})},
+		{"non empty case, reversal", NewResourceFromMap(map[string]Quantity{"first": 2}), NewResourceFromMap(map[string]Quantity{"first": 1}), NewResourceFromMap(map[string]Quantity{"first": 1})},
+		{"non empty case, only one exist with different value", NewResourceFromMap(map[string]Quantity{"first": 1, "second": 2}), NewResourceFromMap(map[string]Quantity{"second": 3}), NewResourceFromMap(map[string]Quantity{"second": 3})},
+		{"non empty case, only one exist with same value", NewResourceFromMap(map[string]Quantity{"first": 1, "second": 2}), NewResourceFromMap(map[string]Quantity{"second": 2}), nil},
+		{"non empty case, disjoint sets and type doesn't exist", NewResourceFromMap(map[string]Quantity{"first": 1}), NewResourceFromMap(map[string]Quantity{"second": 2}), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			latest := ExtractLatestIfModified(tt.old, tt.new)
+			if tt.latest == nil {
+				assert.Equal(t, tt.latest, latest)
+			} else {
+				assert.Assert(t, DeepEquals(tt.latest, latest), "resource type maps are not equal")
+			}
+		})
+	}
+}

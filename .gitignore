@@ -1,12 +1,7 @@
-*.tmp
+.idea
 .DS_Store
-.build
-*.swp
-*.a
 /tools/
 /build/
-/_output/
-.idea
 /coverage.txt
-yunikorn-state.txt
-/shellcheck
+*.swp
+*.tmp

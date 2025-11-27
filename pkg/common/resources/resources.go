@@ -542,7 +542,7 @@ func getFairShare(allocated, guaranteed, fair *Resource) float64 {
 // Get the share of each resource quantity when compared to the total
 // resources quantity
 // NOTE: shares can be negative and positive in the current assumptions
-func getShares(res, total *Resource) []float64 {
+func GetShares(res, total *Resource) []float64 {
 	// shortcut if the passed in resource to get the share on is nil or empty (sparse)
 	if res == nil || len(res.Resources) == 0 {
 		return make([]float64, 0)
@@ -592,8 +592,8 @@ func getShares(res, total *Resource) []float64 {
 // 1 if the left share is larger
 // -1 if the right share is larger
 func CompUsageRatio(left, right, total *Resource) int {
-	lshares := getShares(left, total)
-	rshares := getShares(right, total)
+	lshares := GetShares(left, total)
+	rshares := GetShares(right, total)
 
 	return compareShares(lshares, rshares)
 }
@@ -622,8 +622,8 @@ func CompUsageRatioSeparately(leftAllocated, leftGuaranteed, leftFairMax, rightA
 // highest share for right resource from total.
 // If highest share for the right resource is 0 fairness is 1
 func FairnessRatio(left, right, total *Resource) float64 {
-	lshares := getShares(left, total)
-	rshares := getShares(right, total)
+	lshares := GetShares(left, total)
+	rshares := GetShares(right, total)
 
 	// Get the largest value from the shares
 	lshare := float64(0)

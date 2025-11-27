@@ -71,6 +71,13 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 	assert.NilError(t, err)
 	usageExceededMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000})
 
+	usageEqualsMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
+		Name:      "leaf-usage-equals-max",
+		Resources: leafRes,
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	usageEqualsMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000})
+
 	testCases := []struct {
 		name               string
 		queue              *Queue
@@ -81,6 +88,7 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 		{"dynamic leaf queue", dynamicLeaf, false},
 		{"leaf queue, already preemption process started or running", alreadyPreemptionRunning, false},
 		{"leaf queue, usage exceeded max resources", usageExceededMaxQueue, true},
+		{"leaf queue, usage equals max resources", usageEqualsMaxQueue, false},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -257,6 +265,234 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 			resetQueue(leaf)
 		})
 	}
+}
+
+// TestQuotaChangeGetLeafQueuesPreemptableResource Test leaf queues distribution from parent's preemptable resources under different circumstances
+// Queue Structure:
+// parent
+//
+//	leaf 1 (Guaranteed set for this hierarchy)
+//		leaf11
+//			leaf111
+//		leaf12
+//	leaf2 (Guaranteed not set for this hierarchy)
+//		leaf21
+//			leaf211
+//		leaf22
+//	leaf3 (No usage)
+//	leaf4 (Guaranteed set but equals usage)
+func TestQuotaChangeGetLeafQueuesPreemptableResource(t *testing.T) {
+	parentConfig := configs.QueueConfig{Name: "parent", Parent: true}
+	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
+	assert.NilError(t, err)
+
+	leaf111, leaf12, leaf211, leaf22, leaf4 := createQueueSetups(t, parent, configs.Resources{Guaranteed: map[string]string{"first": "10"}}, configs.Resources{})
+
+	parent.GetChildQueue("leaf1").allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	parent.GetChildQueue("leaf2").allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 80})
+	leaf4.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	parent.GetChildQueue("leaf1").GetChildQueue("leaf11").allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 30})
+	parent.GetChildQueue("leaf1").GetChildQueue("leaf12").allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20})
+	parent.GetChildQueue("leaf2").GetChildQueue("leaf21").allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	leaf22.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 30})
+	leaf111.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 30})
+	leaf211.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+
+	testCases := []struct {
+		name              string
+		parentQueue       *Queue
+		parentPreemptable *resources.Resource
+		leaf111PRes       *resources.Resource
+		leaf12PRes        *resources.Resource
+		leaf211PRes       *resources.Resource
+		leaf22PRes        *resources.Resource
+	}{
+		{"normal preemptable resources  - normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 22}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 42}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25})},
+
+		{"twice the preemptable resources - twice the normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 200}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 45}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 22}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 83}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})},
+
+		{"half the preemptable resources - half the normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 21}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12})},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			childQueues := make(map[*Queue]*resources.Resource)
+			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues)
+			assert.Equal(t, len(childQueues), 4)
+			assert.Equal(t, resources.Equals(childQueues[leaf111], tc.leaf111PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf12], tc.leaf12PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf211], tc.leaf211PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf22], tc.leaf22PRes), true)
+			if _, ok := childQueues[parent.GetChildQueue("leaf3")]; ok {
+				t.Fatal("leaf 3 queue exists")
+			}
+			if _, ok := childQueues[parent.GetChildQueue("leaf4")]; ok {
+				t.Fatal("leaf 4 queue exists")
+			}
+		})
+	}
+}
+
+func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
+	node := NewNode(&si.NodeInfo{
+		NodeID:     "node",
+		Attributes: nil,
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 200}},
+		},
+	})
+
+	parentConfig := configs.QueueConfig{Name: "parent", Parent: true}
+	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
+	assert.NilError(t, err)
+
+	parentConfig1 := configs.QueueConfig{Name: "parent1", Parent: true}
+	parent1, err := NewConfiguredQueue(parentConfig1, nil, false, nil)
+	assert.NilError(t, err)
+
+	leaf111G, leaf12G, leaf211G, leaf22G, leaf4G := createQueueSetups(t, parent, configs.Resources{Guaranteed: map[string]string{"first": "10"}}, configs.Resources{})
+	leaf111, leaf12, leaf211, leaf22, leaf4 := createQueueSetups(t, parent1, configs.Resources{}, configs.Resources{})
+
+	suitableVictims := make([]*Allocation, 0)
+	suitableVictims = append(suitableVictims, createVictim(t, "ask1", node, 5, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims = append(suitableVictims, createVictim(t, "ask2", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims = append(suitableVictims, createVictim(t, "ask3", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+
+	leafGVictims := make(map[*Queue][]*Allocation)
+	leafGVictims[leaf111G] = suitableVictims
+	leafVictims := make(map[*Queue][]*Allocation)
+	leafVictims[leaf111] = suitableVictims
+
+	suitableVictims1 := make([]*Allocation, 0)
+	suitableVictims1 = append(suitableVictims1, createVictim(t, "ask4", node, 5, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims1 = append(suitableVictims1, createVictim(t, "ask5", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	leafGVictims[leaf12G] = suitableVictims1
+	leafVictims[leaf12] = suitableVictims1
+
+	suitableVictims2 := make([]*Allocation, 0)
+	suitableVictims2 = append(suitableVictims2, createVictim(t, "ask6", node, 5, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims2 = append(suitableVictims2, createVictim(t, "ask7", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims2 = append(suitableVictims2, createVictim(t, "ask8", node, 5, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims2 = append(suitableVictims2, createVictim(t, "ask9", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims2 = append(suitableVictims2, createVictim(t, "ask10", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	leafGVictims[leaf211G] = suitableVictims2
+	leafVictims[leaf211] = suitableVictims2
+
+	suitableVictims3 := make([]*Allocation, 0)
+	suitableVictims3 = append(suitableVictims3, createVictim(t, "ask11", node, 5, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims3 = append(suitableVictims3, createVictim(t, "ask12", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+	suitableVictims3 = append(suitableVictims3, createVictim(t, "ask13", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
+
+	leafGVictims[leaf22G] = suitableVictims3
+	leafVictims[leaf22] = suitableVictims3
+
+	v := createVictim(t, "ask14", node, 5, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
+	leafGVictims[leaf4G] = []*Allocation{v}
+	leafVictims[leaf4] = []*Allocation{v}
+
+	expectedGVictims := make(map[*Queue]int)
+	expectedGVictims[leaf111G] = 2
+	expectedGVictims[leaf12G] = 1
+	expectedGVictims[leaf211G] = 5
+	expectedGVictims[leaf22G] = 3
+
+	expectedVictims := make(map[*Queue]int)
+	expectedVictims[leaf111] = 3
+	expectedVictims[leaf12] = 2
+	expectedVictims[leaf211] = 5
+	expectedVictims[leaf22] = 3
+
+	oldMax := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 130})
+	newMax := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+
+	testCases := []struct {
+		name            string
+		queue           *Queue
+		oldMax          *resources.Resource
+		newMax          *resources.Resource
+		victims         map[*Queue][]*Allocation
+		expectedVictims map[*Queue]int
+	}{
+		{"Guaranteed set on one side of queue hierarchy - suitable victims available", parent, oldMax, newMax, leafGVictims, expectedGVictims},
+		{"Guaranteed set not set on any queue - suitable victims available", parent1, oldMax, newMax, leafVictims, expectedVictims},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.queue.maxResource = tc.oldMax
+			for q, v := range tc.victims {
+				assignAllocationsToQueue(v, q)
+			}
+			tc.queue.maxResource = tc.newMax
+			preemptor := NewQuotaChangePreemptor(tc.queue)
+			preemptor.tryPreemption()
+			for q, asks := range tc.victims {
+				var victimsCount int
+				for _, a := range asks {
+					if a.IsPreempted() {
+						victimsCount++
+					}
+				}
+				assert.Equal(t, victimsCount, tc.expectedVictims[q])
+			}
+			for _, v := range tc.victims {
+				removeAllocationAsks(node, v)
+			}
+			resetQueue(tc.queue)
+		})
+	}
+}
+
+// createQueueSetups Creates a queue hierarchy
+// Queue Structure:
+// parent
+//
+//	leaf 1 (Guaranteed set/or not set for this hierarchy)
+//		leaf11
+//			leaf111
+//		leaf12
+//	leaf2 (Guaranteed not set for this hierarchy)
+//		leaf21
+//			leaf211
+//		leaf22
+//	leaf3
+//	leaf4
+func createQueueSetups(t *testing.T, parent *Queue, leafResG configs.Resources, leafRes configs.Resources) (*Queue, *Queue, *Queue, *Queue, *Queue) {
+	leaf1, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf1", Parent: true, Resources: leafResG}, parent, false, nil)
+	assert.NilError(t, err)
+
+	leaf2, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf2", Parent: true, Resources: leafRes}, parent, false, nil)
+	assert.NilError(t, err)
+
+	_, err = NewConfiguredQueue(configs.QueueConfig{Name: "leaf3", Resources: leafRes}, parent, false, nil)
+	assert.NilError(t, err)
+
+	leaf4, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf4", Resources: leafResG}, parent, false, nil)
+	assert.NilError(t, err)
+
+	leaf11, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf11", Parent: true, Resources: leafResG}, leaf1, false, nil)
+	assert.NilError(t, err)
+
+	leaf12, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf12", Resources: leafResG}, leaf1, false, nil)
+	assert.NilError(t, err)
+
+	leaf21, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf21", Parent: true, Resources: leafRes}, leaf2, false, nil)
+	assert.NilError(t, err)
+
+	leaf22, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf22", Resources: leafRes}, leaf2, false, nil)
+	assert.NilError(t, err)
+
+	leaf111, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf111", Resources: leafResG}, leaf11, false, nil)
+	assert.NilError(t, err)
+
+	leaf211, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf211", Resources: leafRes}, leaf21, false, nil)
+	assert.NilError(t, err)
+
+	return leaf111, leaf12, leaf211, leaf22, leaf4
 }
 
 func createVictim(t *testing.T, allocKey string, node *Node, adjustment int, allocRes *resources.Resource) *Allocation {

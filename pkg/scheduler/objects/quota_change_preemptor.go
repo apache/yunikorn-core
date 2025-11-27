@@ -66,9 +66,9 @@ func (qcp *QuotaChangePreemptionContext) tryPreemption() {
 
 	if !qcp.queue.IsLeafQueue() {
 		leafQueues := make(map[*Queue]*resources.Resource)
-		getLeafQueuesPreemptableResource(qcp.queue, preemptableResource, leafQueues)
+		getChildQueuesPreemptableResource(qcp.queue, preemptableResource, leafQueues)
 
-		log.Log(log.ShedQuotaChangePreemption).Info("Triggering quota change preemption for parent queue",
+		log.Log(log.SchedQuotaChangePreemption).Info("Triggering quota change preemption for parent queue",
 			zap.String("parent queue", qcp.queue.GetQueuePath()),
 			zap.String("preemptable resource", preemptableResource.String()),
 			zap.Any("no. of leaf queues with potential victims", len(leafQueues)),
@@ -76,7 +76,7 @@ func (qcp *QuotaChangePreemptionContext) tryPreemption() {
 
 		for leaf, leafPreemptableResource := range leafQueues {
 			leafQueueQCPC := NewQuotaChangePreemptor(leaf)
-			log.Log(log.ShedQuotaChangePreemption).Info("Triggering quota change preemption for leaf queue",
+			log.Log(log.SchedQuotaChangePreemption).Info("Triggering quota change preemption for leaf queue",
 				zap.String("leaf queue", leaf.GetQueuePath()),
 				zap.String("max resource", leafQueueQCPC.maxResource.String()),
 				zap.String("guaranteed resource", leafQueueQCPC.guaranteedResource.String()),
@@ -112,14 +112,14 @@ func (qcp *QuotaChangePreemptionContext) tryPreemptionInternal(preemptableResour
 	qcp.queue.resetPreemptionSettings()
 }
 
-// getLeafQueuesPreemptableResource Compute leaf queue's preemptable resource distribution from the parent's preemptable resource.
+// getChildQueuesPreemptableResource Compute leaf queue's preemptable resource distribution from the parent's preemptable resource.
 // Start with immediate children of parent, compute each child distribution from its parent preemptable resource and repeat the same
 // for all children at all levels until end leaf queues processed recursively.
 
 // In order to achieve a fair distribution of parent's preemptable resource among its children,
 // Higher (relatively) the usage is, higher the preemptable resource would be resulted in.
 // Usage above guaranteed (if set) is only considered to derive the preemptable resource.
-func getLeafQueuesPreemptableResource(queue *Queue, parentPreemptableResource *resources.Resource, childQueues map[*Queue]*resources.Resource) {
+func getChildQueuesPreemptableResource(queue *Queue, parentPreemptableResource *resources.Resource, childQueues map[*Queue]*resources.Resource) {
 	children := queue.GetCopyOfChildren()
 	if len(children) == 0 {
 		return
@@ -173,7 +173,7 @@ func getLeafQueuesPreemptableResource(queue *Queue, parentPreemptableResource *r
 		if c.IsLeafQueue() {
 			childQueues[c] = childPreemptableResource
 		} else {
-			getLeafQueuesPreemptableResource(c, childPreemptableResource, childQueues)
+			getChildQueuesPreemptableResource(c, childPreemptableResource, childQueues)
 		}
 	}
 }
@@ -235,7 +235,7 @@ func (qcp *QuotaChangePreemptionContext) filterAllocations() []*Allocation {
 			allocations = append(allocations, alloc)
 		}
 	}
-	log.Log(log.ShedQuotaChangePreemption).Info("Filtering allocations",
+	log.Log(log.SchedQuotaChangePreemption).Info("Filtering allocations",
 		zap.String("queue", qcp.queue.GetQueuePath()),
 		zap.Int("filtered allocations", len(allocations)),
 	)
@@ -255,13 +255,13 @@ func (qcp *QuotaChangePreemptionContext) sortAllocations() {
 // Otherwise, exceeding above the required resources slightly is acceptable for now.
 func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 	if len(qcp.allocations) == 0 {
-		log.Log(log.ShedQuotaChangePreemption).Warn("BUG: No victims to enforce quota change through preemption",
+		log.Log(log.SchedQuotaChangePreemption).Warn("BUG: No victims to enforce quota change through preemption",
 			zap.String("queue", qcp.queue.GetQueuePath()))
 		return
 	}
 	apps := make(map[*Application][]*Allocation)
 	victimsTotalResource := resources.NewResource()
-	log.Log(log.ShedQuotaChangePreemption).Info("Found victims for quota change preemption",
+	log.Log(log.SchedQuotaChangePreemption).Info("Found victims for quota change preemption",
 		zap.String("queue", qcp.queue.GetQueuePath()),
 		zap.Int("total victims", len(qcp.allocations)),
 		zap.String("max resources", qcp.maxResource.String()),
@@ -276,7 +276,7 @@ func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 		}
 		application := qcp.queue.GetApplication(victim.applicationID)
 		if application == nil {
-			log.Log(log.ShedQuotaChangePreemption).Warn("BUG: application not found in queue",
+			log.Log(log.SchedQuotaChangePreemption).Warn("BUG: application not found in queue",
 				zap.String("queue", qcp.queue.GetQueuePath()),
 				zap.String("application", victim.applicationID))
 			continue
@@ -304,7 +304,7 @@ func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 	for app, victims := range apps {
 		if len(victims) > 0 {
 			for _, victim := range victims {
-				log.Log(log.ShedQuotaChangePreemption).Info("Preempting victims for quota change preemption",
+				log.Log(log.SchedQuotaChangePreemption).Info("Preempting victims for quota change preemption",
 					zap.String("queue", qcp.queue.GetQueuePath()),
 					zap.String("victim allocation key", victim.allocationKey),
 					zap.String("victim allocated resources", victim.GetAllocatedResource().String()),

@@ -69,6 +69,7 @@ type SchedulerMetrics struct {
 	tryNodeEvaluation     prometheus.Histogram
 	lock                  locking.RWMutex
 	tryNodeCount          *prometheus.CounterVec
+	tryApplicationCount   *prometheus.CounterVec
 }
 
 // InitSchedulerMetrics to initialize scheduler metrics
@@ -79,6 +80,16 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 
 	s.nodeResourceUsage = make(map[string]*prometheus.GaugeVec) // Note: This map might be updated at runtime
 
+	initCounterMetrics(s)
+	initGaugeMetrics(s)
+	initHistogramMetrics(s)
+	registerSchedulerMetrics(s)
+
+	return s
+}
+
+// initCounterMetrics initializes counter-based metrics
+func initCounterMetrics(s *SchedulerMetrics) {
 	s.containerAllocation = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: Namespace,
@@ -95,6 +106,25 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Help:      "Total number of application submissions. State of the attempt includes `new`, `accepted` and `rejected`.",
 		}, []string{"result"})
 
+	s.tryNodeCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "trynode_count",
+			Help:      "Total number of nodes evaluated during scheduling cycle",
+		}, nil)
+
+	s.tryApplicationCount = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: Namespace,
+			Subsystem: SchedulerSubsystem,
+			Name:      "tryapplication_count",
+			Help:      "Total number of applications evaluated during scheduling cycle",
+		}, nil)
+}
+
+// initGaugeMetrics initializes gauge-based metrics
+func initGaugeMetrics(s *SchedulerMetrics) {
 	s.application = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: Namespace,
@@ -110,7 +140,10 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Name:      "node",
 			Help:      "Total number of nodes. State of the node includes `active` and `failed`.",
 		}, []string{"state"})
+}
 
+// initHistogramMetrics initializes histogram-based metrics
+func initHistogramMetrics(s *SchedulerMetrics) {
 	s.schedulingLatency = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
 			Namespace: Namespace,
@@ -169,15 +202,10 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8),
 		},
 	)
+}
 
-	s.tryNodeCount = prometheus.NewCounterVec(
-		prometheus.CounterOpts{
-			Namespace: Namespace,
-			Subsystem: SchedulerSubsystem,
-			Name:      "trynode_count",
-			Help:      "Total number of nodes evaluated during scheduling cycle",
-		}, nil)
-	// Register the metrics
+// registerSchedulerMetrics registers all scheduler metrics with Prometheus
+func registerSchedulerMetrics(s *SchedulerMetrics) {
 	var metricsList = []prometheus.Collector{
 		s.containerAllocation,
 		s.applicationSubmission,
@@ -190,13 +218,13 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 		s.tryNodeEvaluation,
 		s.tryPreemptionLatency,
 		s.tryNodeCount,
+		s.tryApplicationCount,
 	}
 	for _, metric := range metricsList {
 		if err := prometheus.Register(metric); err != nil {
 			log.Log(log.Metrics).Warn("failed to register metrics collector", zap.Error(err))
 		}
 	}
-	return s
 }
 
 // Reset all metrics that implement the Reset functionality.
@@ -207,6 +235,7 @@ func (m *SchedulerMetrics) Reset() {
 	m.applicationSubmission.Reset()
 	m.containerAllocation.Reset()
 	m.tryNodeCount.Reset()
+	m.tryApplicationCount.Reset()
 }
 
 func SinceInSeconds(start time.Time) float64 {
@@ -284,8 +313,20 @@ func (m *SchedulerMetrics) GetSchedulingErrors() (int, error) {
 	return -1, err
 }
 
-func (m *SchedulerMetrics) IncTryNodeCount() {
-	m.tryNodeCount.With(nil).Inc()
+func (m *SchedulerMetrics) AddTryNodeCount(count int64) {
+	m.tryNodeCount.With(nil).Add(float64(count))
+}
+
+func (m *SchedulerMetrics) ResetTryNodeCount() {
+	m.tryNodeCount.Reset()
+}
+
+func (m *SchedulerMetrics) AddTryApplicationCount(count int64) {
+	m.tryApplicationCount.With(nil).Add(float64(count))
+}
+
+func (m *SchedulerMetrics) ResetTryApplicationCount() {
+	m.tryApplicationCount.Reset()
 }
 
 func (m *SchedulerMetrics) GetTryNodeCount() (int64, error) {

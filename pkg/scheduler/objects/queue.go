@@ -94,8 +94,6 @@ type Queue struct {
 	isQuotaChangePreemptionRunning bool
 	unschedAskBackoff              uint64
 	askBackoffDelay                time.Duration
-	applicationsTried              int64 // number of applications tried per scheduling cycle
-	nodesTried                     int64 // number of nodes tried per scheduling cycle
 
 	locking.RWMutex
 }
@@ -1548,6 +1546,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 		headRoom := sq.getHeadRoom()
 		preemptionDelay := sq.GetPreemptionDelay()
 		preemptAttemptsRemaining := maxPreemptionsPerQueue
+		var applicationsTried int64
 
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(false) {
@@ -1562,31 +1561,18 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 				continue
 			}
 
-			// Increment counter in root queue before calling app.tryAllocate
-			sq.incrementApplicationsTried()
-			countBefore, err := metrics.GetSchedulerMetrics().GetTryNodeCount()
-			if err != nil {
-				// if metric read fails, default to 0 to avoid disrupting scheduling
-				countBefore = 0
-			}
-
-			result := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
-
-			countAfter, err := metrics.GetSchedulerMetrics().GetTryNodeCount()
-			if err != nil {
-				// if metric read fails, default to 0 to avoid disrupting scheduling
-				countAfter = 0
-			}
-			sq.addNodesTried(countAfter - countBefore)
+			applicationsTried++
+			result, _ := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
 
 			if result != nil {
+				result.ApplicationsTried = applicationsTried
 				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("resultType", result.ResultType),
 					zap.Stringer("allocation", result.Request),
-					zap.Int64("applicationsTried:", sq.GetApplicationsTried()),
-					zap.Int64("nodesTried", sq.GetNodesTried()))
+					zap.Int64("applicationsTried", applicationsTried),
+					zap.Int64("nodesTried", result.NodesTried))
 				// if the app is still in Accepted state we're allocating placeholders.
 				// we want to count these apps as running
 				if app.IsAccepted() {
@@ -1633,7 +1619,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
-			result := app.tryPlaceholderAllocate(iterator, getnode)
+			result, _ := app.tryPlaceholderAllocate(iterator, getnode)
 			if result != nil {
 				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -1724,7 +1710,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *AllocationRe
 				if app.IsAccepted() && (!sq.canRunApp(appID) || !ugm.GetUserManager().CanRunApp(sq.QueuePath, appID, app.user)) {
 					continue
 				}
-				result := app.tryReservedAllocate(headRoom, iterator)
+				result, _ := app.tryReservedAllocate(headRoom, iterator)
 				if result != nil {
 					log.Log(log.SchedQueue).Info("reservation found for allocation found on queue",
 						zap.String("queueName", sq.QueuePath),
@@ -2233,87 +2219,4 @@ func (sq *Queue) GetBackoffDelay() time.Duration {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.askBackoffDelay
-}
-
-func (sq *Queue) addNodesTried(count int64) {
-	if sq == nil {
-		return
-	}
-	// Find the root queue and increment its counter
-	root := sq
-	for root.parent != nil {
-		root = root.parent
-	}
-	root.Lock()
-	defer root.Unlock()
-	root.nodesTried += count
-}
-
-func (sq *Queue) GetNodesTried() int64 {
-	if sq == nil {
-		return 0
-	}
-	root := sq
-	for root.parent != nil {
-		root = root.parent
-	}
-	root.Lock()
-	defer root.Unlock()
-	return root.nodesTried
-}
-
-func (sq *Queue) ResetNodesTried() {
-	if sq == nil {
-		return
-	}
-	root := sq
-	for root.parent != nil {
-		root = root.parent
-	}
-	root.Lock()
-	defer root.Unlock()
-	root.nodesTried = 0
-}
-
-// Increment the root queue's counter for application allocation attempts
-func (sq *Queue) incrementApplicationsTried() {
-	if sq == nil {
-		return
-	}
-	// Find the root queue and increment its counter
-	root := sq
-	for root.parent != nil {
-		root = root.parent
-	}
-	root.Lock()
-	defer root.Unlock()
-	root.applicationsTried++
-}
-
-// Retrieve the count of tryAllocate calls made during the current scheduling cycle
-func (sq *Queue) GetApplicationsTried() int64 {
-	if sq == nil {
-		return 0
-	}
-	root := sq
-	for root.parent != nil {
-		root = root.parent
-	}
-	root.Lock()
-	defer root.Unlock()
-	return root.applicationsTried
-}
-
-// Clear the application allocation attempts counter for the new scheduling cycle
-func (sq *Queue) ResetApplicationsTried() {
-	if sq == nil {
-		return
-	}
-	root := sq
-	for root.parent != nil {
-		root = root.parent
-	}
-	root.Lock()
-	defer root.Unlock()
-	root.applicationsTried = 0
 }

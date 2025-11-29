@@ -986,15 +986,16 @@ func (sa *Application) canReplace(request *Allocation) bool {
 }
 
 // tryAllocate will perform a regular allocation of a pending request, includes placeholders.
-func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption bool, preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator, fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) *AllocationResult {
+func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption bool, preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator, fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) (*AllocationResult, int64) {
 	sa.Lock()
 	defer sa.Unlock()
 	if sa.sortedRequests == nil {
-		return nil
+		return nil, 0
 	}
 	// calculate the users' headroom, includes group check which requires the applicationID
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
 	unschedulable := uint64(0)
+	var totalNodesTried int64
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
 		backoffThreshold := sa.queue.GetMaxAppUnschedAskBackoff()
@@ -1004,7 +1005,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 				zap.Uint64("number of unschedulable asks", unschedulable))
 			delay := sa.queue.GetBackoffDelay()
 			sa.backoffDeadline = time.Now().Add(delay)
-			return nil
+			return nil, totalNodesTried
 		}
 		if request.IsAllocated() {
 			continue
@@ -1032,7 +1033,10 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 				if fullIterator != nil {
 					if result, ok := sa.tryPreemption(headRoom, preemptionDelay, preemptAttemptsRemaining, request, fullIterator, false); ok {
 						// preemption occurred, and possibly reservation
-						return result
+						if result != nil {
+							result.NodesTried = totalNodesTried
+						}
+						return result, totalNodesTried
 					}
 					request.LogAllocationFailure(common.PreemptionDoesNotHelp, true)
 				}
@@ -1048,7 +1052,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		if requiredNode != "" {
 			result := sa.tryRequiredNode(request, getNodeFn)
 			if result != nil {
-				return result
+				result.NodesTried = totalNodesTried
+				return result, totalNodesTried
 			}
 			// it did not allocate or reserve: should only happen if the node is not registered yet
 			// just continue with the next request
@@ -1057,9 +1062,12 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 
 		iterator := nodeIterator()
 		if iterator != nil {
-			if result := sa.tryNodes(request, iterator); result != nil {
+			result, nodesTried := sa.tryNodes(request, iterator)
+			totalNodesTried += nodesTried
+			if result != nil {
 				// have a candidate return it
-				return result
+				result.NodesTried = totalNodesTried
+				return result, totalNodesTried
 			}
 
 			// no nodes qualify, attempt preemption
@@ -1068,7 +1076,10 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 				if fullIterator != nil {
 					if result, ok := sa.tryPreemption(headRoom, preemptionDelay, preemptAttemptsRemaining, request, fullIterator, true); ok {
 						// preemption occurred, and possibly reservation
-						return result
+						if result != nil {
+							result.NodesTried = totalNodesTried
+						}
+						return result, totalNodesTried
 					}
 				}
 				request.LogAllocationFailure(common.PreemptionDoesNotHelp, true)
@@ -1077,7 +1088,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		unschedulable++
 	}
 	// no requests fit, skip to next app
-	return nil
+	return nil, totalNodesTried
 }
 
 // tryRequiredNode tries to place the allocation in the specific node that is set as the required node in the allocation.
@@ -1165,12 +1176,12 @@ func (sa *Application) cancelReservations(reservations []*reservation) int {
 // tryPlaceholderAllocate tries to replace a placeholder that is allocated with a real allocation
 //
 //nolint:funlen
-func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getNodeFn func(string) *Node) *AllocationResult {
+func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getNodeFn func(string) *Node) (*AllocationResult, int64) {
 	sa.Lock()
 	defer sa.Unlock()
 	// nothing to do if we have no placeholders allocated
 	if resources.IsZero(sa.allocatedPlaceholder) || sa.sortedRequests == nil {
-		return nil
+		return nil, 0
 	}
 	// keep the first fits for later
 	var phFit *Allocation
@@ -1233,14 +1244,16 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				request.SetBindTime(time.Now())
 				request.SetNodeID(node.NodeID)
 				request.SetInstanceType(node.GetInstanceType())
-				return newReplacedAllocationResult(node.NodeID, request)
+				result := newReplacedAllocationResult(node.NodeID, request)
+				result.NodesTried = 0
+				return result, 0
 			}
 		}
 	}
 	// cannot allocate if the iterator is not giving us any schedulable nodes
 	iterator := nodeIterator()
 	if iterator == nil {
-		return nil
+		return nil, 0
 	}
 	// we checked all placeholders and asks nothing worked as yet
 	// pick the first fit and try all nodes if that fails give up
@@ -1291,13 +1304,16 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			reqFit.SetNodeID(node.NodeID)
 			reqFit.SetInstanceType(node.GetInstanceType())
 			result := newReplacedAllocationResult(node.NodeID, reqFit)
-
+			result.NodesTried = 0
 			allocResult = result
 			return false
 		})
 	}
 	// still nothing worked give up and hope the next round works
-	return allocResult
+	if allocResult != nil {
+		allocResult.NodesTried = 0
+	}
+	return allocResult, 0
 }
 
 // check ask against both user headRoom and queue headRoom
@@ -1307,11 +1323,12 @@ func (sa *Application) checkHeadRooms(ask *Allocation, userHeadroom *resources.R
 }
 
 // tryReservedAllocate tries allocating an outstanding reservation
-func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *AllocationResult {
+func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) (*AllocationResult, int64) {
 	sa.Lock()
 	defer sa.Unlock()
 	// calculate the users' headroom, includes group check which requires the applicationID
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
+	var totalNodesTried int64
 
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
@@ -1330,7 +1347,9 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				unreserveAsk = ask
 			}
 			// remove the reservation as this should not be reserved
-			return newUnreservedAllocationResult(reserve.nodeID, unreserveAsk)
+			result := newUnreservedAllocationResult(reserve.nodeID, unreserveAsk)
+			result.NodesTried = totalNodesTried
+			return result, totalNodesTried
 		}
 
 		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
@@ -1351,7 +1370,8 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		// allocation worked fix the resultType and return
 		if result != nil {
 			result.ResultType = AllocatedReserved
-			return result
+			result.NodesTried = totalNodesTried
+			return result, totalNodesTried
 		}
 	}
 
@@ -1367,14 +1387,16 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			if !sa.checkHeadRooms(alloc, userHeadroom, headRoom) {
 				continue
 			}
-			result := sa.tryNodesNoReserve(alloc, iterator, reserve.nodeID)
+			result, nodesTried := sa.tryNodesNoReserve(alloc, iterator, reserve.nodeID)
+			totalNodesTried += nodesTried
 			// have a candidate return it, including the node that was reserved
 			if result != nil {
-				return result
+				result.NodesTried = totalNodesTried
+				return result, totalNodesTried
 			}
 		}
 	}
-	return nil
+	return nil, totalNodesTried
 }
 
 func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDelay time.Duration, preemptionAttemptsRemaining *int, ask *Allocation, iterator NodeIterator, nodesTried bool) (*AllocationResult, bool) {
@@ -1444,8 +1466,9 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 
 // tryNodesNoReserve tries all the nodes for a reserved request that have not been tried yet.
 // This should never result in a reservation as the allocation is already reserved
-func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator, reservedNode string) *AllocationResult {
+func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator, reservedNode string) (*AllocationResult, int64) {
 	var allocResult *AllocationResult
+	var nodesTried int64
 	iterator.ForEachNode(func(node *Node) bool {
 		if !node.IsSchedulable() {
 			log.Log(log.SchedApplication).Debug("skipping node for reserved ask as state is unschedulable",
@@ -1457,6 +1480,7 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 		if !node.FitInNode(ask.GetAllocatedResource()) || node.NodeID == reservedNode {
 			return true
 		}
+		nodesTried++
 		// we don't care about predicate error messages here
 		result, _ := sa.tryNode(node, ask) //nolint:errcheck
 		// allocation worked: update resultType and return
@@ -1470,12 +1494,15 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 		return true
 	})
 
-	return allocResult
+	if allocResult != nil {
+		allocResult.NodesTried = nodesTried
+	}
+	return allocResult, nodesTried
 }
 
 // Try all the nodes for a request. The resultType is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *AllocationResult {
+func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) (*AllocationResult, int64) {
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
 	// check if the alloc is reserved or not
@@ -1483,6 +1510,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	reserved := sa.reservations[allocKey]
 	var allocResult *AllocationResult
 	var predicateErrors map[string]int
+	var nodesTried int64
 	tryNodeCycleStart := time.Now()
 	iterator.ForEachNode(func(node *Node) bool {
 		// skip the node if the node is not schedulable
@@ -1497,7 +1525,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 			return true
 		}
 		tryNodeStart := time.Now()
-		metrics.GetSchedulerMetrics().IncTryNodeCount()
+		nodesTried++
 		result, err := sa.tryNode(node, ask)
 		if err != nil {
 			if predicateErrors == nil {
@@ -1552,7 +1580,8 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	metrics.GetSchedulerMetrics().ObserveTryNodeEvaluation(tryNodeCycleStart)
 
 	if allocResult != nil {
-		return allocResult
+		allocResult.NodesTried = nodesTried
+		return allocResult, nodesTried
 	}
 
 	if predicateErrors != nil {
@@ -1569,13 +1598,15 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 			zap.Int("reservations", len(sa.reservations)))
 		// skip the node if conditions can not be satisfied
 		if nodeToReserve.preReserveConditions(ask) != nil {
-			return nil
+			return nil, nodesTried
 		}
 		// return reservation allocation and mark it as a reservation
-		return newReservedAllocationResult(nodeToReserve.NodeID, ask)
+		result := newReservedAllocationResult(nodeToReserve.NodeID, ask)
+		result.NodesTried = nodesTried
+		return result, nodesTried
 	}
 	// ask does not fit, skip to next ask
-	return nil
+	return nil, nodesTried
 }
 
 // tryNode tries allocating on one specific node

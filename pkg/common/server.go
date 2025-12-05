@@ -19,6 +19,7 @@
 package common
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -26,7 +27,6 @@ import (
 	"sync"
 
 	"go.uber.org/zap"
-	"golang.org/x/net/context"
 	"google.golang.org/grpc"
 
 	"github.com/apache/yunikorn-core/pkg/log"

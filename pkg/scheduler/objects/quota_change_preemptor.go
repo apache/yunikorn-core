@@ -161,14 +161,13 @@ func getChildQueuesPreemptableResource(queue *Queue, parentPreemptableResource *
 	// Apply percentage on parent's preemptable resource to derive its individual distribution
 	// or share of resources to be preempted.
 	for c, pRes := range childrenPreemptableResource {
-		i := 0
 		childPreemptableResource := resources.NewResource()
-		per := resources.GetShares(pRes, totalPreemptableResource)
-		for k, v := range parentPreemptableResource.Resources {
-			// Need to be improved further
-			value := math.RoundToEven(per[i] * float64(v))
-			childPreemptableResource.Resources[k] = resources.Quantity(value)
-			i++
+		per := resources.GetSharesTypeWise(pRes, totalPreemptableResource)
+		for k := range pRes.Resources {
+			if _, ok := parentPreemptableResource.Resources[k]; ok {
+				value := math.RoundToEven(per[k] * float64(parentPreemptableResource.Resources[k]))
+				childPreemptableResource.Resources[k] = resources.Quantity(value)
+			}
 		}
 		if c.IsLeafQueue() {
 			childQueues[c] = childPreemptableResource

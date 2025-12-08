@@ -539,15 +539,29 @@ func getFairShare(allocated, guaranteed, fair *Resource) float64 {
 	return maxShare
 }
 
-// Get the share of each resource quantity when compared to the total
-// resources quantity
+// GetShares Get the share of each resource quantity when compared to the total
+// resource quantity. Resource type agnostic. Sort shares to order the same based on dominant resource.
 // NOTE: shares can be negative and positive in the current assumptions
 func GetShares(res, total *Resource) []float64 {
+	shares, _ := internalGetShares(res, total)
+	return shares
+}
+
+// GetSharesTypeWise Get the share of each resource quantity when compared to the total
+// resources quantity
+// NOTE: shares can be negative and positive in the current assumptions
+func GetSharesTypeWise(res, total *Resource) map[string]float64 {
+	_, sharesTypeWise := internalGetShares(res, total)
+	return sharesTypeWise
+}
+
+func internalGetShares(res, total *Resource) ([]float64, map[string]float64) {
 	// shortcut if the passed in resource to get the share on is nil or empty (sparse)
 	if res == nil || len(res.Resources) == 0 {
-		return make([]float64, 0)
+		return make([]float64, 0), make(map[string]float64)
 	}
 	shares := make([]float64, len(res.Resources))
+	sharesTypeWise := make(map[string]float64, len(res.Resources))
 	idx := 0
 	for k, v := range res.Resources {
 		// no usage then there is no share (skip prevents NaN)
@@ -566,13 +580,18 @@ func GetShares(res, total *Resource) []float64 {
 					zap.String("resource key", k),
 					zap.Int64("resource quantity", int64(v)))
 			}
-			shares[idx] = float64(v)
+			share := float64(v)
+			shares[idx] = share
+			sharesTypeWise[k] = share
 			idx++
 			continue
 		}
-		shares[idx] = float64(v) / float64(total.Resources[k])
+		share := float64(v) / float64(total.Resources[k])
+		shares[idx] = share
+		sharesTypeWise[k] = share
+
 		// negative share is logged
-		if shares[idx] < 0 {
+		if shares[idx] < 0 || sharesTypeWise[k] < 0 {
 			log.Log(log.Resources).Debug("share set is negative",
 				zap.String("resource key", k),
 				zap.Int64("resource quantity", int64(v)),
@@ -583,7 +602,7 @@ func GetShares(res, total *Resource) []float64 {
 
 	// sort in increasing order, NaN can not be part of the list
 	sort.Float64s(shares)
-	return shares
+	return shares, sharesTypeWise
 }
 
 // Calculate share for left of total and right of total.

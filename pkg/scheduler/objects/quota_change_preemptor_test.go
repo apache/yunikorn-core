@@ -40,6 +40,7 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 	}
 	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
 	assert.NilError(t, err)
+	parent.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
 
 	leafRes := configs.Resources{
 		Max: map[string]string{"memory": "1000"},
@@ -69,26 +70,36 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 		Resources: leafRes,
 	}, parent, false, nil)
 	assert.NilError(t, err)
-	usageExceededMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000})
+	usageExceededMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
 
 	usageEqualsMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:      "leaf-usage-equals-max",
 		Resources: leafRes,
 	}, parent, false, nil)
 	assert.NilError(t, err)
-	usageEqualsMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000})
+	usageEqualsMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 1000})
+
+	usageNotMatchingMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
+		Name: "leaf-usage-res-not-matching-max-res",
+		Resources: configs.Resources{
+			Max: map[string]string{"cpu": "1000"},
+		},
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	usageNotMatchingMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000})
 
 	testCases := []struct {
 		name               string
 		queue              *Queue
 		preconditionResult bool
 	}{
-		{"parent queue", parent, false},
+		{"parent queue", parent, true},
 		{"leaf queue", leaf, false},
 		{"dynamic leaf queue", dynamicLeaf, false},
 		{"leaf queue, already preemption process started or running", alreadyPreemptionRunning, false},
 		{"leaf queue, usage exceeded max resources", usageExceededMaxQueue, true},
 		{"leaf queue, usage equals max resources", usageEqualsMaxQueue, false},
+		{"leaf queue, usage res not matching max resources", usageNotMatchingMaxQueue, false},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -378,7 +389,7 @@ func TestQuotaChangeTryPreemptionWithDifferentResTypes(t *testing.T) {
 	}
 }
 
-// TestQuotaChangeGetChildQueuesPreemptableResource Test leaf queues distribution from parent's preemptable resources under different circumstances
+// TestQuotaChangeGetChildQueuesPreemptableResource Test child queues distribution from parent's preemptable resources under different circumstances
 // Queue Structure:
 // parent
 //
@@ -449,7 +460,7 @@ func TestQuotaChangeGetChildQueuesPreemptableResource(t *testing.T) {
 	}
 }
 
-// TestQuotaChangeGetChildQueuesPreemptableResource Test leaf queues distribution from parent's preemptable resources under different circumstances
+// TestQuotaChangeGetChildQueuesPreemptableResourceWithDifferentResTypes Test child queues distribution from parent's preemptable resources under different circumstances with different resource types
 // Queue Structure:
 // parent
 //

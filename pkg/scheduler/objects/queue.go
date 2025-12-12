@@ -2211,7 +2211,7 @@ func (sq *Queue) isQCPreemptionRunningForParent() bool {
 }
 
 func (sq *Queue) isQCPreemptionRunningForChild() bool {
-	for _, child := range sq.children {
+	for _, child := range sq.GetCopyOfChildren() {
 		if child.isQCPreemptionRunningForChild() {
 			return true
 		}

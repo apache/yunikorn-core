@@ -41,6 +41,7 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
 	assert.NilError(t, err)
 	parent.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
+
 	leafRes := configs.Resources{
 		Max: map[string]string{"memory": "1000"},
 	}

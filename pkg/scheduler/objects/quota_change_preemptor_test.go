@@ -63,7 +63,6 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 		Resources: leafRes,
 	}, parent, false, nil)
 	assert.NilError(t, err)
-	alreadyPreemptionRunning.MarkQuotaChangePreemptionRunning(true)
 
 	usageExceededMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:      "leaf-usage-exceeded-max",
@@ -91,22 +90,26 @@ func TestQuotaChangeCheckPreconditions(t *testing.T) {
 	testCases := []struct {
 		name               string
 		queue              *Queue
+		preemptionRunning  bool
 		preconditionResult bool
 	}{
-		{"parent queue", parent, true},
-		{"leaf queue", leaf, false},
-		{"dynamic leaf queue", dynamicLeaf, false},
-		{"leaf queue, already preemption process started or running", alreadyPreemptionRunning, false},
-		{"leaf queue, usage exceeded max resources", usageExceededMaxQueue, true},
-		{"leaf queue, usage equals max resources", usageEqualsMaxQueue, false},
-		{"leaf queue, usage res not matching max resources", usageNotMatchingMaxQueue, false},
+		{"parent queue", parent, false, true},
+		{"leaf queue", leaf, false, false},
+		{"dynamic leaf queue", dynamicLeaf, false, false},
+		{"leaf queue, usage exceeded max resources", usageExceededMaxQueue, false, true},
+		{"leaf queue, usage equals max resources", usageEqualsMaxQueue, false, false},
+		{"leaf queue, already preemption process started or running", alreadyPreemptionRunning, true, false},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.queue.MarkQuotaChangePreemptionRunning(tc.preemptionRunning)
 			preemptor := NewQuotaChangePreemptor(tc.queue)
 			assert.Equal(t, preemptor.CheckPreconditions(), tc.preconditionResult)
 		})
 	}
+	// Since parent's leaf queue "leaf-already-preemption-running" is running, parent preconditions passed earlier should fail now
+	preemptor := NewQuotaChangePreemptor(parent)
+	assert.Equal(t, preemptor.CheckPreconditions(), false)
 }
 
 func TestQuotaChangeGetPreemptableResource(t *testing.T) {

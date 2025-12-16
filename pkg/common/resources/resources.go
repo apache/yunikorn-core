@@ -446,20 +446,27 @@ func subNonNegative(left, right *Resource) (*Resource, string) {
 // Types not defined in resource this is called against are considered 0 for Quantity
 // A nil resource is treated as an empty resource (no types defined)
 func (r *Resource) FitIn(smaller *Resource) bool {
-	return r.fitIn(smaller, false)
+	return r.fitIn(smaller, false, false)
 }
 
 // FitInMaxUndef checks if smaller fits in the defined resource
 // Types not defined in resource this is called against are considered the maximum value for Quantity
 // A nil resource is treated as an empty resource (no types defined)
 func (r *Resource) FitInMaxUndef(smaller *Resource) bool {
-	return r.fitIn(smaller, true)
+	return r.fitIn(smaller, true, false)
+}
+
+// FitInActual checks if smaller fits in the defined resource based on the actual values. Negative values too are compared as is.
+// Types not defined in resource this is called against are skipped
+// A nil resource is treated as an empty resource (no types defined)
+func (r *Resource) FitInActual(smaller *Resource) bool {
+	return r.fitIn(smaller, true, true)
 }
 
 // Check if smaller fits in the defined resource
-// Negative values will be treated as 0
+// Negative values will be treated as 0 if actual flag is false. Otherwise, use the value as is and do the comparison later
 // A nil resource is treated as an empty resource, behaviour defined by skipUndef
-func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
+func (r *Resource) fitIn(smaller *Resource, skipUndef bool, actual bool) bool {
 	if r == nil {
 		r = Zero // shadows in the local function not seen by the callers.
 	}
@@ -475,7 +482,9 @@ func (r *Resource) fitIn(smaller *Resource, skipUndef bool) bool {
 		if skipUndef && !ok {
 			continue
 		}
-		largerValue = max(0, largerValue)
+		if !actual {
+			largerValue = max(0, largerValue)
+		}
 		if v > largerValue {
 			return false
 		}

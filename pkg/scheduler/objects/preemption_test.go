@@ -44,7 +44,7 @@ func creatApp1(
 	app1Rec map[string]resources.Quantity,
 	appQueueMapping *AppQueueMapping,
 ) (*Allocation, *Allocation, error) {
-	return creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, app1Rec, app1Rec)
+	return creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, app1Rec, app1Rec, appQueueMapping)
 }
 
 func creatApp1WithTwoDifferentAllocations(
@@ -52,7 +52,7 @@ func creatApp1WithTwoDifferentAllocations(
 	node1 *Node,
 	node2 *Node,
 	app1Rec map[string]resources.Quantity,
-	app2Rec map[string]resources.Quantity,
+	app2Rec map[string]resources.Quantity, appQueueMapping *AppQueueMapping,
 ) (*Allocation, *Allocation, error) {
 	app1 := newApplication(appID1, "default", childQ1.QueuePath)
 	app1.SetQueue(childQ1)
@@ -236,7 +236,8 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 		t.Run(tt.testName, func(t *testing.T) {
 			appQueueMapping := NewAppQueueMapping()
 			node := newNode("node1", map[string]resources.Quantity{"first": 20})
-			iterator := getNodeIteratorFn(node)
+			node2 := newNode("node2", map[string]resources.Quantity{"first": 20})
+			iterator := getNodeIteratorFn(node, node2)
 			rootQ, err := createRootQueue(map[string]string{"first": "20"})
 			assert.NilError(t, err)
 			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{}, tt.parentGuaranteed, appQueueMapping)
@@ -246,7 +247,7 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 			childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{}, tt.childGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
 
-			alloc1, alloc2, err := creatApp1(childQ1, node, nil, map[string]resources.Quantity{"first": 5}, appQueueMapping)
+			alloc1, alloc2, err := creatApp1(childQ1, node, node2, map[string]resources.Quantity{"first": 5}, appQueueMapping)
 			assert.NilError(t, err)
 			assert.Assert(t, alloc1 != nil, "alloc1 should not be nil")
 			assert.Assert(t, alloc2 != nil, "alloc2 should not be nil")
@@ -267,6 +268,54 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 				assert.Equal(t, len(ask3.GetAllocationLog()), 1)
 				assertAllocationLog(t, ask3, []string{common.PreemptionDoesNotGuarantee})
 			}
+		})
+	}
+}
+
+func TestIsAskQueueUnderGuaranteed(t *testing.T) {
+	var tests = []struct {
+		testName    string
+		askResource *resources.Resource
+		askQueue    *resources.Resource
+		expected    bool
+	}{
+		{"matching res types with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), true},
+		{"matching res types with zero value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), true},
+		{"matching res types with -ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10}), false},
+		{"matching res types, one with -ve value and another with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": -10}), false},
+		{"both matching res types  with +ve value and non matching res types with -ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": -10}), true},
+		{"both matching res types  with -ve value and non matching res types with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10, "second": 10}), false},
+		{"both matching res types  with +ve value and non matching res types", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "third": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), true},
+		{"both matching res types  with -ve value and non matching res types", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "third": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10}), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			assert.Equal(t, isAskQueueUnderGuaranteed(tt.askResource, tt.askQueue), tt.expected)
+		})
+	}
+}
+
+func TestIsVictimQueueOverGuaranteed(t *testing.T) {
+	var tests = []struct {
+		testName    string
+		askResource *resources.Resource
+		victimQueue *resources.Resource
+		expected    bool
+	}{
+		{"matching res types with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), false},
+		{"matching res types with zero value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), false},
+		{"matching res types with -ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10}), true},
+		{"matching res types, one with -ve value and another with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": -10}), true},
+		{"both matching res types  with +ve value and non matching res types with -ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": -10}), false},
+		{"both matching res types  with -ve value and non matching res types with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10, "second": 10}), true},
+		{"both matching res types  with +ve value and non matching res types", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "third": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), false},
+		{"both matching res types  with -ve value and non matching res types", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "third": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10}), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			assert.Equal(t, isVictimQueueOverGuaranteed(tt.askResource, tt.victimQueue), tt.expected)
 		})
 	}
 }
@@ -1983,19 +2032,20 @@ func TestTryPreemption_VictimQueue_With_OG_And_UG_ResTypes(t *testing.T) {
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "second": 2})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "second": 2})
 	iterator := getNodeIteratorFn(node1, node2)
+	appQueueMapping := NewAppQueueMapping()
 	rootQ, err := createRootQueue(map[string]string{"first": "20", "storage": "4"})
 	assert.NilError(t, err)
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "4"}, nil)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "4"}, nil, appQueueMapping)
 	assert.NilError(t, err)
-	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "10", "second": "2"})
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "10", "second": "2"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "10"})
-	assert.NilError(t, err)
-
-	alloc1, alloc2, err := creatApp1(childQ1, node1, node2, map[string]resources.Quantity{"first": 10})
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "10"}, appQueueMapping)
 	assert.NilError(t, err)
 
-	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3")
+	alloc1, alloc2, err := creatApp1(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3", appQueueMapping)
 	assert.NilError(t, err)
 
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 4})
@@ -2034,23 +2084,24 @@ func TestTryPreemption_VictimQueue_Under_Diff_Parent_With_OG_And_UG_ResTypes(t *
 			node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "second": 2})
 			node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "second": 2})
 			iterator := getNodeIteratorFn(node1, node2)
+			appQueueMapping := NewAppQueueMapping()
 			rootQ, err := createRootQueue(map[string]string{"first": "20", "storage": "4"})
 			assert.NilError(t, err)
-			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "4"}, nil)
+			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "4"}, nil, appQueueMapping)
 			assert.NilError(t, err)
-			parentQ1, err := createManagedQueueGuaranteed(parentQ, "parent1", true, nil, tt.victimParentGuaranteed)
+			parentQ1, err := createManagedQueueGuaranteed(parentQ, "parent1", true, nil, tt.victimParentGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
-			parentQ2, err := createManagedQueueGuaranteed(parentQ, "parent2", true, nil, tt.askParentGuaranteed)
+			parentQ2, err := createManagedQueueGuaranteed(parentQ, "parent2", true, nil, tt.askParentGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
-			childQ1, err := createManagedQueueGuaranteed(parentQ1, "child1", false, nil, tt.victimChildGuaranteed)
+			childQ1, err := createManagedQueueGuaranteed(parentQ1, "child1", false, nil, tt.victimChildGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
-			childQ2, err := createManagedQueueGuaranteed(parentQ2, "child2", false, nil, tt.askChildGuaranteed)
-			assert.NilError(t, err)
-
-			alloc1, alloc2, err := creatApp1(childQ1, node1, node2, map[string]resources.Quantity{"first": 10})
+			childQ2, err := createManagedQueueGuaranteed(parentQ2, "child2", false, nil, tt.askChildGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
 
-			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3")
+			alloc1, alloc2, err := creatApp1(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, appQueueMapping)
+			assert.NilError(t, err)
+
+			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3", appQueueMapping)
 			assert.NilError(t, err)
 
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 4})
@@ -2078,20 +2129,21 @@ func TestTryPreemption_AskQueue_With_OG_And_UG_ResTypes(t *testing.T) {
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "second": 3, "third": 10})
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "second": 3, "third": 10})
 	iterator := getNodeIteratorFn(node1, node2)
+	appQueueMapping := NewAppQueueMapping()
 	rootQ, err := createRootQueue(map[string]string{"first": "20", "second": "6"})
 	assert.NilError(t, err)
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "6"}, nil)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "6"}, nil, appQueueMapping)
 	assert.NilError(t, err)
-	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "10"})
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "10"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "10", "second": "2"})
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "10", "second": "2"}, appQueueMapping)
 	assert.NilError(t, err)
 
-	alloc1, alloc2, err := creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, map[string]resources.Quantity{"first": 5})
+	alloc1, alloc2, err := creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, map[string]resources.Quantity{"first": 5}, appQueueMapping)
 	assert.NilError(t, err)
 
 	alloc3Res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 3})
-	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "second": 3}, "alloc3")
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "second": 3}, "alloc3", appQueueMapping)
 	assert.NilError(t, err)
 
 	alloc3 := newAllocationWithKey("alloc3", appID2, nodeID2, alloc3Res)
@@ -2146,24 +2198,25 @@ func TestTryPreemption_AskQueue_Under_DiffParent_With_OG_And_UG_ResTypes(t *test
 			node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "second": 3, "third": 10})
 			node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "second": 3, "third": 10})
 			iterator := getNodeIteratorFn(node1, node2)
+			appQueueMapping := NewAppQueueMapping()
 			rootQ, err := createRootQueue(map[string]string{"first": "20", "second": "6"})
 			assert.NilError(t, err)
-			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "6"}, nil)
+			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "6"}, nil, appQueueMapping)
 			assert.NilError(t, err)
-			parentQ1, err := createManagedQueueGuaranteed(parentQ, "parent1", true, nil, tt.victimParentGuaranteed)
+			parentQ1, err := createManagedQueueGuaranteed(parentQ, "parent1", true, nil, tt.victimParentGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
-			parentQ2, err := createManagedQueueGuaranteed(parentQ, "parent2", true, nil, tt.askParentGuaranteed)
+			parentQ2, err := createManagedQueueGuaranteed(parentQ, "parent2", true, nil, tt.askParentGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
-			childQ1, err := createManagedQueueGuaranteed(parentQ1, "child1", false, nil, tt.victimChildGuaranteed)
+			childQ1, err := createManagedQueueGuaranteed(parentQ1, "child1", false, nil, tt.victimChildGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
-			childQ2, err := createManagedQueueGuaranteed(parentQ2, "child2", false, nil, tt.askChildGuaranteed)
+			childQ2, err := createManagedQueueGuaranteed(parentQ2, "child2", false, nil, tt.askChildGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
 
-			alloc1, alloc2, err := creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, map[string]resources.Quantity{"first": 5})
+			alloc1, alloc2, err := creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, map[string]resources.Quantity{"first": 5}, appQueueMapping)
 			assert.NilError(t, err)
 
 			alloc3Res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 3})
-			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "second": 3}, "alloc3")
+			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "second": 3}, "alloc3", appQueueMapping)
 			assert.NilError(t, err)
 
 			alloc3 := newAllocationWithKey("alloc3", appID2, nodeID2, alloc3Res)

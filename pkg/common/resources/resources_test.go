@@ -1381,6 +1381,77 @@ func TestFitInSkip(t *testing.T) {
 	}
 }
 
+func TestFitInActual(t *testing.T) {
+	tests := []struct {
+		larger   *Resource
+		smaller  *Resource
+		expected bool
+		message  string
+	}{
+		{
+			larger:   NewResource(),
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 1}},
+			expected: true,
+			message:  "defined resource %+v should fit in empty (skip undefined)",
+		},
+		{
+			larger:   NewResourceFromMap(map[string]Quantity{"a": 5}),
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 1}},
+			expected: true,
+			message:  "fitin smaller resource with value %+v should fit in larger %+v (skip undefined)",
+		},
+		{
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 1}},
+			larger:   &Resource{Resources: map[string]Quantity{"not-in-smaller": 1}},
+			expected: true,
+			message:  "different type in smaller %+v should fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"not-in-smaller": 1}},
+			smaller:  &Resource{Resources: map[string]Quantity{"not-in-larger": 1}},
+			expected: true,
+			message:  "different type in smaller %+v should fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"a": -10}},
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 0, "b": -10}},
+			expected: false,
+			message:  "fitin smaller resource with zero or neg values %+v should not fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"a": -5}},
+			smaller:  &Resource{Resources: map[string]Quantity{"a": 0, "b": 10}},
+			expected: false,
+			message:  "fitin smaller resource with value %+v should not fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"a": -5}},
+			smaller:  &Resource{Resources: map[string]Quantity{"a": -4, "b": 10}},
+			expected: false,
+			message:  "fitin smaller resource with lesser neg value %+v should not fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"a": -5}},
+			smaller:  &Resource{Resources: map[string]Quantity{"a": -6, "b": 10}},
+			expected: true,
+			message:  "fitin smaller resource with higher neg value %+v should fit in larger %+v (skip undefined)",
+		},
+		{
+			larger:   &Resource{Resources: map[string]Quantity{"a": -5}},
+			smaller:  &Resource{Resources: map[string]Quantity{"a": -5, "b": 10}},
+			expected: true,
+			message:  "fitin smaller resource with equal neg value %+v should fit in larger %+v (skip undefined)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.message, func(t *testing.T) {
+			result := tc.larger.FitInActual(tc.smaller)
+			assert.Equal(t, result, tc.expected, tc.message, tc.smaller, tc.larger)
+		})
+	}
+}
+
 //nolint:funlen // thorough test
 func TestGetFairShare(t *testing.T) {
 	// 0 guarantee should be treated as absence of a gurantee
@@ -2396,6 +2467,33 @@ func TestResource_Prune(t *testing.T) {
 			original.Prune()
 			assert.Equal(t, len(tt.output), len(original.Resources), "unexpected resource types returned")
 			assert.Assert(t, maps.Equal(original.Resources, tt.output), "resource type maps are not equal")
+		})
+	}
+}
+
+func TestResource_ExtractLatestIfModified(t *testing.T) {
+	var tests = []struct {
+		caseName string
+		old      *Resource
+		new      *Resource
+		latest   *Resource
+	}{
+		{"nil case", nil, nil, nil},
+		{"nil with non empty", nil, NewResourceFromMap(map[string]Quantity{"first": 1}), nil},
+		{"non empty case", NewResourceFromMap(map[string]Quantity{"first": 1}), NewResourceFromMap(map[string]Quantity{"first": 2}), NewResourceFromMap(map[string]Quantity{"first": 2})},
+		{"non empty case, reversal", NewResourceFromMap(map[string]Quantity{"first": 2}), NewResourceFromMap(map[string]Quantity{"first": 1}), NewResourceFromMap(map[string]Quantity{"first": 1})},
+		{"non empty case, only one exist with different value", NewResourceFromMap(map[string]Quantity{"first": 1, "second": 2}), NewResourceFromMap(map[string]Quantity{"second": 3}), NewResourceFromMap(map[string]Quantity{"second": 3})},
+		{"non empty case, only one exist with same value", NewResourceFromMap(map[string]Quantity{"first": 1, "second": 2}), NewResourceFromMap(map[string]Quantity{"second": 2}), nil},
+		{"non empty case, disjoint sets and type doesn't exist", NewResourceFromMap(map[string]Quantity{"first": 1}), NewResourceFromMap(map[string]Quantity{"second": 2}), nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.caseName, func(t *testing.T) {
+			latest := ExtractLatestIfModified(tt.old, tt.new)
+			if tt.latest == nil {
+				assert.Equal(t, tt.latest, latest)
+			} else {
+				assert.Assert(t, DeepEquals(tt.latest, latest), "resource type maps are not equal")
+			}
 		})
 	}
 }

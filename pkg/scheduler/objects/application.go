@@ -1438,7 +1438,8 @@ func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allo
 		zap.Int("requiredNode allocations", result.requiredNodeAllocations),
 		zap.Int("allocations already preempted", result.alreadyPreemptedAllocations),
 		zap.Int("higher priority allocations", result.higherPriorityAllocations),
-		zap.Int("allocations with non-matching resources", result.atLeastOneResNotMatched))
+		zap.Int("allocations with non-matching resources", result.atLeastOneResNotMatched),
+		zap.Int("released placeholder allocations", result.releasedPhAllocations))
 	return false
 }
 

@@ -2196,10 +2196,39 @@ func (sq *Queue) MarkQuotaChangePreemptionRunning(run bool) {
 	sq.isQuotaChangePreemptionRunning = run
 }
 
-func (sq *Queue) IsQuotaChangePreemptionRunning() bool {
+func (sq *Queue) isQCPreemptionRunningForParent() bool {
+	if sq == nil {
+		return false
+	}
+	if sq.parent != nil {
+		if sq.parent.isQCPreemptionRunningForParent() {
+			return true
+		}
+	}
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.isQuotaChangePreemptionRunning
+}
+
+func (sq *Queue) isQCPreemptionRunningForChild() bool {
+	for _, child := range sq.GetCopyOfChildren() {
+		if child.isQCPreemptionRunningForChild() {
+			return true
+		}
+	}
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.isQuotaChangePreemptionRunning
+}
+
+func (sq *Queue) IsQCPreemptionRunning() bool {
+	if sq.isQCPreemptionRunningForParent() {
+		return true
+	}
+	if sq.isQCPreemptionRunningForChild() {
+		return true
+	}
+	return false
 }
 
 func (sq *Queue) GetMaxAppUnschedAskBackoff() uint64 {

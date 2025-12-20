@@ -177,12 +177,16 @@ func TestQuotaChangeFilterVictims(t *testing.T) {
 				asks[1].SetRequiredNode("node2")
 			}
 			if tc.irrelevantAllocations[1] {
-				asks[2].MarkPreempted()
-				asks[3].MarkPreempted()
+				err = asks[2].MarkPreempted()
+				assert.NilError(t, err)
+				err = asks[3].MarkPreempted()
+				assert.NilError(t, err)
 			}
 			if tc.irrelevantAllocations[2] {
-				asks[4].SetReleased(true)
-				asks[5].SetReleased(true)
+				err = asks[4].SetReleased(true)
+				assert.NilError(t, err)
+				err = asks[5].SetReleased(true)
+				assert.NilError(t, err)
 			}
 			preemptor := NewQuotaChangePreemptor(tc.queue)
 			preemptor.preemptableResource = tc.preemptableResource

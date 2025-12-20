@@ -19,12 +19,20 @@
 package objects
 
 import (
+	"time"
+
+	"go.uber.org/zap"
+
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type PreemptionContext struct {
 	node        *Node
 	requiredAsk *Allocation
+	application *Application
 	allocations []*Allocation
 }
 
@@ -36,13 +44,68 @@ type filteringResult struct {
 	alreadyPreemptedAllocations int // number of allocations already preempted
 }
 
-func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation) *PreemptionContext {
+func getRateLimitedReqNodeLog() *log.RateLimitedLogger {
+	initReqNodeLogOnce.Do(func() {
+		rateLimitedReqNodeLog = log.NewRateLimitedLogger(log.SchedRequiredNodePreemption, time.Minute)
+	})
+	return rateLimitedReqNodeLog
+}
+
+func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation, application *Application) *PreemptionContext {
 	preemptor := &PreemptionContext{
 		node:        node,
 		requiredAsk: requiredAsk,
+		application: application,
 		allocations: make([]*Allocation, 0),
 	}
 	return preemptor
+}
+
+func (p *PreemptionContext) tryPreemption() {
+	result := p.filterAllocations()
+	p.sortAllocations()
+
+	// Are there any victims/asks to preempt?
+	victims := p.GetVictims()
+	if len(victims) > 0 {
+		log.Log(log.SchedRequiredNodePreemption).Info("Found victims for required node preemption",
+			zap.String("ds allocation key", p.requiredAsk.GetAllocationKey()),
+			zap.String("allocation name", p.requiredAsk.GetAllocationName()),
+			zap.Int("no.of victims", len(victims)))
+		for _, victim := range victims {
+			err := victim.MarkPreempted()
+			if err != nil {
+				log.Log(log.SchedRequiredNodePreemption).Warn("allocation is already released, so not proceeding further on the daemon set preemption process",
+					zap.String("applicationID", p.requiredAsk.GetApplicationID()),
+					zap.String("allocationKey", victim.GetAllocationKey()))
+				continue
+			}
+			if victimQueue := p.application.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
+				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
+			} else {
+				log.Log(log.SchedRequiredNodePreemption).Warn("BUG: Queue not found for daemon set preemption victim",
+					zap.String("queue", p.application.queue.Name),
+					zap.String("victimApplicationID", victim.GetApplicationID()),
+					zap.String("victimAllocationKey", victim.GetAllocationKey()))
+			}
+			victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
+		}
+		p.requiredAsk.MarkTriggeredPreemption()
+		p.application.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
+			"preempting allocations to free up resources to run daemon set ask: "+p.requiredAsk.GetAllocationKey())
+	} else {
+		p.requiredAsk.LogAllocationFailure(common.NoVictimForRequiredNode, true)
+		p.requiredAsk.SendRequiredNodePreemptionFailedEvent(p.node.NodeID)
+		getRateLimitedReqNodeLog().Info("no victim found for required node preemption",
+			zap.String("allocation key", p.requiredAsk.GetAllocationKey()),
+			zap.String("allocation name", p.requiredAsk.GetAllocationName()),
+			zap.String("node", p.node.NodeID),
+			zap.Int("total allocations", result.totalAllocations),
+			zap.Int("requiredNode allocations", result.requiredNodeAllocations),
+			zap.Int("allocations already preempted", result.alreadyPreemptedAllocations),
+			zap.Int("higher priority allocations", result.higherPriorityAllocations),
+			zap.Int("allocations with non-matching resources", result.atLeastOneResNotMatched))
+	}
 }
 
 func (p *PreemptionContext) filterAllocations() filteringResult {

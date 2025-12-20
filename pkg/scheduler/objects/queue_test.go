@@ -2072,7 +2072,8 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	alloc2.released = false
 
 	// alloc2 has already been preempted and should not be considered a valid victim
-	alloc2.MarkPreempted()
+	err = alloc2.MarkPreempted()
+	assert.NilError(t, err, "failed to mark preempted node")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 	assert.Equal(t, 1, len(victims(snapshot)), "wrong victim count")
 	assert.Equal(t, alloc3.allocationKey, victims(snapshot)[0].allocationKey, "wrong alloc")

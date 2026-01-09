@@ -647,11 +647,34 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		return nil, false
 	}
 
+	// Has any victim released?
+	// (Placeholder ?) Allocation chosen as victim earlier in the beginning of preemption cycle but released in the meantime also should be prevented from
+	// proceeding further to avoid choosing the same allocation which is already at the verge of replacement process for this current preemption cycle.
+	var preemptedVictims []*Allocation
+	for _, victim := range finalVictims {
+		err := victim.MarkPreempted()
+		if err != nil {
+			log.Log(log.SchedPreemption).Info("Victim is already released, so marking earlier allocations as un preempted and not moving forward further on this preemption",
+				zap.String("askApplicationID", p.ask.applicationID),
+				zap.String("askAllocationKey", p.ask.allocationKey),
+				zap.String("victimApplicationID", victim.GetApplicationID()),
+				zap.String("victimAllocationKey", victim.GetAllocationKey()),
+				zap.Error(err))
+			// revert preempted victims (if any) to old state
+			for _, v := range preemptedVictims {
+				v.MarkUnPreempted()
+			}
+			// victim already released, so preemption doesn't help
+			p.ask.LogAllocationFailure(common.PreemptionVictimsReleased, true)
+			return nil, false
+		}
+		preemptedVictims = append(preemptedVictims, victim)
+	}
+
 	// preempt the victims
 	for _, victim := range finalVictims {
 		if victimQueue := p.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
 			victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
-			victim.MarkPreempted()
 			log.Log(log.SchedPreemption).Info("Preempting task",
 				zap.String("askApplicationID", p.ask.applicationID),
 				zap.String("askAllocationKey", p.ask.allocationKey),

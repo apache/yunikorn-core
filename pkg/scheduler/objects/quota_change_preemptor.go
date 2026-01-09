@@ -303,6 +303,13 @@ func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 	for app, victims := range apps {
 		if len(victims) > 0 {
 			for _, victim := range victims {
+				err := victim.MarkPreempted()
+				if err != nil {
+					log.Log(log.SchedRequiredNodePreemption).Warn("allocation is already released, so not proceeding further on the daemon set preemption process",
+						zap.String("applicationID", victim.applicationID),
+						zap.String("allocationKey", victim.GetAllocationKey()))
+					continue
+				}
 				log.Log(log.SchedQuotaChangePreemption).Info("Preempting victims for quota change preemption",
 					zap.String("queue", qcp.queue.GetQueuePath()),
 					zap.String("victim allocation key", victim.allocationKey),
@@ -311,7 +318,6 @@ func (qcp *QuotaChangePreemptionContext) preemptVictims() {
 					zap.String("victim node", victim.GetNodeID()),
 				)
 				qcp.queue.IncPreemptingResource(victim.GetAllocatedResource())
-				victim.MarkPreempted()
 				victim.SendPreemptedByQuotaChangeEvent(qcp.queue.GetQueuePath())
 			}
 			app.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,

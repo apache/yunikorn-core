@@ -3312,7 +3312,8 @@ func TestPreemptedPlaceholderSkip(t *testing.T) {
 	}
 
 	// mark the placeholder as preempted (shortcut not interested in usage accounting etc.)
-	ph.MarkPreempted()
+	err = ph.MarkPreempted()
+	assert.NilError(t, err, "failed to mark preempted placeholder")
 
 	// replace the placeholder should NOT work
 	result = partition.tryPlaceholderAllocate()

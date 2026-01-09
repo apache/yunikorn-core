@@ -652,6 +652,83 @@ func TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource(t *testing.T
 	assertAllocationLog(t, ask3, []string{common.PreemptionShortfall})
 }
 
+// TestTryPreemption_VictimReleased_InsufficientResource  Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accommodate, preemption happens because of queue resource constraint.xw
+// Guaranteed and Max resource set on both victim queue path and preemptor queue paths. victim and preemptor queue are siblings.
+// Request (Preemptor) resource type matches with all resource types of the victim. Guaranteed set only on that specific resource type.
+// Setup:
+// Nodes are Node1 and Node2. Node has enough space to accommodate the new ask.
+// root.parent. Max set on parent, first: 18
+// root.parent.child1. Guaranteed not set. 2 Allocations (belongs to single app) are running on node1 and node2. Each Allocation usage is first:5. Total usage is first:10.
+// root.parent.child2. Guaranteed set 5. Request of first:5 is waiting for resources.
+// root.parent.child3. Guaranteed not set. 1 Allocation is running on node2. Total usage is first:5.
+// Preemption options are 1. 2 Alloc running on Node 2 but on child 1 and child 3 queues.  2. 2 Alloc running on Node 2 and child 1 queue. 3. All three 3 allocs.
+// option 1 >> option 2 >> option 3. In option 3, preempting third allocation is unnecessary, should avoid this option.
+// Either option 1 or option2 is fine, but not option 3.
+// Though victims are available in the beginning, some of those are "released" in the meantime. Hence, preemption process is halted and cannot proceed with the remaining victims
+func TestTryPreemption_VictimReleased_InsufficientResource(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 30})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 30})
+	iterator := getNodeIteratorFn(node1, node2)
+	rootQ, err := createRootQueue(map[string]string{"first": "60"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "18"}, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "15"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ3, err := createManagedQueueGuaranteed(parentQ, "child3", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+
+	alloc1, alloc2, err := creatApp1(childQ1, node1, node2, map[string]resources.Quantity{"first": 5}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app3 := newApplication(appID3, "default", "root.parent.child3")
+	app3.SetQueue(childQ3)
+	childQ3.AddApplication(app3)
+	appQueueMapping.AddAppQueueMapping(app3.ApplicationID, childQ3)
+
+	ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask4.createTime = time.Now()
+	assert.NilError(t, app3.AddAllocationAsk(ask4))
+
+	alloc4 := newAllocationWithKey("alloc4", appID3, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	alloc4.createTime = ask4.createTime
+	app3.AddAllocation(alloc4)
+	assert.Check(t, node2.TryAddAllocation(alloc4), "node alloc2 failed")
+	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 10}, "alloc3", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	// Init Queue snapshots before in hand so that victims collection process does not miss "alloc4"
+	preemptor.initQueueSnapshots()
+
+	// Now that this has been included in the victims list, release it so that it preemption fail at the end.
+	err = alloc4.SetReleased(true)
+	assert.NilError(t, err)
+
+	allocs := map[string]string{}
+	allocs["alloc3"] = nodeID2
+
+	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+
+	assert.Assert(t, result == nil, "unexpected result")
+	assert.Equal(t, ok, false, "no victims found")
+	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
+	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	assert.Check(t, !alloc4.IsPreempted(), "alloc2 preempted")
+	assertAllocationLog(t, ask3, []string{common.PreemptionVictimsReleased})
+}
+
 // TestTryPreemption_VictimsAvailableOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue path. victim and preemptor queue are siblings.
 // Request (Preemptor) resource type matches with 1 resource type of the victim. Guaranteed also set on specific resource type. 2 Victims are available, but total resource usage is lesser than ask requirement.

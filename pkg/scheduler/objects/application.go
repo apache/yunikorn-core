@@ -351,9 +351,9 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				}
 				log.Log(log.SchedApplication).Info("application is getting timed out, releasing allocated placeholders",
 					zap.String("AppID", sa.ApplicationID),
-					zap.Int("placeholders being replaced", replacing),
-					zap.Int("placeholders already preempted while tried to release", preempted),
-					zap.Int("releasing placeholders", len(toRelease)))
+					zap.Int("replaced", replacing),
+					zap.Int("preempted", preempted),
+					zap.Int("releasing", len(toRelease)))
 				sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
@@ -429,9 +429,9 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		}
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing allocated placeholders",
 			zap.String("AppID", sa.ApplicationID),
-			zap.Int("placeholders being replaced", replacing),
-			zap.Int("placeholders already preempted while tried to release", preempted),
-			zap.Int("releasing placeholders", len(toRelease)))
+			zap.Int("replaced", replacing),
+			zap.Int("preempted", preempted),
+			zap.Int("releasing", len(toRelease)))
 		// trigger the release of the placeholders: accounting updates when the release is done
 		sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 	} else {
@@ -478,9 +478,9 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		}
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing allocated and pending placeholders",
 			zap.String("AppID", sa.ApplicationID),
-			zap.Int("releasing placeholders", len(toRelease)),
-			zap.Int("pending placeholders", len(pendingRelease)),
-			zap.Int("placeholders already preempted while tried to release", preempted),
+			zap.Int("releasing", len(toRelease)),
+			zap.Int("pending", len(pendingRelease)),
+			zap.Int("preempted", preempted),
 			zap.String("gang scheduling style", sa.gangSchedulingStyle))
 		sa.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
 		// trigger the release of the allocated placeholders: accounting updates when the release is done

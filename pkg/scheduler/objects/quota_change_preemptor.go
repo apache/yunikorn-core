@@ -51,7 +51,7 @@ func NewQuotaChangePreemptor(queue *Queue) *QuotaChangePreemptionContext {
 }
 
 func (qcp *QuotaChangePreemptionContext) CheckPreconditions() bool {
-	if !qcp.queue.IsManaged() || qcp.queue.IsQuotaChangePreemptionRunning() {
+	if !qcp.queue.IsManaged() || qcp.queue.IsQCPreemptionRunning() {
 		return false
 	}
 	if qcp.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(qcp.queue.GetAllocatedResource()) {

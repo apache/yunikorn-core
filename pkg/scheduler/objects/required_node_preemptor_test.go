@@ -50,7 +50,7 @@ func TestFilterAllocations(t *testing.T) {
 	p := NewRequiredNodePreemptor(node, requiredAsk, app)
 	asks := prepareAllocationAsks(t, node)
 	result := p.filterAllocations()
-	verifyFilterResult(t, 10, 0, 10, 0, 0, result)
+	verifyFilterResult(t, 10, 0, 10, 0, 0, 0, result)
 	filteredAllocations := p.getAllocations()
 
 	// allocations are not even considered as there is no match. of course, no victims
@@ -63,7 +63,7 @@ func TestFilterAllocations(t *testing.T) {
 	p1 := NewRequiredNodePreemptor(node, requiredAsk1, app)
 	asks = prepareAllocationAsks(t, node)
 	result = p1.filterAllocations()
-	verifyFilterResult(t, 10, 0, 0, 10, 0, result)
+	verifyFilterResult(t, 10, 0, 0, 10, 0, 0, result)
 	filteredAllocations = p.getAllocations()
 
 	// allocations are not even considered as there is no match. of course, no victims
@@ -76,7 +76,7 @@ func TestFilterAllocations(t *testing.T) {
 	p2 := NewRequiredNodePreemptor(node, requiredAsk2, app)
 	asks = prepareAllocationAsks(t, node)
 	result = p2.filterAllocations()
-	verifyFilterResult(t, 10, 0, 0, 0, 0, result)
+	verifyFilterResult(t, 10, 0, 0, 0, 0, 0, result)
 	filteredAllocations = p2.getAllocations()
 	assert.Equal(t, len(filteredAllocations), 10)
 	removeAllocationAsks(node, asks)
@@ -91,7 +91,7 @@ func TestFilterAllocations(t *testing.T) {
 	result = p3.filterAllocations()
 	p3.sortAllocations()
 
-	verifyFilterResult(t, 10, 0, 0, 0, 1, result)
+	verifyFilterResult(t, 10, 0, 0, 0, 1, 0, result)
 	filteredAllocations = p3.getAllocations()
 	assert.Equal(t, len(filteredAllocations), 9) // "ask5" is no longer considered as a victim
 	removeAllocationAsks(node, asks)
@@ -100,15 +100,25 @@ func TestFilterAllocations(t *testing.T) {
 	requiredAsk4 := createAllocationAsk("ask12", "app1", true, true, 20,
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	p4 := NewRequiredNodePreemptor(node, requiredAsk4, app)
-	_ = prepareAllocationAsks(t, node)
-	allocReqNode := createAllocation("ask11", "app1", node.NodeID, true, true, 5, true,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	assert.Assert(t, node.TryAddAllocation(allocReqNode))
+	results := prepareAllocationAsks(t, node)
+	results[8].requiredNode = "node-3"
 
 	result = p4.filterAllocations()
-	verifyFilterResult(t, 11, 1, 0, 0, 0, result)
+	verifyFilterResult(t, 10, 1, 0, 0, 0, 0, result)
 	filteredAllocations = p4.getAllocations()
-	assert.Equal(t, len(filteredAllocations), 10)
+	assert.Equal(t, len(filteredAllocations), 9)
+	removeAllocationAsks(node, asks)
+
+	// case 6: release ph allocation
+	p5 := NewRequiredNodePreemptor(node, requiredAsk2, app)
+	results = prepareAllocationAsks(t, node)
+	results[9].released = true
+
+	result = p5.filterAllocations()
+	verifyFilterResult(t, 10, 0, 0, 0, 0, 1, result)
+	filteredAllocations = p5.getAllocations()
+	assert.Equal(t, len(filteredAllocations), 9)
+	removeAllocationAsks(node, asks)
 }
 
 func TestGetVictims(t *testing.T) {
@@ -190,11 +200,12 @@ func TestGetVictims(t *testing.T) {
 	removeAllocationAsks(node, asks)
 }
 
-func verifyFilterResult(t *testing.T, totalAllocations, requiredNodeAllocations, resourceNotEnough, higherPriorityAllocations, alreadyPreemptedAllocations int, result filteringResult) {
+func verifyFilterResult(t *testing.T, totalAllocations, requiredNodeAllocations, resourceNotEnough, higherPriorityAllocations, alreadyPreemptedAllocations int, releasedPhAllocations int, result filteringResult) {
 	t.Helper()
 	assert.Equal(t, totalAllocations, result.totalAllocations)
 	assert.Equal(t, requiredNodeAllocations, result.requiredNodeAllocations)
 	assert.Equal(t, resourceNotEnough, result.atLeastOneResNotMatched)
 	assert.Equal(t, higherPriorityAllocations, result.higherPriorityAllocations)
 	assert.Equal(t, alreadyPreemptedAllocations, result.alreadyPreemptedAllocations)
+	assert.Equal(t, releasedPhAllocations, result.releasedPhAllocations)
 }

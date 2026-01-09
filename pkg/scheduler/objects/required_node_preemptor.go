@@ -42,6 +42,7 @@ type filteringResult struct {
 	atLeastOneResNotMatched     int // number of allocations where there's no single resource type that would match
 	higherPriorityAllocations   int // number of allocations with higher priority
 	alreadyPreemptedAllocations int // number of allocations already preempted
+	releasedPhAllocations       int // number of ph allocations released
 }
 
 func getRateLimitedReqNodeLog() *log.RateLimitedLogger {
@@ -136,6 +137,13 @@ func (p *PreemptionContext) filterAllocations() filteringResult {
 			result.atLeastOneResNotMatched++
 			continue
 		}
+
+		// skip placeholder tasks which are marked released
+		if allocation.IsReleased() {
+			result.releasedPhAllocations++
+			continue
+		}
+
 		p.allocations = append(p.allocations, allocation)
 	}
 

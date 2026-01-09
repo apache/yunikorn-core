@@ -3143,3 +3143,56 @@ func TestQueueBackoffProperties(t *testing.T) {
 	assert.Equal(t, uint64(0), leaf3.GetMaxAppUnschedAskBackoff())
 	assert.Equal(t, 30*time.Second, leaf3.GetBackoffDelay())
 }
+
+func TestQueue_IsQCPreemptionRunning(t *testing.T) {
+	// create the root
+	root, err := createManagedQueueMaxApps(nil, "root", true, nil, 1)
+	assert.NilError(t, err, "queue create failed")
+	parent, err := createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+
+	var leaf, leaf2, leaf11, leaf111 *Queue
+	leaf, err = createManagedQueue(parent, "leaf", true, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	leaf2, err = createManagedQueue(parent, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	leaf11, err = createManagedQueue(leaf, "leaf11", true, nil)
+	assert.NilError(t, err, "failed to create leaf11 queue")
+
+	leaf111, err = createManagedQueue(leaf11, "leaf111", false, nil)
+	assert.NilError(t, err, "failed to create leaf111 queue")
+
+	// root.parent is running. any queue located in this hierarchy (both upwards and downwards) should return true. All branches of parent should return true.
+	parent.isQuotaChangePreemptionRunning = true
+	assert.Equal(t, parent.IsQCPreemptionRunning(), true)
+	assert.Equal(t, root.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf111.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf11.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf2.IsQCPreemptionRunning(), true)
+
+	// reset
+	parent.isQuotaChangePreemptionRunning = false
+
+	// root.parent.leaf111 (leaf queue) is running. any queue located in this hierarchy (upwards) should return true. Other branches of parent should return false.
+	leaf111.isQuotaChangePreemptionRunning = true
+	assert.Equal(t, parent.IsQCPreemptionRunning(), true)
+	assert.Equal(t, root.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf111.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf11.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf2.IsQCPreemptionRunning(), false)
+
+	// reset
+	leaf111.isQuotaChangePreemptionRunning = false
+
+	// root.parent.leaf2 (leaf queue) is running. any queue located in this hierarchy (upwards) should return true. Other branches of parent should return false.
+	leaf2.isQuotaChangePreemptionRunning = true
+	assert.Equal(t, parent.IsQCPreemptionRunning(), true)
+	assert.Equal(t, root.IsQCPreemptionRunning(), true)
+	assert.Equal(t, leaf111.IsQCPreemptionRunning(), false)
+	assert.Equal(t, leaf11.IsQCPreemptionRunning(), false)
+	assert.Equal(t, leaf.IsQCPreemptionRunning(), false)
+	assert.Equal(t, leaf2.IsQCPreemptionRunning(), true)
+}

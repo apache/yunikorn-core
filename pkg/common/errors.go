@@ -41,4 +41,5 @@ const (
 	PreemptionDoesNotHelp          = "Preemption does not help"
 	NoVictimForRequiredNode        = "No fit on required node, preemption does not help"
 	PreemptionMaxAttemptsExhausted = "Preemption max attempts exhausted"
+	PreemptionVictimsReleased      = "Victims picked earlier were released at the final stage"
 )

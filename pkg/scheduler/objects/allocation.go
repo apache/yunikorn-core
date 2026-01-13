@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -294,10 +295,16 @@ func (a *Allocation) IsReleased() bool {
 }
 
 // SetReleased updates the release status of the allocation.
-func (a *Allocation) SetReleased(released bool) {
+func (a *Allocation) SetReleased(released bool) error {
 	a.Lock()
 	defer a.Unlock()
+	if released {
+		if a.preempted {
+			return errors.New("allocation is already preempted")
+		}
+	}
 	a.released = released
+	return nil
 }
 
 // GetTagsClone returns the copy of the tags for this allocation.
@@ -348,10 +355,21 @@ func (a *Allocation) SetAllocatedResource(allocatedResource *resources.Resource)
 }
 
 // MarkPreempted marks the allocation as preempted.
-func (a *Allocation) MarkPreempted() {
+func (a *Allocation) MarkPreempted() error {
 	a.Lock()
 	defer a.Unlock()
+	if a.released {
+		return errors.New("allocation is already released")
+	}
 	a.preempted = true
+	return nil
+}
+
+// MarkUnPreempted unmarks the allocation as preempted.
+func (a *Allocation) MarkUnPreempted() {
+	a.Lock()
+	defer a.Unlock()
+	a.preempted = false
 }
 
 // IsPreempted returns whether the allocation has been marked for preemption or not.

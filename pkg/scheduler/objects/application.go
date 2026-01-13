@@ -330,15 +330,30 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 				zap.String("state", sa.stateMachine.Current()))
 			// if the app is completing, but there are placeholders left, first do the cleanup
 			if sa.IsCompleting() && !resources.IsZero(sa.allocatedPlaceholder) {
+				replacing := 0
+				preempted := 0
 				var toRelease []*Allocation
 				for _, alloc := range sa.getPlaceholderAllocations() {
 					// skip over the allocations that are already marked for release
 					if alloc.IsReleased() {
+						replacing++
 						continue
 					}
-					alloc.SetReleased(true)
+					err := alloc.SetReleased(true)
+					if err != nil {
+						log.Log(log.SchedApplication).Warn("allocation is already preempted, so skipping release process",
+							zap.String("applicationID", sa.ApplicationID),
+							zap.String("allocationKey", alloc.GetAllocationKey()))
+						preempted++
+						continue
+					}
 					toRelease = append(toRelease, alloc)
 				}
+				log.Log(log.SchedApplication).Info("application is getting timed out, releasing allocated placeholders",
+					zap.String("AppID", sa.ApplicationID),
+					zap.Int("replaced", replacing),
+					zap.Int("preempted", preempted),
+					zap.Int("releasing", len(toRelease)))
 				sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
 			} else {
@@ -395,19 +410,28 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
 		var toRelease []*Allocation
 		replacing := 0
+		preempted := 0
 		for _, alloc := range sa.getPlaceholderAllocations() {
 			// skip over the allocations that are already marked for release, they will be replaced soon
 			if alloc.IsReleased() {
 				replacing++
 				continue
 			}
-			alloc.SetReleased(true)
+			err := alloc.SetReleased(true)
+			if err != nil {
+				log.Log(log.SchedApplication).Warn("allocation is already preempted, so skipping release process",
+					zap.String("applicationID", sa.ApplicationID),
+					zap.String("allocationKey", alloc.GetAllocationKey()))
+				preempted++
+				continue
+			}
 			toRelease = append(toRelease, alloc)
 		}
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing allocated placeholders",
 			zap.String("AppID", sa.ApplicationID),
-			zap.Int("placeholders being replaced", replacing),
-			zap.Int("releasing placeholders", len(toRelease)))
+			zap.Int("replaced", replacing),
+			zap.Int("preempted", preempted),
+			zap.Int("releasing", len(toRelease)))
 		// trigger the release of the placeholders: accounting updates when the release is done
 		sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
 	} else {
@@ -425,22 +449,38 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		}
 		// all allocations are placeholders release them all
 		var toRelease, pendingRelease []*Allocation
+		preempted := 0
 		for _, alloc := range sa.allocations {
-			alloc.SetReleased(true)
+			err := alloc.SetReleased(true)
+			if err != nil {
+				log.Log(log.SchedApplication).Warn("allocation is already preempted, so skipping release process",
+					zap.String("applicationID", sa.ApplicationID),
+					zap.String("allocationKey", alloc.GetAllocationKey()))
+				preempted++
+				continue
+			}
 			toRelease = append(toRelease, alloc)
 		}
 		// get all open requests and remove them all filter out already allocated as they are already released
 		for _, alloc := range sa.requests {
 			if !alloc.IsAllocated() {
-				alloc.SetReleased(true)
+				err := alloc.SetReleased(true)
+				if err != nil {
+					log.Log(log.SchedApplication).Warn("allocation is already preempted, so skipping release process",
+						zap.String("applicationID", sa.ApplicationID),
+						zap.String("allocationKey", alloc.GetAllocationKey()))
+					preempted++
+					continue
+				}
 				pendingRelease = append(pendingRelease, alloc)
 				sa.placeholderData[alloc.taskGroupName].TimedOut++
 			}
 		}
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing allocated and pending placeholders",
 			zap.String("AppID", sa.ApplicationID),
-			zap.Int("releasing placeholders", len(toRelease)),
-			zap.Int("pending placeholders", len(pendingRelease)),
+			zap.Int("releasing", len(toRelease)),
+			zap.Int("pending", len(pendingRelease)),
+			zap.Int("preempted", preempted),
 			zap.String("gang scheduling style", sa.gangSchedulingStyle))
 		sa.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
 		// trigger the release of the allocated placeholders: accounting updates when the release is done
@@ -1202,9 +1242,15 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 					zap.String("placeholderKey", ph.GetAllocationKey()),
 					zap.Stringer("placeholder resource", ph.GetAllocatedResource()))
 				// release the placeholder and tell the RM
-				ph.SetReleased(true)
-				sa.notifyRMAllocationReleased([]*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
-				sa.appEvents.SendPlaceholderLargerEvent(ph.taskGroupName, sa.ApplicationID, ph.allocationKey, request.GetAllocatedResource(), ph.GetAllocatedResource())
+				err := ph.SetReleased(true)
+				if err != nil {
+					log.Log(log.SchedApplication).Warn("allocation is already preempted, so skipping placeholder cancellation",
+						zap.String("applicationID", sa.ApplicationID),
+						zap.String("allocationKey", ph.GetAllocationKey()))
+				} else {
+					sa.notifyRMAllocationReleased([]*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
+					sa.appEvents.SendPlaceholderLargerEvent(ph.taskGroupName, sa.ApplicationID, ph.allocationKey, request.GetAllocatedResource(), ph.GetAllocatedResource())
+				}
 				continue
 			}
 			// placeholder is the same or larger continue processing and difference is handled when the placeholder
@@ -1228,7 +1274,25 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 				// placeholder point to the real one in the releases list
 				ph.SetRelease(request)
 				// mark placeholder as released
-				ph.SetReleased(true)
+				err = ph.SetReleased(true)
+				if err != nil {
+					log.Log(log.SchedApplication).Warn("allocation is already preempted, so not proceeding further and reverting to old state",
+						zap.String("applicationID", sa.ApplicationID),
+						zap.String("allocationKey", ph.GetAllocationKey()))
+
+					// revert: allocate ask
+					_, err = sa.deallocateAsk(request)
+					if err != nil {
+						log.Log(log.SchedApplication).Warn("deallocation of ask failed unexpectedly",
+							zap.Error(err))
+					}
+					// revert: double link to make it easier to find
+					// alloc (the real one) releases points to the placeholder in the releases list
+					request.ClearRelease()
+					// revert: placeholder point to the real one in the releases list
+					ph.ClearRelease()
+					continue
+				}
 				// bind node here so it will be handled properly upon replacement
 				request.SetBindTime(time.Now())
 				request.SetNodeID(node.NodeID)
@@ -1285,7 +1349,34 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			// placeholder point to the real one in the releases list
 			phFit.SetRelease(reqFit)
 			// mark placeholder as released
-			phFit.SetReleased(true)
+			err = phFit.SetReleased(true)
+
+			if err != nil {
+				log.Log(log.SchedApplication).Warn("allocation is already preempted, so not proceeding further and reverting to old state",
+					zap.String("applicationID", sa.ApplicationID),
+					zap.String("allocationKey", phFit.GetAllocationKey()))
+
+				// revert: node allocation
+				if alloc := node.RemoveAllocation(reqFit.GetAllocationKey()); alloc != nil {
+					log.Log(log.SchedApplication).Debug("Reverting: Node removal failed unexpectedly",
+						zap.String("applicationID", sa.ApplicationID),
+						zap.Stringer("alloc", reqFit))
+				}
+
+				// revert: allocate ask
+				_, err = sa.deallocateAsk(reqFit)
+				if err != nil {
+					log.Log(log.SchedApplication).Warn("deallocation of ask failed unexpectedly",
+						zap.Error(err))
+				}
+				// revert: double link to make it easier to find
+				// alloc (the real one) releases points to the placeholder in the releases list
+				reqFit.ClearRelease()
+				// revert: placeholder point to the real one in the releases list
+				phFit.ClearRelease()
+				return false
+			}
+
 			// bind node here so it will be handled properly upon replacement
 			reqFit.SetBindTime(time.Now())
 			reqFit.SetNodeID(node.NodeID)
@@ -1340,7 +1431,9 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		// Do we need a specific node?
 		if ask.GetRequiredNode() != "" {
 			if !reserve.node.CanAllocate(ask.GetAllocatedResource()) && !ask.HasTriggeredPreemption() {
-				sa.tryRequiredNodePreemption(reserve, ask)
+				// try preemption and see if we can free up resource
+				preemptor := NewRequiredNodePreemptor(reserve.node, ask, sa)
+				preemptor.tryPreemption()
 				continue
 			}
 		}
@@ -1401,46 +1494,6 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 
 	// attempt preemption
 	return preemptor.TryPreemption()
-}
-
-func (sa *Application) tryRequiredNodePreemption(reserve *reservation, ask *Allocation) bool {
-	// try preemption and see if we can free up resource
-	preemptor := NewRequiredNodePreemptor(reserve.node, ask)
-	result := preemptor.filterAllocations()
-	preemptor.sortAllocations()
-
-	// Are there any victims/asks to preempt?
-	victims := preemptor.GetVictims()
-	if len(victims) > 0 {
-		log.Log(log.SchedApplication).Info("Found victims for required node preemption",
-			zap.String("ds allocation key", ask.GetAllocationKey()),
-			zap.String("allocation name", ask.GetAllocationName()),
-			zap.Int("no.of victims", len(victims)))
-		for _, victim := range victims {
-			if victimQueue := sa.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
-				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
-			}
-			victim.MarkPreempted()
-			victim.SendPreemptedBySchedulerEvent(ask.GetAllocationKey(), ask.GetApplicationID(), sa.ApplicationID)
-		}
-		ask.MarkTriggeredPreemption()
-		sa.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
-			"preempting allocations to free up resources to run daemon set ask: "+ask.GetAllocationKey())
-		return true
-	}
-	ask.LogAllocationFailure(common.NoVictimForRequiredNode, true)
-	ask.SendRequiredNodePreemptionFailedEvent(reserve.node.NodeID)
-	getRateLimitedReqNodeLog().Info("no victim found for required node preemption",
-		zap.String("allocation key", ask.GetAllocationKey()),
-		zap.String("allocation name", ask.GetAllocationName()),
-		zap.String("node", reserve.node.NodeID),
-		zap.Int("total allocations", result.totalAllocations),
-		zap.Int("requiredNode allocations", result.requiredNodeAllocations),
-		zap.Int("allocations already preempted", result.alreadyPreemptedAllocations),
-		zap.Int("higher priority allocations", result.higherPriorityAllocations),
-		zap.Int("allocations with non-matching resources", result.atLeastOneResNotMatched),
-		zap.Int("released placeholder allocations", result.releasedPhAllocations))
-	return false
 }
 
 // tryNodesNoReserve tries all the nodes for a reserved request that have not been tried yet.
@@ -2217,13 +2270,6 @@ func getRateLimitedAppLog() *log.RateLimitedLogger {
 		rateLimitedAppLog = log.NewRateLimitedLogger(log.SchedApplication, time.Second)
 	})
 	return rateLimitedAppLog
-}
-
-func getRateLimitedReqNodeLog() *log.RateLimitedLogger {
-	initReqNodeLogOnce.Do(func() {
-		rateLimitedReqNodeLog = log.NewRateLimitedLogger(log.SchedApplication, time.Minute)
-	})
-	return rateLimitedReqNodeLog
 }
 
 func (sa *Application) updateRunnableStatus(runnableInQueue, runnableByUserLimit bool) {

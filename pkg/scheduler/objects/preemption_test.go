@@ -44,7 +44,17 @@ func creatApp1(
 	app1Rec map[string]resources.Quantity,
 	appQueueMapping *AppQueueMapping,
 ) (*Allocation, *Allocation, error) {
-	app1 := newApplication(appID1, "default", "root.parent.child1")
+	return creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, app1Rec, app1Rec, appQueueMapping)
+}
+
+func creatApp1WithTwoDifferentAllocations(
+	childQ1 *Queue,
+	node1 *Node,
+	node2 *Node,
+	app1Rec map[string]resources.Quantity,
+	app2Rec map[string]resources.Quantity, appQueueMapping *AppQueueMapping,
+) (*Allocation, *Allocation, error) {
+	app1 := newApplication(appID1, "default", childQ1.QueuePath)
 	app1.SetQueue(childQ1)
 	childQ1.AddApplication(app1)
 	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
@@ -54,7 +64,7 @@ func creatApp1(
 	if err := app1.AddAllocationAsk(ask1); err != nil {
 		return nil, nil, err
 	}
-	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(app1Rec))
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(app2Rec))
 	ask2.createTime = time.Now()
 	if err := app1.AddAllocationAsk(ask2); err != nil {
 		return nil, nil, err
@@ -68,14 +78,14 @@ func creatApp1(
 	}
 	var alloc2 *Allocation
 	if node2 != nil {
-		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID2, resources.NewResourceFromMap(app1Rec))
+		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID2, resources.NewResourceFromMap(app2Rec))
 		alloc2.createTime = ask2.createTime
 		app1.AddAllocation(alloc2)
 		if !node2.TryAddAllocation(alloc2) {
 			return nil, nil, fmt.Errorf("node alloc2 failed")
 		}
 	} else {
-		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(app1Rec))
+		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(app2Rec))
 		alloc2.createTime = ask2.createTime
 		if !node1.TryAddAllocation(alloc2) {
 			return nil, nil, fmt.Errorf("node alloc2 failed")
@@ -98,7 +108,7 @@ func creatApp2(
 	allocID string,
 	appQueueMapping *AppQueueMapping,
 ) (*Application, *Allocation, error) {
-	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2 := newApplication(appID2, "default", childQ2.QueuePath)
 	app2.SetQueue(childQ2)
 	childQ2.AddApplication(app2)
 	appQueueMapping.AddAppQueueMapping(app2.ApplicationID, childQ2)
@@ -226,7 +236,8 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 		t.Run(tt.testName, func(t *testing.T) {
 			appQueueMapping := NewAppQueueMapping()
 			node := newNode("node1", map[string]resources.Quantity{"first": 20})
-			iterator := getNodeIteratorFn(node)
+			node2 := newNode("node2", map[string]resources.Quantity{"first": 20})
+			iterator := getNodeIteratorFn(node, node2)
 			rootQ, err := createRootQueue(map[string]string{"first": "20"})
 			assert.NilError(t, err)
 			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{}, tt.parentGuaranteed, appQueueMapping)
@@ -236,7 +247,7 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 			childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{}, tt.childGuaranteed, appQueueMapping)
 			assert.NilError(t, err)
 
-			alloc1, alloc2, err := creatApp1(childQ1, node, nil, map[string]resources.Quantity{"first": 5}, appQueueMapping)
+			alloc1, alloc2, err := creatApp1(childQ1, node, node2, map[string]resources.Quantity{"first": 5}, appQueueMapping)
 			assert.NilError(t, err)
 			assert.Assert(t, alloc1 != nil, "alloc1 should not be nil")
 			assert.Assert(t, alloc2 != nil, "alloc2 should not be nil")
@@ -257,6 +268,54 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 				assert.Equal(t, len(ask3.GetAllocationLog()), 1)
 				assertAllocationLog(t, ask3, []string{common.PreemptionDoesNotGuarantee})
 			}
+		})
+	}
+}
+
+func TestIsAskQueueUnderGuaranteed(t *testing.T) {
+	var tests = []struct {
+		testName    string
+		askResource *resources.Resource
+		askQueue    *resources.Resource
+		expected    bool
+	}{
+		{"matching res types with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), true},
+		{"matching res types with zero value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), true},
+		{"matching res types with -ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10}), false},
+		{"matching res types, one with -ve value and another with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": -10}), false},
+		{"both matching res types  with +ve value and non matching res types with -ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": -10}), true},
+		{"both matching res types  with -ve value and non matching res types with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10, "second": 10}), false},
+		{"both matching res types  with +ve value and non matching res types", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "third": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), true},
+		{"both matching res types  with -ve value and non matching res types", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "third": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10}), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			assert.Equal(t, isAskQueueUnderGuaranteed(tt.askResource, tt.askQueue), tt.expected)
+		})
+	}
+}
+
+func TestIsVictimQueueOverGuaranteed(t *testing.T) {
+	var tests = []struct {
+		testName    string
+		askResource *resources.Resource
+		victimQueue *resources.Resource
+		expected    bool
+	}{
+		{"matching res types with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), false},
+		{"matching res types with zero value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0}), false},
+		{"matching res types with -ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10}), true},
+		{"matching res types, one with -ve value and another with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": -10}), true},
+		{"both matching res types  with +ve value and non matching res types with -ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": -10}), false},
+		{"both matching res types  with -ve value and non matching res types with +ve value", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10, "second": 10}), true},
+		{"both matching res types  with +ve value and non matching res types", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "third": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), false},
+		{"both matching res types  with -ve value and non matching res types", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "third": 1}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": -10}), true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			assert.Equal(t, isVictimQueueOverGuaranteed(tt.askResource, tt.victimQueue), tt.expected)
 		})
 	}
 }
@@ -1879,4 +1938,234 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Si
 	assert.Equal(t, nodeID1, alloc2.nodeID, "wrong node")
 	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+}
+
+// TestTryPreemption_VictimQueue_With_OG_And_UG_ResTypes Test try preemption with 2 level queue hierarchy.
+// Guaranteed set on both victim queue path and preemptor queue path.
+// Victim queue has used some res types only but not all defined in guaranteed.
+// Request (Preemptor) resource type matches with victim's queue used resource types, but not all the resource types defined in guaranteed.
+// Though not all res types defined in victim's guaranteed not being used and not has any relevance from preemptor ask resource requirement perspective, preemption should
+// be triggerred and consider the victim queue as candidate and kill the victims whose resource type matches with ask res types.
+// Setup:
+// Nodes are Node1 & Node2. Node has enough space to accommodate the new ask.
+// root.parent.child1. Guaranteed set on root.parent.child1, first: 10, second: 2 Allocations (belongs to single app) are running. Each Allocation usage is first:10. Total usage is first:20.
+// root.parent.child2. Guaranteed set on root.parent.child2, first: 10. Request of first: 5 is waiting for resources.
+// 1 Allocation on root.parent.child1 should be preempted to free up resources for ask arrived in root.parent.child2 even though some guaranteed resource types is not being used at all.
+func TestTryPreemption_VictimQueue_With_OG_And_UG_ResTypes(t *testing.T) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "second": 2})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "second": 2})
+	iterator := getNodeIteratorFn(node1, node2)
+	appQueueMapping := NewAppQueueMapping()
+	rootQ, err := createRootQueue(map[string]string{"first": "20", "storage": "4"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "4"}, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "10", "second": "2"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "10"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	alloc1, alloc2, err := creatApp1(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 4})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result != nil, "unexpected result")
+	assert.Equal(t, ok, true, "victims found")
+	assert.Check(t, alloc1.IsPreempted() || alloc2.IsPreempted(), "alloc1 or alloc2 preempted")
+}
+
+// TestTryPreemption_VictimQueue_Under_Diff_Parent_With_OG_And_UG_ResTypes Test try preemption with 3 level queue hierarchy.
+// Guaranteed set on both victim queue path and preemptor queue path.
+// Victim queue has used some res types only but not all defined in guaranteed.
+// Request (Preemptor) resource type matches with victim's queue used resource types, but not all the resource types defined in guaranteed.
+// Though not all res types defined in victim's guaranteed not being used and not has any relevance from preemptor ask resource requirement perspective, preemption should
+// be triggerred and consider the victim queue as candidate and kill the victims whose resource type matches with ask res types.
+// Setup:
+// Nodes are Node1 & Node2. Node has enough space to accommodate the new ask.
+// root.parent.parent1.child1. Guaranteed set on root.parent.parent1.child1, first: 10, second: 2 Allocations (belongs to single app) are running. Each Allocation usage is first:10. Total usage is first:20.
+// root.parent.parent2.child2. Guaranteed set on root.parent.parent2.child2, first: 10. Request of first: 5 is waiting for resources.
+// 1 Allocation on root.parent.parent1.child1 should be preempted to free up resources for ask arrived in root.parent.parent2.child2 even though some guaranteed resource types of parent2 is not being used at all.
+func TestTryPreemption_VictimQueue_Under_Diff_Parent_With_OG_And_UG_ResTypes(t *testing.T) {
+	var tests = []struct {
+		testName               string
+		victimParentGuaranteed map[string]string
+		askParentGuaranteed    map[string]string
+		victimChildGuaranteed  map[string]string
+		askChildGuaranteed     map[string]string
+	}{
+		{"victim queue under parent different from ask queue with some OG res types", map[string]string{"first": "10", "second": "2"}, map[string]string{"first": "10"}, nil, nil},
+		{"victim queue with some OG res types under parent different from ask queue", nil, nil, map[string]string{"first": "10", "second": "2"}, map[string]string{"first": "10"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "second": 2})
+			node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "second": 2})
+			iterator := getNodeIteratorFn(node1, node2)
+			appQueueMapping := NewAppQueueMapping()
+			rootQ, err := createRootQueue(map[string]string{"first": "20", "storage": "4"})
+			assert.NilError(t, err)
+			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "4"}, nil, appQueueMapping)
+			assert.NilError(t, err)
+			parentQ1, err := createManagedQueueGuaranteed(parentQ, "parent1", true, nil, tt.victimParentGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+			parentQ2, err := createManagedQueueGuaranteed(parentQ, "parent2", true, nil, tt.askParentGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+			childQ1, err := createManagedQueueGuaranteed(parentQ1, "child1", false, nil, tt.victimChildGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+			childQ2, err := createManagedQueueGuaranteed(parentQ2, "child2", false, nil, tt.askChildGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+
+			alloc1, alloc2, err := creatApp1(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, appQueueMapping)
+			assert.NilError(t, err)
+
+			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3", appQueueMapping)
+			assert.NilError(t, err)
+
+			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 4})
+			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+			result, ok := preemptor.TryPreemption()
+			assert.Assert(t, result != nil, "unexpected result")
+			assert.Equal(t, ok, true, "victims found")
+			assert.Check(t, alloc1.IsPreempted() || alloc2.IsPreempted(), "alloc1 or alloc2 preempted")
+		})
+	}
+}
+
+// TestTryPreemption_AskQueue_With_OG_And_UG_ResTypes Test try preemption with 2 level queue hierarchy.
+// Guaranteed set on both victim queue path and preemptor queue path.
+// Ask queue has overused some res types only but not all defined in guaranteed, looking for UG resources.
+// Though some res types defined in ask queue's guaranteed has been overused and not has any relevance from preemptor ask resource requirement perspective, preemption should
+// be triggerred and pass through preliminary checkPreemptionQueueGuarantees checks. Just because ask has some OG res types, checkPreemptionQueueGuarantees should not fail.
+// Setup:
+// Nodes are Node1 & Node2. Node has enough space to accommodate the new ask.
+// root.parent.child1. Guaranteed set on root.parent.child1, first: 10. 2 Allocations (belongs to single app) are running. First Allocation usage is first:10, Second Allocation usage is first:5. Total usage is first:15.
+// root.parent.child2. Guaranteed set on root.parent.child2, first: 10, second: 2. 1 Allocation is running with usage as first:5, second: 3 (OG). Request of first: 5, third: 10 is waiting for resources.
+// 1 Allocation on root.parent.child1 should be preempted to free up resources for ask arrived in root.parent.child2 even though it has overused few guaranteed resource types.
+func TestTryPreemption_AskQueue_With_OG_And_UG_ResTypes(t *testing.T) {
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "second": 3, "third": 10})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "second": 3, "third": 10})
+	iterator := getNodeIteratorFn(node1, node2)
+	appQueueMapping := NewAppQueueMapping()
+	rootQ, err := createRootQueue(map[string]string{"first": "20", "second": "6"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "6"}, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, map[string]string{"first": "10"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "10", "second": "2"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	alloc1, alloc2, err := creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, map[string]resources.Quantity{"first": 5}, appQueueMapping)
+	assert.NilError(t, err)
+
+	alloc3Res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 3})
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "second": 3}, "alloc3", appQueueMapping)
+	assert.NilError(t, err)
+
+	alloc3 := newAllocationWithKey("alloc3", appID2, nodeID2, alloc3Res)
+	alloc3.createTime = ask3.createTime
+	app2.AddAllocation(alloc3)
+	if !node2.TryAddAllocation(alloc3) {
+		t.Fatal("node alloc3 failed")
+	}
+	if err = childQ2.TryIncAllocatedResource(ask3.GetAllocatedResource()); err != nil {
+		t.Fatal("inc queue resource failed")
+	}
+	app3 := newApplication(appID3, "default", "root.parent.child2")
+	app3.SetQueue(childQ2)
+	childQ2.applications[appID3] = app3
+
+	ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "third": 10}))
+	err = app3.AddAllocationAsk(ask4)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 6})
+	preemptor := NewPreemptor(app3, headRoom, 30*time.Second, ask4, iterator(), false)
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result != nil, "unexpected result")
+	assert.Equal(t, ok, true, "victims found")
+	assert.Check(t, alloc1.IsPreempted() || alloc2.IsPreempted(), "alloc1 or alloc2 preempted")
+}
+
+// TestTryPreemption_AskQueue_Under_DiffParent_With_OG_And_UG_ResTypes Test try preemption with 3 level queue hierarchy.
+// Guaranteed set on both victim queue path and preemptor queue path.
+// Ask queue has overused some res types only but not all defined in guaranteed, looking for UG resources.
+// Though some res types defined in ask queue's guaranteed has been overused and not has any relevance from preemptor ask resource requirement perspective, preemption should
+// be triggerred and pass through preliminary checkPreemptionQueueGuarantees checks. Just because ask has some OG res types, checkPreemptionQueueGuarantees should not fail.
+// Setup:
+// Nodes are Node1 & Node2. Node has enough space to accommodate the new ask.
+// root.parent.parent1.child1. Guaranteed set on root.parent.parent1.child1, first: 10. 2 Allocations (belongs to single app) are running. First Allocation usage is first:10, Second Allocation usage is first:5. Total usage is first:15.
+// root.parent.parent2.child2. Guaranteed set on root.parent.parent2.child2, first: 10, second: 2. 1 Allocation is running with usage as first:5, second: 3 (OG). Request of first: 5, third: 10 is waiting for resources.
+// 1 Allocation on root.parent.parent1.child1 should be preempted to free up resources for ask arrived in root.parent.parent2.child2 even though it has overused few guaranteed resource types.
+func TestTryPreemption_AskQueue_Under_DiffParent_With_OG_And_UG_ResTypes(t *testing.T) {
+	var tests = []struct {
+		testName               string
+		victimParentGuaranteed map[string]string
+		askParentGuaranteed    map[string]string
+		victimChildGuaranteed  map[string]string
+		askChildGuaranteed     map[string]string
+	}{
+		{"ask queue under parent different from victim queue with some OG res types", map[string]string{"first": "10"}, map[string]string{"first": "10", "second": "2"}, nil, nil},
+		{"ask queue with some OG res types under parent different from victim queue", nil, nil, map[string]string{"first": "10"}, map[string]string{"first": "10", "second": "2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "second": 3, "third": 10})
+			node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10, "second": 3, "third": 10})
+			iterator := getNodeIteratorFn(node1, node2)
+			appQueueMapping := NewAppQueueMapping()
+			rootQ, err := createRootQueue(map[string]string{"first": "20", "second": "6"})
+			assert.NilError(t, err)
+			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "second": "6"}, nil, appQueueMapping)
+			assert.NilError(t, err)
+			parentQ1, err := createManagedQueueGuaranteed(parentQ, "parent1", true, nil, tt.victimParentGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+			parentQ2, err := createManagedQueueGuaranteed(parentQ, "parent2", true, nil, tt.askParentGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+			childQ1, err := createManagedQueueGuaranteed(parentQ1, "child1", false, nil, tt.victimChildGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+			childQ2, err := createManagedQueueGuaranteed(parentQ2, "child2", false, nil, tt.askChildGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+
+			alloc1, alloc2, err := creatApp1WithTwoDifferentAllocations(childQ1, node1, node2, map[string]resources.Quantity{"first": 10}, map[string]resources.Quantity{"first": 5}, appQueueMapping)
+			assert.NilError(t, err)
+
+			alloc3Res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 3})
+			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "second": 3}, "alloc3", appQueueMapping)
+			assert.NilError(t, err)
+
+			alloc3 := newAllocationWithKey("alloc3", appID2, nodeID2, alloc3Res)
+			alloc3.createTime = ask3.createTime
+			app2.AddAllocation(alloc3)
+			if !node2.TryAddAllocation(alloc3) {
+				t.Fatal("node alloc3 failed")
+			}
+			if err = childQ2.TryIncAllocatedResource(ask3.GetAllocatedResource()); err != nil {
+				t.Fatal("inc queue resource failed")
+			}
+			app3 := newApplication(appID3, "default", "root.parent.child2")
+			app3.SetQueue(childQ2)
+			childQ2.applications[appID3] = app3
+
+			ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "third": 10}))
+			err = app3.AddAllocationAsk(ask4)
+			assert.NilError(t, err)
+
+			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 6})
+			preemptor := NewPreemptor(app3, headRoom, 30*time.Second, ask4, iterator(), false)
+
+			result, ok := preemptor.TryPreemption()
+			assert.Assert(t, result != nil, "unexpected result")
+			assert.Equal(t, ok, true, "victims found")
+			assert.Check(t, alloc1.IsPreempted() || alloc2.IsPreempted(), "alloc1 or alloc2 preempted")
+		})
+	}
 }

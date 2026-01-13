@@ -1018,6 +1018,7 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 		partitionInfo.State = partitionContext.GetCurrentState()
 		partitionInfo.LastStateTransitionTime = partitionContext.GetStateTime().UnixNano()
 		partitionInfo.PreemptionEnabled = partitionContext.IsPreemptionEnabled()
+		partitionInfo.QuotaPreemptionEnabled = partitionContext.IsQuotaPreemptionEnabled()
 
 		capacityInfo := dao.PartitionCapacity{}
 		capacity := partitionContext.GetTotalPartitionResource()

@@ -19,11 +19,12 @@
 package dao
 
 type PartitionInfo struct {
-	ClusterID               string            `json:"clusterId"`         // no omitempty, cluster id should not be empty
-	Name                    string            `json:"name"`              // no omitempty, name should not be empty
-	Capacity                PartitionCapacity `json:"capacity"`          // no omitempty, omitempty doesn't work on a structure value
-	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"` // no omitempty, omitempty doesn't work on a structure value
-	PreemptionEnabled       bool              `json:"preemptionEnabled"` // no omitempty, false shows preemption status better
+	ClusterID               string            `json:"clusterId"`              // no omitempty, cluster id should not be empty
+	Name                    string            `json:"name"`                   // no omitempty, name should not be empty
+	Capacity                PartitionCapacity `json:"capacity"`               // no omitempty, omitempty doesn't work on a structure value
+	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"`      // no omitempty, omitempty doesn't work on a structure value
+	PreemptionEnabled       bool              `json:"preemptionEnabled"`      // no omitempty, false shows preemption status better
+	QuotaPreemptionEnabled  bool              `json:"quotaPreemptionEnabled"` // no omitempty, false shows quota preemption status better
 	TotalNodes              int               `json:"totalNodes,omitempty"`
 	Applications            map[string]int    `json:"applications,omitempty"`
 	TotalContainers         int               `json:"totalContainers,omitempty"`

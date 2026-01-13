@@ -43,8 +43,6 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-const ZeroResource string = "{\"resources\":{\"first\":{\"value\":0}}}"
-
 // base test for creating a managed queue
 func TestQueueBasics(t *testing.T) {
 	// create the root
@@ -1794,7 +1792,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 		configs.PreemptionDelay:       "3600s",
 		configs.PreemptionPolicy:      policies.FencePreemptionPolicy.String(),
 	}
-	leaf.UpdateQueueProperties()
+	leaf.UpdateQueueProperties(nil)
 	leafDAO := leaf.GetPartitionQueueDAOInfo(false)
 	assert.Equal(t, leafDAO.QueueName, "root.leaf-queue")
 	assert.Equal(t, len(leafDAO.Children), 0, "leaf has no children")
@@ -1810,7 +1808,7 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 		configs.PreemptionDelay:       "10s",
 		configs.PreemptionPolicy:      policies.DisabledPreemptionPolicy.String(),
 	}
-	leaf.UpdateQueueProperties()
+	leaf.UpdateQueueProperties(nil)
 	leafDAO = leaf.GetPartitionQueueDAOInfo(false)
 	assert.Equal(t, leafDAO.PreemptionEnabled, false, "preemption should not be enabled")
 	assert.Equal(t, leafDAO.IsPreemptionFence, false, "queue should not be a fence")
@@ -2230,14 +2228,14 @@ func TestApplyConf(t *testing.T) {
 	errConf1 := configs.QueueConfig{
 		SubmitACL: "error Submit ACL",
 	}
-	err = errQueue.ApplyConf(errConf1)
+	_, err = errQueue.ApplyConf(errConf1)
 	assert.ErrorContains(t, err, "multiple spaces found in ACL")
 
 	// wrong AdminACL
 	errConf2 := configs.QueueConfig{
 		AdminACL: "error Admin ACL",
 	}
-	err = errQueue.ApplyConf(errConf2)
+	_, err = errQueue.ApplyConf(errConf2)
 	assert.ErrorContains(t, err, "multiple spaces found in ACL")
 
 	// wrong ChildTemplate
@@ -2249,7 +2247,7 @@ func TestApplyConf(t *testing.T) {
 			},
 		},
 	}
-	err = errQueue.ApplyConf(errConf3)
+	_, err = errQueue.ApplyConf(errConf3)
 	assert.ErrorContains(t, err, "invalid quantity")
 
 	// isManaged is changed from unmanaged to managed
@@ -2261,7 +2259,7 @@ func TestApplyConf(t *testing.T) {
 	child, err := NewDynamicQueue("child", true, parent, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
-	err = child.ApplyConf(childConf)
+	_, err = child.ApplyConf(childConf)
 	assert.NilError(t, err, "failed to parse conf: %v", err)
 	assert.Equal(t, child.IsManaged(), true)
 
@@ -2278,7 +2276,7 @@ func TestApplyConf(t *testing.T) {
 	parent, err = createManagedQueueWithProps(nil, "parent", false, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
-	err = parent.ApplyConf(parentConf)
+	_, err = parent.ApplyConf(parentConf)
 	assert.NilError(t, err, "failed to parse conf: %v", err)
 	assert.Equal(t, parent.IsLeafQueue(), false)
 
@@ -2308,7 +2306,7 @@ func TestApplyConf(t *testing.T) {
 	assert.Assert(t, validTemplate != nil)
 
 	conf.Parent = false
-	err = leaf.ApplyConf(conf)
+	_, err = leaf.ApplyConf(conf)
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, leaf.template == nil)
 	assert.Assert(t, leaf.maxResource != nil)
@@ -2320,7 +2318,7 @@ func TestApplyConf(t *testing.T) {
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
 	conf.Parent = true
-	err = queue.ApplyConf(conf)
+	_, err = queue.ApplyConf(conf)
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, queue.template != nil)
 	assert.Assert(t, queue.maxResource != nil)
@@ -2331,142 +2329,193 @@ func TestApplyConf(t *testing.T) {
 	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
-	err = queue.ApplyConf(conf)
+	_, err = queue.ApplyConf(conf)
 	assert.NilError(t, err, "failed to apply conf: %v", err)
 	assert.Assert(t, root.maxResource == nil)
 	assert.Assert(t, root.guaranteedResource == nil)
 	assert.Equal(t, root.maxRunningApps, uint64(0))
 }
 
-func TestQuotaChangePreemptionSettings(t *testing.T) {
-	root, err := createManagedQueueWithProps(nil, "root", true, nil, nil)
+func TestQuotaPreemptionSettings(t *testing.T) {
+	root, err := createManagedQueue(nil, "root", true, nil)
 	assert.NilError(t, err, "failed to create basic queue: %v", err)
 
-	parent, err := createManagedQueueWithProps(root, "parent", false, nil, nil)
-	assert.NilError(t, err, "failed to create basic queue: %v", err)
 	testCases := []struct {
-		name          string
-		conf          configs.QueueConfig
-		expectedDelay uint64
-	}{{"first time queue setup without delay", configs.QueueConfig{
-		Resources: configs.Resources{
-			Max:        getResourceConf(),
-			Guaranteed: getResourceConf(),
-		},
-	}, 0},
-		{"clearing max resources", configs.QueueConfig{
-			Resources: configs.Resources{
-				Max:        nil,
-				Guaranteed: nil,
-			},
-		}, 0},
-		{"first time queue setup with delay", configs.QueueConfig{
-			Resources: configs.Resources{
-				Max:        getResourceConf(),
-				Guaranteed: getResourceConf(),
-			},
-			Preemption: configs.Preemption{
-				Delay: 1,
-			},
-		}, 1},
-		{"increase max with delay", configs.QueueConfig{
-			Resources: configs.Resources{
-				Max: map[string]string{"memory": "100000000"},
-			},
-			Preemption: configs.Preemption{
-				Delay: 500,
-			},
-		}, 0},
-		{"decrease max with delay", configs.QueueConfig{
-			Resources: configs.Resources{
-				Max: map[string]string{"memory": "100"},
-			},
-			Preemption: configs.Preemption{
-				Delay: 2,
-			},
-		}, 2},
-		{"max remains as is but delay changed", configs.QueueConfig{
-			Resources: configs.Resources{
-				Max: map[string]string{"memory": "100"},
-			},
-			Preemption: configs.Preemption{
-				Delay: 2,
-			},
-		}, 2},
-		{"unrelated config change, should not impact earlier set preemption settings", configs.QueueConfig{
-			Resources: configs.Resources{
-				Max:        map[string]string{"memory": "100"},
-				Guaranteed: map[string]string{"memory": "50"},
-			},
-			Preemption: configs.Preemption{
-				Delay: 2,
-			},
-		}, 2},
-		{"increase max again with delay", configs.QueueConfig{
-			Resources: configs.Resources{
-				Max: map[string]string{"memory": "101"},
-			},
-			Preemption: configs.Preemption{
-				Delay: 200,
-			},
-		}, 0}}
+		name       string
+		maxRes     map[string]string
+		conf       configs.QueueConfig
+		oldDelay   time.Duration
+		timeChange bool
+	}{
+		{"clearing max",
+			map[string]string{"memory": "500"},
+			configs.QueueConfig{
+				Resources: configs.Resources{
+					Max: nil,
+				},
+			}, 0, false},
+		{"clearing max with delay",
+			map[string]string{"memory": "500"},
+			configs.QueueConfig{
+				Resources: configs.Resources{
+					Max: nil,
+				},
+				Properties: map[string]string{configs.QuotaPreemptionDelay: "50ms"},
+			}, 0, false},
+		{"incorrect delay",
+			map[string]string{"memory": "500"},
+			configs.QueueConfig{
+				Resources: configs.Resources{
+					Max: nil,
+				},
+				Properties: map[string]string{configs.QuotaPreemptionDelay: "-50s"},
+			}, 0, false},
+		{"increase max with delay",
+			map[string]string{"memory": "500"},
+			configs.QueueConfig{
+				Resources: configs.Resources{
+					Max: map[string]string{"memory": "1000"},
+				},
+				Properties: map[string]string{configs.QuotaPreemptionDelay: "50ms"},
+			}, 50 * time.Millisecond, false},
+		{"decrease max with delay",
+			map[string]string{"memory": "500"},
+			configs.QueueConfig{
+				Resources: configs.Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				Properties: map[string]string{configs.QuotaPreemptionDelay: "50ms"},
+			}, 50 * time.Millisecond, true},
+		{"delay changed from 0 no max change",
+			map[string]string{"memory": "500"},
+			configs.QueueConfig{
+				Resources: configs.Resources{
+					Max: map[string]string{"memory": "500"},
+				},
+				Properties: map[string]string{configs.QuotaPreemptionDelay: "50ms"},
+			}, 0, true},
+	}
 
+	var oldMax *resources.Resource
+	var parent *Queue
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			err = parent.ApplyConf(tc.conf)
+			var expectedMax *resources.Resource
+			if tc.maxRes != nil {
+				expectedMax, err = resources.NewResourceFromConf(tc.maxRes)
+				assert.NilError(t, err, "resource creation failed")
+			}
+			parent, err = createManagedQueue(root, "parent", false, tc.maxRes)
+			assert.NilError(t, err, "failed to create basic queue: %v", err)
+			oldMax, err = parent.ApplyConf(tc.conf)
 			assert.NilError(t, err, "failed to apply conf: %v", err)
+			assert.Assert(t, resources.Equals(oldMax, expectedMax), "old max not from setup")
 
-			// assert the preemption settings
-			delay, sTime := parent.getPreemptionSettings()
-			assert.Equal(t, delay, tc.expectedDelay)
-			if tc.expectedDelay != uint64(0) {
-				assert.Equal(t, sTime.IsZero(), false)
-			} else {
-				assert.Equal(t, sTime.IsZero(), true)
-			}
-			assert.Equal(t, parent.shouldTriggerPreemption(), false)
-
-			used, err := resources.NewResourceFromConf(tc.conf.Resources.Max)
-			assert.NilError(t, err, "failed to set allocated resource: %v", err)
-			parent.allocatedResource = resources.Multiply(used, 2)
-
+			// apply properties and set a usage
+			parent.allocatedResource = resources.Multiply(oldMax, 2)
+			parent.quotaPreemptionDelay = tc.oldDelay
+			parent.UpdateQueueProperties(oldMax)
 			// Wait till delay expires to let trigger preemption automatically
-			time.Sleep(time.Duration(int64(tc.expectedDelay)+1) * time.Second)
-			if tc.expectedDelay != uint64(0) {
-				assert.Equal(t, parent.shouldTriggerPreemption(), true)
-			}
-			parent.TryAllocate(nil, nil, nil, false)
+			time.Sleep(parent.quotaPreemptionDelay + 50*time.Millisecond)
+			assert.Equal(t, parent.shouldTriggerPreemption(), tc.timeChange, "preemption should get trigger for set delay")
+			parent.TryAllocate(nil, nil, nil, false, true)
 
-			// preemption settings should be same as before even now as trigger is async process
-			delay, sTime = parent.getPreemptionSettings()
-			assert.Equal(t, delay, tc.expectedDelay)
-			if tc.expectedDelay != uint64(0) {
-				assert.Equal(t, sTime.IsZero(), false)
-				assert.Equal(t, parent.shouldTriggerPreemption(), true)
-			} else {
-				assert.Equal(t, sTime.IsZero(), true)
-			}
+			time.Sleep(50 * time.Millisecond)
 
-			time.Sleep(time.Millisecond * 100)
-
-			// preemption should have been triggered by now, assert preemption settings to ensure values are reset
-			if tc.expectedDelay != uint64(0) {
-				delay, sTime = parent.getPreemptionSettings()
-				assert.Equal(t, sTime.IsZero(), true)
-				assert.Equal(t, delay, uint64(0))
-
-				// since preemption settings are set, preemption should not be triggerred again during tryAllocate
-				assert.Equal(t, parent.shouldTriggerPreemption(), false)
-			}
+			// since preemption settings are reset, preemption should not be triggerred again during the next check
+			assert.Equal(t, parent.shouldTriggerPreemption(), false)
 		})
 	}
+}
+
+func TestShouldTriggerPreemption(t *testing.T) {
+	parentConfig := configs.QueueConfig{
+		Name:   "parent",
+		Parent: true,
+		Resources: configs.Resources{
+			Max: map[string]string{"memory": "1000"},
+		},
+	}
+	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
+	assert.NilError(t, err)
+	parent.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
+	parent.quotaPreemptionStartTime = time.Now()
+
+	leafRes := configs.Resources{
+		Max: map[string]string{"memory": "1000"},
+	}
+	leaf, err := NewConfiguredQueue(configs.QueueConfig{
+		Name:      "leaf",
+		Resources: leafRes,
+	}, parent, false, nil)
+	assert.NilError(t, err)
+
+	dynamicLeaf, err := NewConfiguredQueue(configs.QueueConfig{
+		Name:      "dynamic-leaf",
+		Resources: leafRes,
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	dynamicLeaf.isManaged = false
+
+	alreadyPreemptionRunning, err := NewConfiguredQueue(configs.QueueConfig{
+		Name:      "leaf-already-preemption-running",
+		Resources: leafRes,
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	alreadyPreemptionRunning.setQuotaPreemptionState(true)
+
+	usageExceededMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
+		Name:      "leaf-usage-exceeded-max",
+		Resources: leafRes,
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	usageExceededMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
+
+	usageEqualsMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
+		Name:      "leaf-usage-equals-max",
+		Resources: leafRes,
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	usageEqualsMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 1000})
+
+	usageNotMatchingMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
+		Name: "leaf-usage-res-not-matching-max-res",
+		Resources: configs.Resources{
+			Max: map[string]string{"cpu": "1000"},
+		},
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	usageNotMatchingMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000})
+
+	testCases := []struct {
+		name               string
+		queue              *Queue
+		preconditionResult bool
+	}{
+		{"no usage or max change", leaf, false},
+		{"dynamic queue", dynamicLeaf, false},
+		{"preemption running", alreadyPreemptionRunning, false},
+		{"usage exceeded max, no start time", usageExceededMaxQueue, false},
+		{"usage exceeded max, start time set", parent, true},
+		{"usage equals max resources", usageEqualsMaxQueue, false},
+		{"usage res not matching max", usageNotMatchingMaxQueue, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.queue.shouldTriggerPreemption(), tc.preconditionResult)
+		})
+	}
+	// special case: reset time if usage below max
+	usageNotMatchingMaxQueue.quotaPreemptionStartTime = time.Now().Add(time.Hour)
+	assert.Assert(t, !usageNotMatchingMaxQueue.shouldTriggerPreemption(), "preemption should not be triggered")
+	assert.Assert(t, usageNotMatchingMaxQueue.quotaPreemptionStartTime.IsZero(), "start time should be reset")
 }
 
 func TestNewConfiguredQueue(t *testing.T) {
 	// check variable assignment
 	properties := getProperties()
 	resourceConf := getResourceConf()
-	// turn resouce config into resource struct
+	// turn resource config into resource struct
 	resourceStruct, err := resources.NewResourceFromConf(resourceConf)
 	assert.NilError(t, err, "failed to create new resource from config: %v", err)
 
@@ -2491,19 +2540,18 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.DeepEqual(t, properties, parent.template.GetProperties())
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetMaxResource()))
 	assert.Assert(t, resources.Equals(resourceStruct, parent.template.GetGuaranteedResource()))
-	assert.Equal(t, parent.quotaChangePreemptionDelay, uint64(0))
+	assert.Equal(t, parent.preemptionDelay, configs.DefaultPreemptionDelay)
+	assert.Equal(t, parent.quotaPreemptionDelay, configs.DefaultQuotaPreemptionDelay)
 
 	// case 0: managed leaf queue can't use template
 	leafConfig := configs.QueueConfig{
-		Name:       "leaf_queue",
-		Parent:     false,
-		Properties: getProperties(),
+		Name:   "leaf_queue",
+		Parent: false,
+		Properties: map[string]string{configs.PreemptionDelay: "10s",
+			configs.QuotaPreemptionDelay: "1h"},
 		Resources: configs.Resources{
 			Max:        getResourceConf(),
 			Guaranteed: getResourceConf(),
-		},
-		Preemption: configs.Preemption{
-			Delay: 500,
 		},
 	}
 	childLeaf, err := NewConfiguredQueue(leafConfig, parent, false, nil)
@@ -2517,15 +2565,13 @@ func TestNewConfiguredQueue(t *testing.T) {
 	childLeafGuaranteed, err := resources.NewResourceFromConf(leafConfig.Resources.Guaranteed)
 	assert.NilError(t, err, "Resource creation failed")
 	assert.Assert(t, resources.Equals(childLeaf.guaranteedResource, childLeafGuaranteed))
-	assert.Equal(t, childLeaf.quotaChangePreemptionDelay, uint64(500))
+	assert.Equal(t, childLeaf.preemptionDelay, 10*time.Second)
+	assert.Equal(t, childLeaf.quotaPreemptionDelay, 1*time.Hour)
 
-	// case 1: non-leaf can't use template but it can inherit template from parent
+	// case 1: non-leaf can't use template, but it can inherit template from parent
 	NonLeafConfig := configs.QueueConfig{
 		Name:   "nonleaf_queue",
 		Parent: true,
-		Preemption: configs.Preemption{
-			Delay: 500,
-		},
 	}
 	childNonLeaf, err := NewConfiguredQueue(NonLeafConfig, parent, false, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
@@ -2534,7 +2580,6 @@ func TestNewConfiguredQueue(t *testing.T) {
 	assert.Equal(t, len(childNonLeaf.properties), 0)
 	assert.Assert(t, childNonLeaf.guaranteedResource == nil)
 	assert.Assert(t, childNonLeaf.maxResource == nil)
-	assert.Equal(t, childNonLeaf.quotaChangePreemptionDelay, uint64(0))
 
 	// case 2: do not send queue event when silence flag is set to true
 	events.Init()
@@ -2542,17 +2587,12 @@ func TestNewConfiguredQueue(t *testing.T) {
 	eventSystem.StartServiceWithPublisher(false)
 	rootConfig := configs.QueueConfig{
 		Name: "root",
-		Preemption: configs.Preemption{
-			Delay: 500,
-		},
 	}
-
-	rootQ, err := NewConfiguredQueue(rootConfig, nil, true, nil)
+	_, err = NewConfiguredQueue(rootConfig, nil, true, nil)
 	assert.NilError(t, err, "failed to create queue: %v", err)
 	time.Sleep(time.Second)
 	noEvents := eventSystem.Store.CountStoredEvents()
 	assert.Equal(t, noEvents, uint64(0), "expected 0 event, got %d", noEvents)
-	assert.Equal(t, rootQ.quotaChangePreemptionDelay, uint64(0))
 }
 
 func TestResetRunningState(t *testing.T) {
@@ -2575,11 +2615,11 @@ func TestResetRunningState(t *testing.T) {
 	parent.MarkQueueForRemoval()
 	assert.Assert(t, parent.IsDraining(), "parent should be marked as draining")
 	assert.Assert(t, leaf.IsDraining(), "leaf should be marked as draining")
-	err = parent.applyConf(emptyConf, false)
+	_, err = parent.applyConf(emptyConf, false)
 	assert.NilError(t, err, "failed to update parent")
 	assert.Assert(t, parent.IsRunning(), "parent should be running again")
 	assert.Assert(t, leaf.IsDraining(), "leaf should still be marked as draining")
-	err = leaf.applyConf(emptyConf, false)
+	_, err = leaf.applyConf(emptyConf, false)
 	assert.NilError(t, err, "failed to update leaf")
 	assert.Assert(t, leaf.IsRunning(), "leaf should be running again")
 }
@@ -2910,8 +2950,8 @@ func TestQueueEvents(t *testing.T) {
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
 	queue, err := createRootQueue(nil)
-	queue.Name = "testQueue"
 	assert.NilError(t, err)
+	queue.Name = "testQueue"
 
 	app := newApplication(appID0, "default", "root")
 	queue.AddApplication(app)
@@ -2947,8 +2987,10 @@ func TestQueueEvents(t *testing.T) {
 			},
 		},
 	}
-	err = queue.ApplyConf(newConf)
+	var oldMax *resources.Resource
+	oldMax, err = queue.ApplyConf(newConf)
 	assert.NilError(t, err)
+	assert.Assert(t, oldMax.IsEmpty())
 	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		noEvents = eventSystem.Store.CountStoredEvents()
 		return noEvents == 3
@@ -3144,55 +3186,41 @@ func TestQueueBackoffProperties(t *testing.T) {
 	assert.Equal(t, 30*time.Second, leaf3.GetBackoffDelay())
 }
 
-func TestQueue_IsQCPreemptionRunning(t *testing.T) {
-	// create the root
-	root, err := createManagedQueueMaxApps(nil, "root", true, nil, 1)
-	assert.NilError(t, err, "queue create failed")
-	parent, err := createManagedQueue(root, "parent", true, nil)
-	assert.NilError(t, err, "failed to create parent queue")
-
-	var leaf, leaf2, leaf11, leaf111 *Queue
-	leaf, err = createManagedQueue(parent, "leaf", true, nil)
-	assert.NilError(t, err, "failed to create leaf queue")
-	leaf2, err = createManagedQueue(parent, "leaf2", false, nil)
-	assert.NilError(t, err, "failed to create leaf2 queue")
-
-	leaf11, err = createManagedQueue(leaf, "leaf11", true, nil)
-	assert.NilError(t, err, "failed to create leaf11 queue")
-
-	leaf111, err = createManagedQueue(leaf11, "leaf111", false, nil)
-	assert.NilError(t, err, "failed to create leaf111 queue")
-
-	// root.parent is running. any queue located in this hierarchy (both upwards and downwards) should return true. All branches of parent should return true.
-	parent.isQuotaChangePreemptionRunning = true
-	assert.Equal(t, parent.IsQCPreemptionRunning(), true)
-	assert.Equal(t, root.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf111.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf11.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf2.IsQCPreemptionRunning(), true)
-
-	// reset
-	parent.isQuotaChangePreemptionRunning = false
-
-	// root.parent.leaf111 (leaf queue) is running. any queue located in this hierarchy (upwards) should return true. Other branches of parent should return false.
-	leaf111.isQuotaChangePreemptionRunning = true
-	assert.Equal(t, parent.IsQCPreemptionRunning(), true)
-	assert.Equal(t, root.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf111.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf11.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf2.IsQCPreemptionRunning(), false)
-
-	// reset
-	leaf111.isQuotaChangePreemptionRunning = false
-
-	// root.parent.leaf2 (leaf queue) is running. any queue located in this hierarchy (upwards) should return true. Other branches of parent should return false.
-	leaf2.isQuotaChangePreemptionRunning = true
-	assert.Equal(t, parent.IsQCPreemptionRunning(), true)
-	assert.Equal(t, root.IsQCPreemptionRunning(), true)
-	assert.Equal(t, leaf111.IsQCPreemptionRunning(), false)
-	assert.Equal(t, leaf11.IsQCPreemptionRunning(), false)
-	assert.Equal(t, leaf.IsQCPreemptionRunning(), false)
-	assert.Equal(t, leaf2.IsQCPreemptionRunning(), true)
+func TestQueue_setPreemptionTime(t *testing.T) {
+	root, e := createRootQueue(nil)
+	assert.NilError(t, e, "failed to create basic root queue")
+	tests := []struct {
+		name           string
+		oldMaxResource *resources.Resource
+		maxRes         map[string]string
+		oldDelay       time.Duration
+		delay          time.Duration
+		oldStart       bool
+		timeChange     bool
+	}{
+		{"empty", nil, map[string]string{}, 0, 0, false, false},
+		{"no delays", resources.Zero, map[string]string{"test": "100"}, 0, 0, false, false},
+		{"max removed", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, 10, 10, false, false},
+		{"max removed update", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, 0, 10, true, true},
+		{"delay added", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 0, 10, false, true},
+		{"delay change set start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 5, 10, true, true},
+		{"delay change no start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 5, 10, false, false},
+		{"max increase", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, 10, 10, false, false},
+		{"max lowered", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, false, true},
+		{"max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, true, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			queue, err := createManagedQueue(root, "test", false, tt.maxRes)
+			assert.NilError(t, err, "queue creation failed unexpectedly")
+			queue.quotaPreemptionDelay = tt.delay
+			if tt.oldStart {
+				queue.quotaPreemptionStartTime = time.Now()
+			}
+			before := queue.quotaPreemptionStartTime
+			queue.setPreemptionTime(tt.oldMaxResource, tt.oldDelay)
+			after := queue.quotaPreemptionStartTime
+			assert.Equal(t, tt.timeChange, before != after, "time change not as expected")
+		})
+	}
 }

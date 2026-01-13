@@ -1050,14 +1050,14 @@ func TestAddAppTaskGroup(t *testing.T) {
 
 	// queue now has fair as sort policy app add should fail
 	queue := partition.GetQueue(defQueue)
-	err = queue.ApplyConf(configs.QueueConfig{
+	_, err = queue.ApplyConf(configs.QueueConfig{
 		Name:       "default",
 		Parent:     false,
 		Queues:     nil,
 		Properties: map[string]string{configs.ApplicationSortPolicy: "fair"},
 	})
 	assert.NilError(t, err, "updating queue should not have failed")
-	queue.UpdateQueueProperties()
+	queue.UpdateQueueProperties(nil)
 	err = partition.AddApplication(app)
 	if err == nil || partition.getApplication(appID2) != nil {
 		t.Errorf("add application should have failed due to queue sort policy but did not")
@@ -3775,22 +3775,28 @@ func TestUpdatePreemption(t *testing.T) {
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "Partition creation failed")
-	assert.Assert(t, partition.IsPreemptionEnabled(), "preeemption should be enabled by default")
+	assert.Assert(t, partition.IsPreemptionEnabled(), "preemption should be enabled by default")
+	assert.Assert(t, !partition.IsQuotaPreemptionEnabled(), "quota preemption should be disabled by default")
 
 	partition.updatePreemption(configs.PartitionConfig{})
-	assert.Assert(t, partition.IsPreemptionEnabled(), "preeemption should be enabled by empty config")
+	assert.Assert(t, partition.IsPreemptionEnabled(), "preemption should be enabled by empty config")
+	assert.Assert(t, !partition.IsQuotaPreemptionEnabled(), "quota preemption should be disabled by default")
 
 	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{}})
-	assert.Assert(t, partition.IsPreemptionEnabled(), "preeemption should be enabled by empty preemption section")
+	assert.Assert(t, partition.IsPreemptionEnabled(), "preemption should be enabled by empty preemption section")
+	assert.Assert(t, !partition.IsQuotaPreemptionEnabled(), "quota preemption should be disabled by empty preemption section")
 
-	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: nil}})
-	assert.Assert(t, partition.IsPreemptionEnabled(), "preeemption should be enabled by explicit nil")
+	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: nil, QuotaPreemptionEnabled: nil}})
+	assert.Assert(t, partition.IsPreemptionEnabled(), "preemption should be enabled by explicit nil")
+	assert.Assert(t, !partition.IsQuotaPreemptionEnabled(), "quota preemption should be disabled by explicit nil")
 
-	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: &True}})
-	assert.Assert(t, partition.IsPreemptionEnabled(), "preeemption should be enabled by explicit true")
+	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: &True, QuotaPreemptionEnabled: &True}})
+	assert.Assert(t, partition.IsPreemptionEnabled(), "preemption should be enabled by explicit true")
+	assert.Assert(t, partition.IsQuotaPreemptionEnabled(), "quota preemption should be enabled by explicit true")
 
-	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: &False}})
-	assert.Assert(t, !partition.IsPreemptionEnabled(), "preeemption should be disabled by explicit false")
+	partition.updatePreemption(configs.PartitionConfig{Preemption: configs.PartitionPreemptionConfig{Enabled: &False, QuotaPreemptionEnabled: &False}})
+	assert.Assert(t, !partition.IsPreemptionEnabled(), "preemption should be disabled by explicit false")
+	assert.Assert(t, !partition.IsQuotaPreemptionEnabled(), "quota preemption should be disabled by explicit false")
 }
 
 func TestUpdateNodeSortingPolicy(t *testing.T) {

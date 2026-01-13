@@ -218,7 +218,10 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 			zap.String("queuePath", p.queuePath))
 		return false
 	}
-
+	oldRemaining := currentQueue.GetRemainingGuaranteedResource()
+	if oldRemaining != nil && oldRemaining.FitInActual(p.ask.GetAllocatedResource()) {
+		return true
+	}
 	currentQueue.AddAllocation(p.ask.GetAllocatedResource())
 
 	// remove each allocation in turn, validating that at some point we free enough resources to allow this ask to fit
@@ -226,7 +229,9 @@ func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
 		for _, alloc := range snapshot.PotentialVictims {
 			snapshot.RemoveAllocation(alloc.GetAllocatedResource())
 			remaining := currentQueue.GetRemainingGuaranteedResource()
-			if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
+
+			// Is all ask's res types in ask queue still under guaranteed?
+			if remaining != nil && isAskQueueUnderGuaranteed(p.ask.GetAllocatedResource(), remaining) {
 				return true
 			}
 		}
@@ -268,26 +273,24 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
-				oldRemaining := queueSnapshot.GetRemainingGuaranteedResource()
+				remaining := queueSnapshot.GetRemainingGuaranteedResource()
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 				preemptableResource := queueSnapshot.GetPreemptableResource()
 
-				// Did removing this allocation still keep the queue over-allocated?
+				// Did removing this allocation still keep the victim queue over-allocated?
 				// At times, over-allocation happens because of resource types in usage but not defined as guaranteed.
-				// So, as an additional check, -ve remaining guaranteed resource before removing the victim means
-				// some really useful victim is there.
+				// So, as an additional check, res types used by ask should be either -ve or zero in victim queue remaining guaranteed resource to confirm
+				// some relevant useful victim is there.
 				// In case of victims densely populated on any specific node, checking/honouring the guaranteed quota on ask or preemptor queue
 				// acts as early filtering layer to carry forward only the required victims.
 				// For other cases like victims spread over multiple nodes, this doesn't add great value.
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
-					(oldRemaining == nil || resources.StrictlyGreaterThan(resources.Zero, oldRemaining)) {
-					// add the current victim into the ask queue
-					askQueue.AddAllocation(victim.GetAllocatedResource())
-					askQueueNewRemaining := askQueue.GetRemainingGuaranteedResource()
-
-					// Did adding this allocation make the ask queue over - utilized?
-					if askQueueNewRemaining != nil && resources.StrictlyGreaterThan(resources.Zero, askQueueNewRemaining) {
-						askQueue.RemoveAllocation(victim.GetAllocatedResource())
+					(remaining == nil || isVictimQueueOverGuaranteed(p.ask.GetAllocatedResource(), remaining)) {
+					// Does victimQueue have space equivalent to the resource used by the victim?
+					askQueueRemaining := askQueue.GetRemainingGuaranteedResource()
+					if askQueueRemaining != nil && askQueueRemaining.FitInActual(victim.GetAllocatedResource()) {
+						askQueue.AddAllocation(victim.GetAllocatedResource())
+					} else {
 						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
 						break
 					}
@@ -340,17 +343,17 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
-				oldRemaining := queueSnapshot.GetRemainingGuaranteedResource()
+				remaining := queueSnapshot.GetRemainingGuaranteedResource()
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 				preemptableResource := queueSnapshot.GetPreemptableResource()
 
-				// Did removing this allocation still keep the queue over-allocated?
+				// Did removing this allocation still keep the victim queue over-allocated?
 				// At times, over-allocation happens because of resource types in usage but not defined as guaranteed.
-				// So, as an additional check, -ve remaining guaranteed resource before removing the victim means
-				// some really useful victim is there.
+				// So, as an additional check, res types used by ask should be either -ve or zero in victim queue remaining guaranteed resource to confirm
+				// some relevant useful victim is there.
 				// Similar checks could be added even on the ask or preemptor queue to prevent being over utilized.
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
-					(oldRemaining == nil || resources.StrictlyGreaterThan(resources.Zero, oldRemaining)) {
+					(remaining == nil || isVictimQueueOverGuaranteed(p.ask.GetAllocatedResource(), remaining)) {
 					// removing task does not violate queue constraints, adjust queue and node
 					nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
 					// check if ask now fits and we haven't had this happen before
@@ -499,29 +502,28 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
-				oldRemaining := queueSnapshot.GetRemainingGuaranteedResource()
+				remaining := queueSnapshot.GetRemainingGuaranteedResource()
 				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 
-				// Did removing this allocation still keep the queue over-allocated?
+				// Did removing this allocation still keep the victim queue over-allocated?
 				// At times, over-allocation happens because of resource types in usage but not defined as guaranteed.
-				// So, as an additional check, -ve remaining guaranteed resource before removing the victim means
-				// some really useful victim is there.
+				// So, as an additional check, res types used by ask should be either -ve or zero in victim queue remaining guaranteed resource to confirm
+				// some relevant useful victim is there.
 				preemptableResource := queueSnapshot.GetPreemptableResource()
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
-					(oldRemaining == nil || resources.StrictlyGreaterThan(resources.Zero, oldRemaining)) {
-					askQueueRemainingAfterVictimRemoval := askQueue.GetRemainingGuaranteedResource()
-
-					// add the current victim into the ask queue
-					askQueue.AddAllocation(victim.GetAllocatedResource())
-					askQueueNewRemaining := askQueue.GetRemainingGuaranteedResource()
-					// Did adding this allocation make the ask queue over - utilized?
-					if askQueueNewRemaining != nil && resources.StrictlyGreaterThan(resources.Zero, askQueueNewRemaining) {
-						askQueue.RemoveAllocation(victim.GetAllocatedResource())
+					(remaining == nil || isVictimQueueOverGuaranteed(p.ask.GetAllocatedResource(), remaining)) {
+					// Does victimQueue have space equivalent to the resource used by the victim?
+					askQueueRemaining := askQueue.GetRemainingGuaranteedResource()
+					if askQueueRemaining != nil && askQueueRemaining.FitInActual(victim.GetAllocatedResource()) {
+						askQueue.AddAllocation(victim.GetAllocatedResource())
+					} else {
 						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
 						break
 					}
+					askQueueNewRemaining := askQueue.GetRemainingGuaranteedResource()
+
 					// check to see if the shortfall on the queue has changed
-					if !resources.EqualsOrEmpty(askQueueRemainingAfterVictimRemoval, askQueueNewRemaining) {
+					if !resources.EqualsOrEmpty(askQueueRemaining, askQueueNewRemaining) {
 						// remaining capacity changed, so we should keep this task
 						victims = append(victims, victim)
 					} else {
@@ -536,12 +538,17 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 			}
 		}
 	}
-	// At last, did the ask queue usage under or equals guaranteed quota?
-	finalRemainingRes := askQueue.GetRemainingGuaranteedResource()
-	if finalRemainingRes != nil && resources.StrictlyGreaterThanOrEquals(finalRemainingRes, resources.Zero) {
-		return victims, true
+
+	// At last, did the ask queue usage under or equals guaranteed quota after finding the additional victims?
+	if len(victims) > 0 {
+		finalRemainingRes := askQueue.GetRemainingGuaranteedResource()
+		if finalRemainingRes != nil && isAskQueueUnderGuaranteed(p.ask.GetAllocatedResource(), finalRemainingRes) {
+			return victims, true
+		} else {
+			return victims, false
+		}
 	}
-	return nil, false
+	return nil, true
 }
 
 // tryNodes attempts to find potential nodes for scheduling. For each node, potential victims are passed to
@@ -678,7 +685,7 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 			log.Log(log.SchedPreemption).Info("Preempting task",
 				zap.String("askApplicationID", p.ask.applicationID),
 				zap.String("askAllocationKey", p.ask.allocationKey),
-				zap.String("askQueue", p.queue.Name),
+				zap.String("victimQueue", p.queue.Name),
 				zap.String("victimApplicationID", victim.GetApplicationID()),
 				zap.String("victimAllocationKey", victim.GetAllocationKey()),
 				zap.Stringer("victimAllocatedResource", victim.GetAllocatedResource()),
@@ -705,7 +712,8 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
 		zap.String("allocationKey", p.ask.GetAllocationKey()),
 		zap.String("nodeID", nodeID),
-		zap.Int("victimCount", len(victims)))
+		zap.Int("collected victim count", len(victims)),
+		zap.Int("preempted victim count", len(finalVictims)))
 	return newReservedAllocationResult(nodeID, p.ask), true
 }
 
@@ -913,4 +921,34 @@ func batchPreemptionChecks(checks []*si.PreemptionPredicatesArgs, batchSize int)
 		result = append(result, checks[i:end])
 	}
 	return result
+}
+
+// isAskQueueUnderGuaranteed Is Ask Queue (not in general sense) under guaranteed purely based on the ask's resource requirement?
+// Traverse each ask's res type, confirm its existence in ask queue and check whether it has -ve or not.
+// -ve value means over guaranteed, return false to confirm the same
+// For all other cases (even if non-matching res type has -ve value), return true
+func isAskQueueUnderGuaranteed(askResource *resources.Resource, askQueue *resources.Resource) bool {
+	for resType := range askResource.Resources {
+		if val, ok := askQueue.Resources[resType]; ok {
+			if val < 0 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// isVictimQueueOverGuaranteed Is Victim Queue (not in general sense) over guaranteed purely based on the ask's resource requirement?
+// Traverse each ask's res type, confirm its existence in victim queue and check whether it has -ve or not.
+// -ve value means over guaranteed, return true to confirm the same
+// For all other cases (even if non-matching res type has -ve value), return false
+func isVictimQueueOverGuaranteed(askResource *resources.Resource, victimQueue *resources.Resource) bool {
+	for resType := range askResource.Resources {
+		if val, ok := victimQueue.Resources[resType]; ok {
+			if val < 0 {
+				return true
+			}
+		}
+	}
+	return false
 }

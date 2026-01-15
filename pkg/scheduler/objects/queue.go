@@ -442,7 +442,16 @@ func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay 
 	// quota has been lowered, need to set the start time.
 	if resources.StrictlyGreaterThan(oldMaxResource, sq.maxResource) {
 		if !sq.quotaPreemptionStartTime.IsZero() {
-			log.Log(log.SchedQueue).Info("quota preemption time already set from earlier quota change",
+			// multiple consecutive lowering of quotas detected: check for delay change
+			if oldDelay != sq.quotaPreemptionDelay {
+				sq.quotaPreemptionStartTime = sq.quotaPreemptionStartTime.Add(sq.quotaPreemptionDelay - oldDelay)
+				log.Log(log.SchedQueue).Info("consecutive lowering of quota with delay change",
+					zap.String("queue", sq.QueuePath),
+					zap.Time("quotaPreemptionStartTime", sq.quotaPreemptionStartTime),
+					zap.Duration("delta", sq.quotaPreemptionDelay-oldDelay))
+				return
+			}
+			log.Log(log.SchedQueue).Info("consecutive lowering of quota: preemption time already set from earlier quota change",
 				zap.String("queue", sq.QueuePath),
 				zap.Time("quotaPreemptionStartTime", sq.quotaPreemptionStartTime))
 			return

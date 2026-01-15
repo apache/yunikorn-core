@@ -3208,6 +3208,7 @@ func TestQueue_setPreemptionTime(t *testing.T) {
 		{"max increase", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, 10, 10, false, false},
 		{"max lowered", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, false, true},
 		{"max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, true, false},
+		{"delay change max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 5, 10, true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

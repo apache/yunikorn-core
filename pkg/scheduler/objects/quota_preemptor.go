@@ -257,8 +257,8 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 		zap.Bool("isGuaranteedSet", qpc.guaranteedResource.IsEmpty()),
 	)
 	for _, victim := range qpc.allocations {
-		victimALloc := victim.GetAllocatedResource()
-		if !qpc.preemptableResource.FitInMaxUndef(victimALloc) {
+		victimAlloc := victim.GetAllocatedResource()
+		if !qpc.preemptableResource.FitInMaxUndef(victimAlloc) {
 			continue
 		}
 		application := qpc.queue.GetApplication(victim.applicationID)
@@ -272,7 +272,7 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 		// Keep collecting the victims until preemptable resource reaches and subtract the usage
 		if qpc.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
 			apps[application] = append(apps[application], victim)
-			qpc.allocatedResource.SubFrom(victimALloc)
+			qpc.allocatedResource.SubFrom(victimAlloc)
 		}
 
 		// Has usage gone below the guaranteed resources?
@@ -281,10 +281,10 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 			victims := apps[application]
 			exceptRecentlyAddedVictims := victims[:len(victims)-1]
 			apps[application] = exceptRecentlyAddedVictims
-			qpc.allocatedResource.AddTo(victimALloc)
-			victimsTotalResource.SubFrom(victimALloc)
+			qpc.allocatedResource.AddTo(victimAlloc)
+			victimsTotalResource.SubFrom(victimAlloc)
 		} else {
-			victimsTotalResource.AddTo(victimALloc)
+			victimsTotalResource.AddTo(victimAlloc)
 		}
 	}
 

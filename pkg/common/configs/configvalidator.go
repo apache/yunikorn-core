@@ -41,6 +41,7 @@ const (
 	DotReplace       = "_dot_"
 	DefaultPartition = "default"
 
+	// constants defining the names for properties
 	ApplicationSortPolicy                    = "application.sort.policy"
 	ApplicationSortPriority                  = "application.sort.priority"
 	ApplicationUnschedulableAsksBackoff      = "application.unschedasks.backoff"
@@ -49,6 +50,7 @@ const (
 	PriorityOffset                           = "priority.offset"
 	PreemptionPolicy                         = "preemption.policy"
 	PreemptionDelay                          = "preemption.delay"
+	QuotaPreemptionDelay                     = "preemption.quota.delay"
 
 	// app sort priority values
 	ApplicationSortPriorityEnabled  = "enabled"
@@ -61,35 +63,39 @@ const (
 	errLastQueueLeaf
 )
 
-type placementPathCheckResult int
-
-// Priority
+// MinPriority and MaxPriority used in offset calculations. K8s uses an int32 value for priorities, internal calculations
+// use int64.
 var MinPriority int32 = math.MinInt32
 var MaxPriority int32 = math.MaxInt32
 
+// DefaultQuotaPreemptionDelay is 0, no quota preemption by default
+var DefaultQuotaPreemptionDelay time.Duration = 0
+
+// DefaultPreemptionDelay is 30 seconds, guaranteed resources must be set to trigger preemption
 var DefaultPreemptionDelay = 30 * time.Second
 var DefaultAskBackOffDelay = 30 * time.Second
 
-// A queue can be a username with the dot replaced. Most systems allow a 32 character user name.
+// QueueNameRegExp to validate the name of a queue.
+// A queue can be a username with the dot replaced. Most systems allow a 32 character username.
 // The queue name must thus allow for at least that length with the replacement of dots.
 var QueueNameRegExp = regexp.MustCompile(`^[a-zA-Z0-9_:#/@-]{1,64}$`)
 
-// User and group name check: systems allow different things POSIX is the base but we need to be lenient and allow more.
-// A username must start with a letter(uppercase or lowercase),
-// followed by any number of letter(uppercase or lowercase), digits, ':', '#', '/', '_', '.', '@', '-', and may end with '$'.
+// UserRegExp to validate a username. Systems allow different things POSIX is the base, but we need to be lenient and allow more.
+// A username must start with a letter(uppercase or lowercase), followed by any number of letter(uppercase or lowercase),
+// digits, ':', '#', '/', '_', '.', '@', '-', and may end with '$'.
+// This supports OIDC compliant names.
 var UserRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:#/_.@-]*[$]?$`)
 
-// Groups should have a slightly more restrictive regexp (no # / @ or $ at the end)
+// GroupRegExp is similar to UserRegExp, groups have a slightly more restrictive regexp (no # / @ or $ at the end)
 var GroupRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9:_.-]*$`)
 
-// all characters that make a name different from a regexp
+// SpecialRegExp matches all characters that make a name different from a regexp
 var SpecialRegExp = regexp.MustCompile(`[\^$*+?()\[{}|]`)
 
-// The rule maps to a go identifier check that regexp only
+// RuleNameRegExp as rule names must map to a go identifier check that regexp only
 var RuleNameRegExp = regexp.MustCompile(`^[_a-zA-Z][a-zA-Z0-9_]*$`)
 
-// Minimum Quota change preemption delay
-var minQuotaChangePreemptionDelay uint64 = 60
+type placementPathCheckResult int
 
 type placementStaticPath struct {
 	path           string
@@ -668,9 +674,6 @@ func checkQueues(queue *QueueConfig, level int) error {
 			return fmt.Errorf("duplicate child name found with name '%s', level %d", child.Name, level)
 		}
 		queueMap[strings.ToLower(child.Name)] = true
-		if queue.Preemption.Delay != 0 && queue.Preemption.Delay <= minQuotaChangePreemptionDelay {
-			return fmt.Errorf("invalid preemption delay %d, must be between %d and %d", queue.Preemption.Delay, minQuotaChangePreemptionDelay, uint64(math.MaxUint64))
-		}
 	}
 
 	// recurse into the depth if this level passed

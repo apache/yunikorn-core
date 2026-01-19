@@ -626,6 +626,7 @@ partitions:
       - name: root
     preemption:
       enabled: true
+      quotapreemptionenabled: true
   - name: "partition-0"
     queues:
       - name: root
@@ -637,6 +638,7 @@ partitions:
       - name: root
     preemption:
       enabled: false
+      quotapreemptionenabled: false
   - name: "partition-0"
     queues:
       - name: root
@@ -644,15 +646,18 @@ partitions:
 	// validate the config and check after the update
 	conf, err := CreateConfig(data)
 	assert.NilError(t, err, "should expect no error")
-	assert.Assert(t, conf.Partitions[0].Preemption.Enabled == nil, "default should be nil")
+	assert.Assert(t, conf.Partitions[0].Preemption.Enabled == nil, "default preemption should be nil")
+	assert.Assert(t, conf.Partitions[0].Preemption.QuotaPreemptionEnabled == nil, "default quota preemption should be nil")
 
 	conf, err = CreateConfig(dataEnabled)
 	assert.NilError(t, err, "should expect no error")
 	assert.Assert(t, *conf.Partitions[0].Preemption.Enabled, "preemption should be enabled")
+	assert.Assert(t, *conf.Partitions[0].Preemption.QuotaPreemptionEnabled, "quota preemption should be enabled")
 
 	conf, err = CreateConfig(dataDisabled)
 	assert.NilError(t, err, "should expect no error")
 	assert.Assert(t, !*conf.Partitions[0].Preemption.Enabled, "preemption should be disabled")
+	assert.Assert(t, !*conf.Partitions[0].Preemption.QuotaPreemptionEnabled, "quota preemption should be disabled")
 }
 
 func TestParseRule(t *testing.T) {

@@ -32,14 +32,14 @@ import (
 	"github.com/apache/yunikorn-core/pkg/log"
 )
 
-// The configuration can contain multiple partitions. Each partition contains the queue definition for a logical
+// SchedulerConfig can contain multiple partitions. Each partition contains the queue definition for a logical
 // set of scheduler resources.
 type SchedulerConfig struct {
 	Partitions []PartitionConfig
 	Checksum   string `yaml:",omitempty" json:",omitempty"`
 }
 
-// The partition object for each partition:
+// PartitionConfig for each partition:
 // - the name of the partition
 // - a list of sub or child queues
 // - a list of placement rule definition objects
@@ -60,12 +60,13 @@ type UserGroupResolver struct {
 	Type string `yaml:"type,omitempty" json:"type,omitempty"`
 }
 
-// The partition preemption configuration
+// PartitionPreemptionConfig defines global flags for both preemption types
 type PartitionPreemptionConfig struct {
-	Enabled *bool `yaml:",omitempty" json:",omitempty"`
+	Enabled                *bool `yaml:",omitempty" json:",omitempty"`
+	QuotaPreemptionEnabled *bool `yaml:",omitempty" json:",omitempty"`
 }
 
-// The queue object for each queue:
+// QueueConfig object for each queue:
 // - the name of the queue
 // - a resources object to specify resource limits on the queue
 // - the maximum number of applications that can run in the queue
@@ -84,20 +85,16 @@ type QueueConfig struct {
 	ChildTemplate   ChildTemplate     `yaml:",omitempty" json:",omitempty"`
 	Queues          []QueueConfig     `yaml:",omitempty" json:",omitempty"`
 	Limits          []Limit           `yaml:",omitempty" json:",omitempty"`
-	Preemption      Preemption        `yaml:",omitempty" json:",omitempty"`
 }
 
-type Preemption struct {
-	Delay uint64 `yaml:",omitempty" json:",omitempty"`
-}
-
+// ChildTemplate set on a parent queue with settings to be applied to the child created via a placement rule.
 type ChildTemplate struct {
 	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
 	Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
 	Resources       Resources         `yaml:",omitempty" json:",omitempty"`
 }
 
-// The resource limits to set on the queue. The definition allows for an unlimited number of types to be used.
+// The Resources limit to apply on the queue. The definition allows for an unlimited number of types to be used.
 // The mapping to "known" resources is not handled here.
 // - guaranteed resources
 // - max resources
@@ -106,12 +103,12 @@ type Resources struct {
 	Max        map[string]string `yaml:",omitempty" json:",omitempty"`
 }
 
-// The queue placement rule definition
+// The PlacementRule definition:
 // - the name of the rule
 // - create flag: can the rule create a queue
 // - user and group filter to be applied on the callers
 // - rule link to allow setting a rule to generate the parent
-// - value a generic value interpreted depending on the rule type (i.e queue name for the "fixed" rule
+// - value a generic value interpreted depending on the rule type (i.e. queue name for the "fixed" rule
 // or the application label name for the "tag" rule)
 type PlacementRule struct {
 	Name   string
@@ -121,7 +118,7 @@ type PlacementRule struct {
 	Value  string         `yaml:",omitempty" json:",omitempty"`
 }
 
-// The user and group filter for a rule.
+// Filter for users and groups for a PlacementRule.
 // - type of filter (allow or deny filter, empty means allow)
 // - list of users to filter (maybe empty)
 // - list of groups to filter (maybe empty)
@@ -132,13 +129,13 @@ type Filter struct {
 	Groups []string `yaml:",omitempty" json:",omitempty"`
 }
 
-// A list of limit objects to define limits for a partition or queue
+// Limits is a list of Limit objects to define user and group limits for a partition or queue.
 type Limits struct {
 	Limit []Limit
 }
 
-// The limit object to specify user and or group limits at different levels in the partition or queues
-// Different limits for the same user or group may be defined at different levels in the hierarchy
+// A Limit object to specify user and or group limits at different levels in the partition or queues.
+// Different limits for the same user or group may be defined at different levels in the hierarchy:
 // - limit description (optional)
 // - list of users (maybe empty)
 // - list of groups (maybe empty)
@@ -152,8 +149,10 @@ type Limit struct {
 	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
 }
 
-// Global Node Sorting Policy section
-// - type: different type of policies supported (binpacking, fair etc)
+// NodeSortingPolicy to be applied globally.
+// - type: different type of policies supported (binpacking, fair etc.)
+// - resource weight: factor to be applied to comparisons of different resource types when sorting nodes. Types not
+// mentioned have a weight of 1.0.
 type NodeSortingPolicy struct {
 	Type            string
 	ResourceWeights map[string]float64 `yaml:",omitempty" json:",omitempty"`

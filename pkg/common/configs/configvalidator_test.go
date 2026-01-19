@@ -2327,34 +2327,6 @@ func TestCheckQueues(t *testing.T) { //nolint:funlen
 				assert.Equal(t, 2, len(q.Queues), "Expected two queues")
 			},
 		},
-		{
-			name: "Invalid Preemption delay for leaf queue",
-			queue: &QueueConfig{
-				Name: "root",
-				Queues: []QueueConfig{
-					{Name: "leaf",
-						Preemption: Preemption{
-							Delay: 10,
-						},
-					},
-				},
-				Preemption: Preemption{
-					Delay: 10,
-				},
-			},
-			level:            1,
-			expectedErrorMsg: "invalid preemption delay 10, must be between 60 and 18446744073709551615",
-		},
-		{
-			name: "Setting Preemption delay on root queue would be ignored",
-			queue: &QueueConfig{
-				Name: "root",
-				Preemption: Preemption{
-					Delay: 10,
-				},
-			},
-			level: 0,
-		},
 	}
 
 	for _, tc := range testCases {

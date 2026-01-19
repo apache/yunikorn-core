@@ -65,6 +65,7 @@ type PartitionContext struct {
 	reservations           int                             // number of reservations
 	placeholderAllocations int                             // number of placeholder allocations
 	preemptionEnabled      bool                            // whether preemption is enabled or not
+	quotaPreemptionEnabled bool                            // whether quota preemption is enabled or not
 	foreignAllocs          map[string]*objects.Allocation  // foreign (non-Yunikorn) allocations
 	appQueueMapping        *objects.AppQueueMapping        // appID mapping to queues
 
@@ -166,6 +167,7 @@ func (pc *PartitionContext) updateNodeSortingPolicy(conf configs.PartitionConfig
 // NOTE: this is a lock free call. It should only be called holding the PartitionContext lock.
 func (pc *PartitionContext) updatePreemption(conf configs.PartitionConfig) {
 	pc.preemptionEnabled = conf.Preemption.Enabled == nil || *conf.Preemption.Enabled
+	pc.quotaPreemptionEnabled = conf.Preemption.QuotaPreemptionEnabled != nil && *conf.Preemption.QuotaPreemptionEnabled
 }
 
 func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig) error {
@@ -189,12 +191,12 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	queueConf := conf.Queues[0]
 	root := pc.root
 	// update the root queue
-	if err := root.ApplyConf(queueConf); err != nil {
+	if _, err = root.ApplyConf(queueConf); err != nil {
 		return err
 	}
-	root.UpdateQueueProperties()
+	root.UpdateQueueProperties(nil)
 	// update the rest of the queues recursively
-	if err := pc.updateQueues(queueConf.Queues, root); err != nil {
+	if err = pc.updateQueues(queueConf.Queues, root); err != nil {
 		return err
 	}
 	// update limit settings: start at the root
@@ -234,16 +236,17 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 		pathName := parentPath + queueConfig.Name
 		queue := pc.getQueueInternal(pathName)
 		var err error
+		var oldMax *resources.Resource
 		if queue == nil {
 			queue, err = objects.NewConfiguredQueue(queueConfig, parent, false, pc.appQueueMapping)
 		} else {
-			err = queue.ApplyConf(queueConfig)
+			oldMax, err = queue.ApplyConf(queueConfig)
 		}
 		if err != nil {
 			return err
 		}
 		// special call to convert to a real policy from the property
-		queue.UpdateQueueProperties()
+		queue.UpdateQueueProperties(oldMax)
 		if err = pc.updateQueues(queueConfig.Queues, queue); err != nil {
 			return err
 		}
@@ -816,7 +819,7 @@ func (pc *PartitionContext) tryAllocate() *objects.AllocationResult {
 		return nil
 	}
 	// try allocating from the root down
-	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.IsPreemptionEnabled())
+	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.IsPreemptionEnabled(), pc.IsQuotaPreemptionEnabled())
 	if result != nil {
 		return pc.allocate(result)
 	}
@@ -1643,6 +1646,12 @@ func (pc *PartitionContext) IsPreemptionEnabled() bool {
 	pc.RLock()
 	defer pc.RUnlock()
 	return pc.preemptionEnabled
+}
+
+func (pc *PartitionContext) IsQuotaPreemptionEnabled() bool {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.quotaPreemptionEnabled
 }
 
 func (pc *PartitionContext) moveTerminatedApp(appID string) {

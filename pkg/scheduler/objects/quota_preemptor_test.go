@@ -20,7 +20,6 @@ package objects
 
 import (
 	"testing"
-
 	"time"
 
 	"gotest.tools/v3/assert"
@@ -29,88 +28,6 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
-
-func TestQuotaChangeCheckPreconditions(t *testing.T) {
-	parentConfig := configs.QueueConfig{
-		Name:   "parent",
-		Parent: true,
-		Resources: configs.Resources{
-			Max: map[string]string{"memory": "1000"},
-		},
-	}
-	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
-	assert.NilError(t, err)
-	parent.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
-
-	leafRes := configs.Resources{
-		Max: map[string]string{"memory": "1000"},
-	}
-	leaf, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:      "leaf",
-		Resources: leafRes,
-	}, parent, false, nil)
-	assert.NilError(t, err)
-
-	dynamicLeaf, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:      "dynamic-leaf",
-		Resources: leafRes,
-	}, parent, false, nil)
-	assert.NilError(t, err)
-	dynamicLeaf.isManaged = false
-
-	alreadyPreemptionRunning, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:      "leaf-already-preemption-running",
-		Resources: leafRes,
-	}, parent, false, nil)
-	assert.NilError(t, err)
-
-	usageExceededMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:      "leaf-usage-exceeded-max",
-		Resources: leafRes,
-	}, parent, false, nil)
-	assert.NilError(t, err)
-	usageExceededMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
-
-	usageEqualsMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:      "leaf-usage-equals-max",
-		Resources: leafRes,
-	}, parent, false, nil)
-	assert.NilError(t, err)
-	usageEqualsMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 1000})
-
-	usageNotMatchingMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
-		Name: "leaf-usage-res-not-matching-max-res",
-		Resources: configs.Resources{
-			Max: map[string]string{"cpu": "1000"},
-		},
-	}, parent, false, nil)
-	assert.NilError(t, err)
-	usageNotMatchingMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000})
-
-	testCases := []struct {
-		name               string
-		queue              *Queue
-		preemptionRunning  bool
-		preconditionResult bool
-	}{
-		{"parent queue", parent, false, true},
-		{"leaf queue", leaf, false, false},
-		{"dynamic leaf queue", dynamicLeaf, false, false},
-		{"leaf queue, usage exceeded max resources", usageExceededMaxQueue, false, true},
-		{"leaf queue, usage equals max resources", usageEqualsMaxQueue, false, false},
-		{"leaf queue, already preemption process started or running", alreadyPreemptionRunning, true, false},
-	}
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			tc.queue.MarkQuotaChangePreemptionRunning(tc.preemptionRunning)
-			preemptor := NewQuotaChangePreemptor(tc.queue)
-			assert.Equal(t, preemptor.CheckPreconditions(), tc.preconditionResult)
-		})
-	}
-	// Since parent's leaf queue "leaf-already-preemption-running" is running, parent preconditions passed earlier should fail now
-	preemptor := NewQuotaChangePreemptor(parent)
-	assert.Equal(t, preemptor.CheckPreconditions(), false)
-}
 
 func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 	leaf, err := NewConfiguredQueue(configs.QueueConfig{
@@ -137,8 +54,9 @@ func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.queue.maxResource = tc.maxResource
 			tc.queue.allocatedResource = tc.usedResource
-			preemptor := NewQuotaChangePreemptor(tc.queue)
-			assert.Equal(t, resources.Equals(preemptor.getPreemptableResources(), tc.preemptable), true)
+			preemptor := NewQuotaPreemptor(tc.queue)
+			preemptor.setPreemptableResources()
+			assert.Equal(t, resources.Equals(preemptor.preemptableResource, tc.preemptable), true)
 		})
 	}
 }
@@ -191,10 +109,10 @@ func TestQuotaChangeFilterVictims(t *testing.T) {
 				err = asks[5].SetReleased(true)
 				assert.NilError(t, err)
 			}
-			preemptor := NewQuotaChangePreemptor(tc.queue)
+			preemptor := NewQuotaPreemptor(tc.queue)
 			preemptor.preemptableResource = tc.preemptableResource
-			allocations := preemptor.filterAllocations()
-			assert.Equal(t, len(allocations), tc.expectedAllocationsCount)
+			preemptor.filterAllocations()
+			assert.Equal(t, len(preemptor.allocations), tc.expectedAllocationsCount)
 			removeAllocationAsks(node, asks)
 			resetQueue(leaf)
 		})
@@ -267,10 +185,10 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 			assignAllocationsToQueue(asks, leaf)
 			leaf.maxResource = tc.newMax
 			leaf.guaranteedResource = tc.guaranteed
-			preemptor := NewQuotaChangePreemptor(tc.queue)
+			preemptor := NewQuotaPreemptor(tc.queue)
 			preemptor.allocations = asks
 			preemptor.tryPreemption()
-			assert.Equal(t, len(preemptor.getVictims()), tc.totalExpectedVictims)
+			assert.Equal(t, len(preemptor.allocations), tc.totalExpectedVictims)
 			var victimsCount int
 			for _, a := range asks {
 				if a.IsPreempted() {
@@ -379,9 +297,9 @@ func TestQuotaChangeTryPreemptionWithDifferentResTypes(t *testing.T) {
 				assignAllocationsToQueue(asks, leaf)
 				leaf.maxResource = tc.newMax
 				leaf.guaranteedResource = tc.guaranteed
-				preemptor := NewQuotaChangePreemptor(tc.queue)
+				preemptor := NewQuotaPreemptor(tc.queue)
 				preemptor.tryPreemption()
-				assert.Equal(t, len(preemptor.getVictims()), v.totalExpectedVictims)
+				assert.Equal(t, len(preemptor.allocations), v.totalExpectedVictims)
 				var victimsCount int
 				for _, a := range asks {
 					if a.IsPreempted() {
@@ -628,7 +546,7 @@ func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
 				assignAllocationsToQueue(v, q)
 			}
 			tc.queue.maxResource = tc.newMax
-			preemptor := NewQuotaChangePreemptor(tc.queue)
+			preemptor := NewQuotaPreemptor(tc.queue)
 			preemptor.tryPreemption()
 			for q, asks := range tc.victims {
 				var victimsCount int

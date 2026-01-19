@@ -52,6 +52,7 @@ type PartitionQueueDAOInfo struct {
 	PreemptionEnabled      bool                    `json:"preemptionEnabled"` // no omitempty, false shows preemption status better
 	IsPreemptionFence      bool                    `json:"isPreemptionFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
 	PreemptionDelay        string                  `json:"preemptionDelay,omitempty"`
+	QuotaPreemptionDelay   string                  `json:"quotaPreemptionDelay,omitempty"`
 	IsPriorityFence        bool                    `json:"isPriorityFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
 	PriorityOffset         int32                   `json:"priorityOffset,omitempty"`
 }

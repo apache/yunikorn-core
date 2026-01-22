@@ -464,11 +464,13 @@ func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay 
 			zap.Duration("delay", sq.quotaPreemptionDelay),
 			zap.Time("quotaPreemptionStartTime", sq.quotaPreemptionStartTime))
 		return
-	} else {
-		// Quota has been increased but earlier set quota changes not yet enforced.
-		// Irrespective of whether quota increased from already lowered value or the original value (which is not yet enforced either ways),
-		// decision would be taken later based on the usage then during the scheduling cycle
-		// Adjust the delay only here if it has been changed
+	}
+
+	// Quota has been increased but earlier set quota changes not yet enforced.
+	// Irrespective of whether quota increased from already lowered value or the original value (which is not yet enforced either ways),
+	// decision would be taken later based on the usage then during the scheduling cycle
+	// Adjust the delay only here if it has been changed
+	if resources.StrictlyGreaterThan(sq.maxResource, oldMaxResource) {
 		if !sq.quotaPreemptionStartTime.IsZero() {
 			if oldDelay != sq.quotaPreemptionDelay {
 				sq.quotaPreemptionStartTime = sq.quotaPreemptionStartTime.Add(sq.quotaPreemptionDelay - oldDelay)

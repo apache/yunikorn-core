@@ -3205,10 +3205,13 @@ func TestQueue_setPreemptionTime(t *testing.T) {
 		{"delay added", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 0, 10, false, true},
 		{"delay change set start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 5, 10, true, true},
 		{"delay change no start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 5, 10, false, false},
-		{"max increase", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, 10, 10, false, false},
 		{"max lowered", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, false, true},
 		{"max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, true, false},
 		{"delay change max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 5, 10, true, true},
+		{"max increase", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, 5, 5, true, false},
+		{"max increased 2nd with delay change", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "120"}, 5, 10, true, true}, {"max increased 2nd with delay change", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "120"}, 5, 10, true, true},
+		{"max lowered again", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, true, false},
+		{"max lowered again 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 5, true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

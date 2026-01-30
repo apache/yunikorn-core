@@ -1325,7 +1325,7 @@ func TestCheckLimitResource(t *testing.T) { //nolint:funlen
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimitResource(testCase.config, make(map[string]map[string]*resources.Resource), make(map[string]map[string]*resources.Resource), common.Empty)
+			err := checkLimitResource(testCase.config, make(map[string]*resources.Resource, 0), make(map[string]*resources.Resource, 0))
 			if testCase.errMsg != "" {
 				assert.ErrorContains(t, err, testCase.errMsg)
 			} else {
@@ -1680,7 +1680,7 @@ func TestCheckLimitMaxApplications(t *testing.T) { //nolint:funlen
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			err := checkLimitMaxApplications(testCase.config, make(map[string]map[string]uint64), make(map[string]map[string]uint64), common.Empty)
+			err := checkLimitMaxApplications(testCase.config, make(map[string]uint64), make(map[string]uint64))
 			if testCase.errMsg != "" {
 				assert.ErrorContains(t, err, testCase.errMsg)
 			} else {

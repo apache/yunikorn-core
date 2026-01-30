@@ -87,6 +87,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 		log.Log(log.SchedNode).Error("New node created with no available resources",
 			zap.Error(err))
 	}
+
 	sn.initializeAttribute(proto.Attributes)
 
 	return sn
@@ -96,7 +97,6 @@ func (sn *Node) String() string {
 	if sn == nil {
 		return "node is nil"
 	}
-	sn.totalResource.Prune()
 	return fmt.Sprintf("NodeID %s, Partition %s, Schedulable %t, Total %s, Allocated %s, #allocations %d",
 		sn.NodeID, sn.Partition, sn.schedulable, sn.totalResource, sn.allocatedResource, len(sn.allocations))
 }
@@ -153,7 +153,6 @@ func (sn *Node) GetReservationKeys() []string {
 func (sn *Node) GetCapacity() *resources.Resource {
 	sn.RLock()
 	defer sn.RUnlock()
-	sn.totalResource.Prune()
 	return sn.totalResource.Clone()
 }
 
@@ -190,6 +189,7 @@ func (sn *Node) UpdateAllocatedResource(delta *resources.Resource) {
 	sn.Lock()
 	defer sn.Unlock()
 	sn.allocatedResource.AddTo(delta)
+	sn.allocatedResource.Prune()
 	sn.refreshAvailableResource()
 }
 
@@ -209,10 +209,10 @@ func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
 // refresh node available resource based on the latest total, allocated and occupied resources.
 // this call assumes the caller already acquires the lock.
 func (sn *Node) refreshAvailableResource() {
-	sn.totalResource.Prune()
 	sn.availableResource = sn.totalResource.Clone()
 	sn.availableResource.SubFrom(sn.allocatedResource)
 	sn.availableResource.SubFrom(sn.occupiedResource)
+	sn.availableResource.Prune()
 	// check if any quantity is negative: a nil resource is all 0's
 	if !resources.StrictlyGreaterThanOrEquals(sn.availableResource, nil) {
 		log.Log(log.SchedNode).Warn("Node update triggered over allocated node",
@@ -342,6 +342,7 @@ func (sn *Node) RemoveAllocation(allocationKey string) *Allocation {
 			sn.occupiedResource = resources.Sub(sn.occupiedResource, alloc.GetAllocatedResource())
 		} else {
 			sn.allocatedResource.SubFrom(alloc.GetAllocatedResource())
+			sn.allocatedResource.Prune()
 		}
 		sn.availableResource.AddTo(alloc.GetAllocatedResource())
 		sn.nodeEvents.SendAllocationRemovedEvent(sn.NodeID, alloc.allocationKey, alloc.GetAllocatedResource())
@@ -387,12 +388,14 @@ func (sn *Node) UpdateForeignAllocation(alloc *Allocation) *Allocation {
 	existingResource := existing.GetAllocatedResource().Clone()
 	newResource := alloc.GetAllocatedResource().Clone()
 	delta := resources.Sub(newResource, existingResource)
+	delta.Prune()
 
 	log.Log(log.SchedNode).Info("node foreign allocation updated",
 		zap.String("allocationKey", alloc.GetAllocationKey()),
 		zap.Stringer("deltaResource", delta),
 		zap.String("targetNode", sn.NodeID))
 	sn.occupiedResource.AddTo(delta)
+	sn.occupiedResource.Prune()
 	sn.refreshAvailableResource()
 
 	return existing
@@ -423,6 +426,7 @@ func (sn *Node) addAllocationInternal(alloc *Allocation, force bool) bool {
 			sn.allocatedResource.AddTo(res)
 		}
 		sn.availableResource.SubFrom(res)
+		sn.availableResource.Prune()
 		sn.nodeEvents.SendAllocationAddedEvent(sn.NodeID, alloc.allocationKey, res)
 		log.Log(log.SchedNode).Info("node allocation processed",
 			zap.String("appID", alloc.GetApplicationID()),
@@ -453,6 +457,7 @@ func (sn *Node) ReplaceAllocation(allocationKey string, replace *Allocation, del
 	// The allocatedResource and availableResource should be updated in the same way
 	sn.allocatedResource.AddTo(delta)
 	sn.availableResource.SubFrom(delta)
+	sn.availableResource.Prune()
 	log.Log(log.SchedNode).Info("node allocation replaced",
 		zap.String("appID", replace.GetApplicationID()),
 		zap.String("allocationKey", replace.GetAllocationKey()),
@@ -657,7 +662,6 @@ func (sn *Node) GetResourceUsageShares() map[string]float64 {
 		// no resources present, so no usage
 		return res
 	}
-	sn.totalResource.Prune()
 	for k, v := range sn.totalResource.Resources {
 		res[k] = float64(1) - (float64(sn.availableResource.Resources[k]) / float64(v))
 	}
@@ -702,7 +706,6 @@ func (sn *Node) getListeners() []NodeListener {
 func (sn *Node) SendNodeAddedEvent() {
 	sn.RLock()
 	defer sn.RUnlock()
-	sn.totalResource.Prune()
 	sn.nodeEvents.SendNodeAddedEvent(sn.NodeID, sn.totalResource.Clone())
 }
 

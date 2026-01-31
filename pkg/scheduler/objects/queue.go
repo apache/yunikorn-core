@@ -411,10 +411,19 @@ func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay 
 	// if no current limit we should not preempt even if it was set earlier, clear the start time
 	if resources.IsZero(sq.maxResource) {
 		sq.quotaPreemptionStartTime = time.Time{}
-		log.Log(log.SchedQueue).Info("removed quota preemption start time",
+		log.Log(log.SchedQueue).Info("max resource is not set, removed quota preemption start time",
 			zap.String("queue", sq.QueuePath))
 		return
 	}
+
+	// usage is below max, so not required to set anything. clear the start time if it was set earlier.
+	if sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource) {
+		sq.quotaPreemptionStartTime = time.Time{}
+		log.Log(log.SchedQueue).Info("usage is below max resource, removed quota preemption start time",
+			zap.String("queue", sq.QueuePath))
+		return
+	}
+
 	// adjust the startup based on the diff between the delays if no change
 	if resources.Equals(oldMaxResource, sq.maxResource) {
 		if sq.quotaPreemptionStartTime.IsZero() {

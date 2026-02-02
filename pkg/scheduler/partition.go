@@ -821,6 +821,9 @@ func (pc *PartitionContext) tryAllocate() *objects.AllocationResult {
 	// try allocating from the root down
 	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.IsPreemptionEnabled(), pc.IsQuotaPreemptionEnabled())
 	if result != nil {
+		// Record metrics from the allocation result
+		metrics.GetSchedulerMetrics().AddTryNodeCount(result.NodesTried)
+		metrics.GetSchedulerMetrics().AddTryApplicationCount(result.ApplicationsTried)
 		return pc.allocate(result)
 	}
 	return nil
@@ -839,6 +842,8 @@ func (pc *PartitionContext) tryReservedAllocate() *objects.AllocationResult {
 	// try allocating from the root down
 	result := pc.root.TryReservedAllocate(pc.GetNodeIterator)
 	if result != nil {
+		// Record metrics from the allocation result
+		metrics.GetSchedulerMetrics().AddTryNodeCount(result.NodesTried)
 		return pc.allocate(result)
 	}
 	return nil
@@ -854,9 +859,12 @@ func (pc *PartitionContext) tryPlaceholderAllocate() *objects.AllocationResult {
 		// nothing to do just return
 		return nil
 	}
+
 	// try allocating from the root down
 	result := pc.root.TryPlaceholderAllocate(pc.GetNodeIterator, pc.GetNode)
 	if result != nil {
+		// Record metrics from the allocation result
+		metrics.GetSchedulerMetrics().AddTryNodeCount(result.NodesTried)
 		log.Log(log.SchedPartition).Info("scheduler replace placeholder processed",
 			zap.String("appID", result.Request.GetApplicationID()),
 			zap.String("allocationKey", result.Request.GetAllocationKey()),

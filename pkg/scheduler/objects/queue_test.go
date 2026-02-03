@@ -3193,31 +3193,36 @@ func TestQueue_setPreemptionTime(t *testing.T) {
 		name           string
 		oldMaxResource *resources.Resource
 		maxRes         map[string]string
+		currentUsage   *resources.Resource
 		oldDelay       time.Duration
 		delay          time.Duration
 		oldStart       bool
 		timeChange     bool
 	}{
-		{"empty", nil, map[string]string{}, 0, 0, false, false},
-		{"no delays", resources.Zero, map[string]string{"test": "100"}, 0, 0, false, false},
-		{"max removed", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, 10, 10, false, false},
-		{"max removed update", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, 0, 10, true, true},
-		{"delay added", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 0, 10, false, true},
-		{"delay change set start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 5, 10, true, true},
-		{"delay change no start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, 5, 10, false, false},
-		{"max lowered", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, false, true},
-		{"max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, true, false},
-		{"delay change max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 5, 10, true, true},
-		{"max increase", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, 5, 5, true, false},
-		{"max increased 2nd with delay change", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "120"}, 5, 10, true, true}, {"max increased 2nd with delay change", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "120"}, 5, 10, true, true},
-		{"max lowered again", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 10, true, false},
-		{"max lowered again 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, 10, 5, true, true},
+		{"empty", nil, map[string]string{}, nil, 0, 0, false, false},
+		{"no delays", resources.Zero, map[string]string{"test": "100"}, nil, 0, 0, false, false},
+		{"max removed", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, nil, 10, 10, false, false},
+		{"max removed update", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, nil, 0, 10, true, true},
+		{"delay added", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 0, 10, false, true},
+		{"delay change set start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 10, true, true},
+		{"delay change no start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, nil, 5, 10, false, false},
+		{"max lowered", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 10, 10, false, true},
+		{"max lowered but usage is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 5}), 10, 10, true, true},
+		{"max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 10, 10, true, false},
+		{"delay change max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 10, true, true},
+		{"max increase", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 5, true, false},
+		{"max increase but usage is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 90}), 5, 5, true, true},
+		{"max increased 2nd with delay change", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "120"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 10, true, true},
+		{"max lowered again", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 10, 10, true, false},
+		{"max lowered again but usage is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 5}), 10, 10, true, true},
+		{"max lowered again 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, nil, 10, 5, true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			queue, err := createManagedQueue(root, "test", false, tt.maxRes)
 			assert.NilError(t, err, "queue creation failed unexpectedly")
 			queue.quotaPreemptionDelay = tt.delay
+			queue.allocatedResource = tt.currentUsage
 			if tt.oldStart {
 				queue.quotaPreemptionStartTime = time.Now()
 			}

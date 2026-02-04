@@ -464,10 +464,10 @@ func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay 
 	usageIncludingReservations := sq.allocatedResource.Clone()
 	usageIncludingReservations.AddTo(reservedResource)
 
-	// usage including reservations fits within newer max res, so not required to set anything. clear the start time if it was set earlier.
+	// usage including reservations (if any) fits within newer max res, so not required to set anything or cancel reservations. clear the start time if it was set earlier.
 	if sq.maxResource.FitInMaxUndef(usageIncludingReservations) {
 		sq.quotaPreemptionStartTime = time.Time{}
-		log.Log(log.SchedQueue).Info("usage including reservations fits with in max resource, removed quota preemption start time",
+		log.Log(log.SchedQueue).Info("usage including reservations (if any) fits with in max resource, removed quota preemption start time",
 			zap.String("queue", sq.QueuePath))
 		return
 	}

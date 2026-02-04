@@ -321,7 +321,7 @@ func TestAppAllocReservation(t *testing.T) {
 		t.Fatalf("app create failed which should not have %v", app)
 	}
 	assert.Assert(t, !app.HasReserved(), "new app should not have reservations")
-	assert.Equal(t, len(app.GetReservations()), 0, "new app should not have reservation for empty allocKey")
+	assert.Equal(t, len(app.GetReservationKeys()), 0, "new app should not have reservation for empty allocKey")
 
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -346,7 +346,7 @@ func TestAppAllocReservation(t *testing.T) {
 	if allocReserved == nil || allocReserved.nodeID != nodeID1 {
 		t.Fatalf("app should have reservations for %s on %s and has not", aKey, nodeID1)
 	}
-	assert.Equal(t, len(app.GetReservations()), 1, "app should have 1 reservation")
+	assert.Equal(t, len(app.GetReservationKeys()), 1, "app should have 1 reservation")
 
 	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10})
 	err = app.Reserve(node2, ask2)
@@ -355,7 +355,7 @@ func TestAppAllocReservation(t *testing.T) {
 	if allocReserved == nil || allocReserved.nodeID != nodeID2 {
 		t.Fatalf("app should have reservations for %s on %s and has not", aKey, nodeID2)
 	}
-	assert.Equal(t, len(app.GetReservations()), 2, "app should have 2 reservation")
+	assert.Equal(t, len(app.GetReservationKeys()), 2, "app should have 2 reservation")
 
 	// check duplicate reserve: nothing should change
 	assert.Assert(t, app.canAllocationReserve(ask) != nil, "alloc has already reserved, reserve check should have failed")
@@ -372,7 +372,7 @@ func TestAppAllocReservation(t *testing.T) {
 	if allocReserved == nil || allocReserved.nodeID != nodeID2 {
 		t.Fatalf("app should have reservations for node %s and has not: %v", nodeID2, allocReserved)
 	}
-	assert.Equal(t, len(app.GetReservations()), 2, "app should have 2 reservation")
+	assert.Equal(t, len(app.GetReservationKeys()), 2, "app should have 2 reservation")
 	// clean up all asks and reservations
 	reservedRelease := app.RemoveAllocationAsk("")
 	if app.HasReserved() || node1.IsReserved() || node2.IsReserved() || reservedRelease != 2 {

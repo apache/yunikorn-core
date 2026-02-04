@@ -399,6 +399,50 @@ func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) (*resources.R
 	return oldMaxResource, nil
 }
 
+func (sq *Queue) cancelReservations() {
+	reservedCopy := sq.getReservedAppsInternal()
+	if len(reservedCopy) != 0 {
+		for appID := range reservedCopy {
+			app := sq.GetApplication(appID)
+			if app == nil {
+				log.Log(log.SchedQueue).Warn("reserved app does not exist",
+					zap.String("appID", appID))
+				continue
+			}
+			reservations := app.GetReservations()
+			for _, res := range reservations {
+				releases := app.unReserveInternal(res)
+				sq.UnReserveInternal(appID, releases)
+				log.Log(log.SchedQueue).Info("Cancelled reservation for quota preemption",
+					zap.String("queue", sq.QueuePath),
+					zap.String("affected application ID", res.appID),
+					zap.String("affected allocationKey", res.allocKey),
+					zap.Int("reservations count", releases))
+			}
+		}
+	}
+}
+
+func (sq *Queue) getReservedResources() *resources.Resource {
+	reservedResources := resources.NewResource()
+	reservedCopy := sq.getReservedAppsInternal()
+	if len(reservedCopy) != 0 {
+		for appID := range reservedCopy {
+			app := sq.GetApplication(appID)
+			if app == nil {
+				log.Log(log.SchedQueue).Warn("reserved app does not exist",
+					zap.String("appID", appID))
+				continue
+			}
+			reservations := app.GetReservations()
+			for _, res := range reservations {
+				reservedResources.AddTo(res.alloc.GetAllocatedResource())
+			}
+		}
+	}
+	return reservedResources
+}
+
 // setPreemptionTime set the time the quota preemption should be triggered when a quota is changed.
 // Updates the time if the delay is set / changes and the preemption is not running yet.
 // This function MUST be called holding the lock for the queue.
@@ -416,12 +460,30 @@ func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay 
 		return
 	}
 
-	// usage is below max, so not required to set anything. clear the start time if it was set earlier.
-	if sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource) {
+	reservedResource := sq.getReservedResources()
+	usageIncludingReservations := sq.allocatedResource.Clone()
+	usageIncludingReservations.AddTo(reservedResource)
+
+	// usage including reservations fits within newer max res, so not required to set anything. clear the start time if it was set earlier.
+	if sq.maxResource.FitInMaxUndef(usageIncludingReservations) {
 		sq.quotaPreemptionStartTime = time.Time{}
-		log.Log(log.SchedQueue).Info("usage is below max resource, removed quota preemption start time",
+		log.Log(log.SchedQueue).Info("usage including reservations fits with in max resource, removed quota preemption start time",
 			zap.String("queue", sq.QueuePath))
 		return
+	}
+
+	// usage excluding reservations fits within newer max resource. So, Cancelling reservations alone would suffice to enforce max resources and
+	// not required to set anything. Cancelling reservation would avoid problems in moving reservations to allocations later
+	if sq.maxResource.FitInMaxUndef(sq.allocatedResource) {
+		log.Log(log.SchedQueue).Info("reservations on top of actual usage is causing the overflow, so cancelling reservations is enough and doesn't require to trigger any preemption later. Removing quota preemption start time as well",
+			zap.String("queue", sq.QueuePath))
+		sq.cancelReservations()
+		sq.quotaPreemptionStartTime = time.Time{}
+		return
+	} else {
+		log.Log(log.SchedQueue).Info("cancelling reservations anyways as it would create problems later",
+			zap.String("queue", sq.QueuePath))
+		sq.cancelReservations()
 	}
 
 	// adjust the startup based on the diff between the delays if no change
@@ -1810,7 +1872,12 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *AllocationRe
 func (sq *Queue) GetReservedApps() map[string]int {
 	sq.RLock()
 	defer sq.RUnlock()
+	return sq.getReservedAppsInternal()
+}
 
+// getReservedAppsInternal Internal version of GetReservedApps. Returns a shallow copy of the reserved app list.
+// This function MUST be called holding the lock for the queue.
+func (sq *Queue) getReservedAppsInternal() map[string]int {
 	copied := make(map[string]int)
 	for appID, numRes := range sq.reservedApps {
 		copied[appID] = numRes
@@ -1834,6 +1901,10 @@ func (sq *Queue) Reserve(appID string) {
 func (sq *Queue) UnReserve(appID string, releases int) {
 	sq.Lock()
 	defer sq.Unlock()
+	sq.UnReserveInternal(appID, releases)
+}
+
+func (sq *Queue) UnReserveInternal(appID string, releases int) {
 	// make sure we cannot go below 0
 	if num, ok := sq.reservedApps[appID]; ok {
 		// decrease the number of reservations for this app and cleanup

@@ -491,10 +491,10 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.clearPlaceholderTimer()
 }
 
-// GetReservations returns an array of all reservation keys for the application.
+// GetReservationKeys returns an array of all reservation keys for the application.
 // This will return an empty array if there are no reservations.
 // Visible for tests
-func (sa *Application) GetReservations() []string {
+func (sa *Application) GetReservationKeys() []string {
 	sa.RLock()
 	defer sa.RUnlock()
 	keys := make([]string, len(sa.reservations))
@@ -504,6 +504,13 @@ func (sa *Application) GetReservations() []string {
 		i++
 	}
 	return keys
+}
+
+// GetReservations returns an array of all reservations for the application.
+func (sa *Application) GetReservations() map[string]*reservation {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.reservations
 }
 
 // GetAllocationAsk returns the allocation alloc for the key, nil if not found

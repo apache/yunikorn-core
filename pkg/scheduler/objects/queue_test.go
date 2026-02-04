@@ -3189,38 +3189,58 @@ func TestQueueBackoffProperties(t *testing.T) {
 func TestQueue_setPreemptionTime(t *testing.T) {
 	root, e := createRootQueue(nil)
 	assert.NilError(t, e, "failed to create basic root queue")
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 500})
 	tests := []struct {
-		name           string
-		oldMaxResource *resources.Resource
-		maxRes         map[string]string
-		currentUsage   *resources.Resource
-		oldDelay       time.Duration
-		delay          time.Duration
-		oldStart       bool
-		timeChange     bool
+		name                 string
+		oldMaxResource       *resources.Resource
+		maxRes               map[string]string
+		currentUsage         *resources.Resource
+		oldDelay             time.Duration
+		delay                time.Duration
+		oldStart             bool
+		timeChange           bool
+		leftoverReservations int
 	}{
-		{"empty", nil, map[string]string{}, nil, 0, 0, false, false},
-		{"no delays", resources.Zero, map[string]string{"test": "100"}, nil, 0, 0, false, false},
-		{"max removed", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, nil, 10, 10, false, false},
-		{"max removed update", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, nil, 0, 10, true, true},
-		{"delay added", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 0, 10, false, true},
-		{"delay change set start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 10, true, true},
-		{"delay change no start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, nil, 5, 10, false, false},
-		{"max lowered", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 10, 10, false, true},
-		{"max lowered but usage is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 5}), 10, 10, true, true},
-		{"max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 10, 10, true, false},
-		{"delay change max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 10, true, true},
-		{"max increase", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 5, true, false},
-		{"max increase but usage is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 10}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 90}), 5, 5, true, true},
-		{"max increased 2nd with delay change", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "120"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 10, true, true},
-		{"max lowered again", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 10, 10, true, false},
-		{"max lowered again but usage is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 5}), 10, 10, true, true},
-		{"max lowered again 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, nil, 10, 5, true, true},
+		{"empty", nil, map[string]string{}, nil, 0, 0, false, false, 1},
+		{"no delays", resources.Zero, map[string]string{"first": "100"}, nil, 0, 0, false, false, 1},
+		{"max removed", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), nil, nil, 10, 10, false, false, 1},
+		{"max removed update", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), nil, nil, 0, 10, true, true, 1},
+		{"delay added", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 0, 10, false, true, 0},
+		{"delay change set start", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 5, 10, true, true, 0},
+		{"delay change no start", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "100"}, nil, 5, 10, false, false, 1},
+		{"max lowered", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 10, 10, false, true, 0},
+		{"max lowered but usage (including reservations) is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "20"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 10, 10, true, true, 1},
+		{"max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 10, 10, true, false, 0},
+		{"delay change max lowered 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 5, 10, true, true, 0},
+		{"max increase", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), map[string]string{"first": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 5, 5, true, false, 0},
+		{"max increase but usage (including reservations) is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), map[string]string{"first": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 90}), 5, 5, true, true, 1},
+		{"max increased 2nd with delay change but usage (including reservations) is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "120"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 5, 10, true, true, 1},
+		{"max lowered again", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 10, 10, true, false, 0},
+		{"max lowered again but usage (including reservations) is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "20"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 10, 10, true, true, 1},
+		{"max lowered again 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "10"}, nil, 10, 5, true, true, 1},
+		{"max increase but usage (excluding reservations) fits with in newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), map[string]string{"first": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 95}), 5, 5, false, false, 0},
+		{"max increase again with delay change but usage (excluding reservations) fits with in newer max. new delay changes does not come into effect as reservation cancellation is sufficient. however, timer resets to zero", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), map[string]string{"first": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 95}), 5, 10, true, true, 0},
+		{"max lowered but usage (excluding reservations) itself doesn't fit in newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 10, 10, false, true, 0},
+		{"max lowered again with delay change but usage (excluding reservations) itself doesn't fit in newer max. delay changes comes into effect", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), map[string]string{"first": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 5, 10, true, true, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			queue, err := createManagedQueue(root, "test", false, tt.maxRes)
+			queue, err := createManagedQueue(root, "first", false, tt.maxRes)
 			assert.NilError(t, err, "queue creation failed unexpectedly")
+
+			app := newApplication(appID1, "default", queue.QueuePath)
+			app.SetQueue(queue)
+			queue.applications[appID1] = app
+			allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+
+			ask := newAllocationAsk(aKey2, appID1, allocRes)
+			err = app.AddAllocationAsk(ask)
+			queue.Reserve(appID1)
+			assert.NilError(t, err, "unexpected error when adding an ask")
+			err = app.Reserve(node, ask)
+			assert.NilError(t, err, "unexpected error when reserving ask")
+			assert.Equal(t, len(queue.reservedApps), 1, "app should have been reserved")
+
 			queue.quotaPreemptionDelay = tt.delay
 			queue.allocatedResource = tt.currentUsage
 			if tt.oldStart {
@@ -3230,6 +3250,14 @@ func TestQueue_setPreemptionTime(t *testing.T) {
 			queue.setPreemptionTime(tt.oldMaxResource, tt.oldDelay)
 			after := queue.quotaPreemptionStartTime
 			assert.Equal(t, tt.timeChange, before != after, "time change not as expected")
+			assert.Equal(t, tt.leftoverReservations, len(queue.reservedApps))
+
+			// reset reservations
+			if tt.leftoverReservations == 1 {
+				queue.UnReserve(appID1, 1)
+				assert.NilError(t, err, "unexpected error when adding an ask")
+				app.UnReserve(node, ask)
+			}
 		})
 	}
 }

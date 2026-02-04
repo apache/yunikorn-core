@@ -376,7 +376,7 @@ func getApplicationDAO(app *objects.Application) *dao.ApplicationDAOInfo {
 		PlaceholderData:    getPlaceholdersDAO(app.GetAllPlaceholderData()),
 		StateLog:           getStatesDAO(app.GetStateLog()),
 		HasReserved:        app.HasReserved(),
-		Reservations:       app.GetReservations(),
+		Reservations:       app.GetReservationKeys(),
 		MaxRequestPriority: app.GetAskMaxPriority(),
 		StartTime:          app.StartTime().UnixMilli(),
 		ResourceHistory:    resHistory,

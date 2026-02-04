@@ -1139,6 +1139,17 @@ func getPartitionQueuesDAO(lists map[string]*scheduler.PartitionContext) []dao.P
 	return result
 }
 
+func getOrderLogDAO(lists map[string]*scheduler.PartitionContext) map[string][]*dao.OrderLogEntry {
+	result := make(map[string][]*dao.OrderLogEntry)
+
+	for _, partition := range lists {
+		partitionName := common.GetPartitionNameWithoutClusterID(partition.Name)
+		result[partitionName] = partition.GetOrderLog()
+	}
+
+	return result
+}
+
 func getClusterDAO(lists map[string]*scheduler.PartitionContext) []*dao.ClusterDAOInfo {
 	result := make([]*dao.ClusterDAOInfo, 0, len(lists))
 

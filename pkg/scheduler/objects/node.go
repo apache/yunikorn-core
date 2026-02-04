@@ -81,6 +81,7 @@ func NewNode(proto *si.NodeInfo) *Node {
 	sn.nodeEvents = schedEvt.NewNodeEvents(events.GetEventSystem())
 	// initialise available resources
 	var err error
+	sn.totalResource.Prune()
 	sn.availableResource, err = resources.SubErrorNegative(sn.totalResource, sn.occupiedResource)
 	if err != nil {
 		log.Log(log.SchedNode).Error("New node created with no available resources",
@@ -172,6 +173,7 @@ func (sn *Node) SetCapacity(newCapacity *resources.Resource) *resources.Resource
 	}
 	delta = resources.Sub(newCapacity, sn.totalResource)
 	sn.totalResource = newCapacity
+	sn.totalResource.Prune()
 	sn.refreshAvailableResource()
 	sn.nodeEvents.SendNodeCapacityChangedEvent(sn.NodeID, sn.totalResource.Clone())
 	return delta

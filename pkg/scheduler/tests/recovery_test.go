@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -537,19 +538,19 @@ partitions:
 `
 	configPreemptionDefault := strings.ReplaceAll(config, "ENABLED_STR", "")
 	configPreemptionDefault = strings.ReplaceAll(configPreemptionDefault, "PROPERTIES_PARENT_STR", "")
-	configPreemptionDefault = strings.ReplaceAll(configPreemptionDefault, "PROPERTIES_STR", "preemption.quota.delay: 15m")
+	configPreemptionDefault = strings.ReplaceAll(configPreemptionDefault, "PROPERTIES_STR", configs.QuotaPreemptionDelay+": 15m")
 
 	configPreemptionDisabled := strings.ReplaceAll(config, "ENABLED_STR", "quotapreemptionenabled: false")
 	configPreemptionDisabled = strings.ReplaceAll(configPreemptionDisabled, "PROPERTIES_PARENT_STR", "")
-	configPreemptionDisabled = strings.ReplaceAll(configPreemptionDisabled, "PROPERTIES_STR", "preemption.quota.delay: 15m")
+	configPreemptionDisabled = strings.ReplaceAll(configPreemptionDisabled, "PROPERTIES_STR", configs.QuotaPreemptionDelay+": 15m")
 	configPreemptionEnabled := strings.ReplaceAll(config, "ENABLED_STR", "quotapreemptionenabled: true")
 	configPreemptionEnabled = strings.ReplaceAll(configPreemptionEnabled, "PROPERTIES_PARENT_STR", "")
 	configPreemptionEnabled = strings.ReplaceAll(configPreemptionEnabled, "PROPERTIES_STR", "")
 	configPreemptionEnabledAndDelaySet := strings.ReplaceAll(config, "ENABLED_STR", "quotapreemptionenabled: true")
 	configPreemptionEnabledAndDelaySet = strings.ReplaceAll(configPreemptionEnabledAndDelaySet, "PROPERTIES_PARENT_STR", "")
-	configPreemptionEnabledAndDelaySet = strings.ReplaceAll(configPreemptionEnabledAndDelaySet, "PROPERTIES_STR", "preemption.quota.delay: 15m")
+	configPreemptionEnabledAndDelaySet = strings.ReplaceAll(configPreemptionEnabledAndDelaySet, "PROPERTIES_STR", configs.QuotaPreemptionDelay+": 15m")
 	configPreemptionEnabledAndDelaySetAtParent := strings.ReplaceAll(config, "ENABLED_STR", "quotapreemptionenabled: true")
-	configPreemptionEnabledAndDelaySetAtParent = strings.ReplaceAll(configPreemptionEnabledAndDelaySetAtParent, "PROPERTIES_PARENT_STR", "preemption.quota.delay: 15m")
+	configPreemptionEnabledAndDelaySetAtParent = strings.ReplaceAll(configPreemptionEnabledAndDelaySetAtParent, "PROPERTIES_PARENT_STR", configs.QuotaPreemptionDelay+": 15m")
 	configPreemptionEnabledAndDelaySetAtParent = strings.ReplaceAll(configPreemptionEnabledAndDelaySetAtParent, "PROPERTIES_STR", "")
 
 	tests := []struct {

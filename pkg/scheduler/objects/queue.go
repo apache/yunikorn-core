@@ -519,6 +519,23 @@ func (sq *Queue) shouldTriggerPreemption() bool {
 	return !sq.quotaPreemptionStartTime.IsZero() && time.Now().After(sq.quotaPreemptionStartTime)
 }
 
+// ShouldApplyQuotaPreemption returns true if quota preemption should be enforced based on the settings and the
+// delay.
+func (sq *Queue) ShouldApplyQuotaPreemption() bool {
+	if sq == nil {
+		return true
+	}
+	if sq.parent != nil {
+		apply := sq.parent.ShouldApplyQuotaPreemption()
+		if apply {
+			return true
+		}
+	}
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.isManaged && sq.quotaPreemptionDelay != 0 && !sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource)
+}
+
 // setQuotaPreemptionState set or clear the running state for quota preemption. When done the start time is also cleared
 // out preventing a re-run based on the same change
 func (sq *Queue) setQuotaPreemptionState(run bool) {

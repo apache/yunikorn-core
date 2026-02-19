@@ -1214,7 +1214,7 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 				zap.String("appID", applicationID),
 				zap.String("allocationKey", allocationKey))
 
-			if err := app.AddAllocationAsk(alloc); err != nil {
+			if err = app.AddAllocationAsk(alloc); err != nil {
 				log.Log(log.SchedPartition).Info("failed to add request",
 					zap.String("partitionName", pc.Name),
 					zap.String("appID", applicationID),
@@ -1236,7 +1236,24 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 			zap.String("appID", applicationID),
 			zap.String("allocationKey", allocationKey))
 
-		queue.IncAllocatedResource(res)
+		// In case Quota preemption is set, configured delay won't be able to adjusted based on the lost time during restart.
+		// So, allow allocations until it fits in queue max resources if quota preemption is set. Otherwise, drop the allocation
+		// to prevent moving forward.
+
+		// If quota preemption is enabled at partition level and set for any queue in the queue hierarchy,
+		// honour max resources. In case of quota preemption set for any immediate parent or ancestor,
+		// unlike enforcing quota preemption among child pools fairly based on usage distribution during scheduling cycle,
+		// allocations are not allowed from proceeding further and dropped based on the order in which it is being handled here.
+		if pc.IsQuotaPreemptionEnabled() && queue.ShouldApplyQuotaPreemption() {
+			err = queue.TryIncAllocatedResource(res)
+			if err != nil {
+				metrics.GetSchedulerMetrics().IncSchedulingError()
+				return false, false, fmt.Errorf("quota preemption is set for queue %s, cannot allocate resource from application %s: %v ",
+					queue.GetQueuePath(), alloc.GetApplicationID(), err)
+			}
+		} else {
+			queue.IncAllocatedResource(res)
+		}
 		metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 		node.AddAllocation(alloc)
 		alloc.SetInstanceType(node.GetInstanceType())

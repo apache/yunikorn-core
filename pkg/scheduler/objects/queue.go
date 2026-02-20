@@ -533,7 +533,7 @@ func (sq *Queue) ShouldApplyQuotaPreemption() bool {
 	}
 	sq.RLock()
 	defer sq.RUnlock()
-	return sq.isManaged && sq.quotaPreemptionDelay != 0 && !sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource)
+	return sq.isManaged && sq.quotaPreemptionDelay != 0 && !resources.IsZero(sq.maxResource) && !sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource)
 }
 
 // setQuotaPreemptionState set or clear the running state for quota preemption. When done the start time is also cleared

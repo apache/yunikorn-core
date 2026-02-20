@@ -23,9 +23,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"

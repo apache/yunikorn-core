@@ -244,4 +244,5 @@ func unregisterMetrics() {
 	prometheus.Unregister(sm.tryNodeLatency)
 	prometheus.Unregister(sm.tryNodeEvaluation)
 	prometheus.Unregister(sm.tryPreemptionLatency)
+	prometheus.Unregister(sm.tryNodeCount)
 }

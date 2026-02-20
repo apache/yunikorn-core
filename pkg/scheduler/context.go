@@ -121,6 +121,11 @@ func (cc *ClusterContext) schedule() bool {
 	// schedule each partition defined in the cluster
 	activity := false
 	scheduleCycleStart := time.Now()
+
+	// Reset scheduling cycle counters at the start of each cycle
+	metrics.GetSchedulerMetrics().ResetTryNodeCount()
+	metrics.GetSchedulerMetrics().ResetTryApplicationCount()
+
 	for _, psc := range cc.GetPartitionMapClone() {
 		// if there are no resources in the partition just skip
 		if psc.root.GetMaxResource() == nil {

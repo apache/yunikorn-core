@@ -1635,6 +1635,7 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 		headRoom := sq.getHeadRoom()
 		preemptionDelay := sq.GetPreemptionDelay()
 		preemptAttemptsRemaining := maxPreemptionsPerQueue
+		var applicationsTried int64
 
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(false) {
@@ -1648,13 +1649,19 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 			if !deadline.IsZero() && time.Now().Before(deadline) {
 				continue
 			}
-			result := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
+
+			applicationsTried++
+			result, _ := app.tryAllocate(headRoom, allowPreemption, preemptionDelay, &preemptAttemptsRemaining, iterator, fullIterator, getnode)
+
 			if result != nil {
+				result.ApplicationsTried = applicationsTried
 				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
 					zap.String("appID", app.ApplicationID),
 					zap.Stringer("resultType", result.ResultType),
-					zap.Stringer("allocation", result.Request))
+					zap.Stringer("allocation", result.Request),
+					zap.Int64("applicationsTried", applicationsTried),
+					zap.Int64("nodesTried", result.NodesTried))
 				// if the app is still in Accepted state we're allocating placeholders.
 				// we want to count these apps as running
 				if app.IsAccepted() {
@@ -1685,7 +1692,7 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 	if sq.IsLeafQueue() {
 		// process the apps (filters out app without pending requests)
 		for _, app := range sq.sortApplications(true) {
-			result := app.tryPlaceholderAllocate(iterator, getnode)
+			result, _ := app.tryPlaceholderAllocate(iterator, getnode)
 			if result != nil {
 				log.Log(log.SchedQueue).Info("allocation found on queue",
 					zap.String("queueName", sq.QueuePath),
@@ -1776,7 +1783,7 @@ func (sq *Queue) TryReservedAllocate(iterator func() NodeIterator) *AllocationRe
 				if app.IsAccepted() && (!sq.canRunApp(appID) || !ugm.GetUserManager().CanRunApp(sq.QueuePath, appID, app.user)) {
 					continue
 				}
-				result := app.tryReservedAllocate(headRoom, iterator)
+				result, _ := app.tryReservedAllocate(headRoom, iterator)
 				if result != nil {
 					log.Log(log.SchedQueue).Info("reservation found for allocation found on queue",
 						zap.String("queueName", sq.QueuePath),

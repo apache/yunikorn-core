@@ -50,7 +50,7 @@ const (
 	PriorityOffset                           = "priority.offset"
 	PreemptionPolicy                         = "preemption.policy"
 	PreemptionDelay                          = "preemption.delay"
-	QuotaPreemptionDelay                     = "preemption.quota.delay"
+	QuotaPreemptionDelay                     = "quota.preemption.delay"
 
 	// app sort priority values
 	ApplicationSortPriorityEnabled  = "enabled"

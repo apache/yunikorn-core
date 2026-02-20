@@ -1644,10 +1644,11 @@ func TestInheritedQueueProps(t *testing.T) {
 	assert.NilError(t, err, "failed to create basic root queue")
 	var parent *Queue
 	props := map[string]string{
-		"key":               "value",
-		"priority.policy":   "fence",
-		"priority.offset":   "100",
-		"preemption.policy": "fence",
+		"key":                        "value",
+		"priority.policy":            "fence",
+		"priority.offset":            "100",
+		"preemption.policy":          "fence",
+		configs.QuotaPreemptionDelay: "15s",
 	}
 	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props)
 	assert.NilError(t, err, "failed to create parent queue")
@@ -1658,6 +1659,7 @@ func TestInheritedQueueProps(t *testing.T) {
 	assert.Equal(t, parent.priorityPolicy, policies.FencePriorityPolicy)
 	assert.Equal(t, parent.priorityOffset, int32(100))
 	assert.Equal(t, parent.preemptionPolicy, policies.FencePreemptionPolicy)
+	assert.Equal(t, parent.quotaPreemptionDelay, time.Duration(15)*time.Second)
 
 	var leaf *Queue
 	leaf, err = createManagedQueue(parent, "leaf", false, nil)
@@ -1668,18 +1670,26 @@ func TestInheritedQueueProps(t *testing.T) {
 	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
 	assert.Equal(t, leaf.priorityOffset, int32(0))
 	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+	assert.Equal(t, leaf.quotaPreemptionDelay, time.Duration(15)*time.Second)
 
 	props = map[string]string{
-		"preemption.policy": "disabled",
+		"preemption.policy":          "disabled",
+		configs.QuotaPreemptionDelay: "20s",
 	}
 
 	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props)
 	assert.NilError(t, err, "failed to create parent queue")
 	assert.Equal(t, parent.preemptionPolicy, policies.DisabledPreemptionPolicy)
+	assert.Equal(t, parent.quotaPreemptionDelay, time.Duration(20)*time.Second)
 
-	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	props = map[string]string{
+		configs.QuotaPreemptionDelay: "10s",
+	}
+
+	leaf, err = createManagedQueueWithProps(parent, "leaf", false, nil, props)
 	assert.NilError(t, err, "failed to create leaf queue")
 	assert.Equal(t, leaf.preemptionPolicy, policies.DisabledPreemptionPolicy)
+	assert.Equal(t, leaf.quotaPreemptionDelay, time.Duration(10)*time.Second)
 }
 
 func TestMaxResource(t *testing.T) {

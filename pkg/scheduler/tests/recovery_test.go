@@ -564,17 +564,14 @@ partitions:
 		{"preemption enabled at partition level, but delay not set at queue level", configPreemptionEnabled, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 1},
 		{"preemption enabled, delay set but usage is lower than max resources", configPreemptionEnabledAndDelaySet, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 4}), 1},
 		{"preemption enabled, delay set, usage is higher than max resources", configPreemptionEnabledAndDelaySet, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 0},
-		{"preemption enabled, delay set at parent queue but inherited and usage is lower than max resources in leaf queue.", configPreemptionEnabledAndDelaySetAtParent, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 0},
+		{"preemption enabled, delay set at parent queue but inherited and usage is higher than max resources in leaf queue.", configPreemptionEnabledAndDelaySetAtParent, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Register RM
 			ms := &mockScheduler{}
-			defer ms.Stop()
-
-			part, _, queueA := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234", "node-2:1234"}, true, []string{appID1}, nil)
-			assert.Equal(t, resources.Quantity(5), queueA.GetMaxResource().Resources[common.Memory])
+			part, _, _ := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
 
 			err := ms.proxy.UpdateAllocation(&si.AllocationRequest{
 				Allocations: []*si.Allocation{
@@ -586,37 +583,30 @@ partitions:
 			assert.NilError(t, err)
 
 			// verify partition resources
-			assert.Equal(t, part.GetTotalNodeCount(), 2)
+			assert.Equal(t, part.GetTotalNodeCount(), 1)
 			assert.Equal(t, part.GetTotalAllocationCount(), 0)
-			assert.Equal(t, part.GetNode("node-2:1234").GetAllocatedResource().Resources[common.Memory],
+			assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.Memory],
+				resources.Quantity(0))
+			assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.CPU],
 				resources.Quantity(0))
 
-			// register the node again, with application info attached
-			err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-				New:  newAddAppRequest(map[string]string{appID1: "root.a"}),
-				RmID: "rm:123",
-			})
-			assert.NilError(t, err, "ApplicationRequest re-register nodes and app failed")
-			ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+			ms.serviceContext.StopAll()
 
-			err = ms.proxy.UpdateNode(&si.NodeRequest{
-				Nodes: []*si.NodeInfo{
-					createNodeInfo("node-1:1234"),
-				},
-				RmID: "rm:123",
-			})
-			assert.NilError(t, err, "NodeRequest re-register nodes and app failed")
-			ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+			// restart
+			_, _, queueA := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
+
 			// Set allocated resource to exceed max quota
 			queueA.IncAllocatedResource(tt.allocated)
+
 			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 				Allocations: []*si.Allocation{
-					createAllocation("allocation-key-01", "node-1:1234", appID1, 1, 4, "", false),
+					createAllocation("allocation-key-02", "node-1:1234", appID1, 1, 4, "", false),
 				},
 				RmID: "rm:123",
 			})
 			assert.NilError(t, err)
 			ms.mockRM.waitForAllocations(t, tt.addedAllocations, 1000)
+			ms.Stop()
 		})
 	}
 }
@@ -660,6 +650,22 @@ func doRecoverySetup(t *testing.T, config string, ms *mockScheduler, init bool, 
 		queue = part.GetQueue("root.a")
 	}
 
+	if addApp {
+		appsMap := make(map[string]string)
+		for _, app := range apps {
+			appsMap[app] = "root.a"
+		}
+		err := ms.proxy.UpdateApplication(&si.ApplicationRequest{
+			New:  newAddAppRequestWithTags(appsMap, tags),
+			RmID: "rm:123",
+		})
+		assert.NilError(t, err, "ApplicationRequest failed")
+		for _, app := range apps {
+			ms.mockRM.waitForAcceptedApplication(t, app, 1000)
+			assert.Equal(t, ms.getApplication(app).CurrentState(), objects.New.String())
+		}
+	}
+
 	var nodesArr []*si.NodeInfo
 	for _, node := range nodes {
 		nodesArr = append(nodesArr, createNodeInfo(node))
@@ -673,22 +679,6 @@ func doRecoverySetup(t *testing.T, config string, ms *mockScheduler, init bool, 
 	assert.NilError(t, err, "NodeRequest failed")
 	for _, node := range nodesArr {
 		ms.mockRM.waitForAcceptedNode(t, node.NodeID, 1000)
-	}
-
-	if addApp {
-		appsMap := make(map[string]string)
-		for _, app := range apps {
-			appsMap[app] = "root.a"
-		}
-		err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
-			New:  newAddAppRequestWithTags(appsMap, tags),
-			RmID: "rm:123",
-		})
-		assert.NilError(t, err, "ApplicationRequest failed")
-		for _, app := range apps {
-			ms.mockRM.waitForAcceptedApplication(t, app, 1000)
-			assert.Equal(t, ms.getApplication(app).CurrentState(), objects.New.String())
-		}
 	}
 	return part, rootQ, queue
 }

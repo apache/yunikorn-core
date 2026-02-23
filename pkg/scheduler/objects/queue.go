@@ -2029,6 +2029,10 @@ func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation
 
 	// walk the subtree contained within the preemption fence and collect potential victims organized by nodeID
 	fence.findEligiblePreemptionVictims(results, queuePath, ask, priorityMap, queuePriority, false)
+	// prune snapshots that cannot contribute victims:
+	// - leaf snapshots with no victims
+	// - non-leaf snapshots not on ask path or any victim path
+	prunePreemptionSnapshots(results, queuePath)
 
 	return results
 }
@@ -2080,6 +2084,8 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 		// skip this queue if we are within guaranteed limits
 		remaining := results[sq.QueuePath].GetRemainingGuaranteedResource()
 		if remaining != nil && resources.StrictlyGreaterThanOrEquals(remaining, resources.Zero) {
+			// this queue cannot contribute victims; remove the just-created leaf snapshot
+			delete(results, sq.QueuePath)
 			return
 		}
 
@@ -2143,6 +2149,37 @@ func (sq *Queue) findEligiblePreemptionVictims(results map[string]*QueuePreempti
 
 			// retrieve candidate tasks from child queue
 			child.findEligiblePreemptionVictims(results, queuePath, ask, priorityMap, childPriority, fenced || childFenced)
+		}
+	}
+}
+
+func prunePreemptionSnapshots(results map[string]*QueuePreemptionSnapshot, askQueuePath string) {
+	if len(results) == 0 {
+		return
+	}
+
+	keep := make(map[string]struct{}, len(results))
+	// Always keep ask queue path and its ancestor chain.
+	if askSnapshot, ok := results[askQueuePath]; ok {
+		for current := askSnapshot; current != nil; current = current.Parent {
+			keep[current.QueuePath] = struct{}{}
+		}
+	}
+
+	// Keep all leaf snapshots with victims and their ancestor chain.
+	for _, snapshot := range results {
+		if !snapshot.Leaf || len(snapshot.PotentialVictims) == 0 {
+			continue
+		}
+		for current := snapshot; current != nil; current = current.Parent {
+			keep[current.QueuePath] = struct{}{}
+		}
+	}
+
+	// Remove all snapshots that are not on keep paths.
+	for queuePath := range results {
+		if _, ok := keep[queuePath]; !ok {
+			delete(results, queuePath)
 		}
 	}
 }

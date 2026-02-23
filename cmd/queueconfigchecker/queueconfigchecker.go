@@ -30,10 +30,12 @@ A utility command to load queue configuration file and check its validity
 */
 func main() {
 	if len(os.Args) != 2 {
+		//nolint:gosec // safe to ignore, this is a utility command and the argument is provided by the user
 		log.Println("Usage: " + os.Args[0] + " <queue-config-file>")
 		os.Exit(1)
 	}
 	queueFile := os.Args[1]
+	//nolint:gosec // safe to ignore, this is a utility command and the file path is provided by the user
 	conf, err := os.ReadFile(queueFile)
 	if err != nil {
 		log.Printf("Could not read file: %v", err)

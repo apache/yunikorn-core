@@ -132,6 +132,7 @@ func Test_HeaderChecks(t *testing.T) {
 			req, err := http.NewRequest(tt.method, base+tt.reqURL, nil)
 			assert.NilError(t, err, "unexpected error creating request")
 			var resp *http.Response
+			//nolint:gosec // safe to ignore, this is a test client and the URL is hardcoded to localhost
 			resp, err = client.Do(req)
 			assert.NilError(t, err, "unexpected error executing request")
 			assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")

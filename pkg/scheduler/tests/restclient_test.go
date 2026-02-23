@@ -50,6 +50,7 @@ func (c *RClient) GetEventsStream(count uint64) (io.ReadCloser, error) {
 		return nil, err
 	}
 	req.URL.RawQuery = "count=" + strconv.FormatUint(count, 10)
+	//nolint:gosec // safe to ignore, this is a test client and the URL is hardcoded to localhost
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
@@ -77,6 +78,7 @@ func (c *RClient) newRequest(method, path string) (*http.Request, error) {
 }
 
 func (c *RClient) do(req *http.Request, v interface{}) (*http.Response, error) {
+	//nolint:gosec // safe to ignore, this is a test client and the URL is hardcoded to localhost
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err

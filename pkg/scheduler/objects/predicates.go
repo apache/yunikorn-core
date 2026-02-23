@@ -152,10 +152,10 @@ func (p *predicateCheckResult) String() string {
 		return ""
 	}
 	var result strings.Builder
-	result.WriteString(fmt.Sprintf("node: %s, ", p.nodeID))
-	result.WriteString(fmt.Sprintf("alloc: %s, ", p.allocationKey))
-	result.WriteString(fmt.Sprintf("success: %v, ", p.success))
-	result.WriteString(fmt.Sprintf("index: %d", p.index))
+	fmt.Fprintf(&result, "node: %s, ", p.nodeID)
+	fmt.Fprintf(&result, "alloc: %s, ", p.allocationKey)
+	fmt.Fprintf(&result, "success: %v, ", p.success)
+	fmt.Fprintf(&result, "index: %d", p.index)
 	if len(p.victims) > 0 {
 		result.WriteString(", victims: [")
 		for i, victim := range p.victims {

@@ -24,7 +24,7 @@ GO := go
 endif
 
 GO_VERSION := $(shell "$(GO)" version | awk '{print substr($$3, 3, 4)}')
-MOD_VERSION := $(shell cat .go_version) 
+MOD_VERSION := $(shell cat .go_version)
 
 GM := $(word 1,$(subst ., ,$(GO_VERSION)))
 MM := $(word 1,$(subst ., ,$(MOD_VERSION)))
@@ -98,7 +98,7 @@ endif
 endif
 
 # golangci-lint
-GOLANGCI_LINT_VERSION=2.7.0
+GOLANGCI_LINT_VERSION=2.10.1
 GOLANGCI_LINT_PATH=$(TOOLS_DIR)/golangci-lint-v$(GOLANGCI_LINT_VERSION)
 GOLANGCI_LINT_BIN=$(GOLANGCI_LINT_PATH)/golangci-lint
 GOLANGCI_LINT_ARCHIVE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH).tar.gz
@@ -237,4 +237,3 @@ clean:
 distclean: clean
 	@echo "removing tools"
 	@rm -rf "${TOOLS_DIR}"
-

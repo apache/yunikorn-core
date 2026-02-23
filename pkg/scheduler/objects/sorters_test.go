@@ -390,6 +390,7 @@ func assertAppList(t *testing.T, list []*Application, place []int, name string) 
 func assertAppListLength(t *testing.T, list []*Application, apps []string, name string) {
 	assert.Equal(t, len(apps), len(list), "length of list differs, test: %s", name)
 	for i, app := range list {
+		//nolint:gosec //safe to ignore as we are asserting apps and list have same length before
 		assert.Equal(t, apps[i], app.ApplicationID, "test name: %s", name)
 	}
 }

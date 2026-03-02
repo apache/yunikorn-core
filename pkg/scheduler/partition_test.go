@@ -483,7 +483,7 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 		t.Fatal("allocation attempt should not have returned an allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app2.GetReservations()), "app reservation should have been updated")
+	assert.Equal(t, 1, len(app2.GetReservationKeys()), "app reservation should have been updated")
 	assert.Equal(t, app2.NodeReservedForAsk(allocKey2), nodeID2, "ask should have been reserved")
 
 	// try through reserved scheduling cycle this should trigger preemption
@@ -1657,7 +1657,7 @@ func TestRequiredNodeReservation(t *testing.T) {
 		t.Fatal("allocation attempt should not have returned an allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "app should have one reserved ask")
+	assert.Equal(t, 1, len(app.GetReservationKeys()), "app should have one reserved ask")
 	assert.Equal(t, app.NodeReservedForAsk(allocKey2), nodeID1, "ask should have been reserved on node-1")
 	assert.Assert(t, node.IsReserved(), "node should have been reserved")
 	reservations := node.GetReservations()
@@ -1681,7 +1681,7 @@ func TestRequiredNodeReservation(t *testing.T) {
 	}
 
 	// reservation count should be updated as tryAllocate should have added a reservation for the 3rd ask
-	assert.Equal(t, 2, len(app.GetReservations()), "ask should not have been reserved, count changed")
+	assert.Equal(t, 2, len(app.GetReservationKeys()), "ask should not have been reserved, count changed")
 	assert.Equal(t, app.NodeReservedForAsk(allocKey2), nodeID1, "alloc-2 should have been reserved on node-1")
 	assert.Equal(t, app.NodeReservedForAsk(allocKey3), nodeID1, "alloc-3 should have been reserved on node-1")
 	assert.Assert(t, node.IsReserved(), "node should have been reserved")
@@ -1745,7 +1745,7 @@ func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 		t.Fatal("2nd allocation did not return the correct allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "allocation should have been reserved")
+	assert.Equal(t, 1, len(app.GetReservationKeys()), "allocation should have been reserved")
 	assert.Equal(t, 1, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 1")
 	assert.Equal(t, 1, partition.reservations, "partition reservations should be 1")
 
@@ -1770,7 +1770,7 @@ func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 	assert.Equal(t, objects.Allocated, result.ResultType, "allocation result type should have been allocated")
 
 	// earlier app (app1) reservation count should be zero
-	assert.Equal(t, 0, len(app.GetReservations()), "allocation should not have been reserved")
+	assert.Equal(t, 0, len(app.GetReservationKeys()), "allocation should not have been reserved")
 	assert.Equal(t, 0, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 0")
 	assert.Equal(t, 0, partition.reservations, "partition reservations should be 0")
 }
@@ -1825,7 +1825,7 @@ func TestRequiredNodeCancelDSReservations(t *testing.T) {
 		t.Fatal("2nd allocation should not return allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 1, len(app.GetReservationKeys()), "ask should have been reserved")
 	assert.Equal(t, 1, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 1")
 	assert.Equal(t, 1, partition.reservations, "partition reservations should be 1")
 
@@ -1850,9 +1850,9 @@ func TestRequiredNodeCancelDSReservations(t *testing.T) {
 	}
 	// check the reservation count etc for each app
 	assert.Equal(t, app.NodeReservedForAsk(allocKey2), nodeID1, "alloc-2 should be reserved on node-1")
-	assert.Equal(t, 1, len(app.GetReservations()), "only one alloc on app-1 should have been reserved")
+	assert.Equal(t, 1, len(app.GetReservationKeys()), "only one alloc on app-1 should have been reserved")
 	assert.Equal(t, app1.NodeReservedForAsk(allocKey3), nodeID1, "alloc-3 should be reserved on node-1")
-	assert.Equal(t, 1, len(app1.GetReservations()), "alloc-3 on app-2 should have been reserved")
+	assert.Equal(t, 1, len(app1.GetReservationKeys()), "alloc-3 on app-2 should have been reserved")
 	// both apps run in the same queue so just pick one app to get the queue
 	assert.Equal(t, 2, len(app.GetQueue().GetReservedApps()), "queue reserved apps should be 2")
 	assert.Equal(t, 2, partition.reservations, "partition reservations should be 2")
@@ -1937,7 +1937,7 @@ func TestRequiredNodeAllocation(t *testing.T) {
 		t.Fatal("allocation did not return any allocation")
 	}
 	// ensure there is no reservations
-	assert.Equal(t, 0, len(app.GetReservations()), "ask should not have been reserved")
+	assert.Equal(t, 0, len(app.GetReservationKeys()), "ask should not have been reserved")
 	assert.Equal(t, result.Request.GetAllocationKey(), allocKey2, "expected ask alloc-2 to be allocated")
 	assert.Equal(t, result.ResultType, objects.Allocated, "result type is not the expected allocated")
 	assertLimits(t, getTestUserGroup(), resources.Multiply(res, 2))
@@ -2017,7 +2017,7 @@ func TestPreemption(t *testing.T) {
 	if result == nil || result.Request == nil {
 		t.Fatal("missing allocation")
 	}
-	assert.Equal(t, 0, len(app2.GetReservations()), "ask should not be reserved")
+	assert.Equal(t, 0, len(app2.GetReservationKeys()), "ask should not be reserved")
 	assert.Equal(t, result.ResultType, objects.AllocatedReserved, "result type should be allocated from reservation")
 	assert.Equal(t, result.Request.GetAllocationKey(), allocKey3, "expected ask alloc-3 to be allocated")
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000}), getExpectedQueuesLimitsForPreemption())
@@ -2038,7 +2038,7 @@ func TestPreemptionForRequiredNodeNormalAlloc(t *testing.T) {
 		t.Fatal("allocation should have returned a result")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 0, len(app.GetReservations()), "no allocations on app should have been reserved")
+	assert.Equal(t, 0, len(app.GetReservationKeys()), "no allocations on app should have been reserved")
 	assert.Equal(t, 0, partition.reservations, "no allocations on partition should have been reserved")
 }
 
@@ -2053,7 +2053,7 @@ func TestPreemptionForRequiredNodeReservedAlloc(t *testing.T) {
 		t.Fatal("allocation attempt should have returned an allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 0, len(app.GetReservations()), "ask should have no longer be reserved")
+	assert.Equal(t, 0, len(app.GetReservationKeys()), "ask should have no longer be reserved")
 	assert.Equal(t, result.ResultType, objects.AllocatedReserved, "result type is not the expected AllocatedReserved")
 	assert.Check(t, !result.Request.HasRelease(), "released allocation should not be present")
 	assert.Equal(t, result.Request.GetAllocationKey(), allocKey2, "expected ask alloc-2 to be allocated")
@@ -2244,7 +2244,7 @@ func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.A
 		t.Fatal("allocation attempt should not have returned an allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "application should have been reserved")
+	assert.Equal(t, 1, len(app.GetReservationKeys()), "application should have been reserved")
 	assert.Equal(t, app.NodeReservedForAsk(allocKey2), nodeID1, "allocation should have been reserved on node-1")
 	assertUserGroupResourceMaxLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 8000}), getExpectedQueuesLimitsForPreemptionWithRequiredNode())
 
@@ -2304,7 +2304,7 @@ func TestTryAllocateLarge(t *testing.T) {
 	if result != nil {
 		t.Fatalf("allocation returned unexpected result: %s", result)
 	}
-	assert.Equal(t, 0, len(app.GetReservations()), "ask should not have been reserved")
+	assert.Equal(t, 0, len(app.GetReservationKeys()), "ask should not have been reserved")
 	assertLimits(t, getTestUserGroup(), nil)
 }
 
@@ -2357,7 +2357,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 		t.Fatal("2nd allocation did not return the correct allocation")
 	}
 	// check if updated (must be after allocate call)
-	assert.Equal(t, 1, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 1, len(app.GetReservationKeys()), "ask should have been reserved")
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 8000}))
 
 	// turn on 2nd node
@@ -2370,7 +2370,7 @@ func TestAllocReserveNewNode(t *testing.T) {
 	// check if all updated
 	node1 := partition.GetNode(nodeID1)
 	assert.Equal(t, 0, len(node1.GetReservationKeys()), "old node should have no more reservations")
-	assert.Equal(t, 0, len(app.GetReservations()), "ask should have been reserved")
+	assert.Equal(t, 0, len(app.GetReservationKeys()), "ask should have been reserved")
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 16000}))
 	alloc2 := node2.GetAllocation("alloc-2")
 	assert.Assert(t, alloc2 != nil, "alloc was nil")
@@ -2551,9 +2551,9 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 		if result != nil {
 			t.Fatalf("expected reservations to be created not allocation to be returned (step %d) %s", i, result)
 		}
-		assert.Equal(t, len(app.GetReservations()), i, "application reservations incorrect")
+		assert.Equal(t, len(app.GetReservationKeys()), i, "application reservations incorrect")
 	}
-	assert.Equal(t, len(app.GetReservations()), 2, "application reservations should be 2")
+	assert.Equal(t, len(app.GetReservationKeys()), 2, "application reservations should be 2")
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 16000}))
 
 	// add a node
@@ -2577,14 +2577,14 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	}
 	released := app.RemoveAllocationAsk(removeAskID)
 	assert.Equal(t, released, 1, "expected one reservations to be released")
-	assert.Equal(t, len(app.GetReservations()), 1, "application reservations should be 1")
+	assert.Equal(t, len(app.GetReservationKeys()), 1, "application reservations should be 1")
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 20000}))
 
 	// now confirm the allocation: this should not remove the reservation
 	rmAlloc := partition.allocate(result)
 	assert.Assert(t, rmAlloc != nil && rmAlloc.Request != nil, "no result")
 	assert.Equal(t, "", rmAlloc.ReservedNodeID, "reserved node should be reset after processing")
-	assert.Equal(t, len(app.GetReservations()), 1, "application reservations should be kept at 1")
+	assert.Equal(t, len(app.GetReservationKeys()), 1, "application reservations should be kept at 1")
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 20000}))
 }
 

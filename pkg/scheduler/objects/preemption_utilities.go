@@ -20,6 +20,7 @@ package objects
 
 import (
 	"sort"
+	"time"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
@@ -78,4 +79,61 @@ func SortAllocations(allocations []*Allocation) {
 		}
 		return true
 	})
+}
+
+func SortAllocationsBasedOnAsk(allocations []*Allocation, total, ask *resources.Resource) {
+	sort.SliceStable(allocations, func(i, j int) bool {
+		l := allocations[i]
+		r := allocations[j]
+
+		scoreLeft := scoreAllocationBasedOnAsk(l, ask)
+		scoreRight := scoreAllocationBasedOnAsk(r, ask)
+		if scoreLeft != scoreRight {
+			return scoreLeft > scoreRight
+		}
+
+		// sort based on the priority
+		lPriority := l.GetPriority()
+		rPriority := r.GetPriority()
+		if lPriority < rPriority {
+			return true
+		}
+		if lPriority > rPriority {
+			return false
+		}
+
+		// sort based on the age (limiting the boundary to hour max)
+		lHour := l.GetCreateTime().Truncate(time.Hour)
+		rHour := r.GetCreateTime().Truncate(time.Hour)
+		if !lHour.Equal(rHour) {
+			return lHour.After(rHour)
+		}
+
+		// sort based on the allocated resource
+		lResource := l.GetAllocatedResource()
+		rResource := r.GetAllocatedResource()
+		comp := resources.CompUsageRatioSpecificTypes(lResource, rResource, total, ask)
+		if comp == -1 {
+			return true
+		}
+		if comp == 1 {
+			return false
+		}
+		return true
+	})
+}
+
+// scoreAllocation generates a relative score for an allocation. Lower-scored allocations are considered more likely
+// preemption candidates. Tasks which have opted into preemption are considered first, then tasks which are not
+// application originators.
+func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) uint64 {
+	var score uint64 = 0
+	if allocation.IsOriginator() {
+		score |= scoreOriginator
+	}
+	if !allocation.IsAllowPreemptSelf() {
+		score |= scoreNoPreempt
+	}
+	score += uint64(allocation.GetAllocatedResource().TypeMatching(ask))
+	return score
 }

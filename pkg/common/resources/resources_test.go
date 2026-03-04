@@ -2470,3 +2470,72 @@ func TestResource_Prune(t *testing.T) {
 		})
 	}
 }
+
+func TestTypeMatching(t *testing.T) {
+	var tests = []struct {
+		name     string
+		base     *Resource
+		other    *Resource
+		expected int
+	}{
+		{"nil base resource", nil, NewResourceFromMap(map[string]Quantity{"first": 20}), 0},
+		{"nil other resource", NewResourceFromMap(map[string]Quantity{"first": 10}), nil, 0},
+		{"both nil resources", nil, nil, 0},
+		{"same resources", NewResourceFromMap(map[string]Quantity{"first": 10}), NewResourceFromMap(map[string]Quantity{"first": 20}), 100},
+		{"half of the resources matches", NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10}), NewResourceFromMap(map[string]Quantity{"first": 10}), 50},
+		{"one third of the resources matches", NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10, "third": 10}), NewResourceFromMap(map[string]Quantity{"first": 10}), 33},
+		{"one fourth of the resources matches", NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10, "third": 10, "fourth": 10}), NewResourceFromMap(map[string]Quantity{"first": 10}), 25},
+		{"one fourth of the resources matches, extra types in other resource should not affect", NewResourceFromMap(map[string]Quantity{"first": 10, "second": 10, "third": 10, "fourth": 10}), NewResourceFromMap(map[string]Quantity{"first": 10, "fifth": 10, "sixth": 10}), 25},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.base.TypeMatching(tt.other), tt.expected)
+		})
+	}
+}
+
+func TestCompUsageRatioSpecificTypes(t *testing.T) {
+	tests := []struct {
+		name     string
+		left     *Resource
+		right    *Resource
+		total    *Resource
+		ask      *Resource
+		expected int
+	}{
+		{"nil resources", nil, nil, nil, NewResourceFromMap(map[string]Quantity{"first": 10}), 0},
+		{"empty resource with total nil", NewResource(), NewResource(), nil, NewResourceFromMap(map[string]Quantity{"first": 10}), 0},
+		{"empty resource", NewResource(), NewResource(), NewResource(), NewResourceFromMap(map[string]Quantity{"first": 10}), 0},
+		{"zero valued resource but extra types differs and not present in ask", NewResourceFromMap(map[string]Quantity{"zero": 0, "extra_a": 1}), NewResourceFromMap(map[string]Quantity{"zero": 0, "extra_a": 2}), nil, NewResourceFromMap(map[string]Quantity{"zero": 10, "first": 10}), 0},
+		{"negative valued resource", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -2, "extra_a": 1}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5, "extra_a": 2}), nil, NewResourceFromMap(map[string]Quantity{"large": 5, "small": 1}), 1},
+		{"negative valued resource on left side, ask is nil", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0}), nil, nil, -1},
+		{"negative valued resource on right side, ask is nil", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}), nil, nil, 1},
+		{"negative valued resource but extra types differs and not present in ask", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5, "extra_a": 1}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5, "extra_a": 2}), nil, NewResourceFromMap(map[string]Quantity{"large": 5}), 0},
+		{"zero valued resource with total but extra types differs and not present in ask", NewResourceFromMap(map[string]Quantity{"zero": 0, "extra_a": 1}), NewResourceFromMap(map[string]Quantity{"zero": 0, "extra_a": 2}), NewResource(), NewResourceFromMap(map[string]Quantity{"zero": 0}), 0},
+		{"same resource and total but extra types differs and not present in ask", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5, "extra_a": 1}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5, "extra_a": 2}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5, "extra_a": 10}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}), 0},
+		{"left side has more one negative value for type present in ask but not present in right", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0}), NewResourceFromMap(map[string]Quantity{"large": 10, "zero": 10}), NewResourceFromMap(map[string]Quantity{"large": 100, "zero": 100, "small": 5}), -1},
+		{"left side has more one negative value but not present in ask", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0}), NewResourceFromMap(map[string]Quantity{"large": 10, "zero": 10}), NewResourceFromMap(map[string]Quantity{"large": 100, "zero": 100}), 0},
+		{"right side has more one negative value for type present in ask but not present in left", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}), NewResourceFromMap(map[string]Quantity{"large": 10, "zero": 10}), NewResourceFromMap(map[string]Quantity{"large": 100, "zero": 100, "small": 5}), 1},
+		{"right side has more one negative value but not present in ask", NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0}), NewResourceFromMap(map[string]Quantity{"large": 5, "zero": 0, "small": -5}), NewResourceFromMap(map[string]Quantity{"large": 10, "zero": 10}), NewResourceFromMap(map[string]Quantity{"large": 100, "zero": 100}), 0},
+		{"left side first one bigger, last one smaller. right side vice versa. but share wise same", NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}), NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10}), NewResourceFromMap(map[string]Quantity{"first": 15, "second": 15}), NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1}), 0},
+		{"left side first one bigger, last one smaller. right side vice versa. but share wise not same", NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}), NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10}), NewResourceFromMap(map[string]Quantity{"first": 15}), NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1}), -1},
+		{"left side first one bigger, last one smaller. right side vice versa. but share wise not same. none of the ask res types match", NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}), NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10}), NewResourceFromMap(map[string]Quantity{"first": 15}), NewResourceFromMap(map[string]Quantity{"third": 1, "fourth": 1}), 0},
+		{"left side first one smaller, last one bigger. right side vice versa. but share wise not same", NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10}), NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}), NewResourceFromMap(map[string]Quantity{"first": 15}), NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1}), 1},
+		{"left side first one smaller, last one bigger. right side vice versa. but share wise not same. none of the ask res types match", NewResourceFromMap(map[string]Quantity{"first": 5, "second": 10}), NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}), NewResourceFromMap(map[string]Quantity{"first": 15}), NewResourceFromMap(map[string]Quantity{"third": 1, "fourth": 1}), 0},
+		{"left side key order not same as right side which is aligned with ask order ", NewResourceFromMap(map[string]Quantity{"second": 10, "first": 5}), NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}), NewResourceFromMap(map[string]Quantity{}), NewResourceFromMap(map[string]Quantity{"first": 1, "second": 1}), 0},
+		{"right side key order not same as left side which is aligned with ask order", NewResourceFromMap(map[string]Quantity{"second": 10, "first": 5}), NewResourceFromMap(map[string]Quantity{"first": 10, "second": 5}), NewResourceFromMap(map[string]Quantity{}), NewResourceFromMap(map[string]Quantity{"second": 1, "first": 1}), 0},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ratio := CompUsageRatioSpecificTypes(tc.left, tc.right, tc.total, tc.ask)
+			if ratio != tc.expected {
+				t.Errorf("incorrect ratio, expected %v got: %v", tc.expected, ratio)
+			}
+			if tc.ask == nil {
+				assert.Equal(t, ratio, CompUsageRatio(tc.left, tc.right, tc.total))
+				assert.Equal(t, ratio, tc.expected)
+			}
+		})
+	}
+}

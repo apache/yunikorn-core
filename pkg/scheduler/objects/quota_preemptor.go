@@ -231,7 +231,7 @@ func (qpc *QuotaPreemptionContext) filterAllocations() {
 // sortAllocations Sort the allocations running in the queue
 func (qpc *QuotaPreemptionContext) sortAllocations() {
 	if len(qpc.allocations) > 0 {
-		SortAllocations(qpc.allocations)
+		SortAllocationsBasedOnAsk(qpc.allocations, qpc.maxResource, qpc.preemptableResource)
 	}
 }
 

@@ -211,3 +211,84 @@ func TestSortAllocations(t *testing.T) {
 
 	removeAllocationAsks(node, asks)
 }
+
+func TestSortAllocationsBasedOnAsk(t *testing.T) {
+	node := NewNode(&si.NodeInfo{
+		NodeID:     "node",
+		Attributes: nil,
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 100}, "second": {Value: 100}, "third": {Value: 100}, "fourth": {Value: 100},
+				"extra_a": {Value: 100}, "extra_b": {Value: 100}, "extra_c": {Value: 100}, "extra_d": {Value: 100}, "extra_e": {Value: 100},
+				"extra_f": {Value: 100}, "extra_g": {Value: 100}, "extra_h": {Value: 100}, "extra_i": {Value: 100}, "extra_j": {Value: 100}},
+		},
+	})
+
+	type vStruct struct {
+		key       string
+		allocated *resources.Resource
+	}
+
+	// Victims for res types matching comparison
+	res1 := vStruct{"ask1", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 13})}
+	res2 := vStruct{"ask2", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12, "second": 10})}
+	res3 := vStruct{"ask3", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11, "second": 10, "third": 10})}
+	res4 := vStruct{"ask4", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10, "third": 10, "fourth": 10})}
+	askWithExtraRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "extra_a": 10, "extra_b": 10})
+
+	// Victims for allocated resources comparison
+	res5 := vStruct{"ask4", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 13, "extra_c": 10, "extra_d": 10})}
+	res6 := vStruct{"ask3", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12, "extra_e": 10, "extra_f": 10})}
+	res7 := vStruct{"ask2", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11, "extra_g": 10, "extra_h": 10})}
+	res8 := vStruct{"ask1", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "extra_i": 10, "extra_j": 10})}
+	res9 := vStruct{"ask4", resources.NewResourceFromMap(map[string]resources.Quantity{"first": -13, "extra_c": 10, "extra_d": 10})}
+
+	res10 := vStruct{"ask2", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 10})}
+	res11 := vStruct{"ask1", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 5})}
+	res12 := vStruct{"ask1", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})}
+	res13 := vStruct{"ask2", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})}
+	askWithExtraRes1 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "second": 100, "third": 100, "fourth": 100})
+
+	testCases := []struct {
+		name            string
+		victims         []vStruct
+		total           *resources.Resource
+		ask             *resources.Resource
+		expectedVictims []string
+	}{
+		{"100% matching victims, final order should be based on matching % in decreasing order. ask extra res should not create any impact",
+			[]vStruct{res1}, total, askWithExtraRes, []string{"ask1"}},
+		{"50% matching victims, final order should be based on matching % in decreasing order. ask extra res should not create any impact",
+			[]vStruct{res2, res1}, total, askWithExtraRes, []string{"ask1", "ask2"}},
+		{"33% matching victims, final order should be based on matching % in decreasing order. ask extra res should not create any impact",
+			[]vStruct{res3, res2, res1}, total, askWithExtraRes, []string{"ask1", "ask2", "ask3"}},
+		{"25% matching victims, final order should be based on matching % in decreasing order. ask extra res should not create any impact",
+			[]vStruct{res4, res3, res2, res1}, total, askWithExtraRes, []string{"ask1", "ask2", "ask3", "ask4"}},
+		{"ordering based on matching res types, non matching res types does not matter",
+			[]vStruct{res5, res6, res7, res8}, total, askWithExtraRes, []string{"ask1", "ask2", "ask3", "ask4"}},
+		{"negative value resource, ordering based on matching res types, non matching res types does not matter",
+			[]vStruct{res6, res7, res8, res9}, total, askWithExtraRes, []string{"ask4", "ask1", "ask2", "ask3"}},
+		{"first victim one res type bigger and another smaller and vice versa on second victim",
+			[]vStruct{res10, res11}, total, askWithExtraRes1, []string{"ask1", "ask2"}},
+		{"first victim one res type bigger and another smaller and vice versa on second victim",
+			[]vStruct{res13, res12}, total, askWithExtraRes1, []string{"ask1", "ask2"}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var victimAllocations []*Allocation
+			for _, vRes := range tc.victims {
+				// Except victim used resources and ask resources, have all other criteria same for all victims
+				victim := createAllocation(vRes.key, "app1", node.NodeID, true, false, 10, false,
+					vRes.allocated)
+				assert.Assert(t, node.TryAddAllocation(victim))
+				victimAllocations = append(victimAllocations, victim)
+			}
+			SortAllocationsBasedOnAsk(victimAllocations, tc.total, tc.ask)
+			for index, sortedAsk := range victimAllocations {
+				assert.Equal(t, sortedAsk.GetAllocationKey(), tc.expectedVictims[index])
+			}
+			removeAllocationAsks(node, victimAllocations)
+		})
+	}
+}

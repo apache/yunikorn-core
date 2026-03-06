@@ -1722,3 +1722,31 @@ func (pc *PartitionContext) getReservationCount() int {
 	defer pc.RUnlock()
 	return pc.reservations
 }
+
+// GetOrderLog returns a snapshot of applications with pending requests grouped by queue
+func (pc *PartitionContext) GetOrderLog() []*dao.OrderLogEntry {
+	pc.RLock()
+	defer pc.RUnlock()
+
+	// Build a map of queue -> applications with pending requests
+	queueAppMap := make(map[string][]string)
+
+	for _, app := range pc.applications {
+		// Only include apps with pending resources
+		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+			queuePath := app.GetQueuePath()
+			queueAppMap[queuePath] = append(queueAppMap[queuePath], app.ApplicationID)
+		}
+	}
+
+	// Convert map to slice
+	result := make([]*dao.OrderLogEntry, 0, len(queueAppMap))
+	for queueName, appIDs := range queueAppMap {
+		result = append(result, &dao.OrderLogEntry{
+			QueueName:      queueName,
+			ApplicationIDs: appIDs,
+		})
+	}
+
+	return result
+}

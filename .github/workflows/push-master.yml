@@ -10,17 +10,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: .go_version
+          check-latest: true
       - name: Unit tests
         run: make test
       - name: Code coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           files: build/coverage.txt
           # After codecov/codecov-action@v4, tokenless uploading of coverage files to non-public repo is unsupported.

@@ -16,13 +16,14 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: .go_version
+          check-latest: true
       - name: Check license
         run: make license-check
       - name: Go lint
@@ -52,20 +53,21 @@ jobs:
         plugin: [""]
     steps:
       - name: Checkout yunikorn-k8shim source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: apache/yunikorn-k8shim
           fetch-depth: 2
           path: k8shim
       - name: Checkout yunikorn-core source code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2
           path: core
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version-file: k8shim/.go_version
+          check-latest: true
           cache-dependency-path: "**/go.sum"
       - name: Set hugepage
         run: |
@@ -74,7 +76,7 @@ jobs:
           sudo sysctl -a | grep vm.nr_hugepages
       - name: Cache and Restore e2e required tools
         id: cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             k8shim/tools
@@ -89,7 +91,7 @@ jobs:
           KIND_NODE_IMAGE: ${{ matrix.k8s }}
           KIND_EXTRA_ARGS: ${{ matrix.plugin }}
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         if: ${{ failure() }}
         with:
           name: ${{ github.job }} stdout (${{ matrix.k8s }}${{ matrix.plugin == '--plugin' && format(', {0}', matrix.plugin) || matrix.plugin }})

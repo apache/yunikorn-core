@@ -1209,3 +1209,49 @@ func (r *Resource) DominantResourceType(capacity *Resource) string {
 	}
 	return dominant
 }
+
+func (r *Resource) TypeMatching(other *Resource) int {
+	if r == nil || other == nil {
+		return 0
+	}
+	totalResTypes := float64(len(r.Resources))
+	matchingResTypes := 0.0
+	for k := range other.Resources {
+		if _, ok := r.Resources[k]; ok {
+			matchingResTypes++
+		}
+	}
+	return int(matchingResTypes / totalResTypes * 100)
+}
+
+// CompUsageRatioSpecificTypes Compare the left and right resources based on the ask resources.
+// Collect resource types of both left and right resources from ask resource perspective and ignore others.
+// Sort the shares for the collected resource types in increasing order and decide the largest resource
+// by comparing each share starting from last index to 0th index.
+func CompUsageRatioSpecificTypes(left, right, total, specificTypes *Resource) int {
+	lShareTypeWise := GetSharesTypeWise(left, total)
+	rShareTypeWise := GetSharesTypeWise(right, total)
+	if specificTypes != nil {
+		var lShare []float64
+		var rShare []float64
+		for k := range specificTypes.Resources {
+			lValue, lExists := lShareTypeWise[k]
+			rValue, rExists := rShareTypeWise[k]
+			if lExists {
+				lShare = append(lShare, lValue)
+			}
+			if rExists {
+				rShare = append(rShare, rValue)
+			}
+		}
+		if len(lShare) == 0 && len(rShare) == 0 {
+			return 0
+		}
+		sort.Float64s(lShare)
+		sort.Float64s(rShare)
+		return compareShares(lShare, rShare)
+	} else {
+		// fall back to usual way of comparing usage shares.
+		return CompUsageRatio(left, right, total)
+	}
+}

@@ -30,6 +30,7 @@ import (
 
 type QuotaPreemptionContext struct {
 	queue               *Queue
+	parent              *QuotaPreemptionContext
 	maxResource         *resources.Resource
 	guaranteedResource  *resources.Resource
 	allocatedResource   *resources.Resource
@@ -38,9 +39,17 @@ type QuotaPreemptionContext struct {
 	allocations         []*Allocation
 }
 
-func NewQuotaPreemptor(queue *Queue) *QuotaPreemptionContext {
+func createQuotaPreemptionContext(queue *Queue, cache map[string]*QuotaPreemptionContext) *QuotaPreemptionContext {
+	if cache[queue.QueuePath] != nil {
+		return cache[queue.QueuePath]
+	}
+	var parent *QuotaPreemptionContext
+	if queue.parent != nil {
+		parent = createQuotaPreemptionContext(queue.parent, cache)
+	}
 	preemptor := &QuotaPreemptionContext{
 		queue:               queue,
+		parent:              parent,
 		maxResource:         queue.cloneMaxResource(),
 		guaranteedResource:  queue.GetGuaranteedResource(),
 		allocatedResource:   queue.GetAllocatedResource(),
@@ -48,8 +57,15 @@ func NewQuotaPreemptor(queue *Queue) *QuotaPreemptionContext {
 		preemptableResource: nil,
 		allocations:         make([]*Allocation, 0),
 	}
-
+	if cache == nil {
+		cache = make(map[string]*QuotaPreemptionContext)
+	}
+	cache[queue.QueuePath] = preemptor
 	return preemptor
+}
+
+func NewQuotaPreemptor(queue *Queue) *QuotaPreemptionContext {
+	return createQuotaPreemptionContext(queue, map[string]*QuotaPreemptionContext{})
 }
 
 func (qpc *QuotaPreemptionContext) tryPreemption() {
@@ -60,6 +76,8 @@ func (qpc *QuotaPreemptionContext) tryPreemption() {
 		qpc.tryPreemptionInternal()
 		return
 	}
+	cache := make(map[string]*QuotaPreemptionContext)
+	cache[qpc.queue.QueuePath] = qpc
 	leafQueues := make(map[*Queue]*resources.Resource)
 	getChildQueuesPreemptableResource(qpc.queue, qpc.preemptableResource, leafQueues)
 
@@ -70,7 +88,7 @@ func (qpc *QuotaPreemptionContext) tryPreemption() {
 	)
 
 	for leaf, leafPreemptableResource := range leafQueues {
-		leafQueueQCPC := NewQuotaPreemptor(leaf)
+		leafQueueQCPC := createQuotaPreemptionContext(leaf, cache)
 		leafQueueQCPC.preemptableResource = leafPreemptableResource
 		leafQueueQCPC.tryPreemptionInternal()
 	}
@@ -272,17 +290,21 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 		// Keep collecting the victims until preemptable resource reaches and subtract the usage
 		if qpc.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
 			apps[application] = append(apps[application], victim)
-			qpc.allocatedResource.SubFrom(victimAlloc)
+			qpc.decAllocatedResource(victimAlloc)
 		}
 
 		// Has usage gone below the guaranteed resources?
 		// If yes, revert the recently added victim steps completely and try next victim.
-		if !qpc.guaranteedResource.IsEmpty() && qpc.guaranteedResource.StrictlyGreaterThanOnlyExisting(qpc.allocatedResource) {
+		if qpc.HasUsageGoneBelowGuaranteedResource() {
 			victims := apps[application]
+			removedVictim := victims[len(victims)-1]
 			exceptRecentlyAddedVictims := victims[:len(victims)-1]
 			apps[application] = exceptRecentlyAddedVictims
-			qpc.allocatedResource.AddTo(victimAlloc)
+			qpc.incAllocatedResource(victimAlloc)
 			victimsTotalResource.SubFrom(victimAlloc)
+			log.Log(log.SchedQuotaChangePreemption).Debug("Reversed earlier picked victim as removing it would make usage to go below the guaranteed resource",
+				zap.String("queue", qpc.queue.GetQueuePath()),
+				zap.String("reversed victim", removedVictim.String()))
 		} else {
 			victimsTotalResource.AddTo(victimAlloc)
 		}
@@ -311,4 +333,36 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 				"preempting allocations to enforce new max quota for queue : "+qpc.queue.GetQueuePath())
 		}
 	}
+}
+
+// HasUsageGoneBelowGuaranteedResource Has Queue's usage gone below guaranteed resources?
+// Apply Recursive checks to ensure there is no violation at any level in the whole queue hierarchy
+func (qpc *QuotaPreemptionContext) HasUsageGoneBelowGuaranteedResource() bool {
+	if qpc == nil {
+		return false
+	}
+	if qpc.parent != nil {
+		if qpc.parent.HasUsageGoneBelowGuaranteedResource() {
+			return true
+		}
+	}
+	return !qpc.guaranteedResource.IsEmpty() && qpc.guaranteedResource.StrictlyGreaterThanOnlyExisting(qpc.allocatedResource)
+}
+
+// incAllocatedResource Increase allocated resource
+func (qpc *QuotaPreemptionContext) incAllocatedResource(victimAlloc *resources.Resource) {
+	if qpc == nil {
+		return
+	}
+	qpc.parent.incAllocatedResource(victimAlloc)
+	qpc.allocatedResource = resources.AddOnlyExisting(qpc.allocatedResource, victimAlloc)
+}
+
+// decAllocatedResource Decrease allocated resource
+func (qpc *QuotaPreemptionContext) decAllocatedResource(victimAlloc *resources.Resource) {
+	if qpc == nil {
+		return
+	}
+	qpc.parent.decAllocatedResource(victimAlloc)
+	qpc.allocatedResource = resources.SubOnlyExisting(qpc.allocatedResource, victimAlloc)
 }

@@ -1991,7 +1991,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	// verify no victims when no allocations exist
 	snapshot := leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
 
-	assert.Equal(t, 5, len(snapshot), "wrong snapshot count") // root, root.parent1, root.parent1.leaf1, root.parent2, root.parent2.leaf2
+	assert.Equal(t, 3, len(snapshot), "wrong snapshot count") // root, root.parent1, root.parent1.leaf1
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 
 	// add two lower-priority allocs in leaf2
@@ -2028,6 +2028,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	parent1.preemptionPolicy = policies.FencePreemptionPolicy
 	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root.parent1")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 3, len(snapshot), "wrong snapshot count")
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	parent1.preemptionPolicy = policies.DefaultPreemptionPolicy
 
@@ -2035,6 +2036,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	leaf1.preemptionPolicy = policies.FencePreemptionPolicy
 	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, "root.parent1.leaf1")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 3, len(snapshot), "wrong snapshot count")
 	assert.Equal(t, 0, len(victims(snapshot)), "found victims")
 	leaf1.preemptionPolicy = policies.DefaultPreemptionPolicy
 
@@ -2062,6 +2064,7 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.Equal(t, leaf1.preemptionPolicy, policies.DefaultPreemptionPolicy)
 	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority)).QueuePath, parent1.QueuePath)
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
+	assert.Equal(t, 3, len(snapshot), "wrong snapshot count")
 	assert.Equal(t, 0, len(victims(snapshot)), "wrong victim count")
 	parent1.allocatedResource = used
 

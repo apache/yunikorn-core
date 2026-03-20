@@ -2005,7 +2005,7 @@ func (sq *Queue) FindEligiblePreemptionVictims(queuePath string, ask *Allocation
 	priorityMap := make(map[string]int64)
 
 	// get the queue which acts as the fence boundary
-	fence := sq.findPreemptionFenceRoot(priorityMap, int64(ask.priority))
+	fence := sq.findPreemptionFenceRoot(priorityMap, int64(ask.priority), ask.GetAllocatedResource())
 	if fence == nil {
 		return nil
 	}
@@ -2184,7 +2184,7 @@ func prunePreemptionSnapshots(results map[string]*QueuePreemptionSnapshot, askQu
 	}
 }
 
-func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPriority int64) *Queue {
+func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPriority int64, askResource *resources.Resource) *Queue {
 	if sq == nil {
 		return nil
 	}
@@ -2197,11 +2197,20 @@ func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPr
 	}
 	priorityMap[sq.QueuePath] = currentPriority
 
-	// Return this queue as fence root if: 1. FencePreemptionPolicy is set 2. root queue 3. allocations in the queue reached maximum resources
-	if sq.parent == nil || sq.GetPreemptionPolicy() == policies.FencePreemptionPolicy || resources.Equals(sq.maxResource, sq.allocatedResource) {
+	shouldFenceByMax := false
+	maxResource := sq.GetMaxResource()
+	if maxResource != nil && len(maxResource.Resources) > 0 {
+		projected := resources.Add(sq.allocatedResource, askResource)
+		shouldFenceByMax = !maxResource.StrictlyGreaterThanOnlyExisting(projected)
+	}
+	// Return this queue as fence root if:
+	// 1. FencePreemptionPolicy is set
+	// 2. root queue
+	// 3. projected allocations (current usage + ask) reached or exceeded any configured max resource
+	if sq.parent == nil || sq.GetPreemptionPolicy() == policies.FencePreemptionPolicy || shouldFenceByMax {
 		return sq
 	}
-	return sq.parent.findPreemptionFenceRoot(priorityMap, currentPriority)
+	return sq.parent.findPreemptionFenceRoot(priorityMap, currentPriority, askResource)
 }
 
 func (sq *Queue) GetCurrentPriority() int32 {

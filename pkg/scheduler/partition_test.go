@@ -25,7 +25,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -36,6 +35,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
@@ -3650,29 +3650,12 @@ func TestUpdateAllocation(t *testing.T) {
 
 func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 	setupUGM()
-
 	partition := createQuotaPreemptionQueuesNodes(t)
-	maxRes := map[string]string{
-		"memory": "5",
-		"vcore":  "5",
-	}
-	maxRes1 := map[string]string{
-		"memory": "12",
-		"vcore":  "12",
-	}
-	leafQueueConf := []configs.QueueConfig{createLeafQueueConfig(maxRes, map[string]string{
-		configs.QuotaPreemptionDelay: "10s",
-	})}
-	leafQueueConf1 := []configs.QueueConfig{createLeafQueueConfig(maxRes, nil)}
-	leafQueueConf2 := []configs.QueueConfig{createLeafQueueConfig(maxRes, map[string]string{
-		configs.QuotaPreemptionDelay: "0s",
-	})}
-	leafQueueConf3 := []configs.QueueConfig{createLeafQueueConfig(nil, map[string]string{
-		configs.QuotaPreemptionDelay: "10s",
-	})}
-	leafQueueConf4 := []configs.QueueConfig{createLeafQueueConfig(maxRes1, map[string]string{
-		configs.QuotaPreemptionDelay: "10s",
-	})}
+	leafQueueConf := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, map[string]string{configs.QuotaPreemptionDelay: "10s"})}
+	leafQueueConf1 := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, nil)}
+	leafQueueConf2 := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, map[string]string{configs.QuotaPreemptionDelay: "0s"})}
+	leafQueueConf3 := []configs.QueueConfig{createLeafQueueConfig(nil, map[string]string{configs.QuotaPreemptionDelay: "10s"})}
+	leafQueueConf4 := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "12", "vcore": "12"}, map[string]string{configs.QuotaPreemptionDelay: "10s"})}
 	allocRes := &objects.AllocationResult{ResultType: objects.Allocated}
 	tests := []struct {
 		name             string
@@ -3710,8 +3693,8 @@ func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 					NodeID:           nodeID1,
 					ResourcePerAlloc: res.ToProto(),
 				}
-				_, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
-				assert.NilError(t, err, "failed to add alloc to app")
+				_, allocCreated, allocCreatedErr := partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+				assert.NilError(t, allocCreatedErr, "failed to add alloc to app")
 				assert.Check(t, allocCreated, "alloc should have been created")
 			}
 			totalRes, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
@@ -3727,6 +3710,7 @@ func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 			}
 
 			err = partition.updateQueues(tt.leafQueueConfig, root)
+			assert.NilError(t, err, "config should have been updated")
 
 			leaf := partition.GetQueue("root.leaf")
 			if leaf == nil {
@@ -3755,6 +3739,7 @@ func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 			assert.Equal(t, len(leaf.GetApplication(appID1).GetAllAllocations()), 5)
 
 			res, err = resources.NewResourceFromConf(map[string]string{"vcore": "1"})
+			assert.NilError(t, err, "failed to create resource")
 			err = app.AddAllocationAsk(newAllocationAsk("ask-key-6", appID1, res))
 			assert.NilError(t, err, "failed to add ask ask-key-2 to app-1")
 
@@ -3782,7 +3767,6 @@ func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 			partition.removeApplication(appID1)
 		})
 	}
-
 }
 
 func TestUpdateAllocationWithAsk(t *testing.T) {

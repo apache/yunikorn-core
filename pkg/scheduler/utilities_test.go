@@ -480,6 +480,43 @@ func newPlacementPartition() (*PartitionContext, error) {
 	return newPartitionContext(conf, rmID, nil, false)
 }
 
+func newQuotaPreemptionConfiguredPartition() (*PartitionContext, error) {
+	var True = true
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues: []configs.QueueConfig{
+					{
+						Name:   "leaf",
+						Parent: false,
+						Queues: nil,
+						Resources: configs.Resources{
+							Max: map[string]string{
+								"memory": "10",
+								"vcore":  "10",
+							},
+						},
+						Properties: map[string]string{
+							configs.QuotaPreemptionDelay: "10s",
+						},
+					},
+				},
+			},
+		},
+		PlacementRules: nil,
+		Limits:         nil,
+		NodeSortPolicy: configs.NodeSortingPolicy{},
+		Preemption: configs.PartitionPreemptionConfig{
+			QuotaPreemptionEnabled: &True,
+		},
+	}
+	return newPartitionContext(conf, rmID, nil, false)
+}
+
 func newApplication(appID, partition, queueName string) *objects.Application {
 	return newApplicationTags(appID, partition, queueName, nil)
 }
@@ -683,6 +720,25 @@ func createQueuesNodes(t *testing.T) *PartitionContext {
 	return partition
 }
 
+// partition with an expected basic queue hierarchy
+// root -> parent -> leaf1
+//
+//	-> leaf2
+//
+// and 2 nodes: node-1 & node-2
+func createQuotaPreemptionQueuesNodes(t *testing.T) *PartitionContext {
+	partition, err := newQuotaPreemptionConfiguredPartition()
+	assert.NilError(t, err, "test partition create failed with error")
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{"vcore": "12"})
+	assert.NilError(t, err, "failed to create basic resource")
+	err = partition.AddNode(newNodeMaxResource("node-1", res))
+	assert.NilError(t, err, "test node1 add failed unexpected")
+	err = partition.AddNode(newNodeMaxResource("node-2", res))
+	assert.NilError(t, err, "test node2 add failed unexpected")
+	return partition
+}
+
 // partition with a sibling relationship for testing preemption
 // root -> parent -> {leaf1,leaf2}
 //
@@ -703,6 +759,17 @@ func createPreemptionQueuesNodes(t *testing.T) *PartitionContext {
 	return partition
 }
 
+func createLeafQueueConfig(max, properties map[string]string) configs.QueueConfig {
+	return configs.QueueConfig{
+		Name:   "leaf",
+		Parent: false,
+		Queues: nil,
+		Resources: configs.Resources{
+			Max: max,
+		},
+		Properties: properties,
+	}
+}
 func getTestUserGroup() security.UserGroup {
 	return security.UserGroup{User: "testuser", Groups: []string{"testgroup"}}
 }

@@ -21,9 +21,11 @@ package scheduler
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/apache/yunikorn-core/pkg/rmproxy"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -3644,6 +3646,143 @@ func TestUpdateAllocation(t *testing.T) {
 		t.Fatal("alloc on non-existing node should have failed")
 	}
 	assert.Check(t, !allocCreated, "alloc should not have been created")
+}
+
+func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
+	setupUGM()
+
+	partition := createQuotaPreemptionQueuesNodes(t)
+	maxRes := map[string]string{
+		"memory": "5",
+		"vcore":  "5",
+	}
+	maxRes1 := map[string]string{
+		"memory": "12",
+		"vcore":  "12",
+	}
+	leafQueueConf := []configs.QueueConfig{createLeafQueueConfig(maxRes, map[string]string{
+		configs.QuotaPreemptionDelay: "10s",
+	})}
+	leafQueueConf1 := []configs.QueueConfig{createLeafQueueConfig(maxRes, nil)}
+	leafQueueConf2 := []configs.QueueConfig{createLeafQueueConfig(maxRes, map[string]string{
+		configs.QuotaPreemptionDelay: "0s",
+	})}
+	leafQueueConf3 := []configs.QueueConfig{createLeafQueueConfig(nil, map[string]string{
+		configs.QuotaPreemptionDelay: "10s",
+	})}
+	leafQueueConf4 := []configs.QueueConfig{createLeafQueueConfig(maxRes1, map[string]string{
+		configs.QuotaPreemptionDelay: "10s",
+	})}
+	allocRes := &objects.AllocationResult{ResultType: objects.Allocated}
+	tests := []struct {
+		name             string
+		partitionContext *PartitionContext
+		leafQueueConfig  []configs.QueueConfig
+		allocResult      *objects.AllocationResult
+		releasedEvents   int
+	}{
+		{"preemption enabled at partition level", partition, leafQueueConf, nil, 1},
+		{"preemption enabled at partition level but not at queue level, delay not defined explicitly", partition, leafQueueConf1, nil, 0},
+		{"preemption enabled at partition level but not at queue level, delay defined as 0s", partition, leafQueueConf2, nil, 0},
+		{"preemption enabled at partition level but max resources not defined at queue level", partition, leafQueueConf3, allocRes, 0},
+		{"preemption enabled at partition level but max resources higher than usage at queue level", partition, leafQueueConf4, allocRes, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			partition = tt.partitionContext
+
+			var testHandler *rmproxy.MockedRMProxy
+			// add the app to add an ask to
+			app, testHandler := newApplicationWithHandler(appID1, "default", "root.leaf")
+			err := partition.AddApplication(app)
+			assert.NilError(t, err, "app-1 should have been added to the partition")
+
+			// Add simple allocations
+			var i int
+			maxAllocs := 5
+			for i = 1; i <= maxAllocs; i++ {
+				var res *resources.Resource
+				res, err = resources.NewResourceFromConf(map[string]string{"vcore": "2"})
+				assert.NilError(t, err, "failed to create resource")
+				alloc := si.Allocation{
+					AllocationKey:    "ask-key-" + strconv.Itoa(i),
+					ApplicationID:    appID1,
+					NodeID:           nodeID1,
+					ResourcePerAlloc: res.ToProto(),
+				}
+				_, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+				assert.NilError(t, err, "failed to add alloc to app")
+				assert.Check(t, allocCreated, "alloc should have been created")
+			}
+			totalRes, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+			assert.NilError(t, err, "failed to create resource")
+			if !resources.Equals(app.GetAllocatedResource(), totalRes) {
+				t.Fatal("app not updated by adding alloc, no error thrown")
+			}
+
+			// There is a queue setup as the config must be valid when we run
+			root := partition.GetQueue("root")
+			if root == nil {
+				t.Error("root queue not found in partition")
+			}
+
+			err = partition.updateQueues(tt.leafQueueConfig, root)
+
+			leaf := partition.GetQueue("root.leaf")
+			if leaf == nil {
+				t.Error("root queue not found in partition")
+			}
+			assert.Equal(t, len(leaf.GetApplication(appID1).GetAllAllocations()), maxAllocs)
+
+			// update to existing alloc with changed resources
+			res, err := resources.NewResourceFromConf(map[string]string{"vcore": "3"})
+			assert.NilError(t, err, "failed to create resource")
+			alloc := si.Allocation{
+				AllocationKey:    "ask-key-1",
+				ApplicationID:    appID1,
+				NodeID:           nodeID1,
+				ResourcePerAlloc: res.ToProto(),
+			}
+			_, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+			assert.NilError(t, err, "failed to update alloc on app")
+			assert.Check(t, !allocCreated, "alloc should not have been created")
+
+			totalRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "11"})
+			assert.NilError(t, err, "failed to create resource")
+			if !resources.Equals(app.GetAllocatedResource(), totalRes) {
+				t.Fatal("app not updated with new resources")
+			}
+			assert.Equal(t, len(leaf.GetApplication(appID1).GetAllAllocations()), 5)
+
+			res, err = resources.NewResourceFromConf(map[string]string{"vcore": "1"})
+			err = app.AddAllocationAsk(newAllocationAsk("ask-key-6", appID1, res))
+			assert.NilError(t, err, "failed to add ask ask-key-2 to app-1")
+
+			result := partition.tryAllocate()
+
+			// delay so that events are sent out
+			time.Sleep(time.Second)
+
+			if tt.allocResult == nil {
+				events := testHandler.GetEvents()
+				eventsCount := 0
+				for _, event := range events {
+					if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+						assert.Equal(t, len(allocRelease.ReleasedAllocations), 3)
+						assert.Equal(t, allocRelease.ReleasedAllocations[0].GetTerminationType(), si.TerminationType_PREEMPTED_BY_SCHEDULER, "")
+						assert.Assert(t, strings.Contains(allocRelease.ReleasedAllocations[0].AllocationKey, "ask-key"), "wrong allocation released on quota preemption")
+						eventsCount++
+					}
+				}
+				assert.Equal(t, eventsCount, tt.releasedEvents, "unexpected release events count")
+			} else {
+				assert.Equal(t, result.ResultType, objects.Allocated)
+			}
+			leaf.ResetPreemptionTime()
+			partition.removeApplication(appID1)
+		})
+	}
+
 }
 
 func TestUpdateAllocationWithAsk(t *testing.T) {

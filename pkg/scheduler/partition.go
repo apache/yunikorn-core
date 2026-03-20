@@ -1236,24 +1236,13 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 			zap.String("appID", applicationID),
 			zap.String("allocationKey", allocationKey))
 
-		// In case Quota preemption is set, configured delay won't be able to adjusted based on the lost time during restart.
-		// So, allow allocations until it fits in queue max resources if quota preemption is set. Otherwise, drop the allocation
-		// to prevent moving forward.
-
-		// If quota preemption is enabled at partition level and set for any queue in the queue hierarchy,
-		// honour max resources. In case of quota preemption set for any immediate parent or ancestor,
-		// unlike enforcing quota preemption among child pools fairly based on usage distribution during scheduling cycle,
-		// allocations are not allowed from proceeding further and dropped based on the order in which it is being handled here.
-		if pc.IsQuotaPreemptionEnabled() && queue.ShouldApplyQuotaPreemption() {
-			err = queue.TryIncAllocatedResource(res)
-			if err != nil {
-				metrics.GetSchedulerMetrics().IncSchedulingError()
-				return false, false, fmt.Errorf("quota preemption is set for queue %s, cannot allocate resource from application %s: %v ",
-					queue.GetQueuePath(), alloc.GetApplicationID(), err)
-			}
-		} else {
-			queue.IncAllocatedResource(res)
+		// Though Quota preemption is set, allow allocations as usual for now as handling here would lead to unexpected behaviour.
+		// But override (only once) the preemption time set earlier through from config of the queue with passed time so that
+		// preemption would be triggerred immediately during the very first scheduling cycle itself.
+		if pc.IsQuotaPreemptionEnabled() && queue.IsPreemptionScheduled() && queue.ShouldApplyQuotaPreemption() {
+			queue.OverridePreemptionTime()
 		}
+		queue.IncAllocatedResource(res)
 		metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 		node.AddAllocation(alloc)
 		alloc.SetInstanceType(node.GetInstanceType())
@@ -1297,6 +1286,13 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 		// update node if allocation was previously allocated
 		if existingNode != nil {
 			existingNode.UpdateAllocatedResource(delta)
+		}
+
+		// Though Quota preemption is set, allow resource changes as usual for now even if it exceeds max resources as handling here would lead to unexpected behaviour.
+		// But override (only once) the preemption time set earlier through from config of the queue or set with passed time so that
+		// preemption would be triggerred immediately during the very first scheduling cycle itself.
+		if pc.IsQuotaPreemptionEnabled() && queue.ShouldApplyQuotaPreemption() {
+			queue.OverridePreemptionTime()
 		}
 	}
 

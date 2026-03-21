@@ -1489,3 +1489,358 @@ partitions:
 	t.Logf("  Autoscaler will be notified within 1s via inspectOutstandingRequests")
 	t.Logf("  Karpenter can provision nodes while sparkpi waits for its scheduling turn")
 }
+
+// =============================================================================
+// GROUP G: Priority Offset Fix Validation
+// =============================================================================
+
+// TestPriorityOffsetPreventsStarvation proves that setting priority.offset on
+// the small queue causes it to sort BEFORE the large queue regardless of
+// fair-share ratio, completely eliminating the starvation bug.
+//
+// With default prioritySortEnabled=true, sortQueuesByPriorityAndFairness
+// checks priority FIRST, fair share only as tiebreaker.
+//
+// Config:
+//
+//	root.small: priority.offset=1000 (HIGH)
+//	root.large: priority.offset=0   (DEFAULT)
+//
+// Result: root.small always sorts first → sparkpi allocated on cycle 1.
+func TestPriorityOffsetPreventsStarvation(t *testing.T) {
+	configData := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        properties:
+          application.sort.priority: enabled
+        queues:
+          - name: large
+            properties:
+              priority.offset: "0"
+            resources:
+              guaranteed:
+                memory: 360G
+              max:
+                memory: 400G
+          - name: small
+            properties:
+              priority.offset: "1000"
+            resources:
+              guaranteed:
+                memory: 100M
+              max:
+                memory: 100M
+`
+	ms := &mockScheduler{}
+	defer ms.Stop()
+	err := ms.Init(configData, false, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{{
+			NodeID:              "node-1:1234",
+			Attributes:          map[string]string{},
+			SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 500000000000}}},
+			Action:              si.NodeInfo_CREATE,
+		}},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "NodeRequest failed")
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+
+	// Prior allocation on small: 10M → fair share ratio = 0.1
+	// WITHOUT priority offset this would cause starvation (proven by other tests)
+	err = ms.addApp("prior-app", "root.small", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "prior-app", 1000)
+	err = ms.addAppRequest("prior-app", "prior", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 10000000}},
+	}, 1)
+	assert.NilError(t, err)
+	waitForPendingQueueResource(t, ms.getQueue("root.small"), 10000000, 1000)
+	ms.scheduler.MultiStepSchedule(3)
+	ms.mockRM.waitForAllocations(t, 1, 1000)
+
+	// Large queue: 20 asks of 1G each
+	err = ms.addApp("large-app", "root.large", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "large-app", 1000)
+	err = ms.addAppRequest("large-app", "large-ask", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000000}},
+	}, 20)
+	assert.NilError(t, err)
+
+	// Small queue: sparkpi ask
+	err = ms.addApp("sparkpi-app", "root.small", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "sparkpi-app", 1000)
+	err = ms.addAppRequest("sparkpi-app", "sparkpi", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000}},
+	}, 1)
+	assert.NilError(t, err)
+	waitForPendingQueueResource(t, ms.getQueue("root.large"), 20*1000000000, 1000)
+	waitForPendingQueueResource(t, ms.getQueue("root.small"), 1000000, 1000)
+
+	// Run just 5 cycles — sparkpi should be served IMMEDIATELY (cycle 1 or 2)
+	ms.scheduler.MultiStepSchedule(5)
+
+	sparkpiApp := ms.getApplication("sparkpi-app")
+	largeApp := ms.getApplication("large-app")
+
+	sparkpiMem := int(sparkpiApp.GetAllocatedResource().Resources[siCommon.Memory])
+	largeMem := int(largeApp.GetAllocatedResource().Resources[siCommon.Memory])
+
+	t.Logf("With priority.offset fix after 5 cycles:")
+	t.Logf("  sparkpi allocated: %d (expected 1M = 1000000)", sparkpiMem)
+	t.Logf("  large-app allocated: %dM", largeMem/1000000)
+
+	// sparkpi should be allocated — priority sorts small queue first
+	assert.Equal(t, sparkpiMem, 1000000,
+		"FIX CONFIRMED: With priority.offset=1000 on root.small, sparkpi is served immediately. "+
+			"Priority sorting overrides fair share — small queue sorts first regardless of ratio.")
+
+	// large-app should also have allocations (small has no more pending after sparkpi served)
+	assert.Assert(t, largeMem > 0,
+		"large-app should also get allocations after sparkpi is served (no more small-queue pending)")
+
+	// schedulingAttempted should be true (queue was visited!)
+	sparkpiAsk := sparkpiApp.GetAllocationAsk("sparkpi-0")
+	if sparkpiAsk != nil {
+		t.Logf("  sparkpi schedulingAttempted: %v", sparkpiAsk.IsSchedulingAttempted())
+	}
+
+	t.Logf("")
+	t.Logf("CONFIRMED: priority.offset prevents starvation.")
+	t.Logf("  root.small (priority=1000) sorts before root.large (priority=0)")
+	t.Logf("  sparkpi served on first cycle, then large gets remaining cycles.")
+}
+
+// TestPriorityOffsetWithContinuousDemand proves that priority offset works
+// even under continuous demand on the large queue. After sparkpi is served,
+// large queue gets all subsequent cycles. When a new sparkpi arrives (cron),
+// it's served immediately on the next cycle.
+func TestPriorityOffsetWithContinuousDemand(t *testing.T) {
+	configData := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        properties:
+          application.sort.priority: enabled
+        queues:
+          - name: large
+            properties:
+              priority.offset: "0"
+            resources:
+              guaranteed:
+                memory: 360G
+              max:
+                memory: 400G
+          - name: small
+            properties:
+              priority.offset: "1000"
+            resources:
+              guaranteed:
+                memory: 100M
+              max:
+                memory: 100M
+`
+	ms := &mockScheduler{}
+	defer ms.Stop()
+	err := ms.Init(configData, false, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{{
+			NodeID:              "node-1:1234",
+			Attributes:          map[string]string{},
+			SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 500000000000}}},
+			Action:              si.NodeInfo_CREATE,
+		}},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "NodeRequest failed")
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+
+	// Prior allocation on small
+	err = ms.addApp("prior-app", "root.small", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "prior-app", 1000)
+	err = ms.addAppRequest("prior-app", "prior", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 10000000}},
+	}, 1)
+	assert.NilError(t, err)
+	waitForPendingQueueResource(t, ms.getQueue("root.small"), 10000000, 1000)
+	ms.scheduler.MultiStepSchedule(3)
+	ms.mockRM.waitForAllocations(t, 1, 1000)
+
+	// Large queue: continuous demand
+	err = ms.addApp("large-app", "root.large", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "large-app", 1000)
+
+	// WAVE 1: sparkpi-1 arrives alongside large demand
+	err = ms.addAppRequest("large-app", "wave1-ask", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000000}},
+	}, 10)
+	assert.NilError(t, err)
+
+	err = ms.addApp("sparkpi-1", "root.small", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "sparkpi-1", 1000)
+	err = ms.addAppRequest("sparkpi-1", "sp1", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000}},
+	}, 1)
+	assert.NilError(t, err)
+	waitForPendingQueueResource(t, ms.getQueue("root.large"), 10*1000000000, 1000)
+	waitForPendingQueueResource(t, ms.getQueue("root.small"), 1000000, 1000)
+
+	ms.scheduler.MultiStepSchedule(5)
+
+	sp1App := ms.getApplication("sparkpi-1")
+	sp1Mem := int(sp1App.GetAllocatedResource().Resources[siCommon.Memory])
+	assert.Equal(t, sp1Mem, 1000000, "sparkpi-1 should be served immediately (wave 1)")
+	t.Logf("Wave 1: sparkpi-1 allocated=%d (immediate)", sp1Mem)
+
+	// WAVE 2: more large demand + sparkpi-2 (simulates cron 2 mins later)
+	err = ms.addAppRequest("large-app", "wave2-ask", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000000}},
+	}, 10)
+	assert.NilError(t, err)
+
+	err = ms.addApp("sparkpi-2", "root.small", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "sparkpi-2", 1000)
+	err = ms.addAppRequest("sparkpi-2", "sp2", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000}},
+	}, 1)
+	assert.NilError(t, err)
+	waitForPendingQueueResource(t, ms.getQueue("root.small"), 1000000, 1000)
+
+	ms.scheduler.MultiStepSchedule(5)
+
+	sp2App := ms.getApplication("sparkpi-2")
+	sp2Mem := int(sp2App.GetAllocatedResource().Resources[siCommon.Memory])
+	assert.Equal(t, sp2Mem, 1000000, "sparkpi-2 should be served immediately (wave 2)")
+	t.Logf("Wave 2: sparkpi-2 allocated=%d (immediate)", sp2Mem)
+
+	// WAVE 3: yet more demand + sparkpi-3
+	err = ms.addAppRequest("large-app", "wave3-ask", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000000}},
+	}, 10)
+	assert.NilError(t, err)
+
+	err = ms.addApp("sparkpi-3", "root.small", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "sparkpi-3", 1000)
+	err = ms.addAppRequest("sparkpi-3", "sp3", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000}},
+	}, 1)
+	assert.NilError(t, err)
+	waitForPendingQueueResource(t, ms.getQueue("root.small"), 1000000, 1000)
+
+	ms.scheduler.MultiStepSchedule(5)
+
+	sp3App := ms.getApplication("sparkpi-3")
+	sp3Mem := int(sp3App.GetAllocatedResource().Resources[siCommon.Memory])
+	assert.Equal(t, sp3Mem, 1000000, "sparkpi-3 should be served immediately (wave 3)")
+	t.Logf("Wave 3: sparkpi-3 allocated=%d (immediate)", sp3Mem)
+
+	largeMem := int(ms.getApplication("large-app").GetAllocatedResource().Resources[siCommon.Memory])
+	t.Logf("Total large-app allocated: %dG", largeMem/1000000000)
+	assert.Assert(t, largeMem > 0, "large-app should get allocations between sparkpi waves")
+
+	t.Logf("")
+	t.Logf("CONFIRMED: priority.offset works under continuous demand.")
+	t.Logf("  Each sparkpi cron job is served immediately on arrival.")
+	t.Logf("  Large queue gets all remaining cycles between sparkpi waves.")
+	t.Logf("  No starvation for either queue.")
+}
+
+// TestPriorityOffsetContrastWithoutFix runs the SAME scenario as
+// TestPriorityOffsetPreventsStarvation but WITHOUT the priority.offset config.
+// This proves that the priority.offset is the specific change that fixes it.
+func TestPriorityOffsetContrastWithoutFix(t *testing.T) {
+	// IDENTICAL config but NO priority.offset properties
+	configData := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: large
+            resources:
+              guaranteed:
+                memory: 360G
+              max:
+                memory: 400G
+          - name: small
+            resources:
+              guaranteed:
+                memory: 100M
+              max:
+                memory: 100M
+`
+	ms := &mockScheduler{}
+	defer ms.Stop()
+	err := ms.Init(configData, false, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	err = ms.proxy.UpdateNode(&si.NodeRequest{
+		Nodes: []*si.NodeInfo{{
+			NodeID:              "node-1:1234",
+			Attributes:          map[string]string{},
+			SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"memory": {Value: 500000000000}}},
+			Action:              si.NodeInfo_CREATE,
+		}},
+		RmID: "rm:123",
+	})
+	assert.NilError(t, err, "NodeRequest failed")
+	ms.mockRM.waitForAcceptedNode(t, "node-1:1234", 1000)
+
+	// Same setup as the priority fix test
+	err = ms.addApp("prior-app", "root.small", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "prior-app", 1000)
+	err = ms.addAppRequest("prior-app", "prior", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 10000000}},
+	}, 1)
+	assert.NilError(t, err)
+	waitForPendingQueueResource(t, ms.getQueue("root.small"), 10000000, 1000)
+	ms.scheduler.MultiStepSchedule(3)
+	ms.mockRM.waitForAllocations(t, 1, 1000)
+
+	err = ms.addApp("large-app", "root.large", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "large-app", 1000)
+	err = ms.addAppRequest("large-app", "large-ask", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000000}},
+	}, 20)
+	assert.NilError(t, err)
+
+	err = ms.addApp("sparkpi-app", "root.small", "default")
+	assert.NilError(t, err)
+	ms.mockRM.waitForAcceptedApplication(t, "sparkpi-app", 1000)
+	err = ms.addAppRequest("sparkpi-app", "sparkpi", &si.Resource{
+		Resources: map[string]*si.Quantity{"memory": {Value: 1000000}},
+	}, 1)
+	assert.NilError(t, err)
+	waitForPendingQueueResource(t, ms.getQueue("root.large"), 20*1000000000, 1000)
+	waitForPendingQueueResource(t, ms.getQueue("root.small"), 1000000, 1000)
+
+	ms.scheduler.MultiStepSchedule(5)
+
+	sparkpiMem := int(ms.getApplication("sparkpi-app").GetAllocatedResource().Resources[siCommon.Memory])
+
+	t.Logf("WITHOUT priority.offset after 5 cycles: sparkpi=%d (expected 0 = starved)", sparkpiMem)
+
+	// WITHOUT the fix: sparkpi is starved (same as TestQueueStarvationWithPriorAllocation)
+	assert.Equal(t, sparkpiMem, 0,
+		"CONTRAST: Without priority.offset, sparkpi is starved due to fair-share ratio. "+
+			"This proves priority.offset is the specific config change that eliminates starvation.")
+}

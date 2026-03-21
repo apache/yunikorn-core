@@ -3269,3 +3269,44 @@ func TestQueue_setPreemptionTime(t *testing.T) {
 		})
 	}
 }
+
+func TestOverrideAndResetPreemptionTime(t *testing.T) {
+	root, e := createRootQueue(nil)
+	assert.NilError(t, e, "failed to create basic root queue")
+	tests := []struct {
+		name           string
+		oldMaxResource *resources.Resource
+		maxRes         map[string]string
+		currentUsage   *resources.Resource
+		delay          time.Duration
+		timeChange     bool
+	}{
+		{"setting preemption time", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "50"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 80}), 10, true},
+		{"usage lesser than max res, so preemption time is not set", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "150"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 80}), 5, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			queue, err := createManagedQueue(root, "test", false, tt.maxRes)
+			assert.NilError(t, err, "queue creation failed unexpectedly")
+			queue.quotaPreemptionDelay = tt.delay
+			queue.allocatedResource = tt.currentUsage
+			before := queue.quotaPreemptionStartTime
+			queue.setPreemptionTime(tt.oldMaxResource, tt.delay)
+			after := queue.quotaPreemptionStartTime
+			if tt.timeChange {
+				assert.Assert(t, before != after, "time change is expected")
+				assert.Assert(t, !queue.IsPreemptionScheduled(), "schedule is expected")
+			}
+			queue.OverridePreemptionTime()
+			afterOverride := queue.quotaPreemptionStartTime
+			assert.Assert(t, after != afterOverride, "time change is expected")
+			assert.Assert(t, !queue.IsPreemptionScheduled(), "schedule is expected")
+			queue.ResetPreemptionTime()
+			afterReset := queue.quotaPreemptionStartTime
+			assert.Assert(t, afterOverride != afterReset, "time change is expected")
+			assert.Assert(t, afterReset.IsZero(), "time change is expected")
+			assert.Assert(t, queue.quotaPreemptionDelay == 0, "time change is expected")
+			assert.Assert(t, queue.IsPreemptionScheduled(), "schedule is not expected")
+		})
+	}
+}

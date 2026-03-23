@@ -134,6 +134,6 @@ func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) 
 	if !allocation.IsAllowPreemptSelf() {
 		score |= scoreNoPreempt
 	}
-	score += uint64(allocation.GetAllocatedResource().TypeMatching(ask))
+	score += allocation.GetAllocatedResource().TypeMatching(ask)
 	return score
 }

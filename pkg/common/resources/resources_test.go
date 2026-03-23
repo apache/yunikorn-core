@@ -2476,7 +2476,7 @@ func TestTypeMatching(t *testing.T) {
 		name     string
 		base     *Resource
 		other    *Resource
-		expected int
+		expected uint64
 	}{
 		{"nil base resource", nil, NewResourceFromMap(map[string]Quantity{"first": 20}), 0},
 		{"nil other resource", NewResourceFromMap(map[string]Quantity{"first": 10}), nil, 0},

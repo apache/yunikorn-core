@@ -1210,18 +1210,17 @@ func (r *Resource) DominantResourceType(capacity *Resource) string {
 	return dominant
 }
 
-func (r *Resource) TypeMatching(other *Resource) int {
+func (r *Resource) TypeMatching(other *Resource) uint64 {
 	if r == nil || other == nil {
 		return 0
 	}
-	totalResTypes := float64(len(r.Resources))
-	matchingResTypes := 0.0
+	matchingResTypes := 0
 	for k := range other.Resources {
 		if _, ok := r.Resources[k]; ok {
 			matchingResTypes++
 		}
 	}
-	return int(matchingResTypes / totalResTypes * 100)
+	return uint64(matchingResTypes * 100 / len(r.Resources))
 }
 
 // CompUsageRatioSpecificTypes Compare the left and right resources based on the ask resources.

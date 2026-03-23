@@ -2201,7 +2201,7 @@ func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPr
 	maxResource := sq.GetMaxResource()
 	if maxResource != nil && len(maxResource.Resources) > 0 {
 		projected := resources.Add(sq.allocatedResource, askResource)
-		shouldFenceByMax = !maxResource.StrictlyGreaterThanOnlyExisting(projected)
+		shouldFenceByMax = !maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(projected)
 	}
 	// Return this queue as fence root if:
 	// 1. FencePreemptionPolicy is set

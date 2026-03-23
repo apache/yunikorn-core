@@ -2068,12 +2068,13 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.Equal(t, 0, len(victims(snapshot)), "wrong victim count")
 	parent1.allocatedResource = used
 
-	// parent1 queue is not full yet, but this ask would bring it to max resources.
+	// parent1 queue is not full yet, and this ask would bring it exactly to max resources.
+	// Reaching max exactly should not fence by max check.
 	parent1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{siCommon.Memory: 100})
-	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority), ask.GetAllocatedResource()).QueuePath, parent1.QueuePath)
+	assert.Equal(t, leaf1.findPreemptionFenceRoot(make(map[string]int64), int64(ask.priority), ask.GetAllocatedResource()).QueuePath, "root")
 	snapshot = leaf1.FindEligiblePreemptionVictims(leaf1.QueuePath, ask)
-	assert.Equal(t, 3, len(snapshot), "wrong snapshot count")
-	assert.Equal(t, 0, len(victims(snapshot)), "wrong victim count")
+	assert.Equal(t, 5, len(snapshot), "wrong snapshot count")
+	assert.Equal(t, 2, len(victims(snapshot)), "wrong victim count")
 	parent1.allocatedResource = used
 
 	// empty max resources should not fence by max check

@@ -233,6 +233,7 @@ partitions:
 	man := NewPlacementManager(nil, queueFunc, false)
 	if man == nil {
 		t.Fatal("placement manager create failed")
+		return // unreachable but needed to satisfy static check
 	}
 	// update the manager
 	rules := []configs.PlacementRule{

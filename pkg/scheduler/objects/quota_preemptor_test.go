@@ -385,7 +385,7 @@ func TestQuotaChangeGetChildQueuesPreemptableResource(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			childQueues := make(map[*Queue]*QuotaPreemptionContext)
-			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues, map[string]*QuotaPreemptionContext{})
+			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues)
 			assert.Equal(t, len(childQueues), 4)
 			assert.Equal(t, resources.Equals(childQueues[leaf111].preemptableResource, tc.leaf111PRes), true)
 			assert.Equal(t, resources.Equals(childQueues[leaf12].preemptableResource, tc.leaf12PRes), true)
@@ -456,7 +456,7 @@ func TestQuotaChangeGetChildQueuesPreemptableResourceWithDifferentResTypes(t *te
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			childQueues := make(map[*Queue]*QuotaPreemptionContext)
-			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues, map[string]*QuotaPreemptionContext{})
+			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues)
 			assert.Equal(t, len(childQueues), 4)
 			assert.Equal(t, resources.Equals(childQueues[leaf111].preemptableResource, tc.leaf111PRes), true)
 			assert.Equal(t, resources.Equals(childQueues[leaf12].preemptableResource, tc.leaf12PRes), true)

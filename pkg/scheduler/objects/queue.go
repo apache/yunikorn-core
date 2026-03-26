@@ -816,6 +816,25 @@ func (sq *Queue) GetActualGuaranteedResource() *resources.Resource {
 	return resources.ComponentWiseMin(sq.guaranteedResource, parentGuaranteed)
 }
 
+// GetPreemptableResource returns the actual (including parent) preemptable resources for the queue.
+// Preemptable resource is nothing but the resources used above the guaranteed quota.
+func (sq *Queue) GetPreemptableResource() *resources.Resource {
+	if sq == nil {
+		return resources.NewResource()
+	}
+	parentPreemptable := sq.parent.GetPreemptableResource()
+	sq.RLock()
+	defer sq.RUnlock()
+
+	var preemptable *resources.Resource
+	if sq.guaranteedResource == nil {
+		preemptable = sq.allocatedResource.Clone()
+	} else {
+		preemptable = resources.SubOnlyExisting(sq.guaranteedResource, sq.allocatedResource.Clone())
+	}
+	return resources.ComponentWiseMin(preemptable, parentPreemptable)
+}
+
 func (sq *Queue) GetPreemptionDelay() time.Duration {
 	sq.RLock()
 	defer sq.RUnlock()

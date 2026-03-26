@@ -29,65 +29,50 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-func TestNewQuotaPreemptor(t *testing.T) {
-	root, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:   "root",
-		Parent: true,
-	}, nil, false, nil)
-	assert.NilError(t, err)
-
+func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 	parent, err := NewConfiguredQueue(configs.QueueConfig{
 		Name:   "parent",
 		Parent: true,
-	}, root, false, nil)
-	assert.NilError(t, err)
-
-	leaf1, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:   "leaf1",
-		Parent: false,
-	}, parent, false, nil)
-	assert.NilError(t, err)
-
-	leaf2, err := NewConfiguredQueue(configs.QueueConfig{
-		Name:   "leaf2",
-		Parent: false,
-	}, parent, false, nil)
-	assert.NilError(t, err)
-
-	leaf1Context := NewQuotaPreemptor(leaf1)
-	leaf2Context := NewQuotaPreemptor(leaf2)
-	assert.Equal(t, leaf1Context.parent.queue.QueuePath, leaf2Context.parent.queue.QueuePath)
-	assert.Equal(t, leaf1Context.parent.parent.queue.QueuePath, leaf2Context.parent.parent.queue.QueuePath)
-}
-
-func TestQuotaChangeGetPreemptableResource(t *testing.T) {
-	leaf, err := NewConfiguredQueue(configs.QueueConfig{
-		Name: "leaf",
 	}, nil, false, nil)
 	assert.NilError(t, err)
 
+	leaf, err := NewConfiguredQueue(configs.QueueConfig{
+		Name: "leaf",
+	}, parent, false, nil)
+	assert.NilError(t, err)
+
 	testCases := []struct {
-		name         string
-		queue        *Queue
-		maxResource  *resources.Resource
-		usedResource *resources.Resource
-		preemptable  *resources.Resource
+		name             string
+		queue            *Queue
+		parentGuaranteed *resources.Resource
+		maxResource      *resources.Resource
+		usedResource     *resources.Resource
+		preemptable      *resources.Resource
 	}{
-		{"nil max and nil used", leaf, nil, nil, nil},
-		{"nil max", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil},
-		{"nil used", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil, nil},
-		{"used below max", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500}), nil},
-		{"used above max", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
-		{"used above max, below max, equals max in specific res type and also with extra res types", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 10, "gpu": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
-		{"used res type but max undefined", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 150}), nil},
+		{"nil max and nil used", leaf, nil, nil, nil, nil},
+		{"nil max", leaf, nil, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil},
+		{"nil used", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil, nil},
+		{"used below max", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500}), nil},
+		{"used above max", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"used above max, below max, equals max in specific res type and also with extra res types", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 10, "gpu": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"used res type but max undefined", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 150}), nil},
+		{"parent guaranteed set, lower than leaf's preemptable resources", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1200}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300})},
+		{"parent guaranteed set, lower than leaf's preemptable resources - extra res types ", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1200}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300})},
+		{"parent guaranteed set, higher than leaf's preemptable resources", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 900}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"parent guaranteed set, higher than leaf's preemptable resources - extra res types", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 900}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			tc.queue.parent.guaranteedResource = tc.parentGuaranteed
 			tc.queue.maxResource = tc.maxResource
-			tc.queue.allocatedResource = tc.usedResource
+			tc.queue.IncAllocatedResource(tc.usedResource)
 			preemptor := NewQuotaPreemptor(tc.queue)
 			preemptor.setPreemptableResources()
 			assert.Equal(t, resources.Equals(preemptor.preemptableResource, tc.preemptable), true)
+
+			// reset
+			err = tc.queue.DecAllocatedResource(tc.usedResource)
+			assert.NilError(t, err)
 		})
 	}
 }
@@ -203,10 +188,10 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 		{"no victims available", leaf, oldMax, newMax, nil, preemptable, []*Allocation{}, 0, 0},
 		{"suitable victims available", leaf, oldMax, newMax, nil, preemptable, suitableVictims, 2, 1},
 		{"skip over sized victims", leaf, oldMax, newMax, nil, preemptable, oversizedVictims, 2, 1},
-		{"guaranteed not set, victims total resource might go over the requirement a bit", leaf, oldMax, newMax, nil, preemptable, overflowVictims, 3, 2},
-		{"guaranteed set but lower than max, victims total resource might go over the requirement a bit", leaf, oldMax, newMax, lowerGuaranteed, preemptable, overflowVictims, 3, 2},
-		{"best effort - guaranteed set and equals max, victims total resource might fall below the requirement a bit", leaf, oldMax, newMax, guaranteed, preemptable, shortfallVictims, 4, 2},
-		{"best effort - guaranteed set, max not set earlier but now, victims total resource might fall below the requirement a bit", leaf, nil, newMax, guaranteed, preemptable, shortfallVictims, 4, 2},
+		{"guaranteed not set", leaf, oldMax, newMax, nil, preemptable, overflowVictims, 3, 1},
+		{"guaranteed set but lower than max", leaf, oldMax, newMax, lowerGuaranteed, preemptable, overflowVictims, 3, 1},
+		{"best effort - guaranteed set and equals max", leaf, oldMax, newMax, guaranteed, preemptable, shortfallVictims, 4, 2},
+		{"best effort - guaranteed set, max not set earlier but now", leaf, nil, newMax, guaranteed, preemptable, shortfallVictims, 4, 2},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -314,7 +299,7 @@ func TestQuotaChangeTryPreemptionWithDifferentResTypes(t *testing.T) {
 		},
 		{"overflow victims available with extra resource types other than defined in guaranteed and vice versa", leaf, oldMax, newMax, lowerGuaranteedWithNewResTypes,
 			[]test{
-				{overflowVictims, 3, 2},
+				{overflowVictims, 3, 1},
 			},
 		},
 	}
@@ -387,25 +372,25 @@ func TestQuotaChangeGetChildQueuesPreemptableResource(t *testing.T) {
 	}{
 		{"normal preemptable resources  - normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}),
 			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 22}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 42}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25})},
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 41}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 24})},
 
 		{"twice the preemptable resources - twice the normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 200}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 45}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 22}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 83}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})},
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 44}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 22}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 83}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 49})},
 
 		{"half the preemptable resources - half the normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 21}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12})},
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12})},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			childQueues := make(map[*Queue]*resources.Resource)
-			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues)
+			childQueues := make(map[*Queue]*QuotaPreemptionContext)
+			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues, map[string]*QuotaPreemptionContext{})
 			assert.Equal(t, len(childQueues), 4)
-			assert.Equal(t, resources.Equals(childQueues[leaf111], tc.leaf111PRes), true)
-			assert.Equal(t, resources.Equals(childQueues[leaf12], tc.leaf12PRes), true)
-			assert.Equal(t, resources.Equals(childQueues[leaf211], tc.leaf211PRes), true)
-			assert.Equal(t, resources.Equals(childQueues[leaf22], tc.leaf22PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf111].preemptableResource, tc.leaf111PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf12].preemptableResource, tc.leaf12PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf211].preemptableResource, tc.leaf211PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf22].preemptableResource, tc.leaf22PRes), true)
 			if _, ok := childQueues[parent.GetChildQueue("leaf3")]; ok {
 				t.Fatal("leaf 3 queue exists")
 			}
@@ -458,25 +443,25 @@ func TestQuotaChangeGetChildQueuesPreemptableResourceWithDifferentResTypes(t *te
 	}{
 		{"normal preemptable resources  - normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100, "fourth": 100}),
 			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 22}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 42}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25})},
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 41}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 24})},
 
 		{"twice the preemptable resources - twice the normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 200, "fourth": 100}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 45}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 22}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 83}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})},
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 44}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 22}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 83}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 49})},
 
 		{"half the preemptable resources - half the normal distribution", parent, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50, "fourth": 100}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
-			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 21}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12})},
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20}), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12})},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			childQueues := make(map[*Queue]*resources.Resource)
-			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues)
+			childQueues := make(map[*Queue]*QuotaPreemptionContext)
+			getChildQueuesPreemptableResource(tc.parentQueue, tc.parentPreemptable, childQueues, map[string]*QuotaPreemptionContext{})
 			assert.Equal(t, len(childQueues), 4)
-			assert.Equal(t, resources.Equals(childQueues[leaf111], tc.leaf111PRes), true)
-			assert.Equal(t, resources.Equals(childQueues[leaf12], tc.leaf12PRes), true)
-			assert.Equal(t, resources.Equals(childQueues[leaf211], tc.leaf211PRes), true)
-			assert.Equal(t, resources.Equals(childQueues[leaf22], tc.leaf22PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf111].preemptableResource, tc.leaf111PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf12].preemptableResource, tc.leaf12PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf211].preemptableResource, tc.leaf211PRes), true)
+			assert.Equal(t, resources.Equals(childQueues[leaf22].preemptableResource, tc.leaf22PRes), true)
 			if _, ok := childQueues[parent.GetChildQueue("leaf3")]; ok {
 				t.Fatal("leaf 3 queue exists")
 			}
@@ -576,9 +561,9 @@ func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
 		expectedVictims int
 	}{
 		{"Guaranteed set on one side of queue hierarchy - suitable victims available", parent, oldMax, newMax, leafGVictims, 11},
-		{"Guaranteed set not set on any queue - suitable victims available", parent1, oldMax, newMax, leafVictims, 13},
-		{"Guaranteed set only on parent queue but on any child queues underneath - suitable victims available", parent2, oldMax1, newMax1, leafVictimsWithParentG, 8},
-		{"Guaranteed set only on parent queue but on any child queues underneath - suitable victims available", parent2, oldMax1, newMax2, leafVictimsWithParentG, 9},
+		{"Guaranteed set not set on any queue - suitable victims available", parent1, oldMax, newMax, leafVictims, 9},
+		{"Guaranteed set only on parent queue but not on any child queues underneath - suitable victims available", parent2, oldMax1, newMax1, leafVictimsWithParentG, 5},
+		{"Guaranteed set only on parent queue but not on any child queues underneath - suitable victims available", parent2, oldMax1, newMax2, leafVictimsWithParentG, 5},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

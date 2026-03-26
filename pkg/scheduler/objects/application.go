@@ -1426,10 +1426,9 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
 			// Cancel the reservation after wait time expires
-			createTime := reserve.alloc.GetCreateTime()
+			createTime := reserve.createTime
 
-			// Take reservation delay also into account
-			askAge := time.Since(createTime.Add(reservationWaitTimeout).Add(reservationDelay))
+			askAge := time.Since(createTime.Add(reservationWaitTimeout))
 
 			// Has wait time reached?
 			if askAge > reservationWaitTimeout {

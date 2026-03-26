@@ -19,6 +19,8 @@
 package objects
 
 import (
+	"time"
+
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
@@ -30,9 +32,10 @@ type reservation struct {
 	allocKey string
 	// these references must ONLY be used for alloc, node and application removal otherwise
 	// the reservations cannot be removed and scheduling might be impacted.
-	app   *Application
-	node  *Node
-	alloc *Allocation
+	app        *Application
+	node       *Node
+	alloc      *Allocation
+	createTime time.Time
 }
 
 // The reservation inside the scheduler. A reservation object is never mutated and does not use locking.
@@ -47,10 +50,11 @@ func newReservation(node *Node, app *Application, alloc *Allocation, appBased bo
 		return nil
 	}
 	res := &reservation{
-		allocKey: alloc.GetAllocationKey(),
-		alloc:    alloc,
-		app:      app,
-		node:     node,
+		allocKey:   alloc.GetAllocationKey(),
+		alloc:      alloc,
+		app:        app,
+		node:       node,
+		createTime: time.Now(),
 	}
 	if appBased {
 		res.nodeID = node.NodeID

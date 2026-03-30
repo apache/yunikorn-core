@@ -2543,6 +2543,9 @@ func TestTryAllocatePreemptNodeWithReservations(t *testing.T) {
 	alloc3 := result3.Request
 	assert.Assert(t, alloc3 != nil, "alloc3 expected")
 	assert.Assert(t, allocs[0].IsPreempted(), "alloc1 should have been preempted")
+
+	// reset wait timeout
+	reservationWaitTimeout = 60 * time.Minute
 }
 
 func TestTryAllocatePreemptNodeWithReservationsWithHighPriority(t *testing.T) {
@@ -2568,6 +2571,9 @@ func TestTryAllocatePreemptNodeWithReservationsWithHighPriority(t *testing.T) {
 	alloc3 := result4.Request
 	assert.Assert(t, alloc3 != nil, "alloc3 expected")
 	assert.Assert(t, allocs[0].IsPreempted(), "alloc1 should have been preempted")
+
+	// reset wait timeout
+	reservationWaitTimeout = 60 * time.Minute
 }
 
 // TestTryAllocatePreemptNodeWithReservationsNotPossibleToCancel Ensures reservations cannot be cancelled because of the following constraints:
@@ -2631,6 +2637,9 @@ func TestTryAllocatePreemptNodeWithReservationsNotPossibleToCancel(t *testing.T)
 	alloc3 := result5.Request
 	assert.Assert(t, alloc3 != nil, "alloc3 expected")
 	assert.Assert(t, allocs[0].IsPreempted(), "alloc1 should have been preempted")
+
+	// reset wait timeout
+	reservationWaitTimeout = 60 * time.Minute
 }
 
 func TestMaxAskPriority(t *testing.T) {
@@ -3285,6 +3294,7 @@ func TestGetRateLimitedAppLog(t *testing.T) {
 }
 
 func TestTryAllocateWithReservedHeadRoomChecking(t *testing.T) {
+	setupUGM()
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("reserved headroom test regression: %v", r)
@@ -3315,6 +3325,16 @@ func TestTryAllocateWithReservedHeadRoomChecking(t *testing.T) {
 	iter := getNodeIteratorFn(node1, node2)
 	result := app.tryReservedAllocate(headRoom, iter)
 	assert.Assert(t, result == nil, "result is expected to be nil due to insufficient headroom")
+	assert.Equal(t, len(app.reservations), 1)
+
+	// pass the time and try again
+	reservationWaitTimeout = -60 * time.Second
+	result = app.tryReservedAllocate(headRoom, iter)
+	assert.Assert(t, result == nil, "result is expected to be nil due to insufficient headroom")
+	assert.Equal(t, len(app.reservations), 0)
+
+	// reset wait timeout
+	reservationWaitTimeout = 60 * time.Minute
 }
 
 func TestUpdateRunnableStatus(t *testing.T) {

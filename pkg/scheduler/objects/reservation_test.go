@@ -20,6 +20,7 @@ package objects
 
 import (
 	"testing"
+	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -45,8 +46,8 @@ func TestNewReservation(t *testing.T) {
 		{"nil alloc", node, app, nil, true, nil},
 		{"nil app", node, nil, ask, true, nil},
 		{"nil node", nil, app, ask, true, nil},
-		{"node based", node, app, ask, false, &reservation{"app-1", "", "alloc-1", app, node, ask}},
-		{"app based", node, app, ask, true, &reservation{"", "node-1", "alloc-1", app, node, ask}},
+		{"node based", node, app, ask, false, &reservation{"app-1", "", "alloc-1", app, node, ask, time.Now()}},
+		{"app based", node, app, ask, true, &reservation{"", "node-1", "alloc-1", app, node, ask, time.Now()}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

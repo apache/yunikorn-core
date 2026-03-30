@@ -1425,6 +1425,20 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		}
 
 		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
+			// Cancel the reservation after wait time expires
+			createTime := reserve.createTime
+
+			askAge := time.Since(createTime.Add(reservationWaitTimeout))
+
+			// Has wait time reached?
+			if askAge > reservationWaitTimeout {
+				num := sa.unReserveInternal(reserve)
+				sa.queue.UnReserve(sa.ApplicationID, num)
+				log.Log(log.SchedApplication).Info("Cancelled reservation as wait time expired",
+					zap.String("reserve app", reserve.appID),
+					zap.String("reserve alloc key", reserve.allocKey),
+					zap.String("node", reserve.nodeID))
+			}
 			continue
 		}
 

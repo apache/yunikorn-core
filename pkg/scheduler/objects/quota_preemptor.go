@@ -39,7 +39,7 @@ type QuotaPreemptionContext struct {
 }
 
 func NewQuotaPreemptor(queue *Queue) *QuotaPreemptionContext {
-	preemptor := &QuotaPreemptionContext{
+	return &QuotaPreemptionContext{
 		queue:               queue,
 		maxResource:         queue.cloneMaxResource(),
 		guaranteedResource:  queue.GetGuaranteedResource(),
@@ -48,8 +48,6 @@ func NewQuotaPreemptor(queue *Queue) *QuotaPreemptionContext {
 		preemptableResource: nil,
 		allocations:         make([]*Allocation, 0),
 	}
-
-	return preemptor
 }
 
 func (qpc *QuotaPreemptionContext) tryPreemption() {
@@ -60,7 +58,7 @@ func (qpc *QuotaPreemptionContext) tryPreemption() {
 		qpc.tryPreemptionInternal()
 		return
 	}
-	leafQueues := make(map[*Queue]*resources.Resource)
+	leafQueues := make(map[*Queue]*QuotaPreemptionContext)
 	getChildQueuesPreemptableResource(qpc.queue, qpc.preemptableResource, leafQueues)
 
 	log.Log(log.SchedQuotaChangePreemption).Info("Triggering quota change preemption for parent queue",
@@ -69,10 +67,8 @@ func (qpc *QuotaPreemptionContext) tryPreemption() {
 		zap.Int("no. of leaf queues with potential victims", len(leafQueues)),
 	)
 
-	for leaf, leafPreemptableResource := range leafQueues {
-		leafQueueQCPC := NewQuotaPreemptor(leaf)
-		leafQueueQCPC.preemptableResource = leafPreemptableResource
-		leafQueueQCPC.tryPreemptionInternal()
+	for _, leafContext := range leafQueues {
+		leafContext.tryPreemptionInternal()
 	}
 }
 
@@ -106,7 +102,7 @@ func (qpc *QuotaPreemptionContext) tryPreemptionInternal() {
 // In order to achieve a fair distribution of parent's preemptable resource among its children,
 // Higher (relatively) the usage is, higher the preemptable resource would be resulted in.
 // Usage above guaranteed (if set) is only considered to derive the preemptable resource.
-func getChildQueuesPreemptableResource(queue *Queue, parentPreemptableResource *resources.Resource, childQueues map[*Queue]*resources.Resource) {
+func getChildQueuesPreemptableResource(queue *Queue, parentPreemptableResource *resources.Resource, childQueues map[*Queue]*QuotaPreemptionContext) {
 	children := queue.GetCopyOfChildren()
 	if len(children) == 0 {
 		return
@@ -154,12 +150,14 @@ func getChildQueuesPreemptableResource(queue *Queue, parentPreemptableResource *
 		per := resources.GetSharesTypeWise(pRes, totalPreemptableResource)
 		for k := range pRes.Resources {
 			if _, ok := parentPreemptableResource.Resources[k]; ok {
-				value := math.RoundToEven(per[k] * float64(parentPreemptableResource.Resources[k]))
+				value := int(math.Floor(per[k] * float64(parentPreemptableResource.Resources[k])))
 				childPreemptableResource.Resources[k] = resources.Quantity(value)
 			}
 		}
 		if c.IsLeafQueue() {
-			childQueues[c] = childPreemptableResource
+			leafContext := NewQuotaPreemptor(c)
+			leafContext.preemptableResource = childPreemptableResource
+			childQueues[c] = leafContext
 		} else {
 			getChildQueuesPreemptableResource(c, childPreemptableResource, childQueues)
 		}
@@ -169,19 +167,41 @@ func getChildQueuesPreemptableResource(queue *Queue, parentPreemptableResource *
 // setPreemptableResources Get the preemptable resources for the queue
 // Subtracting the usage from the max resource gives the preemptable resources.
 // It could contain both positive and negative values. Only negative values are preemptable.
+// In addition, derive the minimum preemptable resources over parents based on guaranteed resources recursively
+// and do the minimum of this with earlier preemptable resources to derive the net preemptable resources
 func (qpc *QuotaPreemptionContext) setPreemptableResources() {
 	used := resources.SubOnlyExisting(qpc.allocatedResource, qpc.preemptingResource)
 	if qpc.maxResource.IsEmpty() || used.IsEmpty() {
 		return
 	}
 	actual := resources.SubOnlyExisting(qpc.maxResource, used)
-	preemptableResource := resources.NewResource()
+
+	netPreemptableResource := resources.NewResource()
 	// Keep only the resource type which needs to be preempted
 	for k, v := range actual.Resources {
 		if v < 0 {
-			preemptableResource.Resources[k] = resources.Quantity(math.Abs(float64(v)))
+			netPreemptableResource.Resources[k] = resources.Quantity(math.Abs(float64(v)))
 		}
 	}
+
+	parentPreemptableResource := qpc.queue.GetPreemptableResource()
+
+	netParentPreemptableResource := resources.NewResource()
+	// Keep only the resource type which needs to be preempted
+	for k, v := range parentPreemptableResource.Resources {
+		if v < 0 {
+			netParentPreemptableResource.Resources[k] = resources.Quantity(math.Abs(float64(v)))
+		}
+	}
+
+	// Min (current queue preemptable resources, Min(preemptable resources across parents based on guaranteed resources) )
+	preemptableResource := resources.ComponentWiseMinOnlyExisting(netPreemptableResource, netParentPreemptableResource)
+
+	log.Log(log.SchedQuotaChangePreemption).Debug("Preemptable resources calculated",
+		zap.String("queue", qpc.queue.GetQueuePath()),
+		zap.String("actual preemptable resources", netPreemptableResource.String()),
+		zap.String("preemptable resources based on guaranteed", netParentPreemptableResource.String()),
+		zap.String("net preemptable resources", preemptableResource.String()))
 	if preemptableResource.IsEmpty() {
 		return
 	}
@@ -269,22 +289,13 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 			continue
 		}
 
-		// Keep collecting the victims until preemptable resource reaches and subtract the usage
-		if qpc.preemptableResource.StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
+		// Keep collecting the victims until preemptable resource reaches
+		victimsTotalResource.AddTo(victimAlloc)
+		if qpc.preemptableResource.StrictlyGreaterThanOrEqualsOnlyExisting(victimsTotalResource) {
 			apps[application] = append(apps[application], victim)
-			qpc.allocatedResource.SubFrom(victimAlloc)
-		}
-
-		// Has usage gone below the guaranteed resources?
-		// If yes, revert the recently added victim steps completely and try next victim.
-		if !qpc.guaranteedResource.IsEmpty() && qpc.guaranteedResource.StrictlyGreaterThanOnlyExisting(qpc.allocatedResource) {
-			victims := apps[application]
-			exceptRecentlyAddedVictims := victims[:len(victims)-1]
-			apps[application] = exceptRecentlyAddedVictims
-			qpc.allocatedResource.AddTo(victimAlloc)
-			victimsTotalResource.SubFrom(victimAlloc)
 		} else {
-			victimsTotalResource.AddTo(victimAlloc)
+			// reverse to try next victim
+			victimsTotalResource.SubFrom(victimAlloc)
 		}
 	}
 

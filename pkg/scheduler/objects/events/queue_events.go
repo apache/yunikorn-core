@@ -104,6 +104,15 @@ func (q *QueueEvents) SendTypeChangedEvent(queuePath string, isLeaf bool) {
 	q.eventSystem.AddEvent(event)
 }
 
+func (q *QueueEvents) SendQuotaPreemptionEvent(queuePath string, results string, maxResource *resources.Resource) {
+	if !q.eventSystem.IsEventTrackingEnabled() {
+		return
+	}
+	event := events.CreateQueueEventRecord(queuePath, results, common.Empty, si.EventRecord_SET,
+		si.EventRecord_QUEUE_MAX, maxResource)
+	q.eventSystem.AddEvent(event)
+}
+
 func NewQueueEvents(evt events.EventSystem) *QueueEvents {
 	return &QueueEvents{
 		eventSystem: evt,

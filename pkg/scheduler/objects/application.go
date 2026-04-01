@@ -685,7 +685,7 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 
 // UpdateAllocationResources updates the app, queue, and user tracker with deltas for an allocation.
 // If an existing allocation cannot be found or alloc is invalid, an error is returned.
-func (sa *Application) UpdateAllocationResources(alloc *Allocation) error {
+func (sa *Application) UpdateAllocationResources(alloc *Allocation, isQuotaPreemptionEnabled bool) error {
 	sa.Lock()
 	defer sa.Unlock()
 	if alloc == nil {
@@ -711,7 +711,7 @@ func (sa *Application) UpdateAllocationResources(alloc *Allocation) error {
 		// update allocated resources
 		sa.allocatedResource = resources.Add(sa.allocatedResource, delta)
 		sa.allocatedResource.Prune()
-		sa.queue.IncAllocatedResource(delta)
+		sa.queue.IncAllocatedResource(delta, isQuotaPreemptionEnabled)
 
 		// update user usage
 		sa.incUserResourceUsage(delta)

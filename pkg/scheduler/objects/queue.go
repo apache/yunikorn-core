@@ -496,17 +496,6 @@ func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay 
 	}
 }
 
-// OverridePreemptionTime Override the earlier set quota preemption time with the passed time.
-// This function MUST be called only from the scheduler recovery process.
-// Configured delay won't be able to adjusted based on the lost time during restart. Hence, overriding
-// preemption time set earlier through recovery config processing with the passed time would trigger preemption immediately
-// in the very first scheduling cycle itself. Flow remains same and works as usual from that point onwards.
-func (sq *Queue) OverridePreemptionTime() {
-	sq.Lock()
-	defer sq.Unlock()
-	sq.quotaPreemptionStartTime = time.Now().Add(-1 * time.Minute)
-}
-
 // ResetPreemptionTime reset the quota preemption variables
 // Only for testing
 func (sq *Queue) ResetPreemptionTime() {
@@ -545,22 +534,7 @@ func (sq *Queue) ShouldApplyQuotaPreemption() bool {
 	if sq == nil {
 		return true
 	}
-	if sq.parent != nil {
-		apply := sq.parent.ShouldApplyQuotaPreemption()
-		if apply {
-			return true
-		}
-	}
-	sq.RLock()
-	defer sq.RUnlock()
 	return sq.isManaged && sq.quotaPreemptionDelay != 0 && !resources.IsZero(sq.maxResource) && !sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource)
-}
-
-// IsPreemptionScheduled Is preemption scheduled?
-func (sq *Queue) IsPreemptionScheduled() bool {
-	sq.RLock()
-	defer sq.RUnlock()
-	return sq.quotaPreemptionStartTime.IsZero()
 }
 
 // setQuotaPreemptionState set or clear the running state for quota preemption. When done the start time is also cleared
@@ -1303,19 +1277,31 @@ func (sq *Queue) TryIncAllocatedResource(alloc *resources.Resource) error {
 }
 
 // IncAllocatedResource increments the allocated resources for this queue (recursively). No queue limits are checked.
-func (sq *Queue) IncAllocatedResource(alloc *resources.Resource) {
+// In case any quota preemption already scheduled or any quota preemption delay is configured, set the same delay again
+// so that any usage overflow over the max quota caused by alloc would be brought down when the delay expires.
+func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, isQuotaPreemptionEnabled bool) {
 	// fall through if nil
 	if sq == nil {
 		return
 	}
 
 	// update parent
-	sq.parent.IncAllocatedResource(alloc)
+	sq.parent.IncAllocatedResource(alloc, isQuotaPreemptionEnabled)
 
 	// update this queue
 	sq.Lock()
 	defer sq.Unlock()
 	sq.allocatedResource = resources.Add(sq.allocatedResource, alloc)
+
+	// Override the earlier set quota preemption time with the configured delay.
+	// Delay clock ticking from now.
+	if isQuotaPreemptionEnabled && sq.quotaPreemptionStartTime.IsZero() && sq.ShouldApplyQuotaPreemption() {
+		sq.quotaPreemptionStartTime = time.Now().Add(sq.quotaPreemptionDelay)
+		log.Log(log.SchedQueue).Info("Overridden quota preemption time",
+			zap.String("queue", sq.QueuePath),
+			zap.Duration("delay", sq.quotaPreemptionDelay),
+			zap.Time("quotaPreemptionStartTime", sq.quotaPreemptionStartTime))
+	}
 	sq.updateAllocatedResourceMetrics()
 }
 

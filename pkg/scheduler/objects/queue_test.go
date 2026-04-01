@@ -668,8 +668,8 @@ func TestHeadroom(t *testing.T) {
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "3"})
 	assert.NilError(t, err, "failed to create resource")
-	leaf1.IncAllocatedResource(res)
-	leaf2.IncAllocatedResource(res)
+	leaf1.IncAllocatedResource(res, false)
+	leaf2.IncAllocatedResource(res, false)
 
 	// headRoom root should be this (max 20-10 - alloc 10-6)
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "10", "second": "4"})
@@ -726,10 +726,10 @@ func TestHeadroomMerge(t *testing.T) {
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "5", "third": "5"})
 	assert.NilError(t, err, "failed to create resource")
-	leaf1.IncAllocatedResource(res)
+	leaf1.IncAllocatedResource(res, false)
 	res, err = resources.NewResourceFromConf(map[string]string{"third": "5", "fourth": "5"})
 	assert.NilError(t, err, "failed to create resource")
-	leaf2.IncAllocatedResource(res)
+	leaf2.IncAllocatedResource(res, false)
 
 	// root headroom should be nil
 	headRoom := root.getHeadRoom()
@@ -796,8 +796,8 @@ func TestMaxHeadroomNoMax(t *testing.T) {
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "3"})
 	assert.NilError(t, err, "failed to create resource")
-	leaf1.IncAllocatedResource(res)
-	leaf2.IncAllocatedResource(res)
+	leaf1.IncAllocatedResource(res, false)
+	leaf2.IncAllocatedResource(res, false)
 
 	headRoom = root.getMaxHeadRoom()
 	assert.Assert(t, headRoom == nil, "headRoom of root should be nil because no max set for all queues")
@@ -834,8 +834,8 @@ func TestMaxHeadroomMax(t *testing.T) {
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"first": "5", "second": "3"})
 	assert.NilError(t, err, "failed to create resource")
-	leaf1.IncAllocatedResource(res)
-	leaf2.IncAllocatedResource(res)
+	leaf1.IncAllocatedResource(res, false)
+	leaf2.IncAllocatedResource(res, false)
 
 	// root headroom should be nil
 	headRoom := root.getMaxHeadRoom()
@@ -1475,7 +1475,7 @@ func TestOutStandingRequestMultipleChildrenWithMax(t *testing.T) {
 	leaf1App := newApplication("app-leaf1", "default", "root.parent.leaf1")
 	leaf1App.SetQueue(leaf1)
 	leaf1.AddApplication(leaf1App)
-	leaf1.IncAllocatedResource(allocatedRes)
+	leaf1.IncAllocatedResource(allocatedRes, false)
 	// use priority = 1000 for this ask to force ordering of queues when sorting
 	askLeaf1 := newAllocationAskAll("ask-leaf1", "app-leaf1", "", askRes, false, 1000)
 	askLeaf1.SetSchedulingAttempted(true)
@@ -1493,7 +1493,7 @@ func TestOutStandingRequestMultipleChildrenWithMax(t *testing.T) {
 	err = leaf2App.AddAllocationAsk(ask2Leaf2)
 	assert.NilError(t, err, "could not add ask")
 	leaf2.AddApplication(leaf2App)
-	leaf2.IncAllocatedResource(allocatedRes)
+	leaf2.IncAllocatedResource(allocatedRes, false)
 
 	outstanding := root.GetOutstandingRequests()
 	assert.Equal(t, 2, len(outstanding), "expected 2 outstanding requests to be collected")
@@ -3274,15 +3274,17 @@ func TestOverrideAndResetPreemptionTime(t *testing.T) {
 	root, e := createRootQueue(nil)
 	assert.NilError(t, e, "failed to create basic root queue")
 	tests := []struct {
-		name           string
-		oldMaxResource *resources.Resource
-		maxRes         map[string]string
-		currentUsage   *resources.Resource
-		delay          time.Duration
-		timeChange     bool
+		name               string
+		oldMaxResource     *resources.Resource
+		maxRes             map[string]string
+		currentUsage       *resources.Resource
+		delay              time.Duration
+		timeChange         bool
+		overrideTimeChange bool
 	}{
-		{"setting preemption time", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "50"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 80}), 10, true},
-		{"usage lesser than max res, so preemption time is not set", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "150"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 80}), 5, false},
+		{"usage lesser than max res, so preemption time is not set. try to override", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "150"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 80}), 5, false, false},
+		{"setting preemption time first, try to override", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "50"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 80}), 10, true, false},
+		{"preemption time did not set first time, try to override", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "150"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 180}), 10, false, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3294,19 +3296,27 @@ func TestOverrideAndResetPreemptionTime(t *testing.T) {
 			queue.setPreemptionTime(tt.oldMaxResource, tt.delay)
 			after := queue.quotaPreemptionStartTime
 			if tt.timeChange {
-				assert.Assert(t, before != after, "time change is expected")
-				assert.Assert(t, !queue.IsPreemptionScheduled(), "schedule is expected")
+				assert.Assert(t, !before.Equal(after), "time change is expected")
+				assert.Assert(t, !queue.quotaPreemptionStartTime.IsZero(), "schedule is expected")
 			}
-			queue.OverridePreemptionTime()
+			queue.IncAllocatedResource(resources.NewResourceFromMap(map[string]resources.Quantity{"test": 1}), true)
 			afterOverride := queue.quotaPreemptionStartTime
-			assert.Assert(t, after != afterOverride, "time change is expected")
-			assert.Assert(t, !queue.IsPreemptionScheduled(), "schedule is expected")
-			queue.ResetPreemptionTime()
-			afterReset := queue.quotaPreemptionStartTime
-			assert.Assert(t, afterOverride != afterReset, "time change is expected")
-			assert.Assert(t, afterReset.IsZero(), "time change is expected")
-			assert.Assert(t, queue.quotaPreemptionDelay == 0, "time change is expected")
-			assert.Assert(t, queue.IsPreemptionScheduled(), "schedule is not expected")
+			if tt.overrideTimeChange {
+				assert.Assert(t, !after.Equal(afterOverride), "time change is not expected")
+				assert.Assert(t, !queue.quotaPreemptionStartTime.IsZero(), "schedule is expected")
+			}
+			if tt.timeChange && !tt.overrideTimeChange {
+				assert.Assert(t, after.Equal(afterOverride), "time change is not expected")
+				assert.Assert(t, !queue.quotaPreemptionStartTime.IsZero(), "schedule is expected")
+			}
+			if tt.timeChange || tt.overrideTimeChange {
+				queue.ResetPreemptionTime()
+				afterReset := queue.quotaPreemptionStartTime
+				assert.Assert(t, !afterOverride.Equal(afterReset), "time change is expected")
+				assert.Assert(t, afterReset.IsZero(), "time change is expected")
+				assert.Assert(t, queue.quotaPreemptionDelay == 0, "time change is expected")
+				assert.Assert(t, queue.quotaPreemptionStartTime.IsZero(), "schedule is not expected")
+			}
 		})
 	}
 }

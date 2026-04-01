@@ -501,7 +501,7 @@ func newQuotaPreemptionConfiguredPartition() (*PartitionContext, error) {
 							},
 						},
 						Properties: map[string]string{
-							configs.QuotaPreemptionDelay: "10s",
+							configs.QuotaPreemptionDelay: "1s",
 						},
 					},
 				},

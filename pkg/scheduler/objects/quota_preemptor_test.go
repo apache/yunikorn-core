@@ -65,7 +65,7 @@ func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.queue.parent.guaranteedResource = tc.parentGuaranteed
 			tc.queue.maxResource = tc.maxResource
-			tc.queue.IncAllocatedResource(tc.usedResource)
+			tc.queue.IncAllocatedResource(tc.usedResource, false)
 			preemptor := NewQuotaPreemptor(tc.queue)
 			preemptor.setPreemptableResources()
 			assert.Equal(t, resources.Equals(preemptor.preemptableResource, tc.preemptable), true)

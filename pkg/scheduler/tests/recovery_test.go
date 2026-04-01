@@ -596,7 +596,7 @@ partitions:
 			_, _, queueA := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
 
 			// Set allocated resource to exceed max quota
-			queueA.IncAllocatedResource(tt.allocated)
+			queueA.IncAllocatedResource(tt.allocated, false)
 
 			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
 				Allocations: []*si.Allocation{

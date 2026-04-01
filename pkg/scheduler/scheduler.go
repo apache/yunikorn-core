@@ -114,7 +114,9 @@ func (s *Scheduler) internalQuotaPreemption() {
 			return
 		case <-time.After(time.Second):
 			if s.triggerQuotaPreemption(){
-				log.Log(log.Scheduler).Info("Running quota preemption")
+				log.Log(log.Scheduler).Info("Quota preemption completed")
+			}else{
+				log.Log(log.Scheduler).Debug("No quota preemption needed at this time")
 			}
 		}
 	}
@@ -177,14 +179,17 @@ func (s *Scheduler) registerActivity() {
 	}
 }
 
-func (s *Scheduler) triggerQuotaPreemption() {
+func (s *Scheduler) triggerQuotaPreemption() bool{
+	quotaPreemptionTried := false
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
 		if psc.quotaPreemptionEnabled {
 			log.Log(log.Scheduler).Info("Triggering quota preemption",
 				zap.String("partition", psc.Name))
 			psc.root.TryQuotaPreemption()
+			quotaPreemptionTried = true
 		}
 	}
+	return quotaPreemptionTried
 }
 
 // inspect on the outstanding requests for each of the queues,

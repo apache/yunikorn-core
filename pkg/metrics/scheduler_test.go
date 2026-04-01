@@ -232,6 +232,44 @@ func verifyMetric(t *testing.T, expectedCounter float64, expectedState string, n
 	assert.Assert(t, checked, "Failed to find metric")
 }
 
+func TestTryNodeCount(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.AddTryNodeCount(5)
+	count, err := sm.GetTryNodeCount()
+	assert.NilError(t, err)
+	assert.Equal(t, int64(5), count)
+
+	sm.AddTryNodeCount(3)
+	count, err = sm.GetTryNodeCount()
+	assert.NilError(t, err)
+	assert.Equal(t, int64(8), count)
+
+	sm.ResetTryNodeCount()
+	sm.AddTryNodeCount(1)
+	count, err = sm.GetTryNodeCount()
+	assert.NilError(t, err)
+	assert.Equal(t, int64(1), count)
+}
+
+func TestTryApplicationCount(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.AddTryApplicationCount(4)
+	metricDto := &dto.Metric{}
+	err := sm.tryApplicationCount.With(nil).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, int64(4), int64(*metricDto.Counter.Value))
+
+	sm.ResetTryApplicationCount()
+	sm.AddTryApplicationCount(2)
+	err = sm.tryApplicationCount.With(nil).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, int64(2), int64(*metricDto.Counter.Value))
+}
+
 func unregisterMetrics() {
 	sm := GetSchedulerMetrics()
 	prometheus.Unregister(sm.containerAllocation)
@@ -245,4 +283,5 @@ func unregisterMetrics() {
 	prometheus.Unregister(sm.tryNodeEvaluation)
 	prometheus.Unregister(sm.tryPreemptionLatency)
 	prometheus.Unregister(sm.tryNodeCount)
+	prometheus.Unregister(sm.tryApplicationCount)
 }

@@ -3329,7 +3329,7 @@ func TestTryAllocateWithReservedHeadRoomChecking(t *testing.T) {
 
 	// pass the time and try again
 	reservationWaitTimeout = -60 * time.Second
-	result = app.tryReservedAllocate(headRoom, iter)
+	result, _ = app.tryReservedAllocate(headRoom, iter)
 	assert.Assert(t, result == nil, "result is expected to be nil due to insufficient headroom")
 	assert.Equal(t, len(app.reservations), 0)
 

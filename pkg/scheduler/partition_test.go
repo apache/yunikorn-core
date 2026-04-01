@@ -1664,8 +1664,9 @@ func TestApplicationsTriedCount(t *testing.T) {
 		t.Fatal("allocation did not return any allocation")
 	}
 	assert.Equal(t, result.ResultType, objects.Allocated, "result type is not the expected allocated")
-	assert.Equal(t, result.Request.GetApplicationID(), appID3, "expected application app-2 to be allocated")
-	assert.Equal(t, result.Request.GetAllocationKey(), allocKey3, "expected ask alloc-2 to be allocated")
+	assert.Equal(t, result.Request.GetApplicationID(), appID3, "expected application app-3 to be allocated")
+	assert.Equal(t, result.Request.GetAllocationKey(), allocKey3, "expected ask alloc-3 to be allocated")
+	assert.Equal(t, result.ApplicationsTried, int64(3), "expected 3 applications to be tried")
 }
 
 func TestNodesTriedCount(t *testing.T) {

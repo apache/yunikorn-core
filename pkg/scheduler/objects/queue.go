@@ -1683,6 +1683,16 @@ func (sq *Queue) TryQuotaPreemption() {
 			zap.Stringer("maxResource", sq.cloneMaxResource()))
 		preemptor := NewQuotaPreemptor(sq)
 		preemptor.tryQuotaPreemption()
+		// if quota preemption is running for this queue we do not want to trigger for any of the children.
+		// we do a top-down approach: parent first and when done we check the children
+		// there could be a child quota preemption running already
+		if !sq.getQuotaPreemptionRunning() && !sq.IsLeafQueue() {
+			for _, child := range sq.sortQueues() {
+				log.Log(log.Scheduler).Info("Triggering quota preemption for child queue",
+					zap.String("queue", child.GetQueuePath()))
+				child.TryQuotaPreemption()
+			}
+		}
 	}
 }
 

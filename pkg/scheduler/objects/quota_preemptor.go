@@ -50,7 +50,7 @@ func NewQuotaPreemptor(queue *Queue) *QuotaPreemptionContext {
 	}
 }
 
-func (qpc *QuotaPreemptionContext) tryPreemption() {
+func (qpc *QuotaPreemptionContext) tryQuotaPreemption() {
 	// Get Preemptable Resource
 	qpc.setPreemptableResources()
 

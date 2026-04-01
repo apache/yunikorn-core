@@ -819,7 +819,7 @@ func (pc *PartitionContext) tryAllocate() *objects.AllocationResult {
 		return nil
 	}
 	// try allocating from the root down
-	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.IsPreemptionEnabled(), pc.IsQuotaPreemptionEnabled())
+	result := pc.root.TryAllocate(pc.GetNodeIterator, pc.GetFullNodeIterator, pc.GetNode, pc.IsPreemptionEnabled())
 	if result != nil {
 		return pc.allocate(result)
 	}

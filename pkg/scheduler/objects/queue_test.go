@@ -2451,7 +2451,7 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 			// Wait till delay expires to let trigger preemption automatically
 			time.Sleep(parent.quotaPreemptionDelay + 50*time.Millisecond)
 			assert.Equal(t, parent.shouldTriggerPreemption(), tc.timeChange, "preemption should get trigger for set delay")
-			parent.TryAllocate(nil, nil, nil, false, true)
+			parent.TryAllocate(nil, nil, nil, false)
 
 			time.Sleep(50 * time.Millisecond)
 

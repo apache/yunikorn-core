@@ -1630,25 +1630,7 @@ func (sq *Queue) canRunApp(appID string) bool {
 // resources are skipped.
 // Applications are sorted based on the application sortPolicy. Applications without pending resources are skipped.
 // Lock free call this all locks are taken when needed in called functions
-func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() NodeIterator, getnode func(string) *Node, allowPreemption, quotaPreemption bool) *AllocationResult {
-	if quotaPreemption && sq.shouldTriggerPreemption() {
-		go func() {
-			log.Log(log.SchedQueue).Info("Preconditions has passed trigger preemption to enforce new max resources",
-				zap.String("queueName", sq.GetQueuePath()),
-				zap.Stringer("maxResource", sq.cloneMaxResource()))
-			preemptor := NewQuotaPreemptor(sq)
-			preemptor.tryPreemption()
-		}()
-		// when we trigger for a parent queue do not trigger for the children just yet. At least wait until the next
-		// scheduling cycle.
-		quotaPreemption = false
-	}
-	// if quota preemption is running for this queue we do not want to trigger for any of the children.
-	// we do a top-down approach: parent first and when done we check the children
-	// there could be a child quota preemption running already
-	if sq.getQuotaPreemptionRunning() {
-		quotaPreemption = false
-	}
+func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() NodeIterator, getnode func(string) *Node, allowPreemption bool) *AllocationResult {
 	if sq.IsLeafQueue() {
 		// get the headroom
 		headRoom := sq.getHeadRoom()
@@ -1685,13 +1667,23 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 	} else {
 		// process the child queues (filters out queues without pending requests)
 		for _, child := range sq.sortQueues() {
-			result := child.TryAllocate(iterator, fullIterator, getnode, allowPreemption, quotaPreemption)
+			result := child.TryAllocate(iterator, fullIterator, getnode, allowPreemption)
 			if result != nil {
 				return result
 			}
 		}
 	}
 	return nil
+}
+
+func (sq *Queue) TryQuotaPreemption() {
+	if sq.shouldTriggerPreemption() {
+		log.Log(log.SchedQueue).Info("Preconditions has passed trigger preemption to enforce new max resources",
+			zap.String("queueName", sq.GetQueuePath()),
+			zap.Stringer("maxResource", sq.cloneMaxResource()))
+		preemptor := NewQuotaPreemptor(sq)
+		preemptor.tryQuotaPreemption()
+	}
 }
 
 // TryPlaceholderAllocate tries to replace a placeholders with a real allocation.

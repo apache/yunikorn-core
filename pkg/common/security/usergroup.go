@@ -41,7 +41,6 @@ const (
 )
 
 // global variables
-var now time.Time            // One clock to access
 var instance *UserGroupCache // The instance of the cache
 var once = &sync.Once{}      // Make sure we can only create the cache once
 var stopped atomic.Bool      // whether UserGroupCache is stopped (needed for multiple partitions)
@@ -123,8 +122,8 @@ func (c *UserGroupCache) run() {
 
 // Do the real work for the cache cleanup
 func (c *UserGroupCache) cleanUpCache() {
-	oldest := now.Unix() - poscache
-	oldestFailed := now.Unix() - negcache
+	oldest := time.Now().Unix() - poscache
+	oldestFailed := time.Now().Unix() - negcache
 	// clean up the cache so we do not grow out of bounds
 	instance.lock.Lock()
 	defer instance.lock.Unlock()
@@ -173,7 +172,7 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 	// If groups are already present we should just convert
 	newUG := UserGroup{User: ugi.User}
 	newUG.Groups = append(newUG.Groups, ugi.Groups...)
-	newUG.resolved = now.Unix()
+	newUG.resolved = time.Now().Unix()
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.ugs[ugi.User] = &newUG
@@ -192,12 +191,12 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 	c.lock.RLock()
 	ug, ok := c.ugs[userName]
 	c.lock.RUnlock()
-	// return if this was not a negative cache that has not timed out
-	if ok && !ug.failed {
+	// return if valid positive cache hit (not failed and not expired)
+	if ok && !ug.failed && (time.Now().Unix()-ug.resolved) < poscache {
 		return *ug, nil
 	}
-	// nothing returned so create a new one
-	if ug == nil {
+	// create a fresh entry for re-resolution unless we have a fresh negative cache hit
+	if ug == nil || !ug.failed {
 		ug = &UserGroup{
 			User: userName,
 		}
@@ -228,7 +227,7 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 		}
 	}
 	// all resolved (or not) but use this time stamp
-	ug.resolved = now.Unix()
+	ug.resolved = time.Now().Unix()
 
 	// add it to the cache, even if we fail negative cache is also good to know
 	c.lock.Lock()

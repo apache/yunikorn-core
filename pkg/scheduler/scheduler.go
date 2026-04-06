@@ -113,11 +113,7 @@ func (s *Scheduler) internalQuotaPreemption() {
 		case <-s.stop:
 			return
 		case <-time.After(time.Second):
-			if s.triggerQuotaPreemption() {
-				log.Log(log.Scheduler).Info("Quota preemption completed")
-			} else {
-				log.Log(log.Scheduler).Debug("No quota preemption needed at this time")
-			}
+			s.triggerQuotaPreemption()
 		}
 	}
 }
@@ -181,7 +177,7 @@ func (s *Scheduler) registerActivity() {
 func (s *Scheduler) triggerQuotaPreemption() bool {
 	quotaPreemptionTried := false
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
-		if psc.quotaPreemptionEnabled {
+		if psc.IsQuotaPreemptionEnabled() {
 			log.Log(log.Scheduler).Info("Triggering quota preemption",
 				zap.String("partition", psc.Name))
 			psc.root.TryQuotaPreemption()

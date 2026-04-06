@@ -1687,10 +1687,12 @@ func (sq *Queue) TryQuotaPreemption() {
 		// we do a top-down approach: parent first and when done we check the children
 		// there could be a child quota preemption running already
 		if !sq.getQuotaPreemptionRunning() && !sq.IsLeafQueue() {
-			for _, child := range sq.sortQueues() {
-				log.Log(log.Scheduler).Info("Triggering quota preemption for child queue",
+			for _, child := range sq.GetCopyOfChildren() {
+				if child.IsRunning() {
+					log.Log(log.Scheduler).Info("Triggering quota preemption for child queue",
 					zap.String("queue", child.GetQueuePath()))
-				child.TryQuotaPreemption()
+					child.TryQuotaPreemption()
+				}
 			}
 		}
 	}

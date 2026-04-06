@@ -1682,7 +1682,7 @@ func (sq *Queue) TryQuotaPreemption() {
 			zap.String("queueName", sq.GetQueuePath()),
 			zap.Stringer("maxResource", sq.cloneMaxResource()))
 		preemptor := NewQuotaPreemptor(sq)
-		preemptor.tryQuotaPreemption()
+		preemptor.tryPreemption()
 		// if quota preemption is running for this queue we do not want to trigger for any of the children.
 		// we do a top-down approach: parent first and when done we check the children
 		// there could be a child quota preemption running already

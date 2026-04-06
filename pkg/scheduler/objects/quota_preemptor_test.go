@@ -203,7 +203,7 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 			leaf.guaranteedResource = tc.guaranteed
 			preemptor := NewQuotaPreemptor(tc.queue)
 			preemptor.allocations = asks
-			preemptor.tryQuotaPreemption()
+			preemptor.tryPreemption()
 			assert.Equal(t, len(preemptor.allocations), tc.totalExpectedVictims)
 			var victimsCount int
 			for _, a := range asks {
@@ -314,7 +314,7 @@ func TestQuotaChangeTryPreemptionWithDifferentResTypes(t *testing.T) {
 				leaf.maxResource = tc.newMax
 				leaf.guaranteedResource = tc.guaranteed
 				preemptor := NewQuotaPreemptor(tc.queue)
-				preemptor.tryQuotaPreemption()
+				preemptor.tryPreemption()
 				assert.Equal(t, len(preemptor.allocations), v.totalExpectedVictims)
 				var victimsCount int
 				for _, a := range asks {
@@ -574,7 +574,7 @@ func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
 			tc.queue.maxResource = tc.newMax
 			tc.queue.guaranteedResource = tc.newMax
 			preemptor := NewQuotaPreemptor(tc.queue)
-			preemptor.tryQuotaPreemption()
+			preemptor.tryPreemption()
 			victimsCount := 0
 			for _, asks := range tc.victims {
 				for _, a := range asks {

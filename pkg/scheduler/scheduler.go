@@ -174,7 +174,7 @@ func (s *Scheduler) registerActivity() {
 	}
 }
 
-func (s *Scheduler) triggerQuotaPreemption()  {
+func (s *Scheduler) triggerQuotaPreemption() {
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
 		if psc.IsQuotaPreemptionEnabled() {
 			log.Log(log.Scheduler).Info("Triggering quota preemption",

@@ -528,15 +528,6 @@ func (sq *Queue) shouldTriggerPreemption() bool {
 	return !sq.quotaPreemptionStartTime.IsZero() && time.Now().After(sq.quotaPreemptionStartTime)
 }
 
-// ShouldApplyQuotaPreemption returns true if quota preemption should be enforced based on the settings and the
-// delay.
-func (sq *Queue) ShouldApplyQuotaPreemption() bool {
-	if sq == nil {
-		return true
-	}
-	return sq.isManaged && sq.quotaPreemptionDelay != 0 && !resources.IsZero(sq.maxResource) && !sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource)
-}
-
 // setQuotaPreemptionState set or clear the running state for quota preemption. When done the start time is also cleared
 // out preventing a re-run based on the same change
 func (sq *Queue) setQuotaPreemptionState(run bool) {
@@ -1292,17 +1283,24 @@ func (sq *Queue) IncAllocatedResource(alloc *resources.Resource, isQuotaPreempti
 	sq.Lock()
 	defer sq.Unlock()
 	sq.allocatedResource = resources.Add(sq.allocatedResource, alloc)
+	sq.updateAllocatedResourceMetrics()
 
+	// Should apply quota preemption based on the config?
+	if !isQuotaPreemptionEnabled ||
+		!sq.quotaPreemptionStartTime.IsZero() ||
+		!sq.isManaged ||
+		sq.quotaPreemptionDelay == 0 ||
+		resources.IsZero(sq.maxResource) ||
+		sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource) {
+		return
+	}
 	// Override the earlier set quota preemption time with the configured delay.
 	// Delay clock ticking from now.
-	if isQuotaPreemptionEnabled && sq.quotaPreemptionStartTime.IsZero() && sq.ShouldApplyQuotaPreemption() {
-		sq.quotaPreemptionStartTime = time.Now().Add(sq.quotaPreemptionDelay)
-		log.Log(log.SchedQueue).Info("Overridden quota preemption time",
-			zap.String("queue", sq.QueuePath),
-			zap.Duration("delay", sq.quotaPreemptionDelay),
-			zap.Time("quotaPreemptionStartTime", sq.quotaPreemptionStartTime))
-	}
-	sq.updateAllocatedResourceMetrics()
+	sq.quotaPreemptionStartTime = time.Now().Add(sq.quotaPreemptionDelay)
+	log.Log(log.SchedQueue).Info("Overridden quota preemption time",
+		zap.String("queue", sq.QueuePath),
+		zap.Duration("delay", sq.quotaPreemptionDelay),
+		zap.Time("quotaPreemptionStartTime", sq.quotaPreemptionStartTime))
 }
 
 // allocatedResFits adds the passed in resource to the allocatedResource of the queue and checks if it still fits in the

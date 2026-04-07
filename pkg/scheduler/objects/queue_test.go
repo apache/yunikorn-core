@@ -2458,8 +2458,6 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 
 			// since preemption settings are reset, preemption should not be triggerred again during the next check
 			assert.Equal(t, parent.shouldTriggerPreemption(), false)
-
-			assert.Equal(t, parent.ShouldApplyQuotaPreemption(), tc.shouldApplyQuotaPreemption)
 		})
 	}
 }

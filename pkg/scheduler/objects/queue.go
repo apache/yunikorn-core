@@ -510,9 +510,9 @@ func (sq *Queue) shouldTriggerPreemption() bool {
 		return false
 	}
 	// usage is below max: no need to trigger. Happens if the queue drops below the new max when pods stop.
-	// Should clean up, but we have just a read lock...
+	// The stale start time will be cleared by setPreemptionTime on the next config update, or by
+	// setQuotaPreemptionState after any preemption run completes.
 	if sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource) {
-		sq.quotaPreemptionStartTime = time.Time{}
 		return false
 	}
 	// trigger if the time is right
@@ -1683,17 +1683,14 @@ func (sq *Queue) TryQuotaPreemption() {
 			zap.Stringer("maxResource", sq.cloneMaxResource()))
 		preemptor := NewQuotaPreemptor(sq)
 		preemptor.tryPreemption()
-		// if quota preemption is running for this queue we do not want to trigger for any of the children.
-		// we do a top-down approach: parent first and when done we check the children
-		// there could be a child quota preemption running already
-		if !sq.getQuotaPreemptionRunning() && !sq.IsLeafQueue() {
-			for _, child := range sq.GetCopyOfChildren() {
-				if child.IsRunning() {
-					log.Log(log.Scheduler).Info("Triggering quota preemption for child queue",
-					zap.String("queue", child.GetQueuePath()))
-					child.TryQuotaPreemption()
-				}
-			}
+		return // no need to check for sub-tree children when we trigger for parent queue
+	}
+	if sq.getQuotaPreemptionRunning() {
+		return
+	}
+	if !sq.IsLeafQueue() {
+		for _, child := range sq.GetCopyOfChildren() {
+			child.TryQuotaPreemption()
 		}
 	}
 }

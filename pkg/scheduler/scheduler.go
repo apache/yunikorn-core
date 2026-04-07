@@ -174,17 +174,14 @@ func (s *Scheduler) registerActivity() {
 	}
 }
 
-func (s *Scheduler) triggerQuotaPreemption() bool {
-	quotaPreemptionTried := false
+func (s *Scheduler) triggerQuotaPreemption()  {
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
 		if psc.IsQuotaPreemptionEnabled() {
 			log.Log(log.Scheduler).Info("Triggering quota preemption",
 				zap.String("partition", psc.Name))
 			psc.root.TryQuotaPreemption()
-			quotaPreemptionTried = true
 		}
 	}
-	return quotaPreemptionTried
 }
 
 // inspect on the outstanding requests for each of the queues,

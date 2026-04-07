@@ -220,7 +220,7 @@ func TestSendQuotaPreemptionEvent(t *testing.T) {
 	assert.Equal(t, common.Empty, event.ReferenceID)
 	assert.Equal(t, results, event.Message)
 	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
-	assert.Equal(t, si.EventRecord_QUEUE_MAX, event.EventChangeDetail)
+	assert.Equal(t, si.EventRecord_QUEUE_PREEMPTION, event.EventChangeDetail)
 	assert.Equal(t, 1, len(event.Resource.Resources))
 	protoRes := resources.NewResourceFromProto(event.Resource)
 	assert.DeepEqual(t, maxRes, protoRes)

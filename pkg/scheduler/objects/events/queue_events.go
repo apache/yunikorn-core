@@ -109,7 +109,7 @@ func (q *QueueEvents) SendQuotaPreemptionEvent(queuePath string, results string,
 		return
 	}
 	event := events.CreateQueueEventRecord(queuePath, results, common.Empty, si.EventRecord_SET,
-		si.EventRecord_QUEUE_MAX, maxResource)
+		si.EventRecord_QUEUE_PREEMPTION, maxResource)
 	q.eventSystem.AddEvent(event)
 }
 

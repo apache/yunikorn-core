@@ -612,7 +612,7 @@ func assertQuotaPreemptionEvent(t *testing.T, victims int, results string, recor
 	if victims > 0 {
 		assert.Equal(t, si.EventRecord_QUEUE, records[recordsLen-1].Type)
 		assert.Equal(t, si.EventRecord_SET, records[recordsLen-1].EventChangeType)
-		assert.Equal(t, si.EventRecord_QUEUE_MAX, records[recordsLen-1].EventChangeDetail)
+		assert.Equal(t, si.EventRecord_QUEUE_PREEMPTION, records[recordsLen-1].EventChangeDetail)
 		assert.Equal(t, results, records[recordsLen-1].Message)
 	} else {
 		assert.Assert(t, !strings.Contains(records[len(records)-1].Message, "Quota Preemption results summary"))

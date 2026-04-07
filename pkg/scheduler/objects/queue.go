@@ -496,27 +496,29 @@ func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay 
 	}
 }
 
-// shouldTriggerPreemption returns true if quota preemption should be triggered based on the settings and the
-// current time.
-func (sq *Queue) shouldTriggerPreemption() bool {
-	sq.RLock()
-	defer sq.RUnlock()
+// tryAcquirePreemption atomically checks all preconditions for quota preemption and marks the queue as running.
+// This prevents concurrent goroutines from both passing the check before either sets the flag (TOCTOU).
+// Returns true only if all conditions are met and the flag was successfully acquired.
+// The caller MUST call setQuotaPreemptionState(false) when done.
+func (sq *Queue) tryAcquirePreemption() bool {
+	sq.Lock()
+	defer sq.Unlock()
 	// dynamic queues do not support quota preemption
-	if !sq.isManaged {
-		return false
-	}
-	// already in progress do not run again
-	if sq.isQuotaPreemptionRunning {
+	// already in progress: do not run again
+	if !sq.isManaged || sq.isQuotaPreemptionRunning {
 		return false
 	}
 	// usage is below max: no need to trigger. Happens if the queue drops below the new max when pods stop.
-	// The stale start time will be cleared by setPreemptionTime on the next config update, or by
-	// setQuotaPreemptionState after any preemption run completes.
 	if sq.maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(sq.allocatedResource) {
+		sq.quotaPreemptionStartTime = time.Time{}
 		return false
 	}
 	// trigger if the time is right
-	return !sq.quotaPreemptionStartTime.IsZero() && time.Now().After(sq.quotaPreemptionStartTime)
+	if sq.quotaPreemptionStartTime.IsZero() || time.Now().Before(sq.quotaPreemptionStartTime) {
+		return false
+	}
+	sq.isQuotaPreemptionRunning = true
+	return true
 }
 
 // setQuotaPreemptionState set or clear the running state for quota preemption. When done the start time is also cleared
@@ -1677,13 +1679,16 @@ func (sq *Queue) TryAllocate(iterator func() NodeIterator, fullIterator func() N
 }
 
 func (sq *Queue) TryQuotaPreemption() {
-	if sq.shouldTriggerPreemption() {
-		log.Log(log.SchedQueue).Info("Preconditions has passed trigger preemption to enforce new max resources",
-			zap.String("queueName", sq.GetQueuePath()),
-			zap.Stringer("maxResource", sq.cloneMaxResource()))
-		preemptor := NewQuotaPreemptor(sq)
-		preemptor.tryPreemption()
-		return // no need to check for sub-tree children when we trigger for parent queue
+	if sq.tryAcquirePreemption() {
+		go func() {
+			defer sq.setQuotaPreemptionState(false)
+			log.Log(log.SchedQueue).Info("Preconditions has passed trigger preemption to enforce new max resources",
+				zap.String("queueName", sq.GetQueuePath()),
+				zap.Stringer("maxResource", sq.cloneMaxResource()))
+			preemptor := NewQuotaPreemptor(sq)
+			preemptor.tryPreemption()
+		}() // fire preemption in a separate go routine to avoid blocking the quotapreemption loop
+		return // no need to run quota preemption for sub-tree children when we quota preemption is running for parent queue
 	}
 	if sq.getQuotaPreemptionRunning() {
 		return

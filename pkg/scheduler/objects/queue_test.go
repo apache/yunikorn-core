@@ -2450,13 +2450,18 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 			parent.UpdateQueueProperties(oldMax)
 			// Wait till delay expires to let trigger preemption automatically
 			time.Sleep(parent.quotaPreemptionDelay + 50*time.Millisecond)
-			assert.Equal(t, parent.shouldTriggerPreemption(), tc.timeChange, "preemption should get trigger for set delay")
+			triggered := parent.tryAcquirePreemption()
+			assert.Equal(t, triggered, tc.timeChange, "preemption should get trigger for set delay")
+			// Simulate preemption completing: clears isQuotaPreemptionRunning and quotaPreemptionStartTime.
+			if triggered {
+				parent.setQuotaPreemptionState(false)
+			}
 			parent.TryAllocate(nil, nil, nil, false)
 
 			time.Sleep(50 * time.Millisecond)
 
 			// since preemption settings are reset, preemption should not be triggerred again during the next check
-			assert.Equal(t, parent.shouldTriggerPreemption(), false)
+			assert.Equal(t, parent.tryAcquirePreemption(), false)
 		})
 	}
 }
@@ -2535,12 +2540,17 @@ func TestShouldTriggerPreemption(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			assert.Equal(t, tc.queue.shouldTriggerPreemption(), tc.preconditionResult)
+			result := tc.queue.tryAcquirePreemption()
+			assert.Equal(t, result, tc.preconditionResult)
+			// Reset the flag if acquired so it doesn't affect other test cases.
+			if result {
+				tc.queue.setQuotaPreemptionState(false)
+			}
 		})
 	}
-	// special case: reset time if usage below max
+	// special case: reset time if usage below max (StrictlyGreaterThanOrEqualsOnlyExisting clears the start time)
 	usageNotMatchingMaxQueue.quotaPreemptionStartTime = time.Now().Add(time.Hour)
-	assert.Assert(t, !usageNotMatchingMaxQueue.shouldTriggerPreemption(), "preemption should not be triggered")
+	assert.Assert(t, !usageNotMatchingMaxQueue.tryAcquirePreemption(), "preemption should not be triggered")
 	assert.Assert(t, usageNotMatchingMaxQueue.quotaPreemptionStartTime.IsZero(), "start time should be reset")
 }
 

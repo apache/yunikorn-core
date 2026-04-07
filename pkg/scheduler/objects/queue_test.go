@@ -2427,6 +2427,23 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 				},
 				Properties: map[string]string{configs.QuotaPreemptionDelay: "50ms"},
 			}, 0, true},
+		{"parent queue preemption is running, leaf should not be allowed",
+			map[string]string{"memory": "500"},
+			configs.QueueConfig{
+				Resources: configs.Resources{
+					Max: map[string]string{"memory": "100"},
+				},
+				Properties: map[string]string{configs.QuotaPreemptionDelay: "50ms"},
+				Queues: []configs.QueueConfig{
+					{
+						Name: "leaf",
+						Resources: configs.Resources{
+							Max: map[string]string{"memory": "100"},
+						},
+						Properties: map[string]string{configs.QuotaPreemptionDelay: "50ms"},
+					},
+				},
+			}, 50 * time.Millisecond, true},
 	}
 
 	var oldMax *resources.Resource
@@ -2438,7 +2455,7 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 				expectedMax, err = resources.NewResourceFromConf(tc.maxRes)
 				assert.NilError(t, err, "resource creation failed")
 			}
-			parent, err = createManagedQueue(root, "parent", false, tc.maxRes)
+			parent, err = createManagedQueue(root, "parent", true, tc.maxRes)
 			assert.NilError(t, err, "failed to create basic queue: %v", err)
 			oldMax, err = parent.ApplyConf(tc.conf)
 			assert.NilError(t, err, "failed to apply conf: %v", err)
@@ -2448,6 +2465,20 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 			parent.allocatedResource = resources.Multiply(oldMax, 2)
 			parent.quotaPreemptionDelay = tc.oldDelay
 			parent.UpdateQueueProperties(oldMax)
+
+			var leafQ *Queue
+			if len(tc.conf.Queues) > 0 {
+				leaf := tc.conf.Queues[0].Name
+				if leaf != "" {
+					leafQ, err = createManagedQueue(parent, leaf, false, tc.maxRes)
+					assert.NilError(t, err, "failed to create leaf queue: %v", err)
+					oldMax, err = leafQ.ApplyConf(tc.conf.Queues[0])
+					leafQ.allocatedResource = resources.Multiply(oldMax, 2)
+					leafQ.quotaPreemptionDelay = tc.oldDelay
+					leafQ.UpdateQueueProperties(oldMax)
+				}
+			}
+
 			// Wait till delay expires to let trigger preemption automatically
 			time.Sleep(parent.quotaPreemptionDelay + 50*time.Millisecond)
 			triggered := parent.tryAcquirePreemption()
@@ -2456,7 +2487,6 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 			if triggered {
 				parent.setQuotaPreemptionState(false)
 			}
-			parent.TryAllocate(nil, nil, nil, false)
 
 			time.Sleep(50 * time.Millisecond)
 
@@ -2466,7 +2496,7 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 	}
 }
 
-func TestShouldTriggerPreemption(t *testing.T) {
+func TestTryAcquirePreemption(t *testing.T) {
 	parentConfig := configs.QueueConfig{
 		Name:   "parent",
 		Parent: true,
@@ -2477,7 +2507,7 @@ func TestShouldTriggerPreemption(t *testing.T) {
 	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
 	assert.NilError(t, err)
 	parent.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
-	parent.quotaPreemptionStartTime = time.Now()
+	parent.quotaPreemptionStartTime = time.Now().Add(-time.Second)
 
 	leafRes := configs.Resources{
 		Max: map[string]string{"memory": "1000"},
@@ -2525,6 +2555,14 @@ func TestShouldTriggerPreemption(t *testing.T) {
 	assert.NilError(t, err)
 	usageNotMatchingMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000})
 
+	futureStartQueue, err := NewConfiguredQueue(configs.QueueConfig{
+		Name:      "leaf-future-start-time",
+		Resources: leafRes,
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	futureStartQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
+	futureStartQueue.quotaPreemptionStartTime = time.Now().Add(time.Hour)
+
 	testCases := []struct {
 		name               string
 		queue              *Queue
@@ -2535,6 +2573,7 @@ func TestShouldTriggerPreemption(t *testing.T) {
 		{"preemption running", alreadyPreemptionRunning, false},
 		{"usage exceeded max, no start time", usageExceededMaxQueue, false},
 		{"usage exceeded max, start time set", parent, true},
+		{"usage exceeded max, start time in future", futureStartQueue, false},
 		{"usage equals max resources", usageEqualsMaxQueue, false},
 		{"usage res not matching max", usageNotMatchingMaxQueue, false},
 	}

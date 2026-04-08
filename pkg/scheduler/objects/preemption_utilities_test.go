@@ -149,7 +149,7 @@ func assignAllocationsToQueue(allocations []*Allocation, queue *Queue) {
 			app = queue.applications[allocation.applicationID]
 		}
 		app.AddAllocation(allocation)
-		queue.IncAllocatedResource(allocation.GetAllocatedResource())
+		queue.IncAllocatedResource(allocation.GetAllocatedResource(), false)
 	}
 }
 

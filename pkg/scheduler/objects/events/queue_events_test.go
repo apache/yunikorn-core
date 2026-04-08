@@ -201,3 +201,27 @@ func TestSendGuaranteedResourceChangedEvent(t *testing.T) {
 	protoRes := resources.NewResourceFromProto(event.Resource)
 	assert.DeepEqual(t, guaranteed, protoRes)
 }
+
+func TestSendQuotaPreemptionEvent(t *testing.T) {
+	results := "Quota Preemption results summary: preemptable resources: "
+	maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	eventSystem := mock.NewEventSystemDisabled()
+	nq := NewQueueEvents(eventSystem)
+	nq.SendQuotaPreemptionEvent(testQueuePath, results, maxRes)
+	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
+
+	eventSystem = mock.NewEventSystem()
+	nq = NewQueueEvents(eventSystem)
+	nq.SendQuotaPreemptionEvent(testQueuePath, results, maxRes)
+	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
+	event := eventSystem.Events[0]
+	assert.Equal(t, si.EventRecord_QUEUE, event.Type)
+	assert.Equal(t, testQueuePath, event.ObjectID)
+	assert.Equal(t, common.Empty, event.ReferenceID)
+	assert.Equal(t, results, event.Message)
+	assert.Equal(t, si.EventRecord_SET, event.EventChangeType)
+	assert.Equal(t, si.EventRecord_QUEUE_PREEMPTION, event.EventChangeDetail)
+	assert.Equal(t, 1, len(event.Resource.Resources))
+	protoRes := resources.NewResourceFromProto(event.Resource)
+	assert.DeepEqual(t, maxRes, protoRes)
+}

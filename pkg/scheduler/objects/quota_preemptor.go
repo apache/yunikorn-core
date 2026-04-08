@@ -20,6 +20,7 @@ package objects
 
 import (
 	"math"
+	"strconv"
 
 	"go.uber.org/zap"
 
@@ -36,6 +37,13 @@ type QuotaPreemptionContext struct {
 	preemptingResource  *resources.Resource
 	preemptableResource *resources.Resource
 	allocations         []*Allocation
+	results             *QuotaPreemptionResults
+}
+
+type QuotaPreemptionResults struct {
+	selectedVictims  []*Allocation
+	preemptedVictims []*Allocation
+	claimedResource  *resources.Resource
 }
 
 func NewQuotaPreemptor(queue *Queue) *QuotaPreemptionContext {
@@ -47,6 +55,7 @@ func NewQuotaPreemptor(queue *Queue) *QuotaPreemptionContext {
 		preemptingResource:  queue.GetPreemptingResource(),
 		preemptableResource: nil,
 		allocations:         make([]*Allocation, 0),
+		results:             &QuotaPreemptionResults{},
 	}
 }
 
@@ -56,6 +65,16 @@ func (qpc *QuotaPreemptionContext) tryPreemption() {
 
 	if qpc.queue.IsLeafQueue() {
 		qpc.tryPreemptionInternal()
+		log.Log(log.SchedQuotaChangePreemption).Info("quota preemption results for leaf queue",
+			zap.String("queue", qpc.queue.GetQueuePath()),
+			zap.String("preemptable resources planned", qpc.preemptableResource.String()),
+			zap.String("claimed resources", qpc.results.claimedResource.String()),
+			zap.Int("selected victims", len(qpc.results.selectedVictims)),
+			zap.Int("preempted victims", len(qpc.results.preemptedVictims)))
+		if len(qpc.allocations) > 0 {
+			summary := "Quota Preemption results summary: preemptable resources: " + qpc.preemptableResource.String() + ", claimed resources: " + qpc.results.claimedResource.String() + ", selected victims: " + strconv.Itoa(len(qpc.results.selectedVictims)) + ", preempted victims: " + strconv.Itoa(len(qpc.results.preemptedVictims))
+			qpc.queue.queueEvents.SendQuotaPreemptionEvent(qpc.queue.QueuePath, summary, qpc.maxResource)
+		}
 		return
 	}
 	leafQueues := make(map[*Queue]*QuotaPreemptionContext)
@@ -67,8 +86,35 @@ func (qpc *QuotaPreemptionContext) tryPreemption() {
 		zap.Int("no. of leaf queues with potential victims", len(leafQueues)),
 	)
 
+	totalSelectedVictims := 0
+	totalPreemptedVictims := 0
+	totalClaimedResources := resources.NewResource()
 	for _, leafContext := range leafQueues {
 		leafContext.tryPreemptionInternal()
+
+		totalSelectedVictims += len(leafContext.results.selectedVictims)
+		totalPreemptedVictims += len(leafContext.results.preemptedVictims)
+		totalClaimedResources.AddTo(leafContext.results.claimedResource)
+		log.Log(log.SchedQuotaChangePreemption).Debug("child queue quota preemption results",
+			zap.String("parent", qpc.queue.GetQueuePath()),
+			zap.String("parent preemptable resources planned", qpc.preemptableResource.String()),
+			zap.String("queue", leafContext.queue.GetQueuePath()),
+			zap.String("preemptable resources planned", leafContext.preemptableResource.String()),
+			zap.String("claimed resources", leafContext.results.claimedResource.String()),
+			zap.Int("selected victims", len(leafContext.results.selectedVictims)),
+			zap.Int("preempted victims", len(leafContext.results.preemptedVictims)))
+	}
+	log.Log(log.SchedQuotaChangePreemption).Info("quota preemption results for parent queue",
+		zap.String("parent", qpc.queue.GetQueuePath()),
+		zap.String("parent preemptable resources planned", qpc.preemptableResource.String()),
+		zap.String("preemptable resources planned", qpc.preemptableResource.String()),
+		zap.String("claimed resources", totalClaimedResources.String()),
+		zap.Int("selected victims", totalSelectedVictims),
+		zap.Int("preempted victims", totalPreemptedVictims))
+
+	if totalSelectedVictims > 0 {
+		summary := "Quota Preemption results summary: preemptable resources: " + qpc.preemptableResource.String() + ", claimed resources: " + totalClaimedResources.String() + ", selected victims: " + strconv.Itoa(totalSelectedVictims) + ", preempted victims: " + strconv.Itoa(totalPreemptedVictims)
+		qpc.queue.queueEvents.SendQuotaPreemptionEvent(qpc.queue.QueuePath, summary, qpc.maxResource)
 	}
 }
 
@@ -267,7 +313,7 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 	}
 	apps := make(map[*Application][]*Allocation)
 	victimsTotalResource := resources.NewResource()
-	log.Log(log.SchedQuotaChangePreemption).Info("Found victims for quota change preemption",
+	log.Log(log.SchedQuotaChangePreemption).Debug("Found victims for quota change preemption",
 		zap.String("queue", qpc.queue.GetQueuePath()),
 		zap.Int("total victims", len(qpc.allocations)),
 		zap.Stringer("max resources", qpc.maxResource),
@@ -276,6 +322,7 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 		zap.Stringer("preemptable resources", qpc.preemptableResource),
 		zap.Bool("isGuaranteedSet", qpc.guaranteedResource.IsEmpty()),
 	)
+	qpc.results.selectedVictims = qpc.allocations
 	for _, victim := range qpc.allocations {
 		victimAlloc := victim.GetAllocatedResource()
 		if !qpc.preemptableResource.FitInMaxUndef(victimAlloc) {
@@ -301,6 +348,8 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 
 	for app, victims := range apps {
 		if len(victims) > 0 {
+			qpc.results.claimedResource = victimsTotalResource
+			qpc.results.preemptedVictims = victims
 			for _, victim := range victims {
 				err := victim.MarkPreempted()
 				if err != nil {

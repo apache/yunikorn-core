@@ -1236,7 +1236,10 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 			zap.String("appID", applicationID),
 			zap.String("allocationKey", allocationKey))
 
-		queue.IncAllocatedResource(res)
+		// Increase the queue resource usage at any cost even if allocation put up the usage over the max resources.
+		// Quota preemption delay (only if set) used before restart cannot be adjusted based on the lost time after restart.
+		// So, override the quota preemption time with the configured delay again so that preemption would be triggerred once the delay expires.
+		queue.IncAllocatedResource(res, pc.IsQuotaPreemptionEnabled())
 		metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 		node.AddAllocation(alloc)
 		alloc.SetInstanceType(node.GetInstanceType())
@@ -1271,7 +1274,11 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 	delta.Prune()
 	if !resources.IsZero(delta) && !resources.IsZero(newResource) {
 		// resources have changed, update them on application, which also handles queue and user tracker updates
-		if err := app.UpdateAllocationResources(alloc); err != nil {
+		// Increase the queue resource usage at any cost even if changed (+ve) resources put up the usage over the max resources.
+		// In case quota preemption set but not completed, usage would be brought down as part of enforcement through preemption when the already set delay expires.
+		// In case quota preemption set and completed already, configured delay would be set again and
+		// usage would be brought down when the newly set delay expires.
+		if err := app.UpdateAllocationResources(alloc, pc.IsQuotaPreemptionEnabled()); err != nil {
 			metrics.GetSchedulerMetrics().IncSchedulingError()
 			return false, false, fmt.Errorf("cannot update alloc resources on application %s: %v ",
 				alloc.GetApplicationID(), err)
@@ -1301,7 +1308,11 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 			return false, false, err
 		}
 
-		queue.IncAllocatedResource(alloc.GetAllocatedResource())
+		// Increase the queue resource usage at any cost even if ask accommodated earlier based on the old max resources causes usage overflow based on the current max resources now.
+		// In case quota preemption set but not completed, usage would be brought down as part of enforcement through preemption when the already set delay expires.
+		// In case quota preemption set and completed already, configured delay would be set again and
+		// usage would be brought down when the newly set delay expires.
+		queue.IncAllocatedResource(alloc.GetAllocatedResource(), pc.IsQuotaPreemptionEnabled())
 		metrics.GetQueueMetrics(queue.GetQueuePath()).IncAllocatedContainer()
 		node.AddAllocation(existing)
 		existing.SetInstanceType(node.GetInstanceType())

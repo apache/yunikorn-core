@@ -542,3 +542,54 @@ func TestConvertUGI(t *testing.T) {
 		})
 	}
 }
+
+// TestCleanUpCacheUsesRealTime verifies that cleanUpCache uses real wall-clock time for eviction.
+// Without the Bug 1 fix (var now time.Time never assigned), now.Unix() always returns a
+// large negative constant so the eviction condition is never true and entries live forever.
+func TestCleanUpCacheUsesRealTime(t *testing.T) {
+	testCache := GetUserGroupCache(testResolver, &ConfigReaderMock{}, &LdapAccessMock{})
+	testCache.resetCache()
+
+	_, err := testCache.GetUserGroup("testuser1")
+	assert.NilError(t, err)
+	assert.Equal(t, 1, testCache.getUGsize())
+
+	// Stamp the entry as resolved far in the past (2× TTL ago).
+	testCache.lock.Lock()
+	testCache.ugs["testuser1"].resolved = time.Now().Unix() - 2*poscache
+	testCache.lock.Unlock()
+
+	testCache.cleanUpCache()
+
+	// The entry must be evicted. With the broken var-now bug this assertion fails
+	// because cleanUpCache's threshold is computed from the zero time.Time value.
+	assert.Equal(t, 0, testCache.getUGsize(), "stale entry was not evicted by cleanUpCache — Bug 1 not fixed")
+}
+
+// TestPositiveCacheHitExpiryTriggersRefresh verifies that GetUserGroup re-resolves a user
+// whose positive cache entry has exceeded poscache seconds.
+// Without the Bug 2 fix, the stale entry is returned blindly regardless of age.
+func TestPositiveCacheHitExpiryTriggersRefresh(t *testing.T) {
+	testCache := GetUserGroupCache(testResolver, &ConfigReaderMock{}, &LdapAccessMock{})
+	testCache.resetCache()
+
+	_, err := testCache.GetUserGroup("testuser1")
+	assert.NilError(t, err)
+
+	// Age the cached entry beyond poscache.
+	testCache.lock.Lock()
+	testCache.ugs["testuser1"].resolved = time.Now().Unix() - 2*poscache
+	staleResolved := testCache.ugs["testuser1"].resolved
+	testCache.lock.Unlock()
+
+	// A fresh lookup must re-resolve and stamp a new resolved timestamp.
+	ug, err := testCache.GetUserGroup("testuser1")
+	assert.NilError(t, err)
+	if ug.resolved == staleResolved {
+		t.Error("GetUserGroup returned stale cached entry after TTL expiry — Bug 2 not fixed")
+	}
+
+	// Re-resolution must not duplicate groups (groups are appended during resolveGroups;
+	// if the stale entry's Groups slice is reused the count doubles).
+	assert.Equal(t, 2, len(ug.Groups), "re-resolved groups are duplicated — stale ug.Groups was not reset before re-resolution")
+}

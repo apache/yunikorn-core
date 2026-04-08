@@ -72,7 +72,7 @@ func (qpc *QuotaPreemptionContext) tryPreemption() {
 	}
 }
 
-// this MUST always be run in top-down manner.
+// this MUST always be run in top-down manner starting from the root queue.
 // This assumes that parent queue will not call this for leaf queues if quota preemption is already running for parent queue.
 func (qpc *QuotaPreemptionContext) tryPreemptionInternal() {
 	log.Log(log.SchedQuotaChangePreemption).Info("Triggering quota change preemption for leaf queue",

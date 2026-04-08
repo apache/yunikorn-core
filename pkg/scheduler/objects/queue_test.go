@@ -2532,6 +2532,16 @@ func TestTryAcquirePreemption(t *testing.T) {
 	futureStartQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2000, "cpu": 2000})
 	futureStartQueue.quotaPreemptionStartTime = time.Now().Add(time.Hour)
 
+	// nil maxResource: StrictlyGreaterThanOrEqualsOnlyExisting(nil, alloc) -> false (won't clear start time)
+	// so a past start time will still trigger preemption.
+	nilMaxQueue, err := NewConfiguredQueue(configs.QueueConfig{
+		Name: "leaf-nil-max",
+		// Resources intentionally not set -> maxResource == nil
+	}, parent, false, nil)
+	assert.NilError(t, err)
+	nilMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000})
+	nilMaxQueue.quotaPreemptionStartTime = time.Now().Add(-time.Second)
+
 	testCases := []struct {
 		name               string
 		queue              *Queue
@@ -2545,6 +2555,7 @@ func TestTryAcquirePreemption(t *testing.T) {
 		{"usage exceeded max, start time in future", futureStartQueue, false},
 		{"usage equals max resources", usageEqualsMaxQueue, false},
 		{"usage res not matching max", usageNotMatchingMaxQueue, false},
+		{"nil max resource with usage and past start time", nilMaxQueue, true},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -2560,6 +2571,25 @@ func TestTryAcquirePreemption(t *testing.T) {
 	usageNotMatchingMaxQueue.quotaPreemptionStartTime = time.Now().Add(time.Hour)
 	assert.Assert(t, !usageNotMatchingMaxQueue.tryAcquirePreemption(), "preemption should not be triggered")
 	assert.Assert(t, usageNotMatchingMaxQueue.quotaPreemptionStartTime.IsZero(), "start time should be reset")
+
+	// start time is also cleared when usage equals max (within-quota side effect check).
+	usageEqualsMaxQueue.quotaPreemptionStartTime = time.Now().Add(-time.Second)
+	assert.Assert(t, !usageEqualsMaxQueue.tryAcquirePreemption(), "preemption must not fire when usage equals max")
+	assert.Assert(t, usageEqualsMaxQueue.quotaPreemptionStartTime.IsZero(), "start time must be cleared when usage equals max")
+
+	// successful acquisition sets isQuotaPreemptionRunning to true.
+	// re-arm parent: table test called setQuotaPreemptionState(false) which cleared the start time.
+	parent.quotaPreemptionStartTime = time.Now().Add(-time.Second)
+	assert.Assert(t, parent.tryAcquirePreemption(), "acquisition should succeed after re-arming")
+	assert.Assert(t, parent.isQuotaPreemptionRunning, "isQuotaPreemptionRunning must be true after acquisition")
+	parent.setQuotaPreemptionState(false)
+
+	// after release, start time is cleared → immediate re-acquisition is blocked.
+	assert.Assert(t, !parent.tryAcquirePreemption(), "re-acquisition must fail when start time is cleared after release")
+	// re-arming the start time makes re-acquisition possible again.
+	parent.quotaPreemptionStartTime = time.Now().Add(-time.Second)
+	assert.Assert(t, parent.tryAcquirePreemption(), "re-acquisition must succeed after re-arming start time")
+	parent.setQuotaPreemptionState(false)
 }
 
 func TestNewConfiguredQueue(t *testing.T) {

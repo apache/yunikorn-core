@@ -20,7 +20,7 @@ package objects
 
 import (
 	"sort"
-  "strconv"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -625,11 +625,11 @@ func TestTryPreemptionInternal(t *testing.T) {
 	assert.NilError(t, err)
 
 	testCases := []struct {
-		name                 string
-		preemptableResource  *resources.Resource
-		maxResource          *resources.Resource
-		guaranteedResource   *resources.Resource
-		victims              []*Allocation
+		name                  string
+		preemptableResource   *resources.Resource
+		maxResource           *resources.Resource
+		guaranteedResource    *resources.Resource
+		victims               []*Allocation
 		expectedPreemptedKeys []string
 	}{
 		{
@@ -643,11 +643,11 @@ func TestTryPreemptionInternal(t *testing.T) {
 			expectedPreemptedKeys: []string{},
 		},
 		{
-			name:                "empty victim list - nothing to preempt",
-			preemptableResource: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}),
-			maxResource:         resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}),
-			guaranteedResource:  nil,
-			victims:             []*Allocation{},
+			name:                  "empty victim list - nothing to preempt",
+			preemptableResource:   resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}),
+			maxResource:           resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}),
+			guaranteedResource:    nil,
+			victims:               []*Allocation{},
 			expectedPreemptedKeys: []string{},
 		},
 		{
@@ -788,7 +788,7 @@ func TestTryPreemptionInternal(t *testing.T) {
 			removeAllocationAsks(node, asks)
 			resetQueue(leaf)
 		})
- }
+	}
 }
 
 func assertQuotaPreemptionEvent(t *testing.T, victims int, results string, records []*si.EventRecord) {

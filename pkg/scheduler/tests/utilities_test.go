@@ -59,6 +59,11 @@ func caller() string {
 	return funcName
 }
 
+func waitForQueuesPendingResource(t *testing.T, queue []*objects.Queue, memory resources.Quantity, timeoutMs int) {
+	for _, q := range queue {
+		waitForPendingQueueResource(t, q, memory, timeoutMs)
+	}
+}
 func waitForPendingQueueResource(t *testing.T, queue *objects.Queue, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return queue.GetPendingResource().Resources[siCommon.Memory] == memory
@@ -148,16 +153,25 @@ func getApplication(pc *scheduler.PartitionContext, appID string) (*objects.Appl
 }
 
 func newAddAppRequest(apps map[string]string) []*si.AddApplicationRequest {
+	return newAddAppRequestWithTags(apps, nil)
+}
+
+func newAddAppRequestWithTags(apps map[string]string, tags map[string]string) []*si.AddApplicationRequest {
 	var requests []*si.AddApplicationRequest
 	for app, queue := range apps {
+		appQ := queue
+		if tags != nil || len(tags) > 0 {
+			appQ = ""
+		}
 		request := si.AddApplicationRequest{
 			ApplicationID: app,
-			QueueName:     queue,
+			QueueName:     appQ,
 			PartitionName: "",
 			Ugi: &si.UserGroupInformation{
 				User:   "testuser",
 				Groups: []string{"testgroup"},
 			},
+			Tags: tags,
 		}
 		requests = append(requests, &request)
 	}

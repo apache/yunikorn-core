@@ -1054,22 +1054,22 @@ func TestUpdateAllocationResourcePending(t *testing.T) {
 	assert.Check(t, resources.Equals(res, queue.GetPendingResource()), "resources not on queue")
 
 	// check nil alloc update
-	err = app.UpdateAllocationResources(nil)
+	err = app.UpdateAllocationResources(nil, false)
 	assert.Check(t, err != nil, "error not returned on nil alloc")
 
 	// check zero alloc update
 	zero := newAllocationWithKey(alloc, appID1, nodeID1, resources.NewResource())
-	err = app.UpdateAllocationResources(zero)
+	err = app.UpdateAllocationResources(zero, false)
 	assert.Check(t, err != nil, "error not returned on zero alloc")
 
 	// check missing alloc update
 	missing := newAllocationWithKey("missing", appID1, nodeID1, res)
-	err = app.UpdateAllocationResources(missing)
+	err = app.UpdateAllocationResources(missing, false)
 	assert.Check(t, err != nil, "error not returned on missing alloc")
 
 	// check zero delta
 	same := newAllocationWithKey(alloc, appID1, nodeID1, res)
-	err = app.UpdateAllocationResources(same)
+	err = app.UpdateAllocationResources(same, false)
 	assert.NilError(t, err, "error returned on same alloc size")
 	assert.Check(t, resources.Equals(res, app.GetPendingResource()), "resources not on app")
 	assert.Check(t, resources.Equals(res, queue.GetPendingResource()), "resources not on queue")
@@ -1078,7 +1078,7 @@ func TestUpdateAllocationResourcePending(t *testing.T) {
 	res2, err := resources.NewResourceFromConf(map[string]string{"first": "3"})
 	assert.NilError(t, err, "failed to create resource with error")
 	inc := newAllocationWithKey(alloc, appID1, nodeID1, res2)
-	err = app.UpdateAllocationResources(inc)
+	err = app.UpdateAllocationResources(inc, false)
 	assert.NilError(t, err, "error returned on incremented alloc")
 	assert.Check(t, resources.Equals(res2, app.GetPendingResource()), "resources not updated on app")
 	assert.Check(t, resources.Equals(res2, queue.GetPendingResource()), "resources not updated on queue")
@@ -1096,30 +1096,30 @@ func TestUpdateAllocationResourceAllocated(t *testing.T) {
 	res, err := resources.NewResourceFromConf(map[string]string{"first": "2"})
 	assert.NilError(t, err, "failed to create resource with error")
 	alloc1 := newAllocationWithKey(alloc, appID1, nodeID1, res)
-	queue.IncAllocatedResource(res)
+	queue.IncAllocatedResource(res, false)
 	app.RecoverAllocationAsk(alloc1)
 	app.AddAllocation(alloc1)
 	assert.Check(t, resources.Equals(res, queue.GetAllocatedResource()), "resources not on queue")
 
 	// check nil alloc update
-	err = app.UpdateAllocationResources(nil)
+	err = app.UpdateAllocationResources(nil, false)
 	assert.Check(t, err != nil, "error not returned on nil alloc")
 
 	// check zero alloc update
 	zero := newAllocationWithKey(alloc, appID1, nodeID1, resources.NewResource())
-	err = app.UpdateAllocationResources(zero)
+	err = app.UpdateAllocationResources(zero, false)
 	assert.Check(t, err != nil, "error not returned on zero alloc")
 
 	// check missing alloc update
 	missing := newAllocationWithKey("missing", appID1, nodeID1, res)
-	err = app.UpdateAllocationResources(missing)
+	err = app.UpdateAllocationResources(missing, false)
 	assert.Check(t, err != nil, "error not returned on missing alloc")
 	assert.Check(t, resources.Equals(res, app.GetAllocatedResource()), "resources not on app")
 	assert.Check(t, resources.Equals(res, queue.GetAllocatedResource()), "resources not on queue")
 
 	// check zero delta
 	same := newAllocationWithKey(alloc, appID1, nodeID1, res)
-	err = app.UpdateAllocationResources(same)
+	err = app.UpdateAllocationResources(same, false)
 	assert.NilError(t, err, "error returned on same alloc size")
 	assert.Check(t, resources.Equals(res, app.GetAllocatedResource()), "resources not on app")
 	assert.Check(t, resources.Equals(res, queue.GetAllocatedResource()), "resources not on queue")
@@ -1128,7 +1128,7 @@ func TestUpdateAllocationResourceAllocated(t *testing.T) {
 	res2, err := resources.NewResourceFromConf(map[string]string{"first": "3"})
 	assert.NilError(t, err, "failed to create resource with error")
 	inc := newAllocationWithKey(alloc, appID1, nodeID1, res2)
-	err = app.UpdateAllocationResources(inc)
+	err = app.UpdateAllocationResources(inc, false)
 	assert.NilError(t, err, "error returned on incremented alloc")
 	assert.Check(t, resources.Equals(res2, app.GetAllocatedResource()), "resources not updated on app")
 	assert.Check(t, resources.Equals(res2, queue.GetAllocatedResource()), "resources not updated on queue")

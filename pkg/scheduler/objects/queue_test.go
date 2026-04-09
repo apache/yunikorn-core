@@ -2541,7 +2541,7 @@ func TestTryAcquirePreemption(t *testing.T) {
 	}, parent, false, nil)
 	assert.NilError(t, err)
 	nilMaxQueue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000})
-	nilMaxQueue.quotaPreemptionStartTime = time.Now().Add(-time.Second)
+	nilMaxQueue.quotaPreemptionStartTime = time.Now()
 
 	testCases := []struct {
 		name               string
@@ -2574,13 +2574,13 @@ func TestTryAcquirePreemption(t *testing.T) {
 	assert.Assert(t, usageNotMatchingMaxQueue.quotaPreemptionStartTime.IsZero(), "start time should be reset")
 
 	// start time is also cleared when usage equals max (within-quota side effect check).
-	usageEqualsMaxQueue.quotaPreemptionStartTime = time.Now().Add(-time.Second)
+	usageEqualsMaxQueue.quotaPreemptionStartTime = time.Now()
 	assert.Assert(t, !usageEqualsMaxQueue.tryAcquirePreemption(), "preemption must not fire when usage equals max")
 	assert.Assert(t, usageEqualsMaxQueue.quotaPreemptionStartTime.IsZero(), "start time must be cleared when usage equals max")
 
 	// successful acquisition sets isQuotaPreemptionRunning to true.
 	// re-arm parent: table test called setQuotaPreemptionState(false) which cleared the start time.
-	parent.quotaPreemptionStartTime = time.Now().Add(-time.Second)
+	parent.quotaPreemptionStartTime = time.Now()
 	assert.Assert(t, parent.tryAcquirePreemption(), "acquisition should succeed after re-arming")
 	assert.Assert(t, parent.isQuotaPreemptionRunning, "isQuotaPreemptionRunning must be true after acquisition")
 	parent.setQuotaPreemptionState(false)
@@ -2588,7 +2588,7 @@ func TestTryAcquirePreemption(t *testing.T) {
 	// after release, start time is cleared → immediate re-acquisition is blocked.
 	assert.Assert(t, !parent.tryAcquirePreemption(), "re-acquisition must fail when start time is cleared after release")
 	// re-arming the start time makes re-acquisition possible again.
-	parent.quotaPreemptionStartTime = time.Now().Add(-time.Second)
+	parent.quotaPreemptionStartTime = time.Now()
 	assert.Assert(t, parent.tryAcquirePreemption(), "re-acquisition must succeed after re-arming start time")
 	parent.setQuotaPreemptionState(false)
 }

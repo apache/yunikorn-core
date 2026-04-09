@@ -122,6 +122,7 @@ func (qpc *QuotaPreemptionContext) tryPreemption() {
 // This assumes that parent queue will not call this for leaf queues if quota preemption is already running for parent queue.
 // Use tryAcquirePreemption to safely mark the quota preemption running for queue before calling this function.
 // isQuotaPreemptionRunning is already set atomically by tryAcquirePreemption before this function is called.
+// isQuotaPreemptionRunning SHOULD be cleared by the caller (via setQuotaPreemptionState(false)).
 func (qpc *QuotaPreemptionContext) tryPreemptionInternal() {
 	log.Log(log.SchedQuotaChangePreemption).Info("Triggering quota change preemption for leaf queue",
 		zap.String("leaf queue", qpc.queue.GetQueuePath()),
@@ -139,7 +140,6 @@ func (qpc *QuotaPreemptionContext) tryPreemptionInternal() {
 
 	// Preempt the victims
 	qpc.preemptVictims()
-	// isQuotaPreemptionRunning is cleared by the caller (via defer setQuotaPreemptionState(false)).
 }
 
 // getChildQueuesPreemptableResource Compute leaf queue's preemptable resource distribution from the parent's preemptable resource.

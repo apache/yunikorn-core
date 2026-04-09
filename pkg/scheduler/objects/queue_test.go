@@ -2451,16 +2451,11 @@ func TestQuotaPreemptionSettings(t *testing.T) {
 			parent.UpdateQueueProperties(oldMax)
 			// Wait till delay expires to let trigger preemption automatically
 			time.Sleep(parent.quotaPreemptionDelay + 50*time.Millisecond)
+			assert.Equal(t, parent.isQuotaPreemptionRunning, false, "quotaPreemptionRunning flag should be false initially")
 			triggered := parent.tryAcquirePreemption()
 			assert.Equal(t, triggered, tc.timeChange, "preemption should get trigger for set delay")
-			// Simulate preemption completing: clears isQuotaPreemptionRunning and quotaPreemptionStartTime.
-			if triggered {
-				parent.setQuotaPreemptionState(false)
-			}
-
-			time.Sleep(50 * time.Millisecond)
-
-			// since preemption settings are reset, preemption should not be triggerred again during the next check
+			assert.Equal(t, parent.isQuotaPreemptionRunning, triggered, "quotaPreemptionRunning flag should be true if preemption is triggered")
+			// preemption should not be triggerred again during the next check
 			assert.Equal(t, parent.tryAcquirePreemption(), false)
 		})
 	}

@@ -610,6 +610,7 @@ func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
 
 // TestTryPreemptionInternal tests tryPreemptionInternal which filters, sorts, and preempts victims
 // based on the preemptable resource that must be set before calling this function.
+// nolint:funlen
 func TestTryPreemptionInternal(t *testing.T) {
 	node := NewNode(&si.NodeInfo{
 		NodeID:     "node",

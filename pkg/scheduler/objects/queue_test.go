@@ -2559,7 +2559,7 @@ func TestTryAcquirePreemption(t *testing.T) {
 			assert.Equal(t, result, tc.preconditionResult)
 			// Reset the flag if acquired so it doesn't affect other test cases.
 			if result {
-				tc.queue.setQuotaPreemptionState(false)
+				tc.queue.ResetPreemptionTime()
 			}
 		})
 	}

@@ -503,6 +503,7 @@ func (sq *Queue) ResetPreemptionTime() {
 	defer sq.Unlock()
 	sq.quotaPreemptionStartTime = time.Time{}
 	sq.quotaPreemptionDelay = 0
+	sq.isQuotaPreemptionRunning = false
 }
 
 // tryAcquirePreemption atomically checks all preconditions for quota preemption and marks the queue as running.

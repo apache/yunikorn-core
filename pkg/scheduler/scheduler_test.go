@@ -102,9 +102,9 @@ func TestInspectOutstandingRequests(t *testing.T) {
 // flag; all other setup is identical.
 func TestTriggerQuotaPreemption(t *testing.T) {
 	testCases := []struct {
-		name                      string
-		quotaPreemptionEnabled    bool
-		expectedReleaseCount      int // 0 means none; >0 means at-least-one
+		name                   string
+		quotaPreemptionEnabled bool
+		expectedReleaseCount   int // 0 means none; >0 means at-least-one
 	}{
 		{"quota preemption disabled", false, 0},
 		{"quota preemption enabled", true, 1},

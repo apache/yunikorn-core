@@ -18,11 +18,15 @@ limitations under the License.
 package scheduler
 
 import (
+	"strconv"
 	"testing"
+	"time"
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -90,4 +94,76 @@ func TestInspectOutstandingRequests(t *testing.T) {
 	noRequests, totalResources = scheduler.inspectOutstandingRequests()
 	assert.Equal(t, 0, noRequests)
 	assert.Assert(t, resources.IsZero(totalResources), "total resource is not zero: %v", totalResources)
+}
+
+// TestTriggerQuotaPreemption verifies the behavior of triggerQuotaPreemption in two scenarios:
+// disabled (no-op) and enabled (releases fired after the preemption delay elapses).
+// The only difference between the two cases is the PartitionPreemptionConfig.QuotaPreemptionEnabled
+// flag; all other setup is identical.
+func TestTriggerQuotaPreemption(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		quotaPreemptionEnabled bool
+		expectedReleaseCount   int // 0 means none; >0 means at-least-one
+	}{
+		{"quota preemption disabled", false, 0},
+		{"quota preemption enabled", true, 1},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			scheduler := NewScheduler()
+			partition := createQuotaPreemptionQueuesNodes(t)
+			// override the partition-level flag to match the test case
+			partition.quotaPreemptionEnabled = tc.quotaPreemptionEnabled
+			scheduler.clusterContext.partitions["test"] = partition
+
+			app, testHandler := newApplicationWithHandler(appID1, "default", "root.leaf")
+			err := partition.AddApplication(app)
+			assert.NilError(t, err)
+
+			// add allocations so queue usage is above its limit
+			for i := 1; i <= 5; i++ {
+				res, resErr := resources.NewResourceFromConf(map[string]string{"vcore": "2"})
+				assert.NilError(t, resErr)
+				alloc := si.Allocation{
+					AllocationKey:    "ask-key-" + strconv.Itoa(i),
+					ApplicationID:    appID1,
+					NodeID:           nodeID1,
+					ResourcePerAlloc: res.ToProto(),
+				}
+				_, allocCreated, allocErr := partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+				assert.NilError(t, allocErr)
+				assert.Check(t, allocCreated, "alloc should have been created")
+			}
+
+			// lower the max so the queue is now over quota; delay is always set
+			root := partition.GetQueue("root")
+			assert.Assert(t, root != nil, "root queue not found")
+			newLeafConf := []configs.QueueConfig{
+				createLeafQueueConfig(
+					map[string]string{"memory": "10", "vcore": "5"},
+					map[string]string{configs.QuotaPreemptionDelay: "1s"},
+				),
+			}
+			err = partition.updateQueues(newLeafConf, root)
+			assert.NilError(t, err, "failed to update queue config")
+
+			// wait for the preemption delay to elapse (no-op for disabled case)
+			time.Sleep(1100 * time.Millisecond)
+
+			scheduler.triggerQuotaPreemption()
+
+			// wait for any async preemption goroutine to complete
+			time.Sleep(300 * time.Millisecond)
+
+			releaseEventCount := 0
+			for _, event := range testHandler.GetEvents() {
+				if _, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+					releaseEventCount++
+				}
+			}
+			assert.Equal(t, releaseEventCount, tc.expectedReleaseCount, "expected release event does not match actual count")
+		})
+	}
 }

@@ -70,6 +70,7 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	if !manualSchedule {
 		go s.internalSchedule()
 		go s.internalInspectOutstandingRequests()
+		go s.internalQuotaPreemption()
 	}
 }
 
@@ -102,6 +103,17 @@ func (s *Scheduler) internalInspectOutstandingRequests() {
 					zap.Int("number of requests", noRequests),
 					zap.Stringer("total resources", totalResources))
 			}
+		}
+	}
+}
+
+func (s *Scheduler) internalQuotaPreemption() {
+	for {
+		select {
+		case <-s.stop:
+			return
+		case <-time.After(time.Second):
+			s.triggerQuotaPreemption()
 		}
 	}
 }
@@ -159,6 +171,16 @@ func (s *Scheduler) registerActivity() {
 		// activity registered
 	default:
 		// buffer is full, activity will be processed at the next available opportunity
+	}
+}
+
+func (s *Scheduler) triggerQuotaPreemption() {
+	for _, psc := range s.clusterContext.GetPartitionMapClone() {
+		if psc.IsQuotaPreemptionEnabled() {
+			log.Log(log.Scheduler).Debug("Triggering quota preemption",
+				zap.String("partition", psc.Name))
+			psc.root.TryQuotaPreemption()
+		}
 	}
 }
 

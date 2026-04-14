@@ -3746,7 +3746,8 @@ func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 			// delay so that preemption delay of 1 sec expires
 			time.Sleep(1100 * time.Millisecond)
 
-			result := partition.tryAllocate()
+			// call quota preemption on root always
+			partition.root.TryQuotaPreemption()
 
 			// delay so that events are sent out
 			time.Sleep(100 * time.Millisecond)
@@ -3763,8 +3764,6 @@ func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 					}
 				}
 				assert.Equal(t, eventsCount, tt.releasedEvents, "unexpected release events count")
-			} else {
-				assert.Equal(t, result.ResultType, objects.Allocated)
 			}
 			leaf.ResetPreemptionTime()
 			partition.removeApplication(appID1)
@@ -3940,7 +3939,8 @@ func TestUpdateAllocationWithAskAndQuotaPreemption(t *testing.T) {
 			// delay so that preemption delay of 1 sec expires
 			time.Sleep(1100 * time.Millisecond)
 
-			result := partition.tryAllocate()
+			// call quota preemption on root always
+			partition.root.TryQuotaPreemption()
 
 			// delay so that events are sent out
 			time.Sleep(100 * time.Millisecond)
@@ -3957,8 +3957,6 @@ func TestUpdateAllocationWithAskAndQuotaPreemption(t *testing.T) {
 					}
 				}
 				assert.Equal(t, eventsCount, tt.releasedEvents, "unexpected release events count")
-			} else {
-				assert.Equal(t, result.ResultType, objects.Allocated)
 			}
 			leaf.ResetPreemptionTime()
 			partition.removeApplication(appID1)

@@ -50,7 +50,6 @@ jobs:
       fail-fast: false
       matrix:
         k8s: [v1.32.2]
-        plugin: [""]
     steps:
       - name: Checkout yunikorn-k8shim source code
         uses: actions/checkout@v6
@@ -89,10 +88,9 @@ jobs:
         run: cd k8shim && ./scripts/run-e2e-tests.sh -a "test" -n "yk8s" -v "kindest/node:${KIND_NODE_IMAGE}" ${KIND_EXTRA_ARGS}
         env:
           KIND_NODE_IMAGE: ${{ matrix.k8s }}
-          KIND_EXTRA_ARGS: ${{ matrix.plugin }}
       - name: Upload artifacts
         uses: actions/upload-artifact@v6
         if: ${{ failure() }}
         with:
-          name: ${{ github.job }} stdout (${{ matrix.k8s }}${{ matrix.plugin == '--plugin' && format(', {0}', matrix.plugin) || matrix.plugin }})
+          name: ${{ github.job }} stdout (${{ matrix.k8s }})
           path: k8shim/build/e2e

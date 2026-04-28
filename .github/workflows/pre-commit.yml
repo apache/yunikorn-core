@@ -49,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        k8s: [v1.32.2]
+        k8s: [v1.34.0]
     steps:
       - name: Checkout yunikorn-k8shim source code
         uses: actions/checkout@v6
@@ -85,7 +85,7 @@ jobs:
       - name: Replace yunikorn-core dependency
         run: cd k8shim && go mod edit -replace "github.com/apache/yunikorn-core=../core" && grep yunikorn-core go.mod && go mod tidy
       - name: Run e2e tests
-        run: cd k8shim && ./scripts/run-e2e-tests.sh -a "test" -n "yk8s" -v "kindest/node:${KIND_NODE_IMAGE}" ${KIND_EXTRA_ARGS}
+        run: cd k8shim && ./scripts/run-e2e-tests.sh -a "test" -n "yk8s" -v "kindest/node:${KIND_NODE_IMAGE}"
         env:
           KIND_NODE_IMAGE: ${{ matrix.k8s }}
       - name: Upload artifacts

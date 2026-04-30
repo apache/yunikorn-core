@@ -605,7 +605,6 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	buildInfoMap := make(map[string]string)
 	buildInfoMap["buildDate"] = "2006-01-02T15:04:05-0700"
 	buildInfoMap["buildVersion"] = "latest"
-	buildInfoMap["isPluginVersion"] = "false"
 	schedulerContext.Load().SetRMInfo(rmID, buildInfoMap)
 	rmBuildInformationMaps := getRMBuildInformation(nil)
 	assert.Equal(t, 0, len(rmBuildInformationMaps))
@@ -615,7 +614,6 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, 1, len(rmBuildInformationMaps))
 	assert.Equal(t, rmBuildInformationMaps[0]["buildDate"], buildInfoMap["buildDate"])
 	assert.Equal(t, rmBuildInformationMaps[0]["buildVersion"], buildInfoMap["buildVersion"])
-	assert.Equal(t, rmBuildInformationMaps[0]["isPluginVersion"], buildInfoMap["isPluginVersion"])
 	assert.Equal(t, rmBuildInformationMaps[0]["rmId"], rmID)
 
 	// Check test partitions

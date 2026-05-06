@@ -1,9 +1,7 @@
-github.com/Azure/go-ntlmssp v0.1.0 h1:DjFo6YtWzNqNvQdrwEyr/e4nhU3vRiwenz5QX7sFz+A=
-github.com/Azure/go-ntlmssp v0.1.0/go.mod h1:NYqdhxd/8aAct/s4qSYZEerdPuH1liG2/X9DiVTbhpk=
+github.com/Azure/go-ntlmssp v0.1.1 h1:l+FM/EEMb0U9QZE7mKNEDw5Mu3mFiaa2GKOoTSsNDPw=
+github.com/Azure/go-ntlmssp v0.1.1/go.mod h1:NYqdhxd/8aAct/s4qSYZEerdPuH1liG2/X9DiVTbhpk=
 github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e h1:4dAU9FXIyQktpoUAgOJK3OTFc/xug0PCXYCqU0FgDKI=
 github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e/go.mod h1:cEWa1LVoE5KvSD9ONXsZrj0z6KqySlCCNKHlLzbqAt4=
-github.com/apache/yunikorn-scheduler-interface v0.0.0-20260323095809-c1eb5e00dd66 h1:6Gab4OugMMyaRc1Q2xCJq2Sk7EFWLu78USx53uXCj2c=
-github.com/apache/yunikorn-scheduler-interface v0.0.0-20260323095809-c1eb5e00dd66/go.mod h1:RccSRsvQM5CAnKPEhlFhj5BwJHABCgECTnaMEjtX9sM=
 github.com/apache/yunikorn-scheduler-interface v0.0.0-20260408050357-2858f4d09dc7 h1:Vs2FKxwKjJjUHWWsVq1VPl8JobBwbtDJ/Ti4lfPGF6U=
 github.com/apache/yunikorn-scheduler-interface v0.0.0-20260408050357-2858f4d09dc7/go.mod h1:RccSRsvQM5CAnKPEhlFhj5BwJHABCgECTnaMEjtX9sM=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=

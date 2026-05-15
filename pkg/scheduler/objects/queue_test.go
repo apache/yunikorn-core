@@ -3452,6 +3452,50 @@ func TestQueueBackoffProperties(t *testing.T) {
 	assert.Equal(t, 30*time.Second, leaf3.GetBackoffDelay())
 }
 
+func TestUpdateQueuePropertiesReset(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+
+	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create managed queue")
+
+	leaf.properties = map[string]string{
+		configs.ApplicationSortPolicy:                    policies.FairSortPolicy.String(),
+		configs.ApplicationSortPriority:                  configs.ApplicationSortPriorityDisabled,
+		configs.PriorityOffset:                           "5",
+		configs.PriorityPolicy:                           policies.FencePriorityPolicy.String(),
+		configs.PreemptionDelay:                          "10s",
+		configs.PreemptionPolicy:                         policies.FencePreemptionPolicy.String(),
+		configs.ApplicationUnschedulableAsksBackoff:      "12",
+		configs.ApplicationUnschedulableAsksBackoffDelay: "20s",
+		configs.QuotaPreemptionDelay:                     "1m",
+	}
+	leaf.UpdateQueueProperties(nil)
+	assert.Equal(t, leaf.sortType, policies.FairSortPolicy)
+	assert.Equal(t, leaf.prioritySortEnabled, false)
+	assert.Equal(t, leaf.priorityOffset, int32(5))
+	assert.Equal(t, leaf.priorityPolicy, policies.FencePriorityPolicy)
+	assert.Equal(t, leaf.preemptionDelay, 10*time.Second)
+	assert.Equal(t, leaf.preemptionPolicy, policies.FencePreemptionPolicy)
+	assert.Equal(t, leaf.unschedAskBackoff, uint64(12))
+	assert.Equal(t, leaf.askBackoffDelay, 20*time.Second)
+	assert.Equal(t, leaf.quotaPreemptionDelay, time.Minute)
+
+	leaf.quotaPreemptionStartTime = time.Now()
+	leaf.properties = map[string]string{}
+	leaf.UpdateQueueProperties(nil)
+	assert.Equal(t, leaf.sortType, policies.FifoSortPolicy)
+	assert.Equal(t, leaf.prioritySortEnabled, true)
+	assert.Equal(t, leaf.priorityOffset, int32(0))
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.preemptionDelay, configs.DefaultPreemptionDelay)
+	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+	assert.Equal(t, leaf.unschedAskBackoff, uint64(0))
+	assert.Equal(t, leaf.askBackoffDelay, configs.DefaultAskBackOffDelay)
+	assert.Equal(t, leaf.quotaPreemptionDelay, configs.DefaultQuotaPreemptionDelay)
+	assert.Assert(t, leaf.quotaPreemptionStartTime.IsZero(), "quota preemption start time should reset")
+}
+
 func TestQueue_setPreemptionTime(t *testing.T) {
 	root, e := createRootQueue(nil)
 	assert.NilError(t, e, "failed to create basic root queue")

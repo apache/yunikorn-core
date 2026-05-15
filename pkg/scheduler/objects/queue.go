@@ -421,8 +421,12 @@ func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) (*resources.R
 // This function MUST be called holding the lock for the queue.
 func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay time.Duration) {
 	// if quota preemption is running nothing we do not have an influence
+	if sq.isQuotaPreemptionRunning {
+		return
+	}
 	// if the delay for the queue is not set do not trigger preemption
-	if sq.isQuotaPreemptionRunning || sq.quotaPreemptionDelay == 0 {
+	if sq.quotaPreemptionDelay == 0 {
+		sq.quotaPreemptionStartTime = time.Time{}
 		return
 	}
 	// if no current limit we should not preempt even if it was set earlier, clear the start time
@@ -670,6 +674,23 @@ func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 	return nil
 }
 
+// resetProperties resets values derived from queue properties to their defaults.
+// This function MUST be called holding the lock for the queue.
+func (sq *Queue) resetProperties() {
+	sq.sortType = policies.FifoSortPolicy
+	if !sq.isLeaf {
+		sq.sortType = policies.FairSortPolicy
+	}
+	sq.prioritySortEnabled = true
+	sq.priorityOffset = 0
+	sq.priorityPolicy = policies.DefaultPriorityPolicy
+	sq.preemptionPolicy = policies.DefaultPreemptionPolicy
+	sq.preemptionDelay = configs.DefaultPreemptionDelay
+	sq.unschedAskBackoff = 0
+	sq.askBackoffDelay = configs.DefaultAskBackOffDelay
+	sq.quotaPreemptionDelay = configs.DefaultQuotaPreemptionDelay
+}
+
 // UpdateQueueProperties updates the queue properties defined as text
 func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 	sq.Lock()
@@ -679,10 +700,8 @@ func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 		sq.sortType = policies.FifoSortPolicy
 		return
 	}
-	if !sq.isLeaf {
-		// set the sorting type for parent queues
-		sq.sortType = policies.FairSortPolicy
-	}
+	oldDelay := sq.quotaPreemptionDelay
+	sq.resetProperties()
 	// walk over all properties and process
 	var err error
 	for key, value := range sq.properties {
@@ -744,13 +763,11 @@ func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 					zap.Error(err))
 			}
 		case configs.QuotaPreemptionDelay:
-			oldDelay := sq.quotaPreemptionDelay
 			sq.quotaPreemptionDelay, err = convertDelay(value, configs.DefaultQuotaPreemptionDelay)
 			if err != nil {
 				log.Log(log.SchedQueue).Debug("quota preemption delay configuration error",
 					zap.Error(err))
 			}
-			sq.setPreemptionTime(oldMaxResource, oldDelay)
 		default:
 			// skip unknown properties just log them
 			log.Log(log.SchedQueue).Debug("queue property skipped",
@@ -758,6 +775,7 @@ func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 				zap.String("value", value))
 		}
 	}
+	sq.setPreemptionTime(oldMaxResource, oldDelay)
 }
 
 // GetQueuePath returns the fully qualified path of this queue.

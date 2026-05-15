@@ -330,9 +330,23 @@ func unschedulableAskBackoff(value string) (uint64, error) {
 
 // ApplyConf is the locked version of applyConf
 func (sq *Queue) ApplyConf(conf configs.QueueConfig) (*resources.Resource, error) {
+	var parentProperties map[string]string
+	if sq.parent != nil {
+		// Existing queues must rebuild their effective properties from the parent
+		// on config reload, matching the creation path in NewConfiguredQueue.
+		parentProperties = sq.parent.getProperties()
+	}
+
 	sq.Lock()
 	defer sq.Unlock()
-	return sq.applyConf(conf, false)
+	oldMaxResource, err := sq.applyConf(conf, false)
+	if err != nil {
+		return nil, err
+	}
+	if sq.parent != nil {
+		sq.mergeProperties(parentProperties, conf.Properties)
+	}
+	return oldMaxResource, nil
 }
 
 // applyConf applies all the properties to the queue from the config.
@@ -662,6 +676,18 @@ func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 		sq.sortType = policies.FifoSortPolicy
 		return
 	}
+	// Reset fields derived from properties so removed properties revert to defaults.
+	sq.sortType = policies.FifoSortPolicy
+	sq.prioritySortEnabled = true
+	sq.priorityOffset = 0
+	sq.priorityPolicy = policies.DefaultPriorityPolicy
+	sq.preemptionPolicy = policies.DefaultPreemptionPolicy
+	sq.preemptionDelay = configs.DefaultPreemptionDelay
+	sq.unschedAskBackoff = 0
+	sq.askBackoffDelay = configs.DefaultAskBackOffDelay
+	oldDelay := sq.quotaPreemptionDelay
+	sq.quotaPreemptionDelay = configs.DefaultQuotaPreemptionDelay
+	quotaPreemptionDelaySet := false
 	if !sq.isLeaf {
 		// set the sorting type for parent queues
 		sq.sortType = policies.FairSortPolicy
@@ -727,19 +753,25 @@ func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 					zap.Error(err))
 			}
 		case configs.QuotaPreemptionDelay:
-			oldDelay := sq.quotaPreemptionDelay
+			quotaPreemptionDelaySet = true
 			sq.quotaPreemptionDelay, err = convertDelay(value, configs.DefaultQuotaPreemptionDelay)
 			if err != nil {
 				log.Log(log.SchedQueue).Debug("quota preemption delay configuration error",
 					zap.Error(err))
 			}
-			sq.setPreemptionTime(oldMaxResource, oldDelay)
 		default:
 			// skip unknown properties just log them
 			log.Log(log.SchedQueue).Debug("queue property skipped",
 				zap.String("key", key),
 				zap.String("value", value))
 		}
+	}
+	if quotaPreemptionDelaySet || oldDelay != sq.quotaPreemptionDelay {
+		if sq.quotaPreemptionDelay == 0 {
+			sq.quotaPreemptionStartTime = time.Time{}
+			return
+		}
+		sq.setPreemptionTime(oldMaxResource, oldDelay)
 	}
 }
 

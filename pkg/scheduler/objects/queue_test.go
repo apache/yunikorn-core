@@ -3263,6 +3263,91 @@ func TestQueueBackoffProperties(t *testing.T) {
 	assert.Equal(t, 30*time.Second, leaf3.GetBackoffDelay())
 }
 
+func TestUpdateQueuePropertiesReset(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+
+	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create managed queue")
+
+	leaf.properties = map[string]string{
+		configs.ApplicationSortPolicy:                    policies.FairSortPolicy.String(),
+		configs.ApplicationSortPriority:                  configs.ApplicationSortPriorityDisabled,
+		configs.PriorityOffset:                           "5",
+		configs.PriorityPolicy:                           policies.FencePriorityPolicy.String(),
+		configs.PreemptionDelay:                          "10s",
+		configs.PreemptionPolicy:                         policies.FencePreemptionPolicy.String(),
+		configs.ApplicationUnschedulableAsksBackoff:      "12",
+		configs.ApplicationUnschedulableAsksBackoffDelay: "20s",
+		configs.QuotaPreemptionDelay:                     "1m",
+	}
+	leaf.UpdateQueueProperties(nil)
+	assert.Equal(t, leaf.sortType, policies.FairSortPolicy)
+	assert.Equal(t, leaf.prioritySortEnabled, false)
+	assert.Equal(t, leaf.priorityOffset, int32(5))
+	assert.Equal(t, leaf.priorityPolicy, policies.FencePriorityPolicy)
+	assert.Equal(t, leaf.preemptionDelay, 10*time.Second)
+	assert.Equal(t, leaf.preemptionPolicy, policies.FencePreemptionPolicy)
+	assert.Equal(t, leaf.unschedAskBackoff, uint64(12))
+	assert.Equal(t, leaf.askBackoffDelay, 20*time.Second)
+	assert.Equal(t, leaf.quotaPreemptionDelay, time.Minute)
+
+	leaf.properties = map[string]string{}
+	leaf.UpdateQueueProperties(nil)
+	assert.Equal(t, leaf.sortType, policies.FifoSortPolicy)
+	assert.Equal(t, leaf.prioritySortEnabled, true)
+	assert.Equal(t, leaf.priorityOffset, int32(0))
+	assert.Equal(t, leaf.priorityPolicy, policies.DefaultPriorityPolicy)
+	assert.Equal(t, leaf.preemptionDelay, configs.DefaultPreemptionDelay)
+	assert.Equal(t, leaf.preemptionPolicy, policies.DefaultPreemptionPolicy)
+	assert.Equal(t, leaf.unschedAskBackoff, uint64(0))
+	assert.Equal(t, leaf.askBackoffDelay, configs.DefaultAskBackOffDelay)
+	assert.Equal(t, leaf.quotaPreemptionDelay, configs.DefaultQuotaPreemptionDelay)
+}
+
+func TestApplyConfPreservesInheritedQueueProperties(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+
+	parentProps := map[string]string{
+		configs.ApplicationUnschedulableAsksBackoff:      "12",
+		configs.ApplicationUnschedulableAsksBackoffDelay: "20s",
+		configs.QuotaPreemptionDelay:                     "1m",
+		configs.PreemptionPolicy:                         policies.DisabledPreemptionPolicy.String(),
+	}
+	parent, err := createManagedQueueWithProps(root, "parent", true, nil, parentProps)
+	assert.NilError(t, err, "failed to create parent queue")
+	leaf, err := createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	assert.Equal(t, leaf.unschedAskBackoff, uint64(12))
+	assert.Equal(t, leaf.askBackoffDelay, 20*time.Second)
+	assert.Equal(t, leaf.quotaPreemptionDelay, time.Minute)
+	assert.Equal(t, leaf.preemptionPolicy, policies.DisabledPreemptionPolicy)
+
+	parentConf := configs.QueueConfig{
+		Name:       "parent",
+		Parent:     true,
+		Properties: parentProps,
+	}
+	_, err = parent.ApplyConf(parentConf)
+	assert.NilError(t, err, "failed to apply parent conf")
+	parent.UpdateQueueProperties(nil)
+
+	leafConf := configs.QueueConfig{
+		Name:   "leaf",
+		Parent: false,
+	}
+	_, err = leaf.ApplyConf(leafConf)
+	assert.NilError(t, err, "failed to apply leaf conf")
+	leaf.UpdateQueueProperties(nil)
+
+	assert.Equal(t, leaf.unschedAskBackoff, uint64(12))
+	assert.Equal(t, leaf.askBackoffDelay, 20*time.Second)
+	assert.Equal(t, leaf.quotaPreemptionDelay, time.Minute)
+	assert.Equal(t, leaf.preemptionPolicy, policies.DisabledPreemptionPolicy)
+}
+
 func TestQueue_setPreemptionTime(t *testing.T) {
 	root, e := createRootQueue(nil)
 	assert.NilError(t, e, "failed to create basic root queue")

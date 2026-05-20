@@ -241,6 +241,13 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 			queue, err = objects.NewConfiguredQueue(queueConfig, parent, false, pc.appQueueMapping)
 		} else {
 			oldMax, err = queue.ApplyConf(queueConfig)
+			if err == nil {
+				// Re-apply inherited properties from parent, mirroring the NewConfiguredQueue path.
+				// ApplyConf sets sq.properties to only the queue's own config properties, which
+				// drops any previously inherited values and prevents parent property changes from
+				// propagating to existing child queues on config reload.
+				queue.MergeProperties(parent.GetProperties(), queueConfig.Properties)
+			}
 		}
 		if err != nil {
 			return err

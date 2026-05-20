@@ -1428,17 +1428,17 @@ func TestUpdateQueues(t *testing.T) {
 	assertUpdateQueues(t, "both", map[string]string{})
 }
 
-// TestUpdateQueuesInheritedQuotaPreemptionDelay verifies that a child queue inherits
-// quota.preemption.delay from its parent on config reload (updateQueues path).
-// This is the scenario reported where setting quota.preemption.delay on a parent queue
-// was not propagating to existing child queues after a config reload.
-func TestUpdateQueuesInheritedQuotaPreemptionDelay(t *testing.T) {
+// TestUpdateQueuesInheritedProperties verifies that a child queue inherits
+// properties from its parent on config reload (updateQueues path).
+func TestUpdateQueuesInheritedProperties(t *testing.T) {
+	const customProp = "custom.test.property"
+
 	initialConf := []configs.QueueConfig{
 		{
 			Name:   "parent",
 			Parent: true,
 			Properties: map[string]string{
-				configs.QuotaPreemptionDelay: "20s",
+				customProp: "value1",
 			},
 			Queues: []configs.QueueConfig{
 				{
@@ -1454,22 +1454,22 @@ func TestUpdateQueuesInheritedQuotaPreemptionDelay(t *testing.T) {
 	root := partition.GetQueue("root")
 	assert.Assert(t, root != nil, "root queue not found")
 
-	// initial load: leaf should inherit quota.preemption.delay from parent
+	// initial load: leaf should inherit the property from parent
 	err = partition.updateQueues(initialConf, root)
 	assert.NilError(t, err, "initial updateQueues failed")
 
 	leaf := partition.GetQueue("root.parent.leaf")
 	assert.Assert(t, leaf != nil, "leaf queue should exist")
-	assert.Equal(t, leaf.GetProperties()[configs.QuotaPreemptionDelay], "20s",
-		"leaf should inherit quota.preemption.delay from parent on initial load")
+	assert.Equal(t, leaf.GetProperties()[customProp], "value1",
+		"leaf should inherit property from parent on initial load")
 
-	// config reload: parent changes delay to 30s; leaf should pick up the new value
+	// config reload: parent changes property value; leaf should pick up the new value
 	updatedConf := []configs.QueueConfig{
 		{
 			Name:   "parent",
 			Parent: true,
 			Properties: map[string]string{
-				configs.QuotaPreemptionDelay: "30s",
+				customProp: "value2",
 			},
 			Queues: []configs.QueueConfig{
 				{
@@ -1484,8 +1484,8 @@ func TestUpdateQueuesInheritedQuotaPreemptionDelay(t *testing.T) {
 
 	leaf = partition.GetQueue("root.parent.leaf")
 	assert.Assert(t, leaf != nil, "leaf queue should still exist after reload")
-	assert.Equal(t, leaf.GetProperties()[configs.QuotaPreemptionDelay], "30s",
-		"leaf should inherit updated quota.preemption.delay from parent on config reload")
+	assert.Equal(t, leaf.GetProperties()[customProp], "value2",
+		"leaf should inherit updated property from parent on config reload")
 }
 
 func TestReAddQueues(t *testing.T) {

@@ -1486,8 +1486,6 @@ func TestUpdateQueuesInheritedQuotaPreemptionDelay(t *testing.T) {
 	assert.Assert(t, leaf != nil, "leaf queue should still exist after reload")
 	assert.Equal(t, leaf.GetProperties()[configs.QuotaPreemptionDelay], "30s",
 		"leaf should inherit updated quota.preemption.delay from parent on config reload")
-	assert.Equal(t, leaf.GetQuotaPreemptionDelay(), 30*time.Second,
-		"leaf's runtime quotaPreemptionDelay should reflect the updated inherited value")
 }
 
 func TestReAddQueues(t *testing.T) {

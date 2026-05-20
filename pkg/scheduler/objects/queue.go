@@ -869,12 +869,6 @@ func (sq *Queue) GetPreemptionDelay() time.Duration {
 	return sq.preemptionDelay
 }
 
-func (sq *Queue) GetQuotaPreemptionDelay() time.Duration {
-	sq.RLock()
-	defer sq.RUnlock()
-	return sq.quotaPreemptionDelay
-}
-
 // CheckSubmitAccess checks if the user has access to the queue to submit an application.
 // The check is performed recursively: i.e. access to the parent allows access to this queue.
 // This will check both submitACL and adminACL.

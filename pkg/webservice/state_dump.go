@@ -51,6 +51,7 @@ type AggregatedStateInfo struct {
 	Config           *dao.ConfigDAOInfo               `json:"config,omitempty"`
 	PlacementRules   []*dao.RuleDAOInfo               `json:"placementRules,omitempty"`
 	EventStreams     []events.EventStreamData         `json:"eventStreams,omitempty"`
+	OrderLog         map[string][]*dao.OrderLogEntry  `json:"orderLog,omitempty"`
 }
 
 func getFullStateDump(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +83,7 @@ func doStateDump(w io.Writer) error {
 		Config:           getClusterConfigDAO(),
 		PlacementRules:   getPlacementRulesDAO(partitionContext),
 		EventStreams:     events.GetEventSystem().GetEventStreams(),
+		OrderLog:         getOrderLogDAO(partitionContext),
 	}
 
 	var prettyJSON []byte

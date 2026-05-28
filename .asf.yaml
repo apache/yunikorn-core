@@ -30,15 +30,27 @@ github:
     - kubernetes
   enabled_merge_buttons:
     squash: true
-    merge:  false
+    merge: false
     rebase: false
   features:
-    wiki:     false
-    issues:   false
+    wiki: false
+    issues: false
     projects: false
 
+  rulesets:
+    - name: "Default Branch Protection"
+      type: branch
+      branches:
+        includes:
+          - "~DEFAULT_BRANCH"
+          - "branch-*"
+        excludes: []
+      bypass_teams:
+        - root
+      restrict_deletion: true
+      restrict_force_push: true
 notifications:
-  commits:      issues@yunikorn.apache.org
-  issues:       reviews@yunikorn.apache.org
+  commits: issues@yunikorn.apache.org
+  issues: reviews@yunikorn.apache.org
   pullrequests: reviews@yunikorn.apache.org
   jira_options: link label

@@ -22,7 +22,7 @@ module github.com/apache/yunikorn-core
 go 1.25.0
 
 require (
-	github.com/apache/yunikorn-scheduler-interface v0.0.0-20260408050357-2858f4d09dc7
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20260528033204-c474acff6d53
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
@@ -52,17 +52,17 @@ require (
 	github.com/prometheus/procfs v0.16.1 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/crypto v0.49.0 // indirect
-	golang.org/x/net v0.52.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
-	golang.org/x/text v0.35.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
 replace (
-	golang.org/x/crypto => golang.org/x/crypto v0.49.0
-	golang.org/x/net => golang.org/x/net v0.52.0
-	golang.org/x/sys => golang.org/x/sys v0.42.0
-	golang.org/x/text => golang.org/x/text v0.35.0
+	golang.org/x/crypto => golang.org/x/crypto v0.52.0
+	golang.org/x/net => golang.org/x/net v0.55.0
+	golang.org/x/sys => golang.org/x/sys v0.45.0
+	golang.org/x/text => golang.org/x/text v0.37.0
 )

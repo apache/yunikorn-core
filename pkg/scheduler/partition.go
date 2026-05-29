@@ -246,7 +246,7 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 				// ApplyConf sets sq.properties to only the queue's own config properties, which
 				// drops any previously inherited values and prevents parent property changes from
 				// propagating to existing child queues on config reload.
-				queue.MergeProperties(parent.GetProperties(), queueConfig.Properties)
+				queue.MergeParentProperties(queueConfig.Properties)
 			}
 		}
 		if err != nil {

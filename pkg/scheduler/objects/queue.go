@@ -259,14 +259,17 @@ func (sq *Queue) GetProperties() map[string]string {
 	return sq.getProperties()
 }
 
-// MergeProperties merges the parent queue properties with config properties into this queue.
+// MergeParentProperties merges the parent queue properties with config properties into this queue.
 // Config properties override parent properties. This should be called after ApplyConf during
 // config reload to re-apply inherited properties from the parent.
 // Lock protected.
-func (sq *Queue) MergeProperties(parent, config map[string]string) {
+func (sq *Queue) MergeParentProperties(config map[string]string) {
 	sq.Lock()
 	defer sq.Unlock()
-	sq.mergeProperties(parent, config)
+	if sq.parent != nil {
+		parentProps := sq.parent.getProperties()
+		sq.mergeProperties(parentProps, config)
+	}
 }
 
 // mergeProperties merges the properties from the parent queue and the config in the set from new queue

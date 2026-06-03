@@ -67,7 +67,7 @@ func (m *WebService) StartWebApp() {
 	router := newRouter()
 	m.httpServer = &http.Server{
 		Addr:              ":9080",
-		Handler:           router,
+		Handler:           compressResponse(router),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 

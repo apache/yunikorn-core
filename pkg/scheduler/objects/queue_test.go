@@ -53,7 +53,7 @@ func TestMergeParentPropertiesNilParent(t *testing.T) {
 	root.MergeParentProperties(map[string]string{"other": "other-value"})
 
 	// properties should remain unchanged since root has no parent to merge from
-	props := root.GetProperties()
+	props := root.getProperties()
 	assert.Equal(t, "value", props["key"], "root queue properties should not be modified by MergeParentProperties")
 	_, exists := props["other"]
 	assert.Assert(t, !exists, "config props should not be applied when parent is nil")
@@ -69,7 +69,7 @@ func TestMergeParentPropertiesParentPropsInherited(t *testing.T) {
 
 	child.MergeParentProperties(nil)
 
-	props := child.GetProperties()
+	props := child.getProperties()
 	assert.Equal(t, "inherited-value", props["inherited-key"], "child should inherit parent properties")
 }
 
@@ -83,7 +83,7 @@ func TestMergeParentPropertiesConfigOverridesParent(t *testing.T) {
 
 	child.MergeParentProperties(map[string]string{"key": "config-value", "extra": "extra-value"})
 
-	props := child.GetProperties()
+	props := child.getProperties()
 	assert.Equal(t, "config-value", props["key"], "config property should override parent property")
 	assert.Equal(t, "extra-value", props["extra"], "config-only property should be present")
 }
@@ -103,7 +103,7 @@ func TestMergeParentPropertiesClearsOldProperties(t *testing.T) {
 
 	child.MergeParentProperties(map[string]string{"new-key": "new-value"})
 
-	props := child.GetProperties()
+	props := child.getProperties()
 	_, exists := props["stale-key"]
 	assert.Assert(t, !exists, "stale properties should be cleared on MergeParentProperties")
 	assert.Equal(t, "new-value", props["new-key"], "new config property should be present")
@@ -121,7 +121,7 @@ func TestMergeParentPropertiesFilterPriorityPolicy(t *testing.T) {
 
 	child.MergeParentProperties(nil)
 
-	props := child.GetProperties()
+	props := child.getProperties()
 	// priority.policy should not be inherited from parent; filterParentProperty resets it to default
 	assert.Equal(t, policies.DefaultPriorityPolicy.String(), props[configs.PriorityPolicy],
 		"priority.policy should be reset to default when inherited from parent")
@@ -139,7 +139,7 @@ func TestMergeParentPropertiesFilterPriorityOffset(t *testing.T) {
 
 	child.MergeParentProperties(nil)
 
-	props := child.GetProperties()
+	props := child.getProperties()
 	// priority.offset should not be inherited; filterParentProperty resets it to "0"
 	assert.Equal(t, "0", props[configs.PriorityOffset],
 		"priority.offset should be reset to 0 when inherited from parent")
@@ -157,7 +157,7 @@ func TestMergeParentPropertiesFilterPreemptionPolicyDisabledPropagates(t *testin
 
 	child.MergeParentProperties(nil)
 
-	props := child.GetProperties()
+	props := child.getProperties()
 	// disabled preemption.policy is the only value that propagates from parent
 	assert.Equal(t, policies.DisabledPreemptionPolicy.String(), props[configs.PreemptionPolicy],
 		"disabled preemption.policy should propagate from parent")
@@ -175,7 +175,7 @@ func TestMergeParentPropertiesFilterPreemptionPolicyNonDisabledReset(t *testing.
 
 	child.MergeParentProperties(nil)
 
-	props := child.GetProperties()
+	props := child.getProperties()
 	// non-disabled preemption.policy should not propagate from parent; reset to default
 	assert.Equal(t, policies.DefaultPreemptionPolicy.String(), props[configs.PreemptionPolicy],
 		"non-disabled preemption.policy should be reset to default when inherited from parent")
@@ -198,7 +198,7 @@ func TestMergeParentPropertiesConfigCanOverrideFilteredProps(t *testing.T) {
 		configs.PriorityOffset: "5",
 	})
 
-	props := child.GetProperties()
+	props := child.getProperties()
 	assert.Equal(t, policies.FencePriorityPolicy.String(), props[configs.PriorityPolicy],
 		"config priority.policy should override filtered parent value")
 	assert.Equal(t, "5", props[configs.PriorityOffset],

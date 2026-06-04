@@ -45,18 +45,18 @@ import (
 
 // base test for creating a managed queue
 func TestMergeParentPropertiesNilParent(t *testing.T) {
-	// root queue has no parent, MergeParentProperties should be a no-op
+	// root queue has no parent
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "root queue create failed")
 	root.properties = map[string]string{"key": "value"}
-
 	root.MergeParentProperties(map[string]string{"other": "other-value"})
 
-	// properties should remain unchanged since root has no parent to merge from
 	props := root.getProperties()
-	assert.Equal(t, "value", props["key"], "root queue properties should not be modified by MergeParentProperties")
-	_, exists := props["other"]
-	assert.Assert(t, !exists, "config props should not be applied when parent is nil")
+	_, exists := props["key"]
+	assert.Assert(t, !exists, "existing properties should not be inherited when parent is nil")
+	value, exists := props["other"]
+	assert.Assert(t, exists, "config props should be applied even when parent is nil")
+	assert.Equal(t, "other-value", value, "config props should be applied even when parent is nil")
 }
 
 func TestMergeParentPropertiesParentPropsInherited(t *testing.T) {

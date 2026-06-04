@@ -244,12 +244,12 @@ func (sq *Queue) applyTemplate(childTemplate *template.Template) {
 // getProperties returns a copy of the properties for this queue
 // Will never return a nil, can return an empty map.
 func (sq *Queue) getProperties() map[string]string {
+	props := make(map[string]string)
 	if sq == nil {
-		return make(map[string]string)
+		return props
 	}
 	sq.RLock()
 	defer sq.RUnlock()
-	props := make(map[string]string)
 	for key, value := range sq.properties {
 		props[key] = value
 	}
@@ -267,12 +267,11 @@ func (sq *Queue) GetProperties() map[string]string {
 // config reload to re-apply inherited properties from the parent.
 // Lock protected.
 func (sq *Queue) MergeParentProperties(config map[string]string) {
-	if sq.parent != nil {
-		parentProps := sq.parent.getProperties()
-		sq.Lock()
-		defer sq.Unlock()
-		sq.mergeProperties(parentProps, config)
-	}
+	// get parent properties outside of the lock to avoid potential deadlocks with parent queue lock.
+	parentProps := sq.parent.getProperties()
+	sq.Lock()
+	defer sq.Unlock()
+	sq.mergeProperties(parentProps, config)
 }
 
 // mergeProperties merges the properties from the parent queue and the config in the set from new queue

@@ -1428,6 +1428,66 @@ func TestUpdateQueues(t *testing.T) {
 	assertUpdateQueues(t, "both", map[string]string{})
 }
 
+// TestUpdateQueuesInheritedProperties verifies that a child queue inherits
+// properties from its parent on config reload (updateQueues path).
+func TestUpdateQueuesInheritedProperties(t *testing.T) {
+	const customProp = "custom.test.property"
+
+	initialConf := []configs.QueueConfig{
+		{
+			Name:   "parent",
+			Parent: true,
+			Properties: map[string]string{
+				customProp: "value1",
+			},
+			Queues: []configs.QueueConfig{
+				{
+					Name:   "leaf",
+					Parent: false,
+				},
+			},
+		},
+	}
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	root := partition.GetQueue("root")
+	assert.Assert(t, root != nil, "root queue not found")
+
+	// initial load: leaf should inherit the property from parent
+	err = partition.updateQueues(initialConf, root)
+	assert.NilError(t, err, "initial updateQueues failed")
+
+	leaf := partition.GetQueue("root.parent.leaf")
+	assert.Assert(t, leaf != nil, "leaf queue should exist")
+	assert.Equal(t, leaf.GetProperties()[customProp], "value1",
+		"leaf should inherit property from parent on initial load")
+
+	// config reload: parent changes property value; leaf should pick up the new value
+	updatedConf := []configs.QueueConfig{
+		{
+			Name:   "parent",
+			Parent: true,
+			Properties: map[string]string{
+				customProp: "value2",
+			},
+			Queues: []configs.QueueConfig{
+				{
+					Name:   "leaf",
+					Parent: false,
+				},
+			},
+		},
+	}
+	err = partition.updateQueues(updatedConf, root)
+	assert.NilError(t, err, "config-reload updateQueues failed")
+
+	leaf = partition.GetQueue("root.parent.leaf")
+	assert.Assert(t, leaf != nil, "leaf queue should still exist after reload")
+	assert.Equal(t, leaf.GetProperties()[customProp], "value2",
+		"leaf should inherit updated property from parent on config reload")
+}
+
 func TestReAddQueues(t *testing.T) {
 	conf := []configs.QueueConfig{
 		{

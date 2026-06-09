@@ -31,9 +31,10 @@ import (
 
 // minCompressionSize is the minimum response body size in bytes required before gzip
 // compression is applied. Responses smaller than this threshold are sent uncompressed
-// because the gzip framing overhead would exceed any size savings. The value matches
-// the typical Ethernet MTU (1500 bytes). Exposed as a var so tests can override it.
-var minCompressionSize = 1500
+// because the gzip framing overhead would exceed any size savings. The value is set
+// below the typical Ethernet MTU (1500 bytes) to account for TCP/IP and HTTP header
+// overhead, ensuring a small response body fits within a single network packet.
+var minCompressionSize = 1400
 
 // deferredGzipResponseWriter buffers the first minCompressionSize bytes of the
 // response body and defers the compression decision until either the buffer is full

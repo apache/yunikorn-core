@@ -88,7 +88,10 @@ func (d *deferredGzipResponseWriter) switchToGzip() {
 	if d.statusCode != 0 {
 		d.ResponseWriter.WriteHeader(d.statusCode)
 	}
-	_, _ = d.gz.Write(d.buf.Bytes())
+	if _, err := d.gz.Write(d.buf.Bytes()); err != nil {
+		log.Log(log.REST).Error("failed to write buffered bytes to gzip writer",
+			zap.Error(err))
+	}
 	d.buf.Reset()
 }
 
@@ -101,7 +104,10 @@ func (d *deferredGzipResponseWriter) finalize() {
 		if d.statusCode != 0 {
 			d.ResponseWriter.WriteHeader(d.statusCode)
 		}
-		_, _ = d.ResponseWriter.Write(d.buf.Bytes())
+		if _, err := d.ResponseWriter.Write(d.buf.Bytes()); err != nil {
+			log.Log(log.REST).Error("failed to write buffered response bytes",
+				zap.Error(err))
+		}
 	}
 	if d.useGzip {
 		if closeErr := d.gz.Close(); closeErr != nil {

@@ -227,6 +227,15 @@ func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	}
 
 	metrics.GetEventMetrics().IncEventsCreated()
+
+	ec.Lock()
+	defer ec.Unlock()
+
+	if ec.stopped || ec.channel == nil {
+		metrics.GetEventMetrics().IncEventsNotChanneled()
+		return
+	}
+
 	select {
 	case ec.channel <- event:
 		metrics.GetEventMetrics().IncEventsChanneled()

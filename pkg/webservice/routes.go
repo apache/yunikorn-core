@@ -274,14 +274,6 @@ var webRoutes = routes{
 
 	// Deprecated REST calls
 	//
-	// Replaced with /ws/v1/scheduler/node-utilizations as part of YuniKorn 1.5
-	// Remove as part of YuniKorn 1.8
-	route{
-		Name:        "Scheduler",
-		Method:      "GET",
-		Pattern:     "/ws/v1/scheduler/node-utilization",
-		HandlerFunc: getNodeUtilisation,
-	},
 	// Permanently moved to the debug endpoint as part of YuniKorn 1.7
 	// Remove redirect in YuniKorn 1.10
 	route{

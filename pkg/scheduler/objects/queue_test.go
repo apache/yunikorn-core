@@ -49,7 +49,9 @@ func TestMergeParentPropertiesNilParent(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "root queue create failed")
 	root.properties = map[string]string{"key": "value"}
-	root.MergeParentProperties(map[string]string{"other": "other-value"})
+	_, err = root.ApplyConf(configs.QueueConfig{Properties: map[string]string{"other": "other-value"}})
+	assert.NilError(t, err, "applyConf failed")
+	root.MergeParentProperties()
 
 	props := root.getProperties()
 	_, exists := props["key"]
@@ -67,7 +69,7 @@ func TestMergeParentPropertiesParentPropsInherited(t *testing.T) {
 	child, err := createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "child queue create failed")
 
-	child.MergeParentProperties(nil)
+	child.MergeParentProperties()
 
 	props := child.getProperties()
 	assert.Equal(t, "inherited-value", props["inherited-key"], "child should inherit parent properties")
@@ -81,7 +83,9 @@ func TestMergeParentPropertiesConfigOverridesParent(t *testing.T) {
 	child, err := createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "child queue create failed")
 
-	child.MergeParentProperties(map[string]string{"key": "config-value", "extra": "extra-value"})
+	_, err = child.ApplyConf(configs.QueueConfig{Properties: map[string]string{"key": "config-value", "extra": "extra-value"}})
+	assert.NilError(t, err, "applyConf failed")
+	child.MergeParentProperties()
 
 	props := child.getProperties()
 	assert.Equal(t, "config-value", props["key"], "config property should override parent property")
@@ -101,7 +105,9 @@ func TestMergeParentPropertiesClearsOldProperties(t *testing.T) {
 	child.properties["stale-key"] = "stale-value"
 	child.Unlock()
 
-	child.MergeParentProperties(map[string]string{"new-key": "new-value"})
+	_, err = child.ApplyConf(configs.QueueConfig{Properties: map[string]string{"new-key": "new-value"}})
+	assert.NilError(t, err, "applyConf failed")
+	child.MergeParentProperties()
 
 	props := child.getProperties()
 	_, exists := props["stale-key"]
@@ -119,7 +125,7 @@ func TestMergeParentPropertiesFilterPriorityPolicy(t *testing.T) {
 	child, err := createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "child queue create failed")
 
-	child.MergeParentProperties(nil)
+	child.MergeParentProperties()
 
 	props := child.getProperties()
 	// priority.policy should not be inherited from parent; filterParentProperty resets it to default
@@ -137,7 +143,7 @@ func TestMergeParentPropertiesFilterPriorityOffset(t *testing.T) {
 	child, err := createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "child queue create failed")
 
-	child.MergeParentProperties(nil)
+	child.MergeParentProperties()
 
 	props := child.getProperties()
 	// priority.offset should not be inherited; filterParentProperty resets it to "0"
@@ -155,7 +161,7 @@ func TestMergeParentPropertiesFilterPreemptionPolicyDisabledPropagates(t *testin
 	child, err := createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "child queue create failed")
 
-	child.MergeParentProperties(nil)
+	child.MergeParentProperties()
 
 	props := child.getProperties()
 	// disabled preemption.policy is the only value that propagates from parent
@@ -173,7 +179,7 @@ func TestMergeParentPropertiesFilterPreemptionPolicyNonDisabledReset(t *testing.
 	child, err := createManagedQueue(parent, "leaf", false, nil)
 	assert.NilError(t, err, "child queue create failed")
 
-	child.MergeParentProperties(nil)
+	child.MergeParentProperties()
 
 	props := child.getProperties()
 	// non-disabled preemption.policy should not propagate from parent; reset to default
@@ -193,16 +199,38 @@ func TestMergeParentPropertiesConfigCanOverrideFilteredProps(t *testing.T) {
 	assert.NilError(t, err, "child queue create failed")
 
 	// config explicitly sets these, so they should not be overridden by the parent filter
-	child.MergeParentProperties(map[string]string{
+	_, err = child.ApplyConf(configs.QueueConfig{Properties: map[string]string{
 		configs.PriorityPolicy: policies.FencePriorityPolicy.String(),
 		configs.PriorityOffset: "5",
-	})
+	}})
+	assert.NilError(t, err, "applyConf failed")
+	child.MergeParentProperties()
 
 	props := child.getProperties()
 	assert.Equal(t, policies.FencePriorityPolicy.String(), props[configs.PriorityPolicy],
 		"config priority.policy should override filtered parent value")
 	assert.Equal(t, "5", props[configs.PriorityOffset],
 		"config priority.offset should override filtered parent value")
+}
+
+func TestMergeParentPropertiesUsesApplyConfConfig(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "root queue create failed")
+	parent, err := createManagedQueueWithProps(root, "parent", true, nil, map[string]string{
+		"inherited-key": "parent-value",
+	})
+	assert.NilError(t, err, "parent queue create failed")
+	child, err := createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "child queue create failed")
+
+	// simulate config reload: ApplyConf sets only this queue's properties, then merge inherits from parent
+	_, err = child.ApplyConf(configs.QueueConfig{Properties: map[string]string{"own-key": "own-value"}})
+	assert.NilError(t, err, "applyConf failed")
+	child.MergeParentProperties()
+
+	props := child.getProperties()
+	assert.Equal(t, "parent-value", props["inherited-key"], "parent property should be inherited")
+	assert.Equal(t, "own-value", props["own-key"], "config property from ApplyConf should be present")
 }
 
 func TestQueueBasics(t *testing.T) {

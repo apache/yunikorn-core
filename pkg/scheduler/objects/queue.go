@@ -146,8 +146,8 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool, a
 	// add to the parent, we might have an overall lock already
 	// still need to make sure we lock the parent so we do not interfere with scheduling
 	if parent != nil {
-		// pull the properties from the parent that should be set on the child
-		sq.mergeProperties(parent.getProperties(), conf.Properties)
+		// inherit filtered parent properties; sq.properties already holds this queue's config from applyConf
+		sq.mergeProperties(parent.getProperties())
 		sq.UpdateQueueProperties(nil)
 		err := parent.addChildQueue(sq)
 		if err != nil {
@@ -262,35 +262,31 @@ func (sq *Queue) GetProperties() map[string]string {
 	return sq.getProperties()
 }
 
-// MergeParentProperties merges the parent queue properties with config properties into this queue.
-// Config properties override parent properties. This should be called after ApplyConf during
-// config reload to re-apply inherited properties from the parent.
-// Lock protected.
-func (sq *Queue) MergeParentProperties(config map[string]string) {
-	// get parent properties outside of the lock to avoid potential deadlocks with parent queue lock.
+// MergeParentProperties merges the parent queue properties with this queue's config properties.
+// Config properties already set on the queue (from ApplyConf) override parent properties.
+// This should be called after ApplyConf during config reload to re-apply inherited properties
+// from the parent. Lock protected.
+func (sq *Queue) MergeParentProperties() {
+	// get parent properties outside of the lock to avoid potential deadlocks with parent queue lock
 	parentProps := sq.parent.getProperties()
 	sq.Lock()
 	defer sq.Unlock()
-	sq.mergeProperties(parentProps, config)
+	sq.mergeProperties(parentProps)
 }
 
-// mergeProperties merges the properties from the parent queue and the config in the set from new queue
+// mergeProperties merges filtered parent properties with this queue's config properties.
+// Config properties already set on the queue (from applyConf) override parent properties.
+// The parent map is a clean copy from getProperties() and becomes the resulting map.
 // lock free call
-func (sq *Queue) mergeProperties(parent, config map[string]string) {
-	// clean out all existing values (handles update case)
-	sq.properties = make(map[string]string)
-	// Set the parent properties
-	if len(parent) != 0 {
-		for key, value := range parent {
-			sq.properties[key] = filterParentProperty(key, value)
-		}
+func (sq *Queue) mergeProperties(parent map[string]string) {
+	config := sq.properties
+	for key, value := range parent {
+		parent[key] = filterParentProperty(key, value)
 	}
-	// merge the config properties
-	if len(config) > 0 {
-		for key, value := range config {
-			sq.properties[key] = value
-		}
+	for key, value := range config {
+		parent[key] = value
 	}
+	sq.properties = parent
 }
 
 func convertDelay(value string, def time.Duration) (time.Duration, error) {

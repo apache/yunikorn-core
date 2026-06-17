@@ -32,7 +32,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-// Main Scheduler service that starts the needed sub services
+// The Scheduler service that starts the needed sub services
 type Scheduler struct {
 	clusterContext     *ClusterContext  // main context
 	pendingAllocEvents chan interface{} // queue for allocation and application events
@@ -53,7 +53,7 @@ func NewScheduler() *Scheduler {
 	return m
 }
 
-// Start service
+// StartService starts the scheduler service, it will start the event handlers and the main scheduling loop.
 func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule bool) {
 	// set the proxy handler in the context
 	s.clusterContext.setEventHandler(handlers.RMProxyEventHandler)

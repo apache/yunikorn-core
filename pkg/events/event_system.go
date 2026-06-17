@@ -220,6 +220,10 @@ func (ec *EventSystemImpl) Stop() {
 	ec.stopped = true
 }
 
+func (ec *EventSystemImpl) isStopped() bool {
+	return ec.stopped || ec.channel == nil
+}
+
 // AddEvent adds an event record to the event system. See the interface for details.
 func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	if event != nil {
@@ -228,10 +232,10 @@ func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 
 	metrics.GetEventMetrics().IncEventsCreated()
 
-	ec.Lock()
-	defer ec.Unlock()
+	ec.RLock()
+	defer ec.RUnlock()
 
-	if ec.stopped || ec.channel == nil {
+	if ec.isStopped() {
 		metrics.GetEventMetrics().IncEventsNotChanneled()
 		return
 	}

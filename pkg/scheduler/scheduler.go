@@ -32,7 +32,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-// The Scheduler service that starts the needed sub services
+// Scheduler service that starts the needed sub services
 type Scheduler struct {
 	clusterContext     *ClusterContext  // main context
 	pendingAllocEvents chan interface{} // queue for allocation and application events

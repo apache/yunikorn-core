@@ -49,8 +49,11 @@ func NewScheduler() *Scheduler {
 	m.clusterContext = newClusterContext()
 	// Creating 3 channels for different types of events, the buffer size is set based on the expected event volume and processing speed.
 	// This can help to smooth out the event processing and avoid blocking the RM proxy when there is a sudden burst of events.
+	// A cluster can have hundreds of thousands of allocations, and each allocation can trigger multiple events, so the buffer size for pendingAllocEvents is set to 1 million.
 	m.pendingAllocEvents = make(chan interface{}, 1024*1024)
+	// There can be thousands of infra events in a cluster, so the buffer size for pendingInfraEvents is set to 1000.
 	m.pendingInfraEvents = make(chan interface{}, 1000)
+	// There can be tens of thousands of nodes in a cluster, so the buffer size for pendingNodeEvents is set to 100 thousand.
 	m.pendingNodeEvents = make(chan interface{}, 100*1000)
 	m.activityPending = make(chan bool, 1)
 	m.stop = make(chan struct{})

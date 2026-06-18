@@ -182,9 +182,9 @@ func TestHandleEventRouting(t *testing.T) {
 	}
 	assert.Equal(t, len(scheduler.pendingAllocEvents), 2, "expected 2 events on pendingAllocEvents")
 	assert.Equal(t, len(scheduler.pendingInfraEvents), 0, "expected 0 events on pendingInfraEvents")
+	assert.Equal(t, len(scheduler.pendingNodeEvents), 0, "expected 0 events on pendingNodeEvents")
 
 	infraCases := []interface{}{
-		&rmevent.RMUpdateNodeEvent{Request: &si.NodeRequest{}},
 		&rmevent.RMRegistrationEvent{Channel: make(chan *rmevent.Result, 1)},
 		&rmevent.RMConfigUpdateEvent{Channel: make(chan *rmevent.Result, 1)},
 		&rmevent.RMPartitionsRemoveEvent{Channel: make(chan *rmevent.Result, 1)},
@@ -193,16 +193,19 @@ func TestHandleEventRouting(t *testing.T) {
 		scheduler.HandleEvent(ev)
 	}
 	assert.Equal(t, len(scheduler.pendingAllocEvents), 2, "alloc channel should remain unchanged")
-	assert.Equal(t, len(scheduler.pendingInfraEvents), 4, "expected 4 events on pendingInfraEvents")
+	assert.Equal(t, len(scheduler.pendingInfraEvents), 3, "expected 3 events on pendingInfraEvents")
+
+	nodeCase := &rmevent.RMUpdateNodeEvent{Request: &si.NodeRequest{}}
+	scheduler.HandleEvent(nodeCase)
+	assert.Equal(t, len(scheduler.pendingAllocEvents), 2, "alloc channel should remain unchanged")
+	assert.Equal(t, len(scheduler.pendingInfraEvents), 3, "infra channel should remain unchanged")
+	assert.Equal(t, len(scheduler.pendingNodeEvents), 1, "expected 1 event on pendingNodeEvents")
 }
 
 // TestHandleAllocEventGoroutine verifies that the handleAllocEvent goroutine drains
-// pendingAllocEvents and calls registerActivity.
+// pendingAllocEvents and calls registerActivity and stops when signaled.
 func TestHandleAllocEventGoroutine(t *testing.T) {
 	scheduler := NewScheduler()
-	partition, err := newBasePartition()
-	assert.NilError(t, err)
-	scheduler.clusterContext.partitions["test"] = partition
 
 	done := make(chan struct{})
 	go func() {
@@ -232,7 +235,7 @@ func TestHandleAllocEventGoroutine(t *testing.T) {
 }
 
 // TestHandleInfraEventGoroutine verifies that the handleInfraEvent goroutine drains
-// pendingInfraEvents and calls registerActivity.
+// pendingInfraEvents and calls registerActivity and stops when signaled.
 func TestHandleInfraEventGoroutine(t *testing.T) {
 	scheduler := NewScheduler()
 
@@ -268,17 +271,48 @@ func TestHandleInfraEventGoroutine(t *testing.T) {
 	}
 }
 
-// TestInfraEventsNotBlockedByAllocEvents verifies that a full pendingAllocEvents channel
-// does not prevent infra events from being enqueued or processed.
-func TestInfraEventsNotBlockedByAllocEvents(t *testing.T) {
+// TestHandleNodeEventGoroutine verifies that the handleNodeEvent goroutine drains
+// pendingNodeEvents and calls registerActivity.
+func TestHandleNodeEventGoroutine(t *testing.T) {
+	scheduler := NewScheduler()
+
+	scheduler.pendingNodeEvents <- &rmevent.RMUpdateNodeEvent{
+		Request: &si.NodeRequest{},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		scheduler.handleNodeEvent()
+	}()
+
+	// wait for activity signal which proves the event was processed
+	select {
+	case <-scheduler.activityPending:
+		// success
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for activity from handleNodeEvent")
+	}
+
+	close(scheduler.stop)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handleNodeEvent goroutine did not stop")
+	}
+}
+
+// TestNodeEventsNotBlockedByAllocEvents verifies that a full pendingAllocEvents channel
+// does not prevent node events from being enqueued or processed.
+func TestNodeEventsNotBlockedByAllocEvents(t *testing.T) {
 	scheduler := NewScheduler()
 	// fill the alloc channel to capacity so it cannot accept more events
 	for i := 0; i < cap(scheduler.pendingAllocEvents); i++ {
 		scheduler.pendingAllocEvents <- &rmevent.RMUpdateAllocationEvent{Request: &si.AllocationRequest{}}
 	}
 
-	// an infra event must still be enqueued without blocking
+	// a node event must still be enqueued without blocking
 	nodeEv := &rmevent.RMUpdateNodeEvent{Request: &si.NodeRequest{}}
 	scheduler.HandleEvent(nodeEv)
-	assert.Equal(t, len(scheduler.pendingInfraEvents), 1, "infra event should be queued even when alloc channel is full")
+	assert.Equal(t, len(scheduler.pendingNodeEvents), 1, "node event should be queued even when alloc channel is full")
 }

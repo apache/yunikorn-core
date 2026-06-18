@@ -36,7 +36,8 @@ import (
 type Scheduler struct {
 	clusterContext     *ClusterContext  // main context
 	pendingAllocEvents chan interface{} // queue for allocation and application events
-	pendingInfraEvents chan interface{} // queue for node, config, and registration events
+	pendingInfraEvents chan interface{} // queue for config and registration events
+	pendingNodeEvents  chan interface{} // queue for node events
 	activityPending    chan bool        // activity pending channel
 	stop               chan struct{}    // channel to signal stop request
 	healthChecker      *HealthChecker
@@ -46,8 +47,11 @@ type Scheduler struct {
 func NewScheduler() *Scheduler {
 	m := &Scheduler{}
 	m.clusterContext = newClusterContext()
+	// Creating 3 channels for different types of events, the buffer size is set based on the expected event volume and processing speed.
+	// This can help to smooth out the event processing and avoid blocking the RM proxy when there is a sudden burst of events.
 	m.pendingAllocEvents = make(chan interface{}, 1024*1024)
-	m.pendingInfraEvents = make(chan interface{}, 1024*1024)
+	m.pendingInfraEvents = make(chan interface{}, 1000)
+	m.pendingNodeEvents = make(chan interface{}, 100*1000)
 	m.activityPending = make(chan bool, 1)
 	m.stop = make(chan struct{})
 	return m
@@ -61,6 +65,7 @@ func (s *Scheduler) StartService(handlers handler.EventHandlers, manualSchedule 
 	// Start event handlers
 	go s.handleAllocEvent()
 	go s.handleInfraEvent()
+	go s.handleNodeEvent()
 
 	// Start resource monitor if necessary (majorly for testing)
 	s.nodesMonitor = newNodesResourceUsageMonitor(s.clusterContext)
@@ -121,11 +126,13 @@ func (s *Scheduler) internalQuotaPreemption() {
 	}
 }
 
-// Implement methods for Scheduler events
+// HandleEvent is the main entry for handling events from RM proxy, it will dispatch events to different queues based on event type.
 func (s *Scheduler) HandleEvent(ev interface{}) {
 	switch ev.(type) {
 	case *rmevent.RMUpdateAllocationEvent, *rmevent.RMUpdateApplicationEvent:
 		enqueueAndCheckFull(s.pendingAllocEvents, ev)
+	case *rmevent.RMUpdateNodeEvent:
+		enqueueAndCheckFull(s.pendingNodeEvents, ev)
 	default:
 		enqueueAndCheckFull(s.pendingInfraEvents, ev)
 	}
@@ -169,8 +176,6 @@ func (s *Scheduler) handleInfraEvent() {
 		select {
 		case ev := <-s.pendingInfraEvents:
 			switch v := ev.(type) {
-			case *rmevent.RMUpdateNodeEvent:
-				s.clusterContext.handleRMUpdateNodeEvent(v)
 			case *rmevent.RMPartitionsRemoveEvent:
 				s.clusterContext.removePartitionsByRMID(v)
 			case *rmevent.RMRegistrationEvent:
@@ -179,6 +184,24 @@ func (s *Scheduler) handleInfraEvent() {
 				s.clusterContext.processRMConfigUpdateEvent(v)
 			default:
 				log.Log(log.Scheduler).Error("Received type is not an acceptable type for infrastructure event.",
+					zap.Stringer("received type", reflect.TypeOf(v)))
+			}
+			s.registerActivity()
+		case <-s.stop:
+			return
+		}
+	}
+}
+
+func (s *Scheduler) handleNodeEvent() {
+	for {
+		select {
+		case ev := <-s.pendingNodeEvents:
+			switch v := ev.(type) {
+			case *rmevent.RMUpdateNodeEvent:
+				s.clusterContext.handleRMUpdateNodeEvent(v)
+			default:
+				log.Log(log.Scheduler).Error("Received type is not an acceptable type for node event.",
 					zap.Stringer("received type", reflect.TypeOf(v)))
 			}
 			s.registerActivity()

@@ -25,7 +25,7 @@ If an AI tool was used:
 
 Check https://www.apache.org/legal/generative-tooling.html for details.
 
-### How Has This Been Tested?
+### How has this been tested?
 - [ ] New unit tests were added to cover new or changed code paths.
 - [ ] `make test_all` was run, and no failures reported.
 - [ ] A pull request will be opened for new e2e tests (apache/yunikorn-k8shim repository).

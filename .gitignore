@@ -3,6 +3,5 @@
 .DS_Store
 /tools/
 /build/
-/coverage.txt
 *.swp
 *.tmp

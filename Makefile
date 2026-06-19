@@ -15,6 +15,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+.PHONY: lint check_scripts license-check pseudo test test_all bench fsm_graph
+.PHONY: build tools clean distclean
+
 # Check if this GO tools version used is at least the version of go specified in
 # the go.mod file. The version in go.mod should be in sync with other repos.
 
@@ -41,7 +44,8 @@ endif
 
 # Make sure we are in the same directory as the Makefile
 BASE_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
-TOOLS_DIR=tools
+TOOLS_DIR := tools
+BUILD_DIR := build
 
 # Force Go modules even when checked out inside GOPATH
 GO111MODULE := on
@@ -99,16 +103,17 @@ endif
 
 # golangci-lint
 GOLANGCI_LINT_VERSION=2.10.1
-GOLANGCI_LINT_PATH=$(TOOLS_DIR)/golangci-lint-v$(GOLANGCI_LINT_VERSION)
+GOLANGCI_LINT_PATH=${TOOLS_DIR}/golangci-lint-v$(GOLANGCI_LINT_VERSION)
 GOLANGCI_LINT_BIN=$(GOLANGCI_LINT_PATH)/golangci-lint
-GOLANGCI_LINT_ARCHIVE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH).tar.gz
 GOLANGCI_LINT_ARCHIVEBASE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH)
+GOLANGCI_LINT_ARCHIVE=$(GOLANGCI_LINT_ARCHIVEBASE).tar.gz
 
 all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
+test_all: check_scripts license-check lint test
+
 # Install tools
-.PHONY: tools
 tools: $(SHELLCHECK_BIN) $(GOLANGCI_LINT_BIN)
 
 # Install shellcheck
@@ -125,7 +130,6 @@ $(GOLANGCI_LINT_BIN):
 	@curl -sSfL "https://github.com/golangci/golangci-lint/releases/download/v$(GOLANGCI_LINT_VERSION)/$(GOLANGCI_LINT_ARCHIVE)" \
 		| tar -x -z --strip-components=1 -C "$(GOLANGCI_LINT_PATH)" "$(GOLANGCI_LINT_ARCHIVEBASE)/golangci-lint"
 
-.PHONY: lint
 # Run lint against the previous commit for PR and branch build
 # In dev setup look at all changes on top of master
 lint: $(GOLANGCI_LINT_BIN)
@@ -133,33 +137,31 @@ lint: $(GOLANGCI_LINT_BIN)
 	@"${GOLANGCI_LINT_BIN}" run
 
 # Check scripts
-.PHONY: check_scripts
-ALLSCRIPTS := $(shell find . -not \( -path ./tools -prune \) -not \( -path ./build -prune \) -name '*.sh')
+ALLSCRIPTS := $(shell find . -not \( -path ./"${TOOLS_DIR}" -prune \) -not \( -path ./"${BUILD_DIR}" -prune \) -name '*.sh')
 check_scripts: $(SHELLCHECK_BIN)
 	@echo "running shellcheck"
 	@"$(SHELLCHECK_BIN)" ${ALLSCRIPTS}
 
-.PHONY: license-check
 # This is a bit convoluted but using a recursive grep on linux fails to write anything when run
 # from the Makefile. That caused the pull-request license check run from the github action to
 # always pass. The syntax for find is slightly different too but that at least works in a similar
 # way on both Mac and Linux. Excluding all .git* files from the checks.
+LICENSE_CHECK_OUT := $(BUILD_DIR)/license-check.txt
 license-check:
 	@echo "checking license headers:"
 ifeq (darwin,$(OS))
-	$(shell mkdir -p build && find -E . -not \( -path './.git*' -prune \) -not \( -path ./build -prune \) -not \( -path ./tools -prune \) -regex ".*\.(go|sh|md|yaml|yml|mod)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > build/license-check.txt)
+	$(shell mkdir -p "${BUILD_DIR}" && find -E . -not \( -path './.git*' -prune \) -not \( -path ./"${BUILD_DIR}" -prune \) -not \( -path ./"${TOOLS_DIR}" -prune \) -regex ".*\.(go|sh|md|yaml|yml|mod)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > "${LICENSE_CHECK_OUT}")
 else
-	$(shell mkdir -p build && find . -not \( -path './.git*' -prune \) -not \( -path ./build -prune \) -not \( -path ./tools -prune \) -regex ".*\.\(go\|sh\|md\|yaml\|yml\|mod\)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > build/license-check.txt)
+	$(shell mkdir -p "${BUILD_DIR}" && find . -not \( -path './.git*' -prune \) -not \( -path ./"${BUILD_DIR}" -prune \) -not \( -path ./"${TOOLS_DIR}" -prune \) -regex ".*\.\(go\|sh\|md\|yaml\|yml\|mod\)" -exec grep -L "Licensed to the Apache Software Foundation" {} \; > "${LICENSE_CHECK_OUT}")
 endif
-	@if [ -s "build/license-check.txt" ]; then \
+	@if [ -s "${LICENSE_CHECK_OUT}" ]; then \
 		echo "following files are missing license header:" ; \
-		cat build/license-check.txt ; \
+		cat "${LICENSE_CHECK_OUT}" ; \
 		exit 1; \
 	fi
 	@echo "  all OK"
 
 # Check that we use pseudo versions in master
-.PHONY: pseudo
 BRANCH := $(shell git branch --show-current)
 SI_REF := $(shell "$(GO)" list -m -f '{{ .Version }}' github.com/apache/yunikorn-scheduler-interface)
 SI_MATCH := $(shell expr "${SI_REF}" : "v0.0.0-")
@@ -175,49 +177,44 @@ pseudo:
 	@echo "  all OK"
 
 # Build the example binaries for dev and test
-.PHONY: commands
-commands: build/simplescheduler build/schedulerclient build/queueconfigchecker
+commands: $(BUILD_DIR)/simplescheduler $(BUILD_DIR)/schedulerclient $(BUILD_DIR)/queueconfigchecker
 
-build/simplescheduler: go.mod go.sum $(shell find cmd pkg)
+$(BUILD_DIR)/simplescheduler: go.mod go.sum $(shell find cmd pkg)
 	@echo "building example scheduler"
-	@mkdir -p build
-	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/simplescheduler ./cmd/simplescheduler
+	@mkdir -p "${BUILD_DIR}"
+	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o "${BUILD_DIR}/simplescheduler" ./cmd/simplescheduler
 
-build/schedulerclient: go.mod go.sum $(shell find cmd pkg)
+$(BUILD_DIR)/schedulerclient: go.mod go.sum $(shell find cmd pkg)
 	@echo "building example client"
-	@mkdir -p build
-	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/schedulerclient ./cmd/schedulerclient
+	@mkdir -p "${BUILD_DIR}"
+	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o "${BUILD_DIR}/schedulerclient" ./cmd/schedulerclient
 
-build/queueconfigchecker: go.mod go.sum $(shell find cmd pkg)
+$(BUILD_DIR)/queueconfigchecker: go.mod go.sum $(shell find cmd pkg)
 	@echo "building queueconfigchecker"
-	@mkdir -p build
-	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o build/queueconfigchecker ./cmd/queueconfigchecker
+	@mkdir -p "${BUILD_DIR}"
+	"$(GO)" build $(RACE) -a -ldflags '-extldflags "-static"' -o "${BUILD_DIR}/queueconfigchecker" ./cmd/queueconfigchecker
 
 # Build binaries for dev and test
-.PHONY: build
 build: commands
 
 # Run the tests after building
-.PHONY: test
 test: export DEADLOCK_DETECTION_ENABLED = true
 test: export DEADLOCK_TIMEOUT_SECONDS = 10
 test: export DEADLOCK_EXIT = true
 test:
 	@echo "running unit tests"
-	@mkdir -p build
+	@mkdir -p "${BUILD_DIR}"
 	"$(GO)" clean -testcache
-	"$(GO)" test ./... $(RACE) -tags deadlock -coverprofile=build/coverage.txt -covermode=atomic
+	"$(GO)" test ./... $(RACE) -tags deadlock -coverprofile="${BUILD_DIR}/coverage.txt" -covermode=atomic
 	"$(GO)" vet $(REPO)...
 
 # Run benchmarks
-.PHONY: bench
 bench:
 	@echo "running benchmarks"
 	"$(GO)" clean -testcache
 	"$(GO)" test -v -run '^Benchmark' -bench . ./pkg/...
 
 # Generate FSM graphs (dot/png)
-.PHONY: fsm_graph
 fsm_graph:
 	@echo "generating FSM graphs"
 	"$(GO)" clean -testcache
@@ -225,15 +222,13 @@ fsm_graph:
 	scripts/generate-fsm-graph-images.sh
 
 # Remove generated build artifacts
-.PHONY: clean
 clean:
 	@echo "cleaning up caches and output"
 	"$(GO)" clean -cache -testcache -r
 	@echo "removing generated files"
-	@rm -rf build
+	@rm -rf "${BUILD_DIR}"
 
 # Remove all generated content
-.PHONY: distclean
 distclean: clean
 	@echo "removing tools"
 	@rm -rf "${TOOLS_DIR}"

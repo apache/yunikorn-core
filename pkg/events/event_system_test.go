@@ -21,6 +21,7 @@ package events
 import (
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -240,4 +241,32 @@ func TestTruncateEventMessage(t *testing.T) {
 
 func getTestString(stringLength int) string {
 	return strings.Repeat("x", stringLength)
+}
+
+// TestAddEventConcurrentStop verifies AddEvent and Stop can run concurrently without data races.
+func TestAddEventConcurrentStop(t *testing.T) {
+	Init()
+	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < 10000; i++ {
+			eventSystem.AddEvent(&si.EventRecord{
+				Type:    si.EventRecord_REQUEST,
+				Message: strconv.Itoa(i),
+			})
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond)
+		eventSystem.Stop()
+	}()
+
+	wg.Wait()
 }

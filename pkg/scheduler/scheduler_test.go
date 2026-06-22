@@ -167,3 +167,152 @@ func TestTriggerQuotaPreemption(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleEventRouting verifies that HandleEvent routes allocation and application
+// events to pendingAllocEvents, and all other events to pendingInfraEvents.
+func TestHandleEventRouting(t *testing.T) {
+	scheduler := NewScheduler()
+
+	allocCases := []interface{}{
+		&rmevent.RMUpdateAllocationEvent{Request: &si.AllocationRequest{}},
+		&rmevent.RMUpdateApplicationEvent{Request: &si.ApplicationRequest{}},
+	}
+	for _, ev := range allocCases {
+		scheduler.HandleEvent(ev)
+	}
+	assert.Equal(t, len(scheduler.pendingAllocEvents), 2, "expected 2 events on pendingAllocEvents")
+	assert.Equal(t, len(scheduler.pendingInfraEvents), 0, "expected 0 events on pendingInfraEvents")
+	assert.Equal(t, len(scheduler.pendingNodeEvents), 0, "expected 0 events on pendingNodeEvents")
+
+	infraCases := []interface{}{
+		&rmevent.RMRegistrationEvent{Channel: make(chan *rmevent.Result, 1)},
+		&rmevent.RMConfigUpdateEvent{Channel: make(chan *rmevent.Result, 1)},
+		&rmevent.RMPartitionsRemoveEvent{Channel: make(chan *rmevent.Result, 1)},
+	}
+	for _, ev := range infraCases {
+		scheduler.HandleEvent(ev)
+	}
+	assert.Equal(t, len(scheduler.pendingAllocEvents), 2, "alloc channel should remain unchanged")
+	assert.Equal(t, len(scheduler.pendingInfraEvents), 3, "expected 3 events on pendingInfraEvents")
+
+	nodeCase := &rmevent.RMUpdateNodeEvent{Request: &si.NodeRequest{}}
+	scheduler.HandleEvent(nodeCase)
+	assert.Equal(t, len(scheduler.pendingAllocEvents), 2, "alloc channel should remain unchanged")
+	assert.Equal(t, len(scheduler.pendingInfraEvents), 3, "infra channel should remain unchanged")
+	assert.Equal(t, len(scheduler.pendingNodeEvents), 1, "expected 1 event on pendingNodeEvents")
+}
+
+// TestHandleAllocEventGoroutine verifies that the handleAllocEvent goroutine drains
+// pendingAllocEvents and calls registerActivity and stops when signaled.
+func TestHandleAllocEventGoroutine(t *testing.T) {
+	scheduler := NewScheduler()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		scheduler.handleAllocEvent()
+	}()
+
+	// send an allocation update event; an empty request processes cleanly
+	scheduler.pendingAllocEvents <- &rmevent.RMUpdateAllocationEvent{
+		Request: &si.AllocationRequest{},
+	}
+
+	// wait for activity signal which proves the event was dequeued and processed
+	select {
+	case <-scheduler.activityPending:
+		// success
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for activity from handleAllocEvent")
+	}
+
+	close(scheduler.stop)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handleAllocEvent goroutine did not stop")
+	}
+}
+
+// TestHandleInfraEventGoroutine verifies that the handleInfraEvent goroutine drains
+// pendingInfraEvents and calls registerActivity and stops when signaled.
+func TestHandleInfraEventGoroutine(t *testing.T) {
+	scheduler := NewScheduler()
+
+	resultCh := make(chan *rmevent.Result, 1)
+	scheduler.pendingInfraEvents <- &rmevent.RMRegistrationEvent{
+		Registration: &si.RegisterResourceManagerRequest{
+			RmID:        rmID,
+			PolicyGroup: "default-policy-group",
+			Version:     "0.0.2",
+		},
+		Channel: resultCh,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		scheduler.handleInfraEvent()
+	}()
+
+	// wait for activity signal which proves the event was processed
+	select {
+	case <-scheduler.activityPending:
+		// success
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for activity from handleInfraEvent")
+	}
+
+	close(scheduler.stop)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handleInfraEvent goroutine did not stop")
+	}
+}
+
+// TestHandleNodeEventGoroutine verifies that the handleNodeEvent goroutine drains
+// pendingNodeEvents and calls registerActivity.
+func TestHandleNodeEventGoroutine(t *testing.T) {
+	scheduler := NewScheduler()
+
+	scheduler.pendingNodeEvents <- &rmevent.RMUpdateNodeEvent{
+		Request: &si.NodeRequest{},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		scheduler.handleNodeEvent()
+	}()
+
+	// wait for activity signal which proves the event was processed
+	select {
+	case <-scheduler.activityPending:
+		// success
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for activity from handleNodeEvent")
+	}
+
+	close(scheduler.stop)
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("handleNodeEvent goroutine did not stop")
+	}
+}
+
+// TestNodeEventsNotBlockedByAllocEvents verifies that a full pendingAllocEvents channel
+// does not prevent node events from being enqueued or processed.
+func TestNodeEventsNotBlockedByAllocEvents(t *testing.T) {
+	scheduler := NewScheduler()
+	// fill the alloc channel to capacity so it cannot accept more events
+	for i := 0; i < cap(scheduler.pendingAllocEvents); i++ {
+		scheduler.pendingAllocEvents <- &rmevent.RMUpdateAllocationEvent{Request: &si.AllocationRequest{}}
+	}
+
+	// a node event must still be enqueued without blocking
+	nodeEv := &rmevent.RMUpdateNodeEvent{Request: &si.NodeRequest{}}
+	scheduler.HandleEvent(nodeEv)
+	assert.Equal(t, len(scheduler.pendingNodeEvents), 1, "node event should be queued even when alloc channel is full")
+}

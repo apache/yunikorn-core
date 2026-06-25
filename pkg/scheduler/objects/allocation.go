@@ -24,7 +24,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/apache/yunikorn-core/pkg/plugins"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -32,6 +31,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/locking"
 	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"

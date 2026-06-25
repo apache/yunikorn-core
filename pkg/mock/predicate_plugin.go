@@ -33,28 +33,53 @@ type PredicatePlugin struct {
 	nodes    map[string]int
 }
 
+func (f *PredicatePlugin) PredicatesPreFilter(args *si.PredicatesArgs) (map[string]struct{}, error) {
+	feasibleNodes, err := f.predicatesInternal(args)
+	return feasibleNodes, err
+}
+
 func (f *PredicatePlugin) Predicates(args *si.PredicatesArgs) error {
+	_, err := f.predicatesInternal(args)
+	return err
+}
+
+func (f *PredicatePlugin) predicatesInternal(args *si.PredicatesArgs) (map[string]struct{}, error) {
+	feasibleNodes := make(map[string]struct{})
 	if f.mustFail {
 		log.Log(log.Test).Info("fake predicate plugin fail: must fail set")
-		return fmt.Errorf("fake predicate plugin failed")
+		return feasibleNodes, fmt.Errorf("fake predicate plugin failed")
 	}
 	if fail, ok := f.nodes[args.NodeID]; ok {
-		if args.Allocate && fail >= 0 {
-			log.Log(log.Test).Info("fake predicate plugin node allocate fail",
-				zap.String("node", args.NodeID),
-				zap.Int("fail mode", fail))
-			return fmt.Errorf("fake predicate plugin failed")
-		}
-		if !args.Allocate && fail <= 0 {
-			log.Log(log.Test).Info("fake predicate plugin node reserve fail",
-				zap.String("node", args.NodeID),
-				zap.Int("fail mode", fail))
-			return fmt.Errorf("fake predicate plugin failed")
+		if args.Allocate {
+			if fail >= 0 {
+				log.Log(log.Test).Info("fake predicate plugin node allocate fail",
+					zap.String("node", args.NodeID),
+					zap.Int("fail mode", fail))
+				return feasibleNodes, fmt.Errorf("fake predicate plugin failed")
+			} else {
+				feasibleNodes[args.NodeID] = struct{}{}
+				return feasibleNodes, nil
+			}
+		} else {
+			if fail <= 0 {
+				log.Log(log.Test).Info("fake predicate plugin node reserve fail",
+					zap.String("node", args.NodeID),
+					zap.Int("fail mode", fail))
+				return feasibleNodes, fmt.Errorf("fake predicate plugin failed")
+			} else {
+				feasibleNodes[args.NodeID] = struct{}{}
+				return feasibleNodes, nil
+			}
 		}
 	}
 	log.Log(log.Test).Info("fake predicate plugin pass",
 		zap.String("node", args.NodeID))
-	return nil
+	for k, v := range f.nodes {
+		if v > 0 {
+			feasibleNodes[k] = struct{}{}
+		}
+	}
+	return feasibleNodes, nil
 }
 
 // NewPredicatePlugin returns a mock that can either always fail or fail based on the node that is checked.

@@ -1595,15 +1595,15 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	reserved := sa.reservations[allocKey]
 	var allocResult *AllocationResult
 	var predicateErrors map[string]int
+	var podPredicateErrors map[string]int
 	tryNodeCycleStart := time.Now()
 
 	// run predicates for this pod before in hand and fetch feasible nodes
 	feasibleNodes, err := ask.preAllocateConditions(true)
 	if err != nil {
-		preErrors := make(map[string]int, 1)
-		preErrors[err.Error()]++
-		ask.SendPredicatesFailedEvent(preErrors)
-		return nil
+		podPredicateErrors = make(map[string]int, 1)
+		podPredicateErrors[err.Error()]++
+		ask.SendPredicatesFailedEvent(podPredicateErrors)
 	}
 
 	iterator.ForEachNode(func(node *Node) bool {
@@ -1619,50 +1619,55 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 			return true
 		}
 
-		// Is this node suitable to run the pod?
-		if len(feasibleNodes) > 0 {
-			if _, ok := feasibleNodes[node.NodeID]; !ok {
-				log.Log(log.SchedApplication).Debug("skipping node as it is not feasible to run the pod",
-					zap.String("allocationKey", allocKey),
-					zap.String("node", node.NodeID))
-				return true
-			}
-		}
-		tryNodeStart := time.Now()
-		result, err := sa.tryNode(node, ask)
-		if err != nil {
-			if predicateErrors == nil {
-				predicateErrors = make(map[string]int)
-			}
-			predicateErrors[err.Error()]++
-		}
-		// allocation worked so return
-		if result != nil {
-			metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
-			// check if the alloc had a reservation: if it has set the resultType and return
-			if reserved != nil {
-				if reserved.nodeID != node.NodeID {
-					// we have a different node reserved for this alloc
-					log.Log(log.SchedApplication).Debug("allocate picking reserved alloc during non reserved allocate",
-						zap.String("appID", sa.ApplicationID),
-						zap.String("reserved nodeID", reserved.nodeID),
-						zap.String("allocationKey", allocKey))
-					result.ReservedNodeID = reserved.nodeID
-				} else {
-					// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
-					log.Log(log.SchedApplication).Debug("allocate found reserved alloc during non reserved allocate",
-						zap.String("appID", sa.ApplicationID),
-						zap.String("nodeID", node.NodeID),
-						zap.String("allocationKey", allocKey))
+		// Is there any pod predicate errors? No node would be picked up for allocation in case of any errors
+		// and better to get into process of picking up a node for reservation right away
+		if len(podPredicateErrors) == 0 {
+			// Is this node suitable to run the pod?
+			if len(feasibleNodes) > 0 {
+				if _, ok := feasibleNodes[node.NodeID]; !ok {
+					log.Log(log.SchedApplication).Debug("skipping node as it is not feasible to run the pod",
+						zap.String("allocationKey", allocKey),
+						zap.String("node", node.NodeID))
+					return true
 				}
-				result.ResultType = AllocatedReserved
+			}
+			tryNodeStart := time.Now()
+			result, err := sa.tryNode(node, ask)
+			if err != nil {
+				if predicateErrors == nil {
+					predicateErrors = make(map[string]int)
+				}
+				predicateErrors[err.Error()]++
+			}
+			// allocation worked so return
+			if result != nil {
+				metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
+				// check if the alloc had a reservation: if it has set the resultType and return
+				if reserved != nil {
+					if reserved.nodeID != node.NodeID {
+						// we have a different node reserved for this alloc
+						log.Log(log.SchedApplication).Debug("allocate picking reserved alloc during non reserved allocate",
+							zap.String("appID", sa.ApplicationID),
+							zap.String("reserved nodeID", reserved.nodeID),
+							zap.String("allocationKey", allocKey))
+						result.ReservedNodeID = reserved.nodeID
+					} else {
+						// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
+						log.Log(log.SchedApplication).Debug("allocate found reserved alloc during non reserved allocate",
+							zap.String("appID", sa.ApplicationID),
+							zap.String("nodeID", node.NodeID),
+							zap.String("allocationKey", allocKey))
+					}
+					result.ResultType = AllocatedReserved
+					allocResult = result
+					return false
+				}
+				// nothing reserved just return this as a normal alloc
 				allocResult = result
 				return false
 			}
-			// nothing reserved just return this as a normal alloc
-			allocResult = result
-			return false
 		}
+
 		// nothing allocated should we look at a reservation?
 		askAge := time.Since(ask.GetCreateTime())
 		if reserved == nil && askAge > reservationDelay {

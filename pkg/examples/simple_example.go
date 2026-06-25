@@ -38,10 +38,6 @@ type exampleRMCallback struct {
 	locking.RWMutex
 }
 
-func (m *exampleRMCallback) PredicatesPreFilter(args *si.PredicatesArgs) (map[string]struct{}, error) {
-	panic("implement me")
-}
-
 // nolint:unused
 func (m *exampleRMCallback) UpdateAllocation(response *si.AllocationResponse) error {
 	m.Lock()

@@ -53,6 +53,10 @@ func (f *RMPluginImplemented) Predicates(_ *si.PredicatesArgs) error {
 	return nil
 }
 
+func (f *RMPluginImplemented) PredicatesPreFilter(_ *si.PredicatesArgs) (map[string]struct{}, error) {
+	return map[string]struct{}{}, nil
+}
+
 func (f *RMPluginImplemented) PreemptionPredicates(_ *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
 	return nil
 }

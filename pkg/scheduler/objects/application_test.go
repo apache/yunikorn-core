@@ -3427,7 +3427,7 @@ func TestPredicateFailedEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
 	assert.Equal(t, "app-1", event.ReferenceID)
 	assert.Equal(t, "alloc-0", event.ObjectID)
-	assert.Equal(t, "Unschedulable request 'alloc-0': fake predicate plugin failed (2x); ", event.Message)
+	assert.Equal(t, "Unschedulable request 'alloc-0': fake predicate plugin failed (1x); ", event.Message)
 }
 
 func TestRequiredNodePreemption(t *testing.T) {
@@ -3899,7 +3899,7 @@ func TestTryPlaceHolderAllocateDifferentNodes(t *testing.T) {
 	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
 
 	// predicate check fails on node1 and passes on node2
-	mockPlugin := mockCommon.NewPredicatePlugin(false, map[string]int{nodeID1: 0})
+	mockPlugin := mockCommon.NewPredicatePlugin(false, map[string]int{nodeID1: 0, nodeID2: -1})
 	plugins.RegisterSchedulerPlugin(mockPlugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -3958,13 +3958,15 @@ func TestTryNodesNoReserve(t *testing.T) {
 	// case 4: node fails predicate
 	mockPlugin := mockCommon.NewPredicatePlugin(false, map[string]int{nodeID4: 1})
 	plugins.RegisterSchedulerPlugin(mockPlugin)
-	defer plugins.UnregisterSchedulerPlugins()
 	node4 := newNode(nodeID4, map[string]resources.Quantity{"first": 5})
 	iterator = getNodeIteratorFn(node4)
 	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
 	assert.Assert(t, result == nil, "result should be nil since node4 fails predicate")
+	plugins.UnregisterSchedulerPlugins()
 
 	// case 5: success
+	mockPlugin = mockCommon.NewPredicatePlugin(false, map[string]int{nodeID5: -1})
+	plugins.RegisterSchedulerPlugin(mockPlugin)
 	node5 := newNode(nodeID5, map[string]resources.Quantity{"first": 5})
 	iterator = getNodeIteratorFn(node5)
 	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
@@ -3972,6 +3974,7 @@ func TestTryNodesNoReserve(t *testing.T) {
 	assert.Equal(t, node5.NodeID, result.NodeID, "result should be on node5")
 	assert.Equal(t, result.ResultType, AllocatedReserved, "result type should be AllocatedReserved")
 	assert.Equal(t, result.ReservedNodeID, node1.NodeID, "reserved node should be node1")
+	plugins.UnregisterSchedulerPlugins()
 }
 
 func TestAppSubmissionTime(t *testing.T) {

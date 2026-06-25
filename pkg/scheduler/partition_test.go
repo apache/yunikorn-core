@@ -1803,6 +1803,7 @@ func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 
 	// the second one should be reserved as the 2nd node is not scheduling
 	result = partition.tryAllocate()
+	println(result.String())
 	if result != nil {
 		t.Fatal("2nd allocation did not return the correct allocation")
 	}

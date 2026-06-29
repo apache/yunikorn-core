@@ -42,8 +42,11 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
+
+const allocationRollbackTag = siCommon.DomainYuniKornInternal + "allocation-rollback"
 
 type PartitionContext struct {
 	RmID string // the RM the partition belongs to
@@ -1336,7 +1339,68 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 		return false, true, nil
 	}
 
+	if existing.IsAllocated() && !allocated && isAllocationRollbackRequest(alloc) {
+		log.Log(log.SchedPartition).Info("handling allocation rollback",
+			zap.String("partitionName", pc.Name),
+			zap.String("appID", applicationID),
+			zap.String("allocationKey", allocationKey),
+			zap.String("nodeID", existing.GetNodeID()))
+
+		if existingNode.RemoveAllocation(allocationKey) == nil {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return false, false, fmt.Errorf("failed to remove allocation %s from node %s", allocationKey, existing.GetNodeID())
+		}
+
+		removed := app.RemoveAllocation(allocationKey, si.TerminationType_STOPPED_BY_RM)
+		if removed == nil {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return false, false, fmt.Errorf("failed to remove allocation %s from application %s", allocationKey, applicationID)
+		}
+
+		if err := queue.DecAllocatedResource(existing.GetAllocatedResource()); err != nil {
+			log.Log(log.SchedPartition).Warn("failed to release resources from queue during rollback",
+				zap.String("appID", applicationID),
+				zap.String("allocationKey", allocationKey),
+				zap.Error(err))
+		}
+		metrics.GetQueueMetrics(queue.GetQueuePath()).IncReleasedContainer()
+
+		if _, err := app.DeallocateAsk(allocationKey); err != nil {
+			metrics.GetSchedulerMetrics().IncSchedulingError()
+			return false, false, fmt.Errorf("failed to deallocate ask %s on app %s during rollback: %w", allocationKey, applicationID, err)
+		}
+
+		if app.IsCompleting() {
+			if err := app.HandleApplicationEvent(objects.RunApplication); err != nil {
+				log.Log(log.SchedPartition).Warn("failed to transition application back to running after rollback",
+					zap.String("appID", applicationID),
+					zap.String("allocationKey", allocationKey),
+					zap.Error(err))
+			}
+		}
+
+		existing.SetNodeID("")
+		existing.SetBindTime(time.Time{})
+		pc.updateAllocationCount(-1)
+		if existing.IsPlaceholder() {
+			pc.decPhAllocationCount(1)
+		}
+
+		log.Log(log.SchedPartition).Info("allocation rollback completed",
+			zap.String("partitionName", pc.Name),
+			zap.String("appID", applicationID),
+			zap.String("allocationKey", allocationKey))
+		return false, false, nil
+	}
+
 	return false, false, nil
+}
+
+func isAllocationRollbackRequest(alloc *objects.Allocation) bool {
+	if alloc == nil {
+		return false
+	}
+	return strings.EqualFold(alloc.GetTag(allocationRollbackTag), "true")
 }
 
 func (pc *PartitionContext) handleForeignAllocation(allocationKey, applicationID, nodeID string, node *objects.Node, alloc *objects.Allocation) (requestCreated bool, allocCreated bool, err error) {

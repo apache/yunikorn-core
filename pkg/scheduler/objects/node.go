@@ -519,7 +519,7 @@ func (sn *Node) preConditions(ask *Allocation, allocate bool) error {
 	allocationKey := ask.GetAllocationKey()
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
 		// checking predicates
-		if _, err := plugin.PredicatesPreFilter(&si.PredicatesArgs{
+		if err := plugin.Predicates(&si.PredicatesArgs{
 			AllocationKey: allocationKey,
 			NodeID:        sn.NodeID,
 			Allocate:      allocate,

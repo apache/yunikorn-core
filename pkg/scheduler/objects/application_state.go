@@ -187,7 +187,9 @@ func callbacks() fsm.Callbacks {
 		},
 		fmt.Sprintf("enter_%s", Rejected.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
-			metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsRejected()
+			qm := metrics.GetQueueMetrics(app.queuePath)
+			qm.IncQueueApplicationsRejected()
+			qm.IncQueueApplicationsRejectedTotal()
 			metrics.GetSchedulerMetrics().IncTotalApplicationsRejected()
 			app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 			app.finishedTime = time.Now()
@@ -248,7 +250,9 @@ func callbacks() fsm.Callbacks {
 		fmt.Sprintf("enter_%s", Completed.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
 			metrics.GetSchedulerMetrics().IncTotalApplicationsCompleted()
-			metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsCompleted()
+			qm := metrics.GetQueueMetrics(app.queuePath)
+			qm.IncQueueApplicationsCompleted()
+			qm.IncQueueApplicationsCompletedTotal()
 			app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 			app.executeTerminatedCallback()
 			app.clearPlaceholderTimer()
@@ -257,7 +261,9 @@ func callbacks() fsm.Callbacks {
 		fmt.Sprintf("enter_%s", Failed.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
 			metrics.GetSchedulerMetrics().IncTotalApplicationsFailed()
-			metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsFailed()
+			qm := metrics.GetQueueMetrics(app.queuePath)
+			qm.IncQueueApplicationsFailed()
+			qm.IncQueueApplicationsFailedTotal()
 			app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 			app.executeTerminatedCallback()
 			app.cleanupAsks()

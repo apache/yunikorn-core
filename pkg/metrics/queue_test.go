@@ -352,5 +352,29 @@ func unregisterQueueMetrics() {
 	prometheus.Unregister(qm.appMetrics)
 	prometheus.Unregister(qm.containerMetrics)
 	prometheus.Unregister(qm.resourceMetricsLabel)
+	prometheus.Unregister(qm.appTerminalMetrics)
 	qm.knownResourceTypes = make(map[string]struct{})
+}
+
+func TestApplicationsTerminalTotal(t *testing.T) {
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
+
+	qm.IncQueueApplicationsCompletedTotal()
+	qm.IncQueueApplicationsCompletedTotal()
+	qm.IncQueueApplicationsFailedTotal()
+	qm.IncQueueApplicationsRejectedTotal()
+
+	metricDto := &dto.Metric{}
+	err := qm.appTerminalMetrics.WithLabelValues(AppCompleted).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, int(*metricDto.Counter.Value))
+
+	err = qm.appTerminalMetrics.WithLabelValues(AppFailed).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, 1, int(*metricDto.Counter.Value))
+
+	err = qm.appTerminalMetrics.WithLabelValues(AppRejected).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, 1, int(*metricDto.Counter.Value))
 }

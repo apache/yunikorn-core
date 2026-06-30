@@ -71,6 +71,9 @@ var ldapResolver = configs.UserGroupResolver{
 	Type: "ldap",
 }
 
+// UserGroupResolver Config for the LDAP resolver
+var defResolver = configs.UserGroupResolver{}
+
 func TestGetUserGroupCache(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -92,6 +95,10 @@ func TestGetUserGroupCache(t *testing.T) {
 			name:     "LdapResolver",
 			resolver: ldapResolver,
 		},
+		{
+			name:     "DefaultResolver",
+			resolver: defResolver,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -100,6 +107,11 @@ func TestGetUserGroupCache(t *testing.T) {
 			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			assert.Assert(t, testCache != nil, "Cache create failed")
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
+			currentType := tc.resolver.Type
+			if tc.resolver.Type == "unknown" {
+				currentType = defType
+			}
+			assert.Equal(t, testCache.GetResolverType(), currentType, "Cache type is not correct")
 
 			testCache.Stop()
 			assert.Assert(t, instance == nil, "instance should be nil")

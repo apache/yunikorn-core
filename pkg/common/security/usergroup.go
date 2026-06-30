@@ -45,10 +45,11 @@ var instance *UserGroupCache // The instance of the cache
 var once = &sync.Once{}      // Make sure we can only create the cache once
 var stopped atomic.Bool      // whether UserGroupCache is stopped (needed for multiple partitions)
 
-// Cache for the user entries.
+// UserGroupCache for the user entries.
 type UserGroupCache struct {
 	lock     locking.RWMutex
 	interval time.Duration
+	myType string
 	ugs      map[string]*UserGroup
 	// methods that allow mocking of the class or extending to use non OS solutions
 	lookup        func(userName string) (*user.User, error)
@@ -57,7 +58,7 @@ type UserGroupCache struct {
 	stop          chan struct{}
 }
 
-// The structure of the entry in the cache.
+// UserGroup structure of the entry in the cache.
 type UserGroup struct {
 	User     string
 	Groups   []string
@@ -66,34 +67,37 @@ type UserGroup struct {
 }
 
 const (
-	Default = ""
-	Ldap    = "ldap"
-	Test    = "test"
-	Os      = "os"
+	defType  = ""
+	ldapType = "ldap"
+	testType = "test"
+	osType   = "os"
 )
 
-// Get the resolver for the user and group info.
+// GetUserGroupCache returns the resolver for the user and group info.
 // Current setup allows three resolvers:
 // * NO resolver: default, no user or group resolution just return the info (k8s use case)
 // * OS resolver: uses the OS libraries to resolve user and group memberships
 // * Test resolver: fake resolution for testing
 // * Ldap resolver: uses the LDAP protocol to resolve user and group memberships
 func GetUserGroupCache(ugr configs.UserGroupResolver, ldapConfigReader ConfigReader, ldapAccess LdapAccess) *UserGroupCache {
-	resolver := ugr.Type
 	once.Do(func() {
-		switch resolver {
-		case Test:
+		switch ugr.Type {
+		case testType:
 			log.Log(log.Security).Info("creating test user group resolver")
 			instance = GetUserGroupCacheTest()
-		case Os:
+			instance.myType = testType
+		case osType:
 			log.Log(log.Security).Info("creating OS user group resolver")
 			instance = GetUserGroupCacheOS()
-		case Ldap:
+			instance.myType = osType
+		case ldapType:
 			log.Log(log.Security).Info("creating LDAP user group resolver")
 			instance = GetUserGroupCacheLdap(ldapConfigReader, ldapAccess)
+			instance.myType = ldapType
 		default:
 			log.Log(log.Security).Info("creating UserGroupCache without resolver")
 			instance = GetUserGroupNoResolve()
+			instance.myType = defType // do not use the type from the config as it might not be clean.
 		}
 		instance.ugs = make(map[string]*UserGroup)
 		log.Log(log.Security).Info("starting UserGroupCache cleaner",
@@ -104,7 +108,14 @@ func GetUserGroupCache(ugr configs.UserGroupResolver, ldapConfigReader ConfigRea
 	return instance
 }
 
-// Run the cleanup in a separate routine
+// GetResolverType returns the type of resolver configured
+func (c *UserGroupCache) GetResolverType() string {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return c.myType
+}
+
+// run the cleanup in a separate routine
 func (c *UserGroupCache) run() {
 	log.Log(log.Security).Info("Starting user/group cache cleaner")
 	for {
@@ -120,7 +131,7 @@ func (c *UserGroupCache) run() {
 	}
 }
 
-// Do the real work for the cache cleanup
+// cleanUpCache clears expired entries from the cache.
 func (c *UserGroupCache) cleanUpCache() {
 	oldest := time.Now().Unix() - poscache
 	oldestFailed := time.Now().Unix() - negcache
@@ -136,7 +147,7 @@ func (c *UserGroupCache) cleanUpCache() {
 	}
 }
 
-// reset the cached content, test use only
+// resetCache clears the cached content, test use only
 func (c *UserGroupCache) resetCache() {
 	log.Log(log.Security).Debug("UserGroupCache reset")
 	instance.lock.Lock()
@@ -149,8 +160,10 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 	if ugi == nil || ugi.User == "" {
 		if force {
 			// app creation is forced, so we need to synthesize a user / group
-			ugi.User = common.AnonymousUser
-			ugi.Groups = []string{common.AnonymousGroup}
+			ugi = &si.UserGroupInformation{
+				User:   common.AnonymousUser,
+				Groups: []string{common.AnonymousGroup},
+			}
 		} else {
 			return UserGroup{}, fmt.Errorf("empty user cannot resolve")
 		}
@@ -179,7 +192,7 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 	return newUG, nil
 }
 
-// Get the user group information. An error will still return a UserGroup.
+// GetUserGroup get the user group information for a singe user. An error will still return a UserGroup.
 // The Failed flag in the object will be set to true for any failures.
 // The information is cached, negatively and positively.
 func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
@@ -236,6 +249,7 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 	return *ug, err
 }
 
+// Stop the currently running cache cleaner and reset the resolver.
 func (c *UserGroupCache) Stop() {
 	// make sure that in case of multiple partitions, we call Stop() only once (the instance is shared)
 	// see ClusterContext.Stop()
@@ -254,7 +268,7 @@ func (c *UserGroupCache) Stop() {
 	log.Log(log.Security).Info("UserGroupCache already stopped")
 }
 
-// Resolve the groups for the user if the user exists
+// resolveGroups resolves the groups for the user if the user exists and updates the cache.
 func (ug *UserGroup) resolveGroups(osUser *user.User, c *UserGroupCache) error {
 	// resolve the primary group and add it first
 	groupName, err := c.lookupGroupID(osUser.Gid)

@@ -108,7 +108,14 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 	return pc, nil
 }
 
-// Initialise the partition.
+// GetUserGroupResolverType returns the user group resolver set for the partition.
+func (pc *PartitionContext) GetUserGroupResolverType() string {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.userGroupCache.GetResolverType()
+}
+
+// initialPartitionFromConfig initialises a new partition.
 // If the silence flag is set to true, the function will not log queue creation or node sorting policy, update limit settings, or send a queue event.
 func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionConfig, silence bool) error {
 	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {

@@ -1350,7 +1350,7 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (request
 			metrics.GetSchedulerMetrics().IncSchedulingError()
 			return false, false, fmt.Errorf("failed to remove allocation %s from node %s", allocationKey, existing.GetNodeID())
 		}
-
+		// this only removes allocation from the allocations map and the allocation is still present in requests map
 		removed := app.RemoveAllocation(allocationKey, si.TerminationType_STOPPED_BY_RM)
 		if removed == nil {
 			metrics.GetSchedulerMetrics().IncSchedulingError()

@@ -49,7 +49,7 @@ var stopped atomic.Bool      // whether UserGroupCache is stopped (needed for mu
 type UserGroupCache struct {
 	lock     locking.RWMutex
 	interval time.Duration
-	myType string
+	myType   string
 	ugs      map[string]*UserGroup
 	// methods that allow mocking of the class or extending to use non OS solutions
 	lookup        func(userName string) (*user.User, error)

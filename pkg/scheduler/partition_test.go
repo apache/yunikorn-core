@@ -122,6 +122,13 @@ func TestNewPartition(t *testing.T) {
 	if partition.root.QueuePath != "root" {
 		t.Fatal("partition root queue not set as expected")
 	}
+	assert.Equal(t, partition.GetUserGroupResolverType(), "", "default user group resolver type should be ''")
+	// stop and clear the resolver to allow a new one to be set
+	partition.userGroupCache.Stop()
+	conf.UserGroupResolver.Type = "os"
+	partition, err = newPartitionContext(conf, "test", &ClusterContext{}, false)
+	assert.NilError(t, err, "partition create should not have failed with error")
+	assert.Equal(t, partition.GetUserGroupResolverType(), "os", "expected OS resolver to be set based on config")
 }
 
 func TestNewWithPlacement(t *testing.T) {
@@ -5271,4 +5278,28 @@ func TestApplicationBackoff(t *testing.T) {
 	deadline := app.GetBackoffDeadline()
 	assert.Assert(t, !deadline.IsZero())
 	assert.Assert(t, deadline.After(beforeAlloc))
+}
+
+func TestUpdateResolver(t *testing.T) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues:    nil,
+			},
+		},
+		UserGroupResolver: configs.UserGroupResolver{
+			Type: "test",
+		},
+	}
+	partition, err := newPartitionContext(conf, "resolver", &ClusterContext{}, false)
+	assert.NilError(t, err, "partition create failed")
+	assert.Equal(t, partition.GetUserGroupResolverType(), "test", "expected test resolver to be set based on config")
+	conf.UserGroupResolver.Type = "ldap"
+	err = partition.updatePartitionDetails(conf)
+	assert.NilError(t, err, "unable to update partition config")
+	assert.Equal(t, partition.GetUserGroupResolverType(), "test", "resolver cannot be updated on running partition")
 }

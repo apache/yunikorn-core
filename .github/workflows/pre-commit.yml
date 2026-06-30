@@ -49,7 +49,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        k8s: [v1.34.0]
+        k8s: [v1.36.1]
     steps:
       - name: Checkout yunikorn-k8shim source code
         uses: actions/checkout@v6

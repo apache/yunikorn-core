@@ -19,6 +19,8 @@
 package metrics
 
 import (
+	"errors"
+
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
@@ -120,8 +122,12 @@ func InitQueueMetrics(name string) *QueueMetrics {
 	// registry (from a previous queue lifecycle), reuse the existing one so
 	// accumulated counts are preserved.
 	if err := prometheus.Register(q.appTerminalMetrics); err != nil {
-		if are, ok := err.(prometheus.AlreadyRegisteredError); ok {
-			if existing, ok := are.ExistingCollector.(*prometheus.CounterVec); ok {
+		are := &prometheus.AlreadyRegisteredError{}
+		if errors.As(err, are) {
+			existing, ok := are.ExistingCollector.(*prometheus.CounterVec)
+			if !ok {
+				log.Log(log.Metrics).Warn("existing terminal metrics collector has unexpected type", zap.Error(err))
+			} else {
 				q.appTerminalMetrics = existing
 			}
 		} else {

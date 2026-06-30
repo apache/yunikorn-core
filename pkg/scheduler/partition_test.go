@@ -3729,6 +3729,10 @@ func TestUpdateAllocationRollback(t *testing.T) {
 	assert.NilError(t, err, "failed to add alloc to app")
 	assert.Check(t, allocCreated, "alloc should have been created")
 	assert.Equal(t, partition.GetTotalAllocationCount(), 1)
+	queue := partition.GetQueue("root.leaf")
+	assert.Assert(t, queue != nil)
+	assert.Assert(t, resources.Equals(queue.GetAllocatedResource(), res), "queue allocated resources should match allocation")
+	assertLimits(t, getTestUserGroup(), res)
 
 	rollback := si.Allocation{
 		AllocationKey:    alloc.AllocationKey,
@@ -3755,7 +3759,17 @@ func TestUpdateAllocationRollback(t *testing.T) {
 	node := partition.GetNode(nodeID1)
 	assert.Assert(t, node != nil)
 	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "node allocated resources should be zero after rollback")
+	assert.Assert(t, resources.IsZero(queue.GetAllocatedResource()), "queue allocated resources should be zero after rollback")
+	assertLimits(t, getTestUserGroup(), nil)
 	assert.Equal(t, partition.GetTotalAllocationCount(), 0)
+
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	assert.NilError(t, err, "failed to re-add allocation after rollback")
+	assert.Check(t, allocCreated, "allocation should be created after rollback")
+	assert.Assert(t, resources.Equals(queue.GetAllocatedResource(), res), "queue allocated resources should be restored after re-allocation")
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), res), "node allocated resources should be restored after re-allocation")
+	assert.Equal(t, len(app.GetAllAllocations()), 1)
+	assert.Equal(t, partition.GetTotalAllocationCount(), 1)
 }
 
 func TestUpdateAllocationEmptyNodeWithoutRollbackTagIsNoop(t *testing.T) {

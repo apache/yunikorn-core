@@ -353,6 +353,36 @@ func TestContext_OnAllocationNotification(t *testing.T) {
 	assert.Assert(t, lastAllocEvent != nil)
 	assert.Equal(t, lastAllocEvent.Allocations[0].AllocationKey, allocKey)
 
+	// rollback update should not trigger new-allocation notifications
+	lastAllocEvent = nil
+	rollbackReq := &si.AllocationRequest{
+		Allocations: []*si.Allocation{
+			{
+				AllocationKey: allocKey,
+				ResourcePerAlloc: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"first": {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+				NodeID:        "",
+				PartitionName: pName,
+				AllocationTags: map[string]string{
+					allocationRollbackTag: "true",
+				},
+			},
+		},
+		RmID: "rm:123",
+	}
+	context.handleRMUpdateAllocationEvent(&rmevent.RMUpdateAllocationEvent{Request: rollbackReq})
+	assert.Assert(t, lastAllocEvent == nil, "rollback update unexpectedly generated new allocation event")
+	app := partition.GetApplication(appID1)
+	assert.Assert(t, app != nil)
+	assert.Equal(t, 0, len(app.GetAllAllocations()))
+	ask := app.GetAllocationAsk(allocKey)
+	assert.Assert(t, ask != nil)
+	assert.Assert(t, !ask.IsAllocated(), "ask should be pending after rollback")
+
 	// add a non-Yunikorn allocation
 	lastAllocEvent = nil
 	nonYkAllocReq := &si.AllocationRequest{

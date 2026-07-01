@@ -48,6 +48,8 @@ func createPartitionContext(t *testing.T) *PartitionContext {
 
 func TestStopPartitionManager(t *testing.T) {
 	p := createPartitionContext(t)
+	// stop the resolver
+	defer p.userGroupCache.Stop()
 
 	p.partitionManager.Stop()
 
@@ -60,6 +62,8 @@ func TestStopPartitionManager(t *testing.T) {
 
 func TestCleanQueues(t *testing.T) {
 	p := createPartitionContext(t)
+	// stop the resolver
+	defer p.userGroupCache.Stop()
 
 	root := p.GetQueue("root")
 	assert.Assert(t, root != nil)
@@ -77,6 +81,8 @@ func TestCleanQueues(t *testing.T) {
 
 func TestRemoveAll(t *testing.T) {
 	p := createPartitionContext(t)
+	// stop the resolver
+	defer p.userGroupCache.Stop()
 
 	_, err := p.createQueue("root.test", security.UserGroup{})
 	assert.NilError(t, err)

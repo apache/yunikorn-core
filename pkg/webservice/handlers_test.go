@@ -117,13 +117,17 @@ partitions:
 const configMultiPartitions = `
 partitions: 
   - name: gpu
+    usergroupresolver:
+      type: test
     preemption:
       enabled: false
     queues: 
     - name: root
   - name: default
+    usergroupresolver:
+      type: ""
     nodesortpolicy:
-        type: fair
+      type: fair
     queues: 
     - name: root
       queues: 
@@ -845,7 +849,7 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
+	assert.NilError(t, err, "partition handler request failed")
 
 	resp := &MockResponseWriter{}
 	var partitionInfo []*dao.PartitionInfo
@@ -913,7 +917,7 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	assert.Check(t, allocCreated)
 
 	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
+	assert.NilError(t, err, "partition handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitions(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
@@ -952,6 +956,10 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
 	assert.Equal(t, cs["gpu"].Applications["total"], 0)
 	assert.Assert(t, !cs["gpu"].PreemptionEnabled, "preemption should be disabled on gpu")
+
+	// only one resolver for the system, gpu is defined first so we get the one defined there: test
+	assert.Equal(t, cs["gpu"].UserGroupResolver.Type, "test", "resolver should be set to test")
+	assert.Equal(t, cs["default"].UserGroupResolver.Type, "test", "resolver should be set to test")
 }
 
 func TestMetricsNotEmpty(t *testing.T) {

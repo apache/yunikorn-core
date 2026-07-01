@@ -125,7 +125,7 @@ partitions:
     - name: root
   - name: default
     usergroupresolver:
-      type: "test"
+      type: ""
     nodesortpolicy:
       type: fair
     queues: 

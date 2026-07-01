@@ -41,6 +41,8 @@ type AllocationResult struct {
 	NodeID                string
 	ReservedNodeID        string
 	CancelledReservations int
+	NodesTried            int64
+	ApplicationsTried     int64
 }
 
 func (ar *AllocationResult) String() string {

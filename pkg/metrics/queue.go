@@ -19,6 +19,8 @@
 package metrics
 
 import (
+	"errors"
+
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"go.uber.org/zap"
@@ -54,6 +56,7 @@ const (
 // QueueMetrics to declare queue metrics
 type QueueMetrics struct {
 	appMetrics           *prometheus.GaugeVec
+	appTerminalMetrics   *prometheus.CounterVec
 	containerMetrics     *prometheus.CounterVec
 	resourceMetricsLabel *prometheus.GaugeVec
 	// Track known resource types
@@ -91,6 +94,14 @@ func InitQueueMetrics(name string) *QueueMetrics {
 			Help:        "Queue resource metrics. State of the resource includes `guaranteed`, `max`, `allocated`, `pending`, `preempting`, `maxRunningApps`.",
 		}, []string{"state", "resource"})
 
+	q.appTerminalMetrics = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace:   Namespace,
+			Name:        "queue_app_total",
+			ConstLabels: prometheus.Labels{"queue": name},
+			Help:        "Total number of applications that reached a terminal state. State includes `completed`, `failed`, `rejected`.",
+		}, []string{"state"})
+
 	var queueMetricsList = []prometheus.Collector{
 		q.appMetrics,
 		q.containerMetrics,
@@ -107,6 +118,23 @@ func InitQueueMetrics(name string) *QueueMetrics {
 		}
 	}
 
+	// Register the terminal counter separately — if it already exists in the
+	// registry (from a previous queue lifecycle), reuse the existing one so
+	// accumulated counts are preserved.
+	if err := prometheus.Register(q.appTerminalMetrics); err != nil {
+		are := &prometheus.AlreadyRegisteredError{}
+		if errors.As(err, are) {
+			existing, ok := are.ExistingCollector.(*prometheus.CounterVec)
+			if !ok {
+				log.Log(log.Metrics).Warn("existing terminal metrics collector has unexpected type", zap.Error(err))
+			} else {
+				q.appTerminalMetrics = existing
+			}
+		} else {
+			log.Log(log.Metrics).Warn("failed to register terminal metrics collector", zap.Error(err))
+		}
+	}
+
 	q.knownResourceTypes = make(map[string]struct{})
 	return q
 }
@@ -119,6 +147,8 @@ func (m *QueueMetrics) UnregisterMetrics() {
 	}
 
 	// Unregister the metrics
+	// appTerminalMetrics is intentionally excluded — it persists in the
+	// Prometheus registry so accumulated counts survive queue recreation.
 	for _, metric := range queueMetricsList {
 		prometheus.Unregister(metric)
 	}
@@ -329,4 +359,16 @@ func (m *QueueMetrics) SetQueuePreemptingResourceMetrics(resourceName string, va
 
 func (m *QueueMetrics) SetQueueMaxRunningAppsMetrics(value uint64) {
 	m.setQueueResource(QueueMaxRunningApps, "apps", float64(value))
+}
+
+func (m *QueueMetrics) IncQueueApplicationsCompletedTotal() {
+	m.appTerminalMetrics.WithLabelValues(AppCompleted).Inc()
+}
+
+func (m *QueueMetrics) IncQueueApplicationsFailedTotal() {
+	m.appTerminalMetrics.WithLabelValues(AppFailed).Inc()
+}
+
+func (m *QueueMetrics) IncQueueApplicationsRejectedTotal() {
+	m.appTerminalMetrics.WithLabelValues(AppRejected).Inc()
 }

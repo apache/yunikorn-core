@@ -352,5 +352,51 @@ func unregisterQueueMetrics() {
 	prometheus.Unregister(qm.appMetrics)
 	prometheus.Unregister(qm.containerMetrics)
 	prometheus.Unregister(qm.resourceMetricsLabel)
+	prometheus.Unregister(qm.appTerminalMetrics)
 	qm.knownResourceTypes = make(map[string]struct{})
+}
+
+func TestTerminalMetricsReuse(t *testing.T) {
+	// First registration
+	qm1 := InitQueueMetrics("root.reuse")
+	qm1.IncQueueApplicationsCompletedTotal()
+	qm1.IncQueueApplicationsCompletedTotal()
+
+	// Second registration — simulates queue recreation
+	// Should reuse the existing counter with accumulated values
+	qm2 := InitQueueMetrics("root.reuse")
+
+	metricDto := &dto.Metric{}
+	err := qm2.appTerminalMetrics.WithLabelValues(AppCompleted).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, int(*metricDto.Counter.Value))
+
+	// Cleanup
+	prometheus.Unregister(qm2.appMetrics)
+	prometheus.Unregister(qm2.containerMetrics)
+	prometheus.Unregister(qm2.resourceMetricsLabel)
+	prometheus.Unregister(qm2.appTerminalMetrics)
+}
+
+func TestApplicationsTerminalTotal(t *testing.T) {
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
+
+	qm.IncQueueApplicationsCompletedTotal()
+	qm.IncQueueApplicationsCompletedTotal()
+	qm.IncQueueApplicationsFailedTotal()
+	qm.IncQueueApplicationsRejectedTotal()
+
+	metricDto := &dto.Metric{}
+	err := qm.appTerminalMetrics.WithLabelValues(AppCompleted).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, 2, int(*metricDto.Counter.Value))
+
+	err = qm.appTerminalMetrics.WithLabelValues(AppFailed).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, 1, int(*metricDto.Counter.Value))
+
+	err = qm.appTerminalMetrics.WithLabelValues(AppRejected).Write(metricDto)
+	assert.NilError(t, err)
+	assert.Equal(t, 1, int(*metricDto.Counter.Value))
 }

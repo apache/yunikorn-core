@@ -719,7 +719,7 @@ func TestValidateSecretValue(t *testing.T) {
 		{"Valid bindPassword", common.LdapBindPassword, "password", false},
 		{"Valid insecure", common.LdapInsecure, "true", false},
 		{"Valid SSL", common.LdapSSL, "false", false},
-		{"Invalid key", "unknown", "value", true},
+		{"Invalid key", unknown, "value", true},
 	}
 
 	for _, tt := range tests {

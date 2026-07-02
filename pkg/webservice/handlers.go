@@ -963,6 +963,9 @@ func getPartitionInfoDAO(lists map[string]*scheduler.PartitionContext) []*dao.Pa
 			Type:            partitionContext.GetNodeSortingPolicyType().String(),
 			ResourceWeights: partitionContext.GetNodeSortingResourceWeights(),
 		}
+		partitionInfo.UserGroupResolver = dao.UserGroupResolver{
+			Type: partitionContext.GetUserGroupResolverType(),
+		}
 
 		partitionInfo.TotalNodes = partitionContext.GetTotalNodeCount()
 		appList := partitionContext.GetApplications()

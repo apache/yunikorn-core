@@ -94,6 +94,9 @@ func createTestContext(t *testing.T, partitionName string) *ClusterContext {
 
 func TestContext_UpdateNode(t *testing.T) {
 	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
+
 	n := &si.NodeInfo{
 		NodeID:              "test-1",
 		Action:              si.NodeInfo_UNKNOWN_ACTION_FROM_RM,
@@ -144,6 +147,8 @@ func TestContext_UpdateNode(t *testing.T) {
 
 func TestContext_AddNode(t *testing.T) {
 	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
 
 	n := &si.NodeInfo{
 		NodeID:              "test-1",
@@ -172,6 +177,8 @@ func TestContext_AddNode(t *testing.T) {
 
 func TestContext_AddNodeDrained(t *testing.T) {
 	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
 
 	draining, err := metrics.GetSchedulerMetrics().GetDrainingNodes()
 	assert.NilError(t, err, "failed to get draining node count")
@@ -211,6 +218,8 @@ func TestContext_AddNodeDrained(t *testing.T) {
 
 func TestContext_AddRMBuildInformation(t *testing.T) {
 	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
 
 	rmID1 := "myCluster1"
 	buildInfoMap1 := make(map[string]string)
@@ -254,6 +263,8 @@ func TestContext_ProcessNode(t *testing.T) {
 		}
 	}()
 	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
 
 	request := &si.NodeRequest{
 		Nodes: []*si.NodeInfo{
@@ -271,6 +282,8 @@ func TestContext_ProcessNode(t *testing.T) {
 func TestContextDrainingNodeMetrics(t *testing.T) {
 	metrics.GetSchedulerMetrics().Reset()
 	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
 
 	n := getNodeInfoForAddingNode()
 	err := context.addNode(n, true)
@@ -284,6 +297,8 @@ func TestContextDrainingNodeMetrics(t *testing.T) {
 func TestContextDrainingNodeBackToSchedulableMetrics(t *testing.T) {
 	metrics.GetSchedulerMetrics().Reset()
 	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
 
 	n := getNodeInfoForAddingNode()
 	err := context.addNode(n, true)
@@ -299,6 +314,9 @@ func TestContextDrainingNodeBackToSchedulableMetrics(t *testing.T) {
 
 func TestContext_OnAllocationNotification(t *testing.T) {
 	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
+
 	eventHandler := context.rmEventHandler.(*mockEventHandler) //nolint:errcheck
 	var lastAllocEvent *rmevent.RMNewAllocationsEvent
 	eventHandler.newAllocHandler = func(event *rmevent.RMNewAllocationsEvent) {

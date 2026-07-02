@@ -35,6 +35,7 @@ func TestInspectOutstandingRequests(t *testing.T) {
 	scheduler := NewScheduler()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "unable to create partition: %v", err)
+	defer partition.userGroupCache.Stop()
 	scheduler.clusterContext.partitions["test"] = partition
 
 	// two applications with no asks
@@ -114,6 +115,8 @@ func TestTriggerQuotaPreemption(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			scheduler := NewScheduler()
 			partition := createQuotaPreemptionQueuesNodes(t)
+			defer partition.userGroupCache.Stop()
+
 			// override the partition-level flag to match the test case
 			partition.quotaPreemptionEnabled = tc.quotaPreemptionEnabled
 			scheduler.clusterContext.partitions["test"] = partition

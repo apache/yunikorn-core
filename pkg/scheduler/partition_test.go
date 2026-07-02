@@ -3708,6 +3708,108 @@ func TestUpdateAllocation(t *testing.T) {
 	assert.Check(t, !allocCreated, "alloc should not have been created")
 }
 
+func TestUpdateAllocationRollback(t *testing.T) {
+	setupUGM()
+	partition := createQueuesNodes(t)
+
+	app := newApplication(appID1, "default", "root.leaf")
+	err := partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+	alloc := si.Allocation{
+		AllocationKey:    "ask-key-rollback",
+		ApplicationID:    appID1,
+		NodeID:           nodeID1,
+		ResourcePerAlloc: res.ToProto(),
+	}
+
+	_, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	assert.NilError(t, err, "failed to add alloc to app")
+	assert.Check(t, allocCreated, "alloc should have been created")
+	assert.Equal(t, partition.GetTotalAllocationCount(), 1)
+	queue := partition.GetQueue("root.leaf")
+	assert.Assert(t, queue != nil)
+	assert.Assert(t, resources.Equals(queue.GetAllocatedResource(), res), "queue allocated resources should match allocation")
+	assertLimits(t, getTestUserGroup(), res)
+
+	rollback := si.Allocation{
+		AllocationKey:    alloc.AllocationKey,
+		ApplicationID:    alloc.ApplicationID,
+		ResourcePerAlloc: alloc.ResourcePerAlloc,
+		AllocationTags: map[string]string{
+			allocationRollbackTag: "true",
+		},
+	}
+
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&rollback))
+	assert.NilError(t, err, "failed to rollback allocation")
+	assert.Check(t, !allocCreated, "rollback should not create allocation")
+
+	ask := app.GetAllocationAsk(alloc.AllocationKey)
+	assert.Assert(t, ask != nil, "ask should exist after rollback")
+	assert.Assert(t, !ask.IsAllocated(), "ask should be pending after rollback")
+	assert.Equal(t, ask.GetNodeID(), "")
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "app allocated resources should be zero after rollback")
+	assert.Assert(t, resources.Equals(res, app.GetPendingResource()), "app pending resources should be restored after rollback")
+	assert.Equal(t, len(app.GetAllAllocations()), 0)
+	assert.Assert(t, !app.IsCompleting(), "app should not remain completing after rollback")
+
+	node := partition.GetNode(nodeID1)
+	assert.Assert(t, node != nil)
+	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "node allocated resources should be zero after rollback")
+	assert.Assert(t, resources.IsZero(queue.GetAllocatedResource()), "queue allocated resources should be zero after rollback")
+	assertLimits(t, getTestUserGroup(), nil)
+	assert.Equal(t, partition.GetTotalAllocationCount(), 0)
+
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	assert.NilError(t, err, "failed to re-add allocation after rollback")
+	assert.Check(t, allocCreated, "allocation should be created after rollback")
+	assert.Assert(t, resources.Equals(queue.GetAllocatedResource(), res), "queue allocated resources should be restored after re-allocation")
+	assert.Assert(t, resources.Equals(node.GetAllocatedResource(), res), "node allocated resources should be restored after re-allocation")
+	assert.Equal(t, len(app.GetAllAllocations()), 1)
+	assert.Equal(t, partition.GetTotalAllocationCount(), 1)
+}
+
+func TestUpdateAllocationEmptyNodeWithoutRollbackTagIsNoop(t *testing.T) {
+	setupUGM()
+	partition := createQueuesNodes(t)
+
+	app := newApplication(appID1, "default", "root.leaf")
+	err := partition.AddApplication(app)
+	assert.NilError(t, err, "app-1 should have been added to the partition")
+
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+	alloc := si.Allocation{
+		AllocationKey:    "ask-key-noop",
+		ApplicationID:    appID1,
+		NodeID:           nodeID1,
+		ResourcePerAlloc: res.ToProto(),
+	}
+
+	_, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	assert.NilError(t, err, "failed to add alloc to app")
+	assert.Check(t, allocCreated, "alloc should have been created")
+
+	noopUpdate := si.Allocation{
+		AllocationKey:    alloc.AllocationKey,
+		ApplicationID:    alloc.ApplicationID,
+		ResourcePerAlloc: alloc.ResourcePerAlloc,
+	}
+
+	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&noopUpdate))
+	assert.NilError(t, err, "unexpected error for non-rollback update")
+	assert.Check(t, !allocCreated, "non-rollback update should not create allocation")
+
+	ask := app.GetAllocationAsk(alloc.AllocationKey)
+	assert.Assert(t, ask != nil)
+	assert.Assert(t, ask.IsAllocated(), "ask should remain allocated without rollback tag")
+	assert.Equal(t, ask.GetNodeID(), nodeID1)
+	assert.Equal(t, partition.GetTotalAllocationCount(), 1)
+}
+
 func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 	setupUGM()
 	partition := createQuotaPreemptionQueuesNodes(t)

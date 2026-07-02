@@ -3394,40 +3394,70 @@ func TestUpdateRunnableStatus(t *testing.T) {
 
 func TestPredicateFailedEvents(t *testing.T) {
 	setupUGM()
+	node := newNode("node1", map[string]resources.Quantity{"first": 20})
+	node2 := newNode("node2", map[string]resources.Quantity{"first": 20})
+	nodeMap := map[string]*Node{"node1": node, "node2": node2}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
 
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "1"})
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
-	headroom, err := resources.NewResourceFromConf(map[string]string{"first": "40"})
+	childQ, err := createManagedQueue(rootQ, "child", false, map[string]string{"first": "20"})
 	assert.NilError(t, err)
-	ask := newAllocationAsk("alloc-0", "app-1", res)
-	app := newApplication(appID1, "default", "root")
-	eventSystem := mock.NewEventSystem()
-	ask.askEvents = schedEvt.NewAskEvents(eventSystem)
-	app.disableStateChangeEvents()
-	app.resetAppEvents()
-	queue, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	app.queue = queue
-	sr := sortedRequests{}
-	sr.insert(ask)
-	app.sortedRequests = sr
+
+	app := newApplication(appID1, "default", "root.child")
+	app.SetQueue(childQ)
+	childQ.applications[appID1] = app
+
 	attempts := 0
+	wrongNodes := make(map[string]int, 1)
+	wrongNodes["node3"] = 10
+	rightNodes := make(map[string]int, 1)
+	rightNodes["node1"] = 10
 
-	mockPlugin := mockCommon.NewPredicatePlugin(true, nil)
-	plugins.RegisterSchedulerPlugin(mockPlugin)
-	defer plugins.UnregisterSchedulerPlugins()
+	tests := []struct {
+		name                 string
+		mockPlugin           *mockCommon.PredicatePlugin
+		allocKey             string
+		expectedFailedEvents int
+	}{
+		{"prefilter pass", mockCommon.NewPredicatePlugin(false, false, nil), "alloc-1", 0},
+		{"prefilter passes but none of the node from iterator is available in feasible nodes", mockCommon.NewPredicatePlugin(false, false, wrongNodes), "alloc-2", 0},
+		{"prefilter fails", mockCommon.NewPredicatePlugin(true, false, nil), "alloc-2", 1},
+		{"prefilter pass with expected feasible nodes, filter fails", mockCommon.NewPredicatePlugin(false, true, rightNodes), "alloc-3", 1},
+		{"both prefilter and filter passes with correct feasible nodes", mockCommon.NewPredicatePlugin(false, false, rightNodes), "alloc-3", 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ask := newAllocationAsk(tt.allocKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+			err = app.AddAllocationAsk(ask)
+			assert.NilError(t, err)
 
-	app.tryAllocate(headroom, false, time.Second, &attempts, func() NodeIterator {
-		return &testIterator{}
-	}, nilNodeIterator, nilGetNode)
-	assert.Equal(t, 1, len(eventSystem.Events))
-	event := eventSystem.Events[0]
+			eventSystem := mock.NewEventSystem()
+			ask.askEvents = schedEvt.NewAskEvents(eventSystem)
+			app.disableStateChangeEvents()
+
+			plugins.RegisterSchedulerPlugin(tt.mockPlugin)
+			app.tryAllocate(node.GetAvailableResource(), false, time.Second, &attempts, iterator, iterator, getNode)
+			assert.Equal(t, tt.expectedFailedEvents, len(eventSystem.Events))
+			if tt.expectedFailedEvents > 0 {
+				assertEventsForPredicateFailures(t, tt.allocKey, eventSystem.Events[0])
+			}
+			plugins.UnregisterSchedulerPlugins()
+			app.resetAppEvents()
+		})
+	}
+}
+
+func assertEventsForPredicateFailures(t *testing.T, allocKey string, event *si.EventRecord) {
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
 	assert.Equal(t, "app-1", event.ReferenceID)
-	assert.Equal(t, "alloc-0", event.ObjectID)
-	assert.Equal(t, "Unschedulable request 'alloc-0': fake predicate plugin failed (2x); ", event.Message)
+	assert.Equal(t, allocKey, event.ObjectID)
+	assert.Equal(t, "Unschedulable request '"+allocKey+"': fake predicate plugin failed (1x); ", event.Message)
 }
 
 func TestRequiredNodePreemption(t *testing.T) {
@@ -3596,15 +3626,6 @@ func TestRequiredNodePreemptionFailed(t *testing.T) {
 	assert.Assert(t, app.tryReservedAllocate(headRoom, iterator) == nil, "unexpected result from reserved allocation")
 	assert.Equal(t, 1, noEvents, "unexpected number of REQUEST events")
 	assert.Equal(t, int32(4), ask2.allocLog[common.NoVictimForRequiredNode].Count, "incorrect number of entry count")
-}
-
-type testIterator struct{}
-
-func (testIterator) ForEachNode(fn func(*Node) bool) {
-	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 20})
-	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 20})
-	fn(node1)
-	fn(node2)
 }
 
 func TestGetMaxResourceFromTag(t *testing.T) {
@@ -3885,93 +3906,127 @@ func TestTryPlaceHolderAllocateDifferentNodes(t *testing.T) {
 	getNode := func(nodeID string) *Node {
 		return nodeMap[nodeID]
 	}
-
-	app := newApplication(appID0, "default", "root.default")
-
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	app.queue = queue
 
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ph := newPlaceholderAlloc(appID0, nodeID1, res, tg1)
-	app.AddAllocation(ph)
-	app.addPlaceholderData(ph)
-	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+	wrongNodes := make(map[string]int, 1)
+	wrongNodes[nodeID3] = 10
+	rightNodes := make(map[string]int, 2)
+	rightNodes[nodeID1] = 201
+	rightNodes[nodeID2] = 1
 
-	// predicate check fails on node1 and passes on node2
-	mockPlugin := mockCommon.NewPredicatePlugin(false, map[string]int{nodeID1: 0})
-	plugins.RegisterSchedulerPlugin(mockPlugin)
-	defer plugins.UnregisterSchedulerPlugins()
+	tests := []struct {
+		name         string
+		mockPlugin   *mockCommon.PredicatePlugin
+		allocResult  bool
+		expectedNode string
+	}{
+		{"prefilter pass with empty feasible nodes, so original node (node1) itself is feasible for replacement", mockCommon.NewPredicatePlugin(false, false, nil), true, nodeID1},
+		{"prefilter passes but none of the node from iterator is available in feasible nodes", mockCommon.NewPredicatePlugin(false, false, wrongNodes), false, "NA"},
+		{"prefilter fails", mockCommon.NewPredicatePlugin(true, false, nil), false, "NA"},
+		{"prefilter pass with expected feasible nodes, filter fails", mockCommon.NewPredicatePlugin(false, true, rightNodes), false, "NA"},
+		{"both prefilter and filter passes with correct feasible nodes. original node (node1) is not feasible, hence node2 opted for replacement", mockCommon.NewPredicatePlugin(false, false, rightNodes), true, nodeID2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := newApplication(appID0, "default", "root.default")
+			app.queue = queue
 
-	// should allocate on node2
-	ask := newAllocationAsk(aKey, appID0, res)
-	ask.taskGroupName = tg1
-	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been added to app")
+			res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+			ph := newPlaceholderAlloc(appID0, nodeID1, res, tg1)
+			app.AddAllocation(ph)
+			app.addPlaceholderData(ph)
+			assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+			plugins.RegisterSchedulerPlugin(tt.mockPlugin)
 
-	result := app.tryPlaceholderAllocate(iterator, getNode)
-	assert.Assert(t, result != nil, "result should not be nil")
-	assert.Equal(t, Replaced, result.ResultType, "result type should be Replaced")
-	assert.Equal(t, nodeID2, result.NodeID, "result should be on node2")
-	assert.Equal(t, ask, result.Request, "result should contain the ask")
-	assert.Equal(t, ph, result.Request.GetRelease(), "real allocation should link to placeholder")
-	assert.Equal(t, result.Request, ph.GetRelease(), "placeholder should link to real allocation")
-	// placeholder data remains unchanged until RM confirms the replacement
-	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+			ask := newAllocationAsk(aKey, appID0, res)
+			ask.taskGroupName = tg1
+			err = app.AddAllocationAsk(ask)
+			assert.NilError(t, err, "ask should have been added to app")
+
+			result := app.tryPlaceholderAllocate(iterator, getNode)
+			if tt.allocResult {
+				assert.Assert(t, result != nil, "result should not be nil")
+				assert.Equal(t, Replaced, result.ResultType, "result type should be Replaced")
+				assert.Equal(t, tt.expectedNode, result.NodeID, "result should be on node2")
+				assert.Equal(t, ask, result.Request, "result should contain the ask")
+				assert.Equal(t, ph, result.Request.GetRelease(), "real allocation should link to placeholder")
+				assert.Equal(t, result.Request, ph.GetRelease(), "placeholder should link to real allocation")
+				// placeholder data remains unchanged until RM confirms the replacement
+				assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+			} else {
+				assert.Assert(t, result == nil, "result should be nil")
+			}
+			queue.RemoveApplication(app)
+			plugins.UnregisterSchedulerPlugins()
+		})
+	}
 }
 
 func TestTryNodesNoReserve(t *testing.T) {
-	app := newApplication(appID0, "default", "root.default")
-
-	queue, err := createRootQueue(map[string]string{"first": "5"})
+	queue, err := createRootQueue(map[string]string{"first": "100"})
 	assert.NilError(t, err, "queue create failed")
-	app.queue = queue
 
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	ask := newAllocationAsk(aKey, appID0, res)
-	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been added to app")
+	wrongNodes := make(map[string]int, 1)
+	wrongNodes[nodeID4] = 10
+	rightNodes := make(map[string]int, 1)
+	rightNodes[nodeID1] = -10
+	rightNodes[nodeID3] = 10
 
-	// reserve the allocation on node1
-	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
-	err = app.Reserve(node1, ask)
-	assert.NilError(t, err, "reservation failed")
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
 
-	// case 1: node is the reserved node
-	iterator := getNodeIteratorFn(node1)
-	result := app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
-	assert.Assert(t, result == nil, "result should be nil since node1 is the reserved node")
+	otherNode1 := newNode(nodeID2, map[string]resources.Quantity{"first": 5})
+	otherNode1.schedulable = false
+	otherNode2 := newNode(nodeID2, map[string]resources.Quantity{"first": 1})
+	otherNode3 := newNode(nodeID3, map[string]resources.Quantity{"first": 50})
 
-	// case 2: node is unschedulable
-	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5})
-	node2.schedulable = false
-	iterator = getNodeIteratorFn(node2)
-	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
-	assert.Assert(t, result == nil, "result should be nil since node2 is unschedulable")
+	tests := []struct {
+		name        string
+		mockPlugin  *mockCommon.PredicatePlugin
+		otherNode   *Node
+		allocResult bool
+	}{
+		{"prefilter pass, reserved node itself is being used", mockCommon.NewPredicatePlugin(false, false, nil), node, false},
+		{"prefilter pass, reserved node is different and other node is no schedulable", mockCommon.NewPredicatePlugin(false, false, nil), otherNode1, false},
+		{"prefilter pass, reserved node is different and other node doesn't have sufficient resource", mockCommon.NewPredicatePlugin(false, false, nil), otherNode2, false},
+		{"prefilter pass with empty feasible nodes, so other node (node3) is selected", mockCommon.NewPredicatePlugin(false, false, nil), otherNode3, true},
+		{"prefilter passes but none of the other node from iterator is available in feasible nodes", mockCommon.NewPredicatePlugin(false, false, wrongNodes), otherNode3, false},
+		{"prefilter fails", mockCommon.NewPredicatePlugin(true, false, nil), otherNode3, false},
+		{"prefilter pass with expected feasible nodes, filter fails", mockCommon.NewPredicatePlugin(false, true, rightNodes), otherNode3, false},
+		{"both prefilter and filter passes with correct feasible nodes. so other node (node3) is selected", mockCommon.NewPredicatePlugin(false, false, rightNodes), otherNode3, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plugins.RegisterSchedulerPlugin(tt.mockPlugin)
 
-	// case 3: node does not have enough resources
-	node3 := newNode(nodeID3, map[string]resources.Quantity{"first": 1})
-	iterator = getNodeIteratorFn(node3)
-	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
-	assert.Assert(t, result == nil, "result should be nil since node3 does not have enough resources")
+			app := newApplication(appID0, "default", "root.default")
+			app.queue = queue
 
-	// case 4: node fails predicate
-	mockPlugin := mockCommon.NewPredicatePlugin(false, map[string]int{nodeID4: 1})
-	plugins.RegisterSchedulerPlugin(mockPlugin)
-	defer plugins.UnregisterSchedulerPlugins()
-	node4 := newNode(nodeID4, map[string]resources.Quantity{"first": 5})
-	iterator = getNodeIteratorFn(node4)
-	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
-	assert.Assert(t, result == nil, "result should be nil since node4 fails predicate")
+			res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+			ask := newAllocationAsk(aKey, appID0, res)
+			err = app.AddAllocationAsk(ask)
+			assert.NilError(t, err, "ask should have been added to app")
 
-	// case 5: success
-	node5 := newNode(nodeID5, map[string]resources.Quantity{"first": 5})
-	iterator = getNodeIteratorFn(node5)
-	result = app.tryNodesNoReserve(ask, iterator(), node1.NodeID)
-	assert.Assert(t, result != nil, "result should not be nil")
-	assert.Equal(t, node5.NodeID, result.NodeID, "result should be on node5")
-	assert.Equal(t, result.ResultType, AllocatedReserved, "result type should be AllocatedReserved")
-	assert.Equal(t, result.ReservedNodeID, node1.NodeID, "reserved node should be node1")
+			// reserve the allocation on node1
+			err = app.Reserve(node, ask)
+			assert.NilError(t, err, "reservation failed")
+
+			iterator := getNodeIteratorFn(tt.otherNode)
+			result := app.tryNodesNoReserve(ask, iterator(), node.NodeID)
+			if tt.allocResult {
+				assert.Assert(t, result != nil, "result should not be nil")
+				assert.Equal(t, tt.otherNode.NodeID, result.NodeID, "result should be on other node")
+				assert.Equal(t, result.ResultType, AllocatedReserved, "result type should be AllocatedReserved")
+				assert.Equal(t, result.ReservedNodeID, node.NodeID, "reserved node should be node1")
+			} else {
+				assert.Assert(t, result == nil, "result should be not nil")
+			}
+			node.unReserve(ask)
+			app.UnReserve(node, ask)
+			queue.RemoveApplication(app)
+			plugins.UnregisterSchedulerPlugins()
+		})
+	}
 }
 
 func TestAppSubmissionTime(t *testing.T) {

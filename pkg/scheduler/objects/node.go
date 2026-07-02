@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"errors"
 	"fmt"
 
 	"go.uber.org/zap"
@@ -487,6 +488,23 @@ func (sn *Node) preAllocateConditions(ask *Allocation) error {
 
 // Checking pre-conditions in the shim for a reservation.
 func (sn *Node) preReserveConditions(ask *Allocation) error {
+	// run predicates for this pod before in hand and fetch feasible nodes
+	feasibleNodes, err := ask.preAllocateConditions(false)
+	if err != nil {
+		preErrors := make(map[string]int, 1)
+		preErrors[err.Error()]++
+		ask.SendPredicatesFailedEvent(preErrors)
+		return err
+	}
+	// Is this node suitable to run the pod?
+	if len(feasibleNodes) > 0 {
+		if _, ok := feasibleNodes[sn.NodeID]; !ok {
+			log.Log(log.SchedApplication).Debug("skipping node as it is not feasible to run the pod",
+				zap.String("allocationKey", ask.GetAllocationKey()),
+				zap.String("node", sn.NodeID))
+			return errors.New("skipping node as it is not feasible to run the pod")
+		}
+	}
 	return sn.preConditions(ask, false)
 }
 

@@ -29,30 +29,44 @@ import (
 
 type PredicatePlugin struct {
 	ResourceManagerCallback
-	mustFail bool
-	nodes    map[string]int
+	mustPreFilterFail bool
+	mustFilterFail    bool
+	nodes             map[string]int
+}
+
+func (f *PredicatePlugin) PredicatesPreFilter(args *si.PredicatesArgs) (map[string]struct{}, error) {
+	feasibleNodes := make(map[string]struct{})
+	if f.mustPreFilterFail {
+		log.Log(log.Test).Info("fake predicate prefilter plugin fail: must fail set")
+		return feasibleNodes, fmt.Errorf("fake predicate plugin failed")
+	}
+	for k, v := range f.nodes {
+		if args.Allocate {
+			if v > 0 && v < 200 {
+				feasibleNodes[k] = struct{}{}
+			}
+		} else {
+			if v < 100 {
+				feasibleNodes[k] = struct{}{}
+			}
+		}
+	}
+	log.Log(log.Test).Info("fake predicate prefilter plugin pass",
+		zap.Bool("allocate", args.Allocate),
+		zap.String("allocationKey", args.AllocationKey),
+		zap.String("node", args.NodeID),
+		zap.Int("feasibleNodes", len(feasibleNodes)))
+	return feasibleNodes, nil
 }
 
 func (f *PredicatePlugin) Predicates(args *si.PredicatesArgs) error {
-	if f.mustFail {
-		log.Log(log.Test).Info("fake predicate plugin fail: must fail set")
+	if f.mustFilterFail {
+		log.Log(log.Test).Info("fake predicate filter plugin fail: must fail set")
 		return fmt.Errorf("fake predicate plugin failed")
 	}
-	if fail, ok := f.nodes[args.NodeID]; ok {
-		if args.Allocate && fail >= 0 {
-			log.Log(log.Test).Info("fake predicate plugin node allocate fail",
-				zap.String("node", args.NodeID),
-				zap.Int("fail mode", fail))
-			return fmt.Errorf("fake predicate plugin failed")
-		}
-		if !args.Allocate && fail <= 0 {
-			log.Log(log.Test).Info("fake predicate plugin node reserve fail",
-				zap.String("node", args.NodeID),
-				zap.Int("fail mode", fail))
-			return fmt.Errorf("fake predicate plugin failed")
-		}
-	}
-	log.Log(log.Test).Info("fake predicate plugin pass",
+	log.Log(log.Test).Info("fake predicate filter plugin pass",
+		zap.Bool("allocate", args.Allocate),
+		zap.String("allocationKey", args.AllocationKey),
 		zap.String("node", args.NodeID))
 	return nil
 }
@@ -61,9 +75,10 @@ func (f *PredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 // mustFail will cause the predicate check to always fail
 // nodes allows specifying which node to fail for which check using the nodeID:
 // possible values: -1 fail reserve, 0 fail always, 1 fail alloc (defaults to always)
-func NewPredicatePlugin(mustFail bool, nodes map[string]int) *PredicatePlugin {
+func NewPredicatePlugin(mustPreFilterFail bool, mustFilterFail bool, nodes map[string]int) *PredicatePlugin {
 	return &PredicatePlugin{
-		mustFail: mustFail,
-		nodes:    nodes,
+		mustPreFilterFail: mustPreFilterFail,
+		mustFilterFail:    mustFilterFail,
+		nodes:             nodes,
 	}
 }

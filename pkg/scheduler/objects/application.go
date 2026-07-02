@@ -1301,16 +1301,27 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			}
 		}
 	}
+
 	// cannot allocate if the iterator is not giving us any schedulable nodes
 	iterator := nodeIterator()
 	if iterator == nil {
 		return nil
 	}
+
 	// we checked all placeholders and asks nothing worked as yet
 	// pick the first fit and try all nodes if that fails give up
 	var allocResult *AllocationResult
 	if phFit != nil && reqFit != nil {
 		resKey := reqFit.GetAllocationKey()
+
+		// run predicates for this pod before in hand and fetch feasible nodes
+		feasibleNodes, err := reqFit.preAllocateConditions(true)
+		if err != nil {
+			preErrors := make(map[string]int, 1)
+			preErrors[err.Error()]++
+			reqFit.SendPredicatesFailedEvent(preErrors)
+			return nil
+		}
 		iterator.ForEachNode(func(node *Node) bool {
 			if !node.IsSchedulable() {
 				log.Log(log.SchedApplication).Debug("skipping node for placeholder alloc as state is unschedulable",
@@ -1321,10 +1332,22 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if !node.preAllocateCheck(reqFit.GetAllocatedResource(), resKey) {
 				return true
 			}
+
+			// Is this node suitable to run the pod?
+			if len(feasibleNodes) > 0 {
+				if _, ok := feasibleNodes[node.NodeID]; !ok {
+					log.Log(log.SchedApplication).Debug("skipping node as it is not feasible to run the pod",
+						zap.String("allocationKey", resKey),
+						zap.String("node", node.NodeID))
+					return true
+				}
+			}
+
 			// skip the node if conditions can not be satisfied
 			if err := node.preAllocateConditions(reqFit); err != nil {
 				return true
 			}
+
 			// update just the node to make sure we keep its spot
 			// no queue update as we're releasing the placeholder and are just temp over the size
 			if !node.TryAddAllocation(reqFit) {
@@ -1514,6 +1537,16 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 // This should never result in a reservation as the allocation is already reserved
 func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator, reservedNode string) *AllocationResult {
 	var allocResult *AllocationResult
+
+	// run predicates for this pod before in hand and fetch feasible nodes
+	feasibleNodes, err := ask.preAllocateConditions(true)
+	if err != nil {
+		preErrors := make(map[string]int, 1)
+		preErrors[err.Error()]++
+		ask.SendPredicatesFailedEvent(preErrors)
+		return nil
+	}
+
 	iterator.ForEachNode(func(node *Node) bool {
 		if !node.IsSchedulable() {
 			log.Log(log.SchedApplication).Debug("skipping node for reserved ask as state is unschedulable",
@@ -1525,6 +1558,17 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 		if !node.FitInNode(ask.GetAllocatedResource()) || node.NodeID == reservedNode {
 			return true
 		}
+
+		// Is this node suitable to run the pod?
+		if len(feasibleNodes) > 0 {
+			if _, ok := feasibleNodes[node.NodeID]; !ok {
+				log.Log(log.SchedApplication).Debug("skipping node as it is not feasible to run the pod",
+					zap.String("allocationKey", ask.GetAllocationKey()),
+					zap.String("node", node.NodeID))
+				return true
+			}
+		}
+
 		// we don't care about predicate error messages here
 		result, _ := sa.tryNode(node, ask) //nolint:errcheck
 		// allocation worked: update resultType and return
@@ -1551,7 +1595,17 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 	reserved := sa.reservations[allocKey]
 	var allocResult *AllocationResult
 	var predicateErrors map[string]int
+	var podPredicateErrors map[string]int
 	tryNodeCycleStart := time.Now()
+
+	// run predicates for this pod before in hand and fetch feasible nodes
+	feasibleNodes, err := ask.preAllocateConditions(true)
+	if err != nil {
+		podPredicateErrors = make(map[string]int, 1)
+		podPredicateErrors[err.Error()]++
+		ask.SendPredicatesFailedEvent(podPredicateErrors)
+	}
+
 	iterator.ForEachNode(func(node *Node) bool {
 		// skip the node if the node is not schedulable
 		if !node.IsSchedulable() {
@@ -1564,41 +1618,56 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 		if !node.FitInNode(ask.GetAllocatedResource()) {
 			return true
 		}
-		tryNodeStart := time.Now()
-		result, err := sa.tryNode(node, ask)
-		if err != nil {
-			if predicateErrors == nil {
-				predicateErrors = make(map[string]int)
-			}
-			predicateErrors[err.Error()]++
-		}
-		// allocation worked so return
-		if result != nil {
-			metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
-			// check if the alloc had a reservation: if it has set the resultType and return
-			if reserved != nil {
-				if reserved.nodeID != node.NodeID {
-					// we have a different node reserved for this alloc
-					log.Log(log.SchedApplication).Debug("allocate picking reserved alloc during non reserved allocate",
-						zap.String("appID", sa.ApplicationID),
-						zap.String("reserved nodeID", reserved.nodeID),
-						zap.String("allocationKey", allocKey))
-					result.ReservedNodeID = reserved.nodeID
-				} else {
-					// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
-					log.Log(log.SchedApplication).Debug("allocate found reserved alloc during non reserved allocate",
-						zap.String("appID", sa.ApplicationID),
-						zap.String("nodeID", node.NodeID),
-						zap.String("allocationKey", allocKey))
+
+		// Is there any pod predicate errors? No node would be picked up for allocation in case of any errors
+		// and better to get into process of picking up a node for reservation right away
+		if len(podPredicateErrors) == 0 {
+			// Is this node suitable to run the pod?
+			if len(feasibleNodes) > 0 {
+				if _, ok := feasibleNodes[node.NodeID]; !ok {
+					log.Log(log.SchedApplication).Debug("skipping node as it is not feasible to run the pod",
+						zap.String("allocationKey", allocKey),
+						zap.String("node", node.NodeID))
+					return true
 				}
-				result.ResultType = AllocatedReserved
+			}
+			tryNodeStart := time.Now()
+			result, err := sa.tryNode(node, ask)
+			if err != nil {
+				if predicateErrors == nil {
+					predicateErrors = make(map[string]int)
+				}
+				predicateErrors[err.Error()]++
+			}
+			// allocation worked so return
+			if result != nil {
+				metrics.GetSchedulerMetrics().ObserveTryNodeLatency(tryNodeStart)
+				// check if the alloc had a reservation: if it has set the resultType and return
+				if reserved != nil {
+					if reserved.nodeID != node.NodeID {
+						// we have a different node reserved for this alloc
+						log.Log(log.SchedApplication).Debug("allocate picking reserved alloc during non reserved allocate",
+							zap.String("appID", sa.ApplicationID),
+							zap.String("reserved nodeID", reserved.nodeID),
+							zap.String("allocationKey", allocKey))
+						result.ReservedNodeID = reserved.nodeID
+					} else {
+						// NOTE: this is a safeguard as reserved nodes should never be part of the iterator
+						log.Log(log.SchedApplication).Debug("allocate found reserved alloc during non reserved allocate",
+							zap.String("appID", sa.ApplicationID),
+							zap.String("nodeID", node.NodeID),
+							zap.String("allocationKey", allocKey))
+					}
+					result.ResultType = AllocatedReserved
+					allocResult = result
+					return false
+				}
+				// nothing reserved just return this as a normal alloc
 				allocResult = result
 				return false
 			}
-			// nothing reserved just return this as a normal alloc
-			allocResult = result
-			return false
 		}
+
 		// nothing allocated should we look at a reservation?
 		askAge := time.Since(ask.GetCreateTime())
 		if reserved == nil && askAge > reservationDelay {

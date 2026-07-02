@@ -557,7 +557,23 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 	// calculate victim list for each node
 	predicateChecks := make([]*si.PreemptionPredicatesArgs, 0)
 	victimsByNode := make(map[string][]*Allocation)
+
+	// run predicates for this pod before in hand and fetch feasible nodes
+	feasibleNodes, err := p.ask.preAllocateConditions(true)
+	if err != nil {
+		return "", nil, false
+	}
+
 	for nodeID, nodeAvailable := range p.nodeAvailableMap {
+		// Is this node suitable to run the pod?
+		if len(feasibleNodes) > 0 {
+			if _, ok := feasibleNodes[nodeID]; !ok {
+				log.Log(log.SchedApplication).Debug("skipping node as it is not feasible to run the pod",
+					zap.String("allocationKey", p.ask.GetAllocationKey()),
+					zap.String("node", nodeID))
+				continue
+			}
+		}
 		allocations, ok := p.allocationsByNode[nodeID]
 		if !ok {
 			// no allocations present, but node may still be available for scheduling

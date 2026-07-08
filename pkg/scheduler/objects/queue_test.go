@@ -2015,6 +2015,50 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	assert.Equal(t, leafDAO.SortingPolicy, "fifo", "incorrect policy returned")
 }
 
+func TestGetPartitionQueueDAOInfoBackoffAndQuotaPreemptionFields(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+
+	t.Run("default values", func(t *testing.T) {
+		rootDAO := root.GetPartitionQueueDAOInfo(false)
+		assert.Assert(t, rootDAO.QuotaPreemptionStartTime.IsZero(), "quota preemption start time should be zero by default")
+		assert.Equal(t, rootDAO.IsQuotaPreemptionRunning, false, "quota preemption should not be running by default")
+		assert.Equal(t, rootDAO.UnschedAskBackoff, uint64(0), "unsched ask backoff should be zero by default")
+		assert.Equal(t, rootDAO.AskBackoffDelay, configs.DefaultAskBackOffDelay.String(), "ask backoff delay should use default")
+	})
+
+	t.Run("configured backoff properties", func(t *testing.T) {
+		props := map[string]string{
+			configs.ApplicationUnschedulableAsksBackoffDelay: "123s",
+			configs.ApplicationUnschedulableAsksBackoff:      "12",
+		}
+		queue, err := createManagedQueueWithProps(root, "backoff-queue", false, nil, props)
+		assert.NilError(t, err, "failed to create queue with backoff properties")
+		queueDAO := queue.GetPartitionQueueDAOInfo(false)
+		assert.Equal(t, queueDAO.UnschedAskBackoff, uint64(12), "unsched ask backoff not exposed correctly")
+		assert.Equal(t, queueDAO.AskBackoffDelay, (123 * time.Second).String(), "ask backoff delay not exposed correctly")
+		assert.Equal(t, queueDAO.IsQuotaPreemptionRunning, false, "quota preemption should not be running")
+		assert.Assert(t, queueDAO.QuotaPreemptionStartTime.IsZero(), "quota preemption start time should be zero")
+	})
+
+	t.Run("quota preemption runtime fields", func(t *testing.T) {
+		queue, err := createManagedQueue(root, "quota-queue", false, map[string]string{"memory": "1000"})
+		assert.NilError(t, err, "failed to create queue")
+		startTime := time.Now().Add(time.Hour)
+		queue.quotaPreemptionStartTime = startTime
+		queue.isQuotaPreemptionRunning = true
+
+		queueDAO := queue.GetPartitionQueueDAOInfo(false)
+		assert.Equal(t, queueDAO.QuotaPreemptionStartTime, startTime, "quota preemption start time not exposed correctly")
+		assert.Equal(t, queueDAO.IsQuotaPreemptionRunning, true, "quota preemption running flag not exposed correctly")
+
+		queue.setQuotaPreemptionState(false)
+		queueDAO = queue.GetPartitionQueueDAOInfo(false)
+		assert.Assert(t, queueDAO.QuotaPreemptionStartTime.IsZero(), "quota preemption start time should be cleared")
+		assert.Equal(t, queueDAO.IsQuotaPreemptionRunning, false, "quota preemption running flag should be cleared")
+	})
+}
+
 func getAllocatingAcceptedApps() map[string]bool {
 	allocatingAcceptedApps := make(map[string]bool)
 	allocatingAcceptedApps[appID1] = true

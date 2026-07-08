@@ -270,6 +270,19 @@ partitions:
             - name: default
 `
 
+const configQueueBackoffProperties = `
+partitions:
+  - name: default
+    queues:
+    - name: root
+      queues:
+      - name: leaf
+        properties:
+          application.sort.policy: fifo
+          application.unschedasks.backoff: "12"
+          application.unschedasks.backoff.delay: "123s"
+`
+
 const rmID = "rm-123"
 const policyGroup = "default-policy-group"
 const queueName = "root.default"
@@ -1062,6 +1075,14 @@ func assertPartitionQueueDaoInfo(t *testing.T, partitionQueueDAOInfo *dao.Partit
 	assert.Equal(t, len(partitionQueueDAOInfo.Properties), 1)
 	assert.Equal(t, partitionQueueDAOInfo.Properties[configs.ApplicationSortPolicy], policies.FifoSortPolicy.String())
 	assert.DeepEqual(t, partitionQueueDAOInfo.TemplateInfo, templateInfo)
+	assertPartitionQueueDaoInfoBackoffAndQuotaPreemptionFields(t, partitionQueueDAOInfo, 0, configs.DefaultAskBackOffDelay.String())
+}
+
+func assertPartitionQueueDaoInfoBackoffAndQuotaPreemptionFields(t *testing.T, partitionQueueDAOInfo *dao.PartitionQueueDAOInfo, unschedAskBackoff uint64, askBackoffDelay string) {
+	assert.Assert(t, partitionQueueDAOInfo.QuotaPreemptionStartTime.IsZero(), "quota preemption start time should be zero")
+	assert.Equal(t, partitionQueueDAOInfo.IsQuotaPreemptionRunning, false, "quota preemption should not be running")
+	assert.Equal(t, partitionQueueDAOInfo.UnschedAskBackoff, unschedAskBackoff, "unsched ask backoff mismatch")
+	assert.Equal(t, partitionQueueDAOInfo.AskBackoffDelay, askBackoffDelay, "ask backoff delay mismatch")
 }
 
 func TestGetPartitionQueueHandler(t *testing.T) {
@@ -1084,6 +1105,7 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	assert.Equal(t, len(partitionQueueDao1.Children), 0)
 	assert.Equal(t, len(partitionQueueDao1.ChildNames), 1)
 	assert.Equal(t, partitionQueueDao1.ChildNames[0], "root.a.a1")
+	assertPartitionQueueDaoInfoBackoffAndQuotaPreemptionFields(t, &partitionQueueDao1, 0, configs.DefaultAskBackOffDelay.String())
 
 	// test hierarchy queue
 	var partitionQueueDao2 dao.PartitionQueueDAOInfo
@@ -1098,6 +1120,8 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	assert.Equal(t, len(partitionQueueDao2.ChildNames), 1)
 	assert.Equal(t, partitionQueueDao2.Children[0].QueueName, "root.a.a1")
 	assert.Equal(t, partitionQueueDao2.ChildNames[0], "root.a.a1")
+	assertPartitionQueueDaoInfoBackoffAndQuotaPreemptionFields(t, &partitionQueueDao2, 0, configs.DefaultAskBackOffDelay.String())
+	assertPartitionQueueDaoInfoBackoffAndQuotaPreemptionFields(t, &partitionQueueDao2.Children[0], 0, configs.DefaultAskBackOffDelay.String())
 
 	// test partition not exists
 	req, err = createRequest(t, partitionQueuesHandler+queueA, map[string]string{"partition": "notexists"})
@@ -1150,6 +1174,22 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.statusCode, statusCodeError)
 	assert.Equal(t, errInfo.Message, "invalid URL escape \"%Zt\"", jsonMessageError)
 	assert.Equal(t, errInfo.StatusCode, http.StatusBadRequest)
+}
+
+func TestGetPartitionQueueHandlerBackoffAndQuotaPreemptionFields(t *testing.T) {
+	setup(t, configQueueBackoffProperties, 1)
+
+	NewWebApp(schedulerContext.Load(), nil)
+
+	req, err := createRequest(t, "/ws/v1/partition/default/queue/root.leaf", map[string]string{"partition": "default", "queue": "root.leaf"})
+	assert.NilError(t, err, "HTTP request create failed")
+	resp := &MockResponseWriter{}
+	getPartitionQueue(resp, req)
+	var partitionQueueDao dao.PartitionQueueDAOInfo
+	err = json.Unmarshal(resp.outputBytes, &partitionQueueDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.Equal(t, partitionQueueDao.QueueName, "root.leaf")
+	assertPartitionQueueDaoInfoBackoffAndQuotaPreemptionFields(t, &partitionQueueDao, 12, (123 * time.Second).String())
 }
 
 func TestGetClusterInfo(t *testing.T) {

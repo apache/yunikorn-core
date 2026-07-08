@@ -65,6 +65,16 @@ func (m *PreemptionPredicatePlugin) PredicatesPreFilter(args *si.PredicatesArgs)
 	return feasibleNodes, nil
 }
 
+func (m *PreemptionPredicatePlugin) Predicates(args *si.PredicatesArgs) error {
+	m.RLock()
+	defer m.RUnlock()
+	if m.mustFilterFail {
+		m.errHolder.err = fmt.Errorf("fake predicate filter plugin failed")
+		return m.errHolder.err
+	}
+	return nil
+}
+
 func (m *PreemptionPredicatePlugin) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
 	m.Lock()
 	defer m.Unlock()

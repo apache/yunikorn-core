@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"testing"
@@ -118,6 +119,23 @@ func creatApp2(
 	}
 
 	return app2, ask3, nil
+}
+
+func resetNode(node *Node) {
+	for _, v := range node.allocations {
+		node.RemoveAllocation(v.allocationKey)
+	}
+}
+
+func resetQ(queue *Queue) {
+	for _, v := range queue.applications {
+		for _, a := range v.allocations {
+			v.RemoveAllocationAsk(a.allocationKey)
+		}
+		queue.RemoveApplication(v)
+	}
+	queue.applications = make(map[string]*Application)
+	queue.allocatedResource = nil
 }
 
 func TestCheckPreconditions(t *testing.T) {
@@ -334,32 +352,60 @@ func TestTryPreemption(t *testing.T) {
 	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, map[string]string{"first": "5"}, appQueueMapping)
 	assert.NilError(t, err)
 
-	alloc1, alloc2, err := creatApp1(childQ1, node, nil, map[string]resources.Quantity{"first": 5, "pods": 1}, appQueueMapping)
-	assert.NilError(t, err)
-
-	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3", appQueueMapping)
-	assert.NilError(t, err)
-	childQ2.incPendingResource(ask3.GetAllocatedResource())
-
-	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
-	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
-
 	// register predicate handler
 	preemptions := []mock.Preemption{
 		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
 	}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
-	plugins.RegisterSchedulerPlugin(plugin)
-	defer plugins.UnregisterSchedulerPlugins()
-
-	result, ok := preemptor.TryPreemption()
-	assert.Assert(t, result != nil, "no result")
-	assert.NilError(t, plugin.GetPredicateError())
-	assert.Assert(t, ok, "no victims found")
-	assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
-	assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
-	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
-	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
+	wrongNodes := make(map[string]int, 1)
+	wrongNodes[nodeID2] = 10
+	rightNodes := make(map[string]int, 1)
+	rightNodes[nodeID1] = 10
+	tests := []struct {
+		name            string
+		mockPlugin      *mock.PreemptionPredicatePlugin
+		result          bool
+		mockPluginError error
+	}{
+		{"prefilter fails", mock.NewPreemptionPredicatePlugin(preemptions, nil, true, false), false, errors.New("fail")},
+		{"prefilter passes but none of the node from iterator is available in feasible nodes", mock.NewPreemptionPredicatePlugin(preemptions, wrongNodes, false, false), false, nil},
+		{"prefilter pass with expected feasible nodes, filter fails", mock.NewPreemptionPredicatePlugin(preemptions, rightNodes, false, true), false, errors.New("fail")},
+		{"both prefilter and filter passes with correct feasible nodes", mock.NewPreemptionPredicatePlugin(preemptions, rightNodes, false, false), true, nil},
+		{"both prefilter and filter passes with empty feasible nodes", mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false), true, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			alloc1, alloc2, err := creatApp1(childQ1, node, nil, map[string]resources.Quantity{"first": 5, "pods": 1}, appQueueMapping)
+			assert.NilError(t, err)
+			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3", appQueueMapping)
+			assert.NilError(t, err)
+			childQ2.incPendingResource(ask3.GetAllocatedResource())
+			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+			plugins.RegisterSchedulerPlugin(tt.mockPlugin)
+			result, ok := preemptor.TryPreemption()
+			if tt.result {
+				assert.Assert(t, result != nil, "no result")
+				assert.NilError(t, tt.mockPlugin.GetPredicateError())
+				assert.Assert(t, ok, "no victims found")
+				assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
+				assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
+				assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+				assert.Equal(t, len(ask3.GetAllocationLog()), 0)
+			} else {
+				assert.Assert(t, result == nil, "no result")
+			}
+			if tt.mockPluginError != nil {
+				assert.ErrorContains(t, tt.mockPlugin.GetPredicateError(), tt.mockPluginError.Error())
+			}
+			// reset
+			resetNode(node)
+			resetQ(childQ1)
+			resetQ(childQ2)
+			resetQ(parentQ)
+			resetQ(rootQ)
+			plugins.UnregisterSchedulerPlugins()
+		})
+	}
 }
 
 func TestTryPreemption_SendEvent(t *testing.T) {
@@ -393,7 +439,7 @@ func TestTryPreemption_SendEvent(t *testing.T) {
 	preemptions := []mock.Preemption{
 		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
 	}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -451,7 +497,7 @@ func TestTryPreemptionOnNode(t *testing.T) {
 	preemptions := []mock.Preemption{
 		mock.NewPreemption(true, "alloc3", nodeID2, []string{"alloc2"}, 0, 0),
 	}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -560,7 +606,7 @@ func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
 	preemptions := []mock.Preemption{
 		mock.NewPreemption(true, "alloc7", nodeID2, []string{"alloc1"}, 0, 0),
 	}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -605,10 +651,9 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
-	allocs := map[string]string{}
-	allocs["alloc3"] = nodeID2
-
-	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	feasibleNodes := map[string]int{}
+	feasibleNodes[nodeID2] = 1
+	plugin := mock.NewPreemptionPredicatePlugin(nil, feasibleNodes, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -699,8 +744,7 @@ func TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource(t *testing.T
 		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
 		mock.NewPreemption(true, "alloc3", nodeID2, []string{"alloc2"}, 0, 0),
 	}
-
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -772,10 +816,7 @@ func TestTryPreemption_VictimReleased_InsufficientResource(t *testing.T) {
 	err = alloc4.SetReleased(true)
 	assert.NilError(t, err)
 
-	allocs := map[string]string{}
-	allocs["alloc3"] = nodeID2
-
-	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -844,7 +885,7 @@ func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
 		mock.NewPreemption(true, "alloc3", nodeID2, []string{"alloc2"}, 0, 0),
 	}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -908,10 +949,9 @@ func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
-	allocs := map[string]string{}
-	allocs["alloc3"] = nodeID2
-
-	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	feasibleNodes := map[string]int{}
+	feasibleNodes[nodeID2] = 1
+	plugin := mock.NewPreemptionPredicatePlugin(nil, feasibleNodes, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -998,10 +1038,7 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
-	allocs := map[string]string{}
-	allocs["alloc3"] = nodeID1
-
-	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1077,10 +1114,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *test
 	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 2})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
-	allocs := map[string]string{}
-	allocs["alloc3"] = nodeID1
-
-	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1155,7 +1189,7 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(
 
 	// register predicate handler
 	preemptions := []mock.Preemption{mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0)}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1250,9 +1284,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSid
 	preemptor := NewPreemptor(app4, headRoom, 30*time.Second, ask4, iterator(), false)
 
 	// register predicate handler
-	allocs := map[string]string{}
-	allocs["alloc4"] = nodeID1
-	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1349,7 +1381,7 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreem
 
 	// register predicate handler
 	preemptions := []mock.Preemption{mock.NewPreemption(true, "alloc4", nodeID1, []string{"alloc3", "alloc2"}, 1, 1)}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1465,9 +1497,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T
 	preemptor := NewPreemptor(app4, headRoom, 30*time.Second, ask4, iterator(), false)
 
 	// register predicate handler
-	allocs := map[string]string{}
-	allocs["alloc4"] = nodeID1
-	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1564,7 +1594,7 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *te
 
 	// register predicate handler
 	preemptions := []mock.Preemption{mock.NewPreemption(true, "alloc4", nodeID1, []string{"alloc3", "alloc2"}, 1, 1)}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1663,9 +1693,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t 
 	preemptor := NewPreemptor(app4, headRoom, 30*time.Second, ask4, iterator(), false)
 
 	// register predicate handler
-	allocs := map[string]string{}
-	allocs["alloc4"] = nodeID1
-	plugin := mock.NewPreemptionPredicatePlugin(nil, allocs, nil)
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1763,7 +1791,7 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorS
 
 	// register predicate handler
 	preemptions := []mock.Preemption{mock.NewPreemption(true, "alloc4", nodeID1, []string{"alloc3", "alloc2"}, 1, 1)}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1848,7 +1876,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChil
 
 	// register predicate handler
 	preemptions := []mock.Preemption{mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0)}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -1928,7 +1956,7 @@ func TestTryPreemption_OnNode_UGParent_With_GNotSetOnBothChilds(t *testing.T) {
 	preemptor := NewPreemptor(app3, headRoom, 30*time.Second, ask3, iterator(), false)
 
 	// register predicate handler
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, nil)
+	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 
@@ -2004,7 +2032,7 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Si
 
 	// register predicate handler
 	preemptions := []mock.Preemption{mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0)}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 

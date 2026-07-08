@@ -19,20 +19,19 @@
 package mock
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/apache/yunikorn-core/pkg/locking"
-
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 type PreemptionPredicatePlugin struct {
 	ResourceManagerCallback
-	reservations map[string]string
-	allocations  map[string]string
-	preemptions  []Preemption
-	errHolder    *errHolder
+	mustPreFilterFail bool
+	mustFilterFail    bool
+	preemptions       []Preemption
+	errHolder         *errHolder
+	nodes             map[string]int
 
 	locking.RWMutex
 }
@@ -50,28 +49,20 @@ type errHolder struct {
 	err error
 }
 
-func (m *PreemptionPredicatePlugin) Predicates(args *si.PredicatesArgs) error {
+func (m *PreemptionPredicatePlugin) PredicatesPreFilter(args *si.PredicatesArgs) (map[string]struct{}, error) {
 	m.RLock()
 	defer m.RUnlock()
-	if args.Allocate {
-		nodeID, ok := m.allocations[args.AllocationKey]
-		if !ok {
-			return errors.New("no allocation found")
-		}
-		if nodeID != args.NodeID {
-			return errors.New("wrong node")
-		}
-		return nil
-	} else {
-		nodeID, ok := m.reservations[args.AllocationKey]
-		if !ok {
-			return errors.New("no allocation found")
-		}
-		if nodeID != args.NodeID {
-			return errors.New("wrong node")
-		}
-		return nil
+	feasibleNodes := make(map[string]struct{})
+	if m.mustPreFilterFail {
+		m.errHolder.err = fmt.Errorf("fake preemption predicate prefilter plugin failed")
+		return feasibleNodes, m.errHolder.err
 	}
+	for k, v := range m.nodes {
+		if v > 0 {
+			feasibleNodes[k] = struct{}{}
+		}
+	}
+	return feasibleNodes, nil
 }
 
 func (m *PreemptionPredicatePlugin) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
@@ -80,6 +71,10 @@ func (m *PreemptionPredicatePlugin) PreemptionPredicates(args *si.PreemptionPred
 	result := &si.PreemptionPredicatesResponse{
 		Success: false,
 		Index:   -1,
+	}
+	if m.mustFilterFail {
+		m.errHolder.err = fmt.Errorf("fake preemption predicate filter plugin failed")
+		return result
 	}
 	for _, preemption := range m.preemptions {
 		if preemption.expectedAllocationKey != args.AllocationKey {
@@ -126,12 +121,13 @@ func (m *PreemptionPredicatePlugin) GetPredicateError() error {
 // reservations: provide a list of allocations and node IDs for which the reservation predicate succeeds
 // allocs: provide a list of allocations and node IDs for which the allocation predicate succeeds
 // preempt: a slice of preemption scenarios configured for the plugin to check
-func NewPreemptionPredicatePlugin(reservations, allocs map[string]string, preempt []Preemption) *PreemptionPredicatePlugin {
+func NewPreemptionPredicatePlugin(preempt []Preemption, nodes map[string]int, mustPreFilterFail, mustFilterFail bool) *PreemptionPredicatePlugin {
 	return &PreemptionPredicatePlugin{
-		reservations: reservations,
-		allocations:  allocs,
-		preemptions:  preempt,
-		errHolder:    &errHolder{},
+		preemptions:       preempt,
+		errHolder:         &errHolder{},
+		nodes:             nodes,
+		mustPreFilterFail: mustPreFilterFail,
+		mustFilterFail:    mustFilterFail,
 	}
 }
 

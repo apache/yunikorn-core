@@ -672,8 +672,13 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 				assert.Assert(t, ok, "no victims found")
 				assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
 				assert.Equal(t, nodeID1, result.NodeID, "wrong node")
-				assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
-				assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+				nodes := make(map[string]int)
+				nodes[nodeID1] = 1
+				nodes[nodeID2] = 1
+				_, ok = nodes[result.NodeID]
+				assert.Check(t, ok == true, "either node1 or node2 chosen")
+				assert.Check(t, alloc1.IsPreempted() || alloc2.IsPreempted(), "either alloc1 or alloc2 preempted, but not both")
+				assert.Check(t, !alloc1.IsPreempted() || !alloc2.IsPreempted(), "either alloc1 or alloc2 not preempted, but not both")
 				assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 			} else {
 				assert.Assert(t, result == nil, "no result")

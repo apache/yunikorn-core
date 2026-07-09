@@ -127,11 +127,12 @@ func resetNode(node *Node) {
 	}
 }
 
-func resetQ(queue *Queue) {
+func resetQ(t *testing.T, queue *Queue) {
 	for _, v := range queue.applications {
 		for _, a := range v.allocations {
 			v.RemoveAllocationAsk(a.allocationKey)
-			_ = queue.DecAllocatedResource(a.GetAllocatedResource())
+			err := queue.DecAllocatedResource(a.GetAllocatedResource())
+			assert.NilError(t, err)
 		}
 		queue.RemoveApplication(v)
 	}
@@ -399,10 +400,8 @@ func TestTryPreemption(t *testing.T) {
 			}
 			// reset
 			resetNode(node)
-			resetQ(childQ1)
-			resetQ(childQ2)
-			resetQ(parentQ)
-			resetQ(rootQ)
+			resetQ(t, childQ1)
+			resetQ(t, childQ2)
 			plugins.UnregisterSchedulerPlugins()
 		})
 	}
@@ -685,8 +684,8 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 			// reset
 			resetNode(node1)
 			resetNode(node2)
-			resetQ(childQ1)
-			resetQ(childQ2)
+			resetQ(t, childQ1)
+			resetQ(t, childQ2)
 			plugins.UnregisterSchedulerPlugins()
 		})
 	}

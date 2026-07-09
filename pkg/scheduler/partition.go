@@ -73,10 +73,10 @@ type PartitionContext struct {
 	// Scheduling is running continuously as a lock free background task. Scheduling an application
 	// acquires a write lock of the application object. While holding the write lock a list of nodes is
 	// requested from the partition. This requires a read lock on the partition.
-	// If the partition write lock is held while manipulating an application a dead lock could occur.
+	// If the partition write lock is held while manipulating an application a deadlock could occur.
 	// Since application objects handle their own locks there is no requirement to hold the partition lock
 	// while manipulating the application.
-	// Similarly adding, updating or removing a node or a queue should only hold the partition write lock
+	// Similarly, adding, updating or removing a node or a queue should only hold the partition write lock
 	// while manipulating the partition information not while manipulating the underlying objects.
 	locking.RWMutex
 }
@@ -108,7 +108,14 @@ func newPartitionContext(conf configs.PartitionConfig, rmID string, cc *ClusterC
 	return pc, nil
 }
 
-// Initialise the partition.
+// GetUserGroupResolverType returns the user group resolver set for the partition.
+func (pc *PartitionContext) GetUserGroupResolverType() string {
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.userGroupCache.GetResolverType()
+}
+
+// initialPartitionFromConfig initialises a new partition.
 // If the silence flag is set to true, the function will not log queue creation or node sorting policy, update limit settings, or send a queue event.
 func (pc *PartitionContext) initialPartitionFromConfig(conf configs.PartitionConfig, silence bool) error {
 	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {
@@ -568,7 +575,7 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 	return queue, nil
 }
 
-// Get a node from the partition by nodeID.
+// GetNode from the partition by nodeID.
 func (pc *PartitionContext) GetNode(nodeID string) *objects.Node {
 	return pc.nodes.GetNode(nodeID)
 }
@@ -1024,13 +1031,15 @@ func (pc *PartitionContext) unReserve(app *objects.Application, node *objects.No
 		zap.Int("reservationsRemoved", num))
 }
 
-// Create an ordered node iterator based on the node sort policy set for this partition.
+// GetNodeIterator returns a node iterator with nodes ordered based on the node sort policy set for this partition.
+// Reserved nodes are filtered before the iterator is build.
 // The iterator is nil if there are no unreserved nodes available.
 func (pc *PartitionContext) GetNodeIterator() objects.NodeIterator {
 	return pc.nodes.GetNodeIterator()
 }
 
-// Create an ordered node iterator based on the node sort policy set for this partition.
+// GetFullNodeIterator returns a node iterator with nodes ordered based on the node sort policy set for this partition.
+// Reserved nodes are not filtered before the iterator is build.
 // The iterator is nil if there are no nodes available.
 func (pc *PartitionContext) GetFullNodeIterator() objects.NodeIterator {
 	return pc.nodes.GetFullNodeIterator()
@@ -1103,7 +1112,7 @@ func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 func (pc *PartitionContext) getAppsState(appMap map[string]*objects.Application, state string) []string {
 	pc.RLock()
 	defer pc.RUnlock()
-	apps := []string{}
+	var apps []string
 	for appID, app := range appMap {
 		if app.CurrentState() == state {
 			apps = append(apps, appID)
@@ -1399,7 +1408,7 @@ func (pc *PartitionContext) getOrStoreForeignAlloc(alloc *objects.Allocation) bo
 }
 
 // calculate overall nodes resource usage and returns a map as the result,
-// where the key is the resource name, e.g memory, and the value is a []int,
+// where the key is the resource name, e.g. memory, and the value is a []int,
 // which is a slice with 10 elements,
 // each element represents a range of resource usage,
 // such as

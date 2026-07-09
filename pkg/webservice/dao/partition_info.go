@@ -23,6 +23,7 @@ type PartitionInfo struct {
 	Name                    string            `json:"name"`                   // no omitempty, name should not be empty
 	Capacity                PartitionCapacity `json:"capacity"`               // no omitempty, omitempty doesn't work on a structure value
 	NodeSortingPolicy       NodeSortingPolicy `json:"nodeSortingPolicy"`      // no omitempty, omitempty doesn't work on a structure value
+	UserGroupResolver       UserGroupResolver `json:"userGroupResolver"`      // no omitempty, omitempty doesn't work on a structure value
 	PreemptionEnabled       bool              `json:"preemptionEnabled"`      // no omitempty, false shows preemption status better
 	QuotaPreemptionEnabled  bool              `json:"quotaPreemptionEnabled"` // no omitempty, false shows quota preemption status better
 	TotalNodes              int               `json:"totalNodes,omitempty"`
@@ -41,4 +42,8 @@ type PartitionCapacity struct {
 type NodeSortingPolicy struct {
 	Type            string             `json:"type,omitempty"`
 	ResourceWeights map[string]float64 `json:"resourceWeights,omitempty"`
+}
+
+type UserGroupResolver struct {
+	Type string `json:"type,omitempty"`
 }

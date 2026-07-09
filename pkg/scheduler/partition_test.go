@@ -62,21 +62,7 @@ func setupNode(t *testing.T, nodeID string, partition *PartitionContext, nodeRes
 }
 
 func TestNewPartition(t *testing.T) {
-	partition, err := newPartitionContext(configs.PartitionConfig{}, "", nil, false)
-	if err == nil || partition != nil {
-		t.Fatal("nil inputs should not have returned partition")
-	}
-	conf := configs.PartitionConfig{Name: "test"}
-	partition, err = newPartitionContext(conf, "", nil, false)
-	if err == nil || partition != nil {
-		t.Fatal("named partition without RM should not have returned partition")
-	}
-	partition, err = newPartitionContext(conf, "test", &ClusterContext{}, false)
-	if err == nil || partition != nil {
-		t.Fatal("partition without root queue should not have returned partition")
-	}
-
-	conf = configs.PartitionConfig{
+	conf := configs.PartitionConfig{
 		Name: "test",
 		Queues: []configs.QueueConfig{
 			{
@@ -85,12 +71,8 @@ func TestNewPartition(t *testing.T) {
 			},
 		},
 	}
-	partition, err = newPartitionContext(conf, "test", &ClusterContext{}, false)
-	if err == nil || partition != nil {
-		t.Fatal("partition without root queue should not have returned partition")
-	}
 
-	conf = configs.PartitionConfig{
+	confWithRoot := configs.PartitionConfig{
 		Name: "test",
 		Queues: []configs.QueueConfig{
 			{
@@ -117,10 +99,36 @@ func TestNewPartition(t *testing.T) {
 			},
 		},
 	}
-	partition, err = newPartitionContext(conf, "test", &ClusterContext{}, false)
-	assert.NilError(t, err, "partition create should not have failed with error")
-	if partition.root.QueuePath != "root" {
-		t.Fatal("partition root queue not set as expected")
+	testResolver := confWithRoot
+	testResolver.UserGroupResolver.Type = "test"
+	tests := []struct {
+		name     string
+		config   configs.PartitionConfig
+		rmID     string
+		cc       *ClusterContext
+		resolver string
+		wantErr  bool
+	}{
+		{"nil", configs.PartitionConfig{}, "", nil, "", true},
+		{"named no RM", configs.PartitionConfig{Name: "test"}, "", nil, "", true},
+		{"no queue", configs.PartitionConfig{Name: "test"}, "test", &ClusterContext{}, "", true},
+		{"no root", conf, "test", &ClusterContext{}, "", true},
+		{"OK default resolver", confWithRoot, "test", &ClusterContext{}, "", false},
+		{"OK test resolver", testResolver, "test", &ClusterContext{}, "test", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			partition, err := newPartitionContext(tt.config, tt.rmID, tt.cc, false)
+			if tt.wantErr {
+				assert.Assert(t, err != nil, "expected error got nil")
+				assert.Assert(t, partition == nil, "expected nil partition")
+				return
+			}
+			assert.NilError(t, err, "partition create should not have failed with error")
+			defer partition.userGroupCache.Stop()
+			assert.Equal(t, partition.root.QueuePath, "root", "partition root queue not set as expected")
+			assert.Equal(t, partition.GetUserGroupResolverType(), tt.resolver, "expected resolver type not set based on config")
+		})
 	}
 }
 
@@ -146,6 +154,7 @@ func TestNewWithPlacement(t *testing.T) {
 	}
 	partition, err := newPartitionContext(confWith, rmID, nil, false)
 	assert.NilError(t, err, "test partition create failed with error")
+	defer partition.userGroupCache.Stop()
 
 	// add a rule and check if it is updated
 	confWith = configs.PartitionConfig{
@@ -195,6 +204,7 @@ func TestNewWithPlacement(t *testing.T) {
 func TestAddNode(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")
+	defer partition.userGroupCache.Stop()
 	err = partition.AddNode(nil)
 	if err == nil {
 		t.Fatal("nil node add did not return error")
@@ -230,11 +240,12 @@ func TestRemoveNode(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")
+	defer partition.userGroupCache.Stop()
 	err = partition.AddNode(newNodeMaxResource("test", resources.NewResource()))
 	assert.NilError(t, err, "test node add failed unexpected")
 	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "node list not correct")
 
-	// remove non existing node
+	// remove non-existing node
 	_, _ = partition.removeNode("")
 	assert.Equal(t, 1, partition.nodes.GetNodeCount(), "nil node should not remove anything")
 	_, _ = partition.removeNode("does not exist")
@@ -248,6 +259,7 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	defer metrics.GetSchedulerMetrics().Reset()
 	defer metrics.GetQueueMetrics(defQueue).Reset()
@@ -298,7 +310,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
-
+	defer partition.userGroupCache.Stop()
 	defer metrics.GetSchedulerMetrics().Reset()
 	defer metrics.GetQueueMetrics(defQueue).Reset()
 
@@ -363,6 +375,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 func TestCalculateNodesResourceUsage(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	oldCapacity := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
 	node := newNodeMaxResource(nodeID1, oldCapacity)
 	err = partition.AddNode(node)
@@ -399,11 +412,13 @@ func TestCalculateNodesResourceUsage(t *testing.T) {
 //
 // ensure placeholder has been preempted and released resources has been given to the request asked for
 // ensure preempted placeholder has been accounted under timed out in gang app placeholder data
+//
+//nolint:funlen
 func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
-
+	defer partition.userGroupCache.Stop()
 	defer metrics.GetSchedulerMetrics().Reset()
 	defer metrics.GetQueueMetrics(defQueue).Reset()
 
@@ -525,7 +540,7 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 // queue quota max size: 16GB / 16cpu
 // nodes: 2 * 8GB / 8 cpu
 // create an application with allocation: 4 GB / 4 cpu
-// create an gang application requesting: 7 * 2GB / 2cpu
+// create a gang application requesting: 7 * 2GB / 2cpu
 // Remove the node where placeholders are running
 //
 // ensure removed placeholders has been accounted under timed out in gang app placeholder data
@@ -533,6 +548,7 @@ func TestPlaceholderDataWithNodeRemoval(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	defer metrics.GetSchedulerMetrics().Reset()
 	defer metrics.GetQueueMetrics(defQueue).Reset()
@@ -611,7 +627,7 @@ func TestPlaceholderDataWithNodeRemoval(t *testing.T) {
 // queue quota max size: 16GB / 16cpu
 // nodes: 2 * 8GB / 8 cpu
 // create an application with allocation: 4 GB / 4 cpu
-// create an gang application requesting: 7 * 2GB / 2cpu
+// create a gang application requesting: 7 * 2GB / 2cpu
 // Remove the node where placeholders are running
 //
 // ensure removed placeholders has been accounted under timed out in gang app placeholder data
@@ -619,6 +635,7 @@ func TestPlaceholderDataWithRemoval(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	defer metrics.GetSchedulerMetrics().Reset()
 	defer metrics.GetQueueMetrics(defQueue).Reset()
@@ -716,6 +733,7 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	defer metrics.GetSchedulerMetrics().Reset()
 	defer metrics.GetQueueMetrics(defQueue).Reset()
@@ -790,6 +808,7 @@ func TestRemoveNodeWithReal(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	defer metrics.GetSchedulerMetrics().Reset()
 	defer metrics.GetQueueMetrics(defQueue).Reset()
@@ -859,6 +878,7 @@ func TestAddApp(t *testing.T) {
 	defer metrics.GetQueueMetrics(defQueue).Reset()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	// add a new app
 	app := newApplication(appID1, "default", defQueue)
@@ -913,6 +933,7 @@ func TestAddApp(t *testing.T) {
 func TestAddAppForced(t *testing.T) {
 	partition, err := newBasePartitionNoRootDefault()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	// add a new app to an invalid queue
 	app := newApplication(appID1, "default", "root.invalid")
@@ -1008,6 +1029,7 @@ func TestAddAppForcedWithPlacement(t *testing.T) {
 	}
 	partition, err := newPartitionContext(confWith, rmID, nil, false)
 	assert.NilError(t, err, "test partition create failed with error")
+	defer partition.userGroupCache.Stop()
 
 	// add a new app using tag rule
 	app := newApplicationTags(appID1, "default", "", map[string]string{"queue": "root.test"})
@@ -1038,6 +1060,7 @@ func TestAddAppForcedWithPlacement(t *testing.T) {
 func TestAddAppTaskGroup(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	// add a new app: TG specified with resource no max set on the queue
 	task := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10000})
@@ -1050,7 +1073,7 @@ func TestAddAppTaskGroup(t *testing.T) {
 	app = newApplicationTG(appID2, "default", defQueue, task)
 	assert.Assert(t, resources.Equals(app.GetPlaceholderAsk(), task), "placeholder ask not set as expected")
 
-	// queue now has fair as sort policy app add should fail
+	// queue now has fair set as the sort policy, app add should fail
 	queue := partition.GetQueue(defQueue)
 	_, err = queue.ApplyConf(configs.QueueConfig{
 		Name:       "default",
@@ -1070,6 +1093,7 @@ func TestRemoveApp(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	// add a new app that will just sit around to make sure we remove the right one
 	appNotRemoved := "will_not_remove"
@@ -1132,6 +1156,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	// add a new app that will just sit around to make sure we remove the right one
 	appNotRemoved := "will_not_remove"
@@ -1169,7 +1194,7 @@ func TestRemoveAppAllocs(t *testing.T) {
 	allocs, _ = partition.removeAllocation(release)
 	assert.Equal(t, 0, len(allocs), "removal request for non existing application returned allocations: %v", allocs)
 	assertLimits(t, getTestUserGroup(), resources.Multiply(appRes, 2))
-	// create a new release with app, non existing allocation: should just return
+	// create a new release with app, non-existing allocation: should just return
 	release.ApplicationID = appNotRemoved
 	release.AllocationKey = "does_not_exist"
 	allocs, _ = partition.removeAllocation(release)
@@ -1195,6 +1220,7 @@ func TestRemoveAllPlaceholderAllocs(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	setupNode(t, nodeID1, partition, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1000000}))
 
 	// add a new app that will just sit around to make sure we remove the right one
@@ -1225,6 +1251,7 @@ func TestRemoveAllPlaceholderAllocs(t *testing.T) {
 func TestCreateQueue(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	// top level should fail
 	_, err = partition.createQueue("test", security.UserGroup{})
 	if err == nil {
@@ -1311,6 +1338,7 @@ func TestCreateDeepQueueConfig(t *testing.T) {
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	// There is a queue setup as the config must be valid when we run
 	root := partition.GetQueue("root")
 	if root == nil {
@@ -1325,74 +1353,94 @@ func TestCreateDeepQueueConfig(t *testing.T) {
 	assert.Equal(t, "root.level1.level2.level3.level4.level5", queue.GetQueuePath(), "root.level1.level2.level3.level4.level5 queue not found in partition")
 }
 
-func assertUpdateQueues(t *testing.T, resourceType string, resMap map[string]string) {
-	var resExpect *resources.Resource
-	var err error
-	if len(resMap) > 0 {
-		resExpect, err = resources.NewResourceFromConf(resMap)
-		assert.NilError(t, err, "resource from conf failed")
-	} else {
-		resExpect = nil
+func TestUpdateQueues(t *testing.T) {
+	tests := []struct {
+		name         string
+		resourceType string
+		resMap       map[string]string
+	}{
+		{"single max", "max", map[string]string{"first": "2"}},
+		{"multi max", "max", map[string]string{"first": "4", "second": "3"}},
+		{"empty max", "max", map[string]string{}},
+		{"single guaranteed", "guaranteed", map[string]string{"third": "10"}},
+		{"multi guaranteed", "guaranteed", map[string]string{"third": "2", "fourth": "5"}},
+		{"empty guaranteed", "guaranteed", map[string]string{}},
+		{"single both", "both", map[string]string{"both": "5"}},
+		{"multi both", "both", map[string]string{"bothfirst": "2", "bothsecond": "5"}},
+		{"empty both", "both", map[string]string{}},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var resExpect *resources.Resource
+			var err error
+			if len(tt.resMap) > 0 {
+				resExpect, err = resources.NewResourceFromConf(tt.resMap)
+				assert.NilError(t, err, "resource from conf failed")
+			} else {
+				resExpect = nil
+			}
 
-	var res configs.Resources
-	switch resourceType {
-	case "max":
-		res = configs.Resources{Max: resMap}
-	case "guaranteed":
-		res = configs.Resources{Guaranteed: resMap}
-	default:
-		res = configs.Resources{Max: resMap, Guaranteed: resMap}
-	}
+			var res configs.Resources
+			switch tt.resourceType {
+			case "max":
+				res = configs.Resources{Max: tt.resMap}
+			case "guaranteed":
+				res = configs.Resources{Guaranteed: tt.resMap}
+			default:
+				res = configs.Resources{Max: tt.resMap, Guaranteed: tt.resMap}
+			}
 
-	conf := []configs.QueueConfig{
-		{
-			Name:      "parent",
-			Parent:    true,
-			Resources: res,
-			Queues: []configs.QueueConfig{
+			conf := []configs.QueueConfig{
 				{
-					Name:   "leaf",
-					Parent: false,
-					Queues: nil,
+					Name:      "parent",
+					Parent:    true,
+					Resources: res,
+					Queues: []configs.QueueConfig{
+						{
+							Name:   "leaf",
+							Parent: false,
+							Queues: nil,
+						},
+					},
 				},
-			},
-		},
-	}
+			}
 
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
 
-	// There is a queue setup as the config must be valid when we run
-	root := partition.GetQueue("root")
-	if root == nil {
-		t.Error("root queue not found in partition")
-	}
+			// There is a queue setup as the config must be valid when we run
+			root := partition.GetQueue("root")
+			if root == nil {
+				t.Error("root queue not found in partition")
+			}
 
-	err = partition.updateQueues(conf, root)
-	assert.NilError(t, err, "queue update from config failed")
-	parent := partition.GetQueue("root.parent")
-	if parent == nil {
-		t.Fatal("parent queue should still exist")
-	}
-	switch resourceType {
-	case "max":
-		assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
-		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), nil), "parent queue guaranteed resource should have been updated")
-	case "guaranteed":
-		assert.Assert(t, resources.Equals(parent.GetMaxResource(), nil), "parent queue max resource should have been updated")
-		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
-	default:
-		assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
-		assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
-	}
-	leaf := partition.GetQueue("root.parent.leaf")
-	if leaf == nil {
-		t.Fatal("leaf queue should have been created")
+			err = partition.updateQueues(conf, root)
+			assert.NilError(t, err, "queue update from config failed")
+			parent := partition.GetQueue("root.parent")
+			if parent == nil {
+				t.Fatal("parent queue should still exist")
+			}
+			switch tt.resourceType {
+			case "max":
+				assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
+				assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), nil), "parent queue guaranteed resource should have been updated")
+			case "guaranteed":
+				assert.Assert(t, resources.Equals(parent.GetMaxResource(), nil), "parent queue max resource should have been updated")
+				assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
+			default:
+				assert.Assert(t, resources.Equals(parent.GetMaxResource(), resExpect), "parent queue max resource should have been updated")
+				assert.Assert(t, resources.Equals(parent.GetGuaranteedResource(), resExpect), "parent queue guaranteed resource should have been updated")
+			}
+			leaf := partition.GetQueue("root.parent.leaf")
+			if leaf == nil {
+				t.Fatal("leaf queue should have been created")
+			}
+		})
 	}
 }
 
-func TestUpdateQueues(t *testing.T) {
+func TestUpdateQueueDefault(t *testing.T) {
 	conf := []configs.QueueConfig{
 		{
 			Name:   "parent",
@@ -1403,6 +1451,7 @@ func TestUpdateQueues(t *testing.T) {
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	// There is a queue setup as the config must be valid when we run
 	root := partition.GetQueue("root")
 	if root == nil {
@@ -1415,17 +1464,6 @@ func TestUpdateQueues(t *testing.T) {
 		t.Fatal("default queue should still exist")
 	}
 	assert.Assert(t, def.IsDraining(), "'root.default' queue should have been marked for removal")
-
-	assertUpdateQueues(t, "max", map[string]string{"vcore": "2"})
-	assertUpdateQueues(t, "max", map[string]string{"vcore": "5"})
-	assertUpdateQueues(t, "max", map[string]string{"memory": "5"})
-	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "2", "memory": "5"})
-	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "4", "memory": "3"})
-	assertUpdateQueues(t, "guaranteed", map[string]string{"vcore": "10"})
-	assertUpdateQueues(t, "both", map[string]string{"vcore": "2", "memory": "5"})
-	assertUpdateQueues(t, "both", map[string]string{"vcore": "5", "memory": "2"})
-	assertUpdateQueues(t, "both", map[string]string{"vcore": "5"})
-	assertUpdateQueues(t, "both", map[string]string{})
 }
 
 // TestUpdateQueuesInheritedProperties verifies that a child queue inherits
@@ -1451,6 +1489,7 @@ func TestUpdateQueuesInheritedProperties(t *testing.T) {
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	root := partition.GetQueue("root")
 	assert.Assert(t, root != nil, "root queue not found")
 
@@ -1519,6 +1558,7 @@ func TestReAddQueues(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
 	// There is a queue setup as the config must be valid when we run
+	defer partition.userGroupCache.Stop()
 	root := partition.GetQueue("root")
 	if root == nil {
 		t.Error("root queue not found in partition")
@@ -1549,9 +1589,10 @@ func TestReAddQueues(t *testing.T) {
 	}
 }
 
-func TestGetApplication(t *testing.T) {
+func TestGetApplicationNoRoot(t *testing.T) {
 	partition, err := newBasePartitionNoRootDefault()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", "root.custom")
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "no error expected while adding the application")
@@ -1564,18 +1605,22 @@ func TestGetApplication(t *testing.T) {
 	if partition.GetApplication(appID2) != nil {
 		t.Fatal("partition added app incorrectly should have failed")
 	}
-
-	partition, err = newBasePartition()
+}
+func TestGetApplication(t *testing.T) {
+	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
-	err = partition.AddApplication(app2)
+	defer partition.userGroupCache.Stop()
+	app := newApplication(appID2, "default", "unknown")
+	err = partition.AddApplication(app)
 	assert.NilError(t, err, "no error expected while adding the application")
-	assert.Equal(t, partition.GetApplication(appID2), app2, "partition failed to add app incorrect app returned")
+	assert.Equal(t, partition.GetApplication(appID2), app, "partition failed to add app incorrect app returned")
 }
 
 func TestGetQueue(t *testing.T) {
 	// get the partition
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")
+	defer partition.userGroupCache.Stop()
 	var nilQueue *objects.Queue
 	// test partition has a root queue
 	queue := partition.GetQueue("")
@@ -1604,6 +1649,8 @@ func TestTryAllocate(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -1681,6 +1728,8 @@ func TestRequiredNodeReservation(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	node := partition.nodes.GetNode(nodeID1)
 	if node == nil {
 		t.Fatal("node-1 should have been created")
@@ -1763,6 +1812,8 @@ func TestRequiredNodeReservation(t *testing.T) {
 func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -1841,6 +1892,8 @@ func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 func TestRequiredNodeCancelDSReservations(t *testing.T) {
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -1924,6 +1977,8 @@ func TestRequiredNodeNotExist(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -1959,6 +2014,8 @@ func TestRequiredNodeNotExist(t *testing.T) {
 func TestRequiredNodeAllocation(t *testing.T) {
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result.Request.String())
 	}
@@ -2027,6 +2084,7 @@ func assertPreemptedResource(t *testing.T, appSummary *objects.ApplicationSummar
 func TestPreemption(t *testing.T) {
 	setupUGM()
 	partition, app1, app2, alloc1, alloc2 := setupPreemption(t)
+	defer partition.userGroupCache.Stop()
 
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "5"})
 	assert.NilError(t, err, "failed to create resource")
@@ -2107,7 +2165,7 @@ func TestPreemptionForRequiredNodeNormalAlloc(t *testing.T) {
 // Preemption followed by a reserved allocation
 func TestPreemptionForRequiredNodeReservedAlloc(t *testing.T) {
 	setupUGM()
-	// setup the partition so we can try the real allocation
+	// set up the partition so we can try the real allocation
 	partition, app := setupPreemptionForRequiredNode(t)
 	// now try the allocation again: the reserved path
 	result := partition.tryReservedAllocate()
@@ -2125,6 +2183,7 @@ func TestPreemptionForRequiredNodeReservedAlloc(t *testing.T) {
 func TestPreemptionForRequiredNodeMultipleAttemptsAvoided(t *testing.T) {
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	app, testHandler := newApplicationWithHandler(appID1, "default", "root.parent.sub-leaf")
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "8"})
@@ -2201,7 +2260,7 @@ func getExpectedQueuesLimitsForPreemptionWithRequiredNode() map[string]map[strin
 	return expectedQueuesMaxLimits
 }
 
-// setup the partition with existing allocations so we can test preemption
+// set up the partition with existing allocations so we can test preemption
 func setupPreemption(t *testing.T) (*PartitionContext, *objects.Application, *objects.Application, *objects.Allocation, *objects.Allocation) {
 	partition := createPreemptionQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
@@ -2261,10 +2320,12 @@ func setupPreemption(t *testing.T) (*PartitionContext, *objects.Application, *ob
 	return partition, app1, app2, result1.Request, result2.Request
 }
 
-// setup the partition in a state that we need for multiple tests
+// set up the partition in a state that we need for multiple tests
 func setupPreemptionForRequiredNode(t *testing.T) (*PartitionContext, *objects.Application) {
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -2343,6 +2404,8 @@ func TestTryAllocateLarge(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -2374,6 +2437,8 @@ func TestAllocReserveNewNode(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned result: %s", result)
 	}
@@ -2443,6 +2508,8 @@ func TestTryAllocateReserve(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryReservedAllocate(); result != nil {
 		t.Fatalf("empty cluster reserved allocate returned allocation: %s", result)
 	}
@@ -2495,7 +2562,7 @@ func TestTryAllocateReserve(t *testing.T) {
 	if result != nil {
 		t.Fatalf("reserved allocation should not return any allocation: %s", result)
 	}
-	// try non reserved this should allocate
+	// try non-reserved this should allocate
 	result = partition.tryAllocate()
 	if result == nil || result.Request == nil {
 		t.Fatal("allocation did not return any allocation")
@@ -2515,6 +2582,8 @@ func TestTryAllocateWithReserved(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if alloc := partition.tryReservedAllocate(); alloc != nil {
 		t.Fatalf("empty cluster reserved allocate returned allocation: %v", alloc)
 	}
@@ -2566,6 +2635,8 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -2598,7 +2669,7 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 	}
 	assertLimits(t, getTestUserGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 16000}))
 
-	// add a asks which should reserve
+	// add an asks which should reserve
 	ask := newAllocationAsk("alloc-5", appID1, res)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "failed to add ask alloc-5 to app")
@@ -2654,6 +2725,8 @@ func TestScheduleRemoveReservedAsk(t *testing.T) {
 func TestUpdateRootQueue(t *testing.T) {
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "20"})
 	assert.NilError(t, err, "resource creation failed")
 	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
@@ -2753,6 +2826,7 @@ func completeApplicationAndWait(app *objects.Application, pc *PartitionContext) 
 func TestCompleteApp(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication("completed", "default", defQueue)
 	app.SetState(objects.Completing.String())
 	err = partition.AddApplication(app)
@@ -2769,6 +2843,7 @@ func TestCompleteApp(t *testing.T) {
 func TestCleanupFailedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	newApp1 := newApplication("newApp1", "default", defQueue)
 	newApp2 := newApplication("newApp2", "default", defQueue)
 
@@ -2789,6 +2864,7 @@ func TestCleanupFailedApps(t *testing.T) {
 func TestCleanupCompletedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	completedApp1 := newApplication("completedApp1", "default", defQueue)
 	completedApp2 := newApplication("completedApp2", "default", defQueue)
 
@@ -2825,6 +2901,7 @@ func TestCleanupCompletedApps(t *testing.T) {
 func TestCleanupRejectedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	rejectedApp := newApplication("new", "default", defQueue)
 	rejectedMessage := fmt.Sprintf("Failed to place application %s: application rejected: no placement rule matched", rejectedApp.ApplicationID)
 
@@ -2850,6 +2927,7 @@ func TestCleanupRejectedApps(t *testing.T) {
 func TestUpdateNode(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "test partition create failed with error")
+	defer partition.userGroupCache.Stop()
 
 	newRes, err := resources.NewResourceFromConf(map[string]string{"memory": "400M", "vcore": "30"})
 	assert.NilError(t, err, "failed to create resource")
@@ -2902,21 +2980,25 @@ func TestUpdateNode(t *testing.T) {
 	assert.Assert(t, partition.GetTotalPartitionResource().IsEmpty())
 }
 
-func TestAddTGApplication(t *testing.T) {
-	limit := map[string]string{"vcore": "1"}
-	partition, err := newLimitedPartition(limit)
-	assert.NilError(t, err, "partition create failed")
-	// add a app with TG that does not fit in the queue
-	var tgRes *resources.Resource
-	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+func tgApp(t *testing.T) *objects.Application {
+	tgRes, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
 	tags := map[string]string{
 		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"vcore\":{\"value\":111}}}",
 		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"vcore\":{\"value\":2222}}}",
 		siCommon.AppTagNamespaceResourceMaxApps:    "1",
 	}
-	app := newApplicationTGTags(appID1, "default", "root.limited", tgRes, tags)
-	err = partition.AddApplication(app)
+	return newApplicationTGTags(appID1, "default", "root.limited", tgRes, tags)
+}
+
+func TestAddTGApplication_NotFit(t *testing.T) {
+	limit := map[string]string{"vcore": "1"}
+	partition, err := newLimitedPartition(limit)
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	// add an app with TG that does not fit in the queue
+	err = partition.AddApplication(tgApp(t))
 	if err == nil {
 		t.Error("app-1 should be rejected due to TG request")
 	}
@@ -2926,29 +3008,37 @@ func TestAddTGApplication(t *testing.T) {
 	})), "max resource changed unexpectedly")
 	assert.Assert(t, queue.GetGuaranteedResource() == nil)
 	assert.Equal(t, queue.GetMaxApps(), uint64(2), "max running apps should be 2")
+}
 
-	// add a app with TG that does fit in the queue
-	limit = map[string]string{"vcore": "100"}
-	partition, err = newLimitedPartition(limit)
+func TestAddTGApplication_Fit(t *testing.T) {
+	// add an app with TG that does fit in the queue
+	limit := map[string]string{"vcore": "100"}
+	partition, err := newLimitedPartition(limit)
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+	app := tgApp(t)
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	assert.Equal(t, partition.getApplication(appID1), app, "partition failed to add app incorrect app returned")
-	queue = partition.GetQueue("root.limited")
+	queue := partition.GetQueue("root.limited")
 	assert.Assert(t, resources.Equals(queue.GetMaxResource(), resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": 100000,
 	})), "max resource changed unexpectedly")
 	assert.Assert(t, queue.GetGuaranteedResource() == nil)
 	assert.Equal(t, queue.GetMaxApps(), uint64(2), "max running apps should be 2")
+}
 
-	// add a app with TG that does fit in the queue as the resource is not limited in the queue
-	limit = map[string]string{"second": "100"}
-	partition, err = newLimitedPartition(limit)
+func TestAddTGApplication_OtherLimit(t *testing.T) {
+	// add an app with TG that does fit in the queue as the resource is not limited in the queue
+	limit := map[string]string{"second": "100"}
+	partition, err := newLimitedPartition(limit)
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+	app := tgApp(t)
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	assert.Equal(t, partition.getApplication(appID1), app, "partition failed to add app incorrect app returned")
-	queue = partition.GetQueue("root.limited")
+	queue := partition.GetQueue("root.limited")
 	assert.Assert(t, resources.Equals(queue.GetMaxResource(), resources.NewResourceFromMap(map[string]resources.Quantity{
 		"second": 100,
 	})), "max resource changed unexpectedly")
@@ -2959,7 +3049,9 @@ func TestAddTGApplication(t *testing.T) {
 func TestAddTGAppDynamic(t *testing.T) {
 	partition, err := newPlacementPartition()
 	assert.NilError(t, err, "partition create failed")
-	// add a app with TG that does fit in the dynamic queue (no limit)
+	defer partition.userGroupCache.Stop()
+
+	// add an app with TG that does fit in the dynamic queue (no limit)
 	var tgRes *resources.Resource
 	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
@@ -3027,6 +3119,7 @@ func TestPlaceholderSmallerThanReal(t *testing.T) {
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	tgRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5})
 	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
@@ -3092,6 +3185,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	phCount := 5
 	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
@@ -3166,6 +3260,7 @@ func TestPlaceholderBiggerThanReal(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	if result := partition.tryPlaceholderAllocate(); result != nil {
 		t.Fatalf("empty cluster placeholder allocate returned allocation: %s", result)
 	}
@@ -3241,6 +3336,7 @@ func TestPlaceholderMatch(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	tgRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
 	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
 
@@ -3338,6 +3434,7 @@ func TestPreemptedPlaceholderSkip(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	tgRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 10})
 	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
 
@@ -3419,6 +3516,7 @@ func TestTryPlaceholderAllocate(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	if result := partition.tryPlaceholderAllocate(); result != nil {
 		t.Fatalf("empty cluster placeholder allocate returned allocation: %s", result)
 	}
@@ -3546,6 +3644,7 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	if result := partition.tryPlaceholderAllocate(); result != nil {
 		t.Fatalf("empty cluster placeholder allocate returned allocation: %s", result)
 	}
@@ -3642,6 +3741,9 @@ func TestFailReplacePlaceholder(t *testing.T) {
 func TestUpdateAllocation(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	_, allocCreated, err := partition.UpdateAllocation(nil)
 	assert.NilError(t, err, "nil alloc should not return an error")
 	assert.Check(t, !allocCreated, "alloc should not have been created")
@@ -3711,6 +3813,8 @@ func TestUpdateAllocation(t *testing.T) {
 func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 	setupUGM()
 	partition := createQuotaPreemptionQueuesNodes(t)
+	defer partition.userGroupCache.Stop()
+
 	leafQueueConf := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, map[string]string{configs.QuotaPreemptionDelay: "1s"})}
 	leafQueueConf1 := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, nil)}
 	leafQueueConf2 := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, map[string]string{configs.QuotaPreemptionDelay: "0s"})}
@@ -3813,9 +3917,9 @@ func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 
 			if tt.allocResult == nil {
-				events := testHandler.GetEvents()
+				eventsList := testHandler.GetEvents()
 				eventsCount := 0
-				for _, event := range events {
+				for _, event := range eventsList {
 					if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
 						assert.Equal(t, len(allocRelease.ReleasedAllocations), 3)
 						assert.Equal(t, allocRelease.ReleasedAllocations[0].GetTerminationType(), si.TerminationType_PREEMPTED_BY_SCHEDULER, "")
@@ -3834,6 +3938,9 @@ func TestUpdateAllocationWithQuotaPreemption(t *testing.T) {
 func TestUpdateAllocationWithAsk(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	askCreated, _, err := partition.UpdateAllocation(nil)
 	assert.NilError(t, err, "nil ask should not return an error")
 	assert.Check(t, !askCreated, "ask should not have been created")
@@ -3904,6 +4011,8 @@ func TestUpdateAllocationWithAsk(t *testing.T) {
 func TestUpdateAllocationWithAskAndQuotaPreemption(t *testing.T) {
 	setupUGM()
 	partition := createQuotaPreemptionQueuesNodes(t)
+	defer partition.userGroupCache.Stop()
+
 	leafQueueConf := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, map[string]string{configs.QuotaPreemptionDelay: "1s"})}
 	leafQueueConf1 := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, nil)}
 	leafQueueConf2 := []configs.QueueConfig{createLeafQueueConfig(map[string]string{"memory": "5", "vcore": "5"}, map[string]string{configs.QuotaPreemptionDelay: "0s"})}
@@ -4006,9 +4115,9 @@ func TestUpdateAllocationWithAskAndQuotaPreemption(t *testing.T) {
 			time.Sleep(100 * time.Millisecond)
 
 			if tt.allocResult == nil {
-				events := testHandler.GetEvents()
+				eventsList := testHandler.GetEvents()
 				eventsCount := 0
-				for _, event := range events {
+				for _, event := range eventsList {
 					if allocRelease, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
 						assert.Equal(t, len(allocRelease.ReleasedAllocations), 2)
 						assert.Equal(t, allocRelease.ReleasedAllocations[0].GetTerminationType(), si.TerminationType_PREEMPTED_BY_SCHEDULER, "")
@@ -4028,6 +4137,7 @@ func TestRemoveAllocationAsk(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	// add the app
 	app := newApplication(appID1, "default", "root.default")
 	err = partition.AddApplication(app)
@@ -4083,6 +4193,7 @@ func TestUpdatePreemption(t *testing.T) {
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "Partition creation failed")
+	defer partition.userGroupCache.Stop()
 	assert.Assert(t, partition.IsPreemptionEnabled(), "preemption should be enabled by default")
 	assert.Assert(t, !partition.IsQuotaPreemptionEnabled(), "quota preemption should be disabled by default")
 
@@ -4110,6 +4221,7 @@ func TestUpdatePreemption(t *testing.T) {
 func TestUpdateNodeSortingPolicy(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "Partition creation failed unexpectedly")
+	defer partition.userGroupCache.Stop()
 
 	if partition.nodes.GetNodeSortingPolicy().PolicyType().String() != policies.FairnessPolicy.String() {
 		t.Error("Node policy is not set with the default policy which is fair policy.")
@@ -4193,9 +4305,8 @@ func TestGetNodeSortingPolicyWhenNewPartitionFromConfig(t *testing.T) {
 			}
 
 			p, err := newPartitionContext(conf, rmID, nil, false)
-			if err != nil {
-				t.Errorf("Partition creation fail: %s", err.Error())
-			}
+			assert.NilError(t, err, "Partition creation fail should not have failed")
+			defer p.userGroupCache.Stop()
 
 			ans := p.nodes.GetNodeSortingPolicy().PolicyType().String()
 			if ans != tt.want {
@@ -4209,6 +4320,8 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 	const resType = "vcore"
 	partition := createQueuesNodes(t)
 	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	if result := partition.tryAllocate(); result != nil {
 		t.Fatalf("empty cluster allocate returned allocation: %s", result)
 	}
@@ -4296,6 +4409,7 @@ func TestNewQueueEvents(t *testing.T) {
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err)
+	defer partition.userGroupCache.Stop()
 	_, err = partition.createQueue("root.test", security.UserGroup{
 		User: "test",
 	})
@@ -4326,6 +4440,8 @@ func TestUserHeadroom(t *testing.T) {
 	setupUGM()
 	partition, err := newConfiguredPartition()
 	assert.NilError(t, err, "test partition create failed with error")
+	defer partition.userGroupCache.Stop()
+
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"memory": "10", "vcores": "10"})
 	assert.NilError(t, err, "failed to create basic resource")
@@ -4456,6 +4572,9 @@ func TestPlaceholderAllocationTracking(t *testing.T) {
 	const phID3 = "ph-3"
 	setupUGM()
 	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
 	assert.NilError(t, err, "failed to create resource")
 
@@ -4529,6 +4648,8 @@ func TestPlaceholderAllocationTracking(t *testing.T) {
 func TestReservationTracking(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	app := newApplication(appID1, "default", "root.parent.sub-leaf")
 	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
@@ -4682,6 +4803,7 @@ func TestLimitMaxApplications(t *testing.T) {
 
 			partition, err := newPartitionContext(conf, rmID, nil, false)
 			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
 
 			// add node1
 			nodeRes, err := resources.NewResourceFromConf(map[string]string{"memory": "10", "vcores": "10"})
@@ -4837,6 +4959,7 @@ func TestLimitMaxApplicationsForReservedAllocation(t *testing.T) {
 
 			partition, err := newPartitionContext(conf, rmID, nil, false)
 			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
 
 			// add node1
 			nodeRes, err := resources.NewResourceFromConf(map[string]string{"memory": "10", "vcores": "10"})
@@ -4885,6 +5008,7 @@ func TestLimitMaxApplicationsForReservedAllocation(t *testing.T) {
 func TestCalculateOutstandingRequests(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "unable to create partition: %v", err)
+	defer partition.userGroupCache.Stop()
 
 	// no application&asks
 	requests := partition.calculateOutstandingRequests()
@@ -4960,6 +5084,7 @@ func TestPlaceholderAllocationAndReplacementAfterRecovery(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	// add a new app
 	app := newApplication(appID1, "default", defQueue)
@@ -5013,10 +5138,12 @@ func TestPlaceholderAllocationAndReplacementAfterRecovery(t *testing.T) {
 	assert.Equal(t, "tg-1", confirmed.GetTaskGroup())
 }
 
-func TestForeignAllocation(t *testing.T) { //nolint:funlen
+//nolint:funlen
+func TestForeignAllocation(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	node := newNodeMaxResource(nodeID1, nodeRes)
 	err = partition.AddNode(node)
@@ -5121,6 +5248,7 @@ func TestAppSchedulingOrderFIFO(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	conf := configs.PartitionConfig{
 		Name: "test",
 		Queues: []configs.QueueConfig{
@@ -5221,6 +5349,7 @@ func TestApplicationBackoff(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	conf := configs.PartitionConfig{
 		Name: "test",
 		Queues: []configs.QueueConfig{
@@ -5271,4 +5400,29 @@ func TestApplicationBackoff(t *testing.T) {
 	deadline := app.GetBackoffDeadline()
 	assert.Assert(t, !deadline.IsZero())
 	assert.Assert(t, deadline.After(beforeAlloc))
+}
+
+func TestUpdateResolver(t *testing.T) {
+	conf := configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{
+			{
+				Name:      "root",
+				Parent:    true,
+				SubmitACL: "*",
+				Queues:    nil,
+			},
+		},
+		UserGroupResolver: configs.UserGroupResolver{
+			Type: "test",
+		},
+	}
+	partition, err := newPartitionContext(conf, "resolver", &ClusterContext{}, false)
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+	assert.Equal(t, partition.GetUserGroupResolverType(), "test", "expected test resolver to be set based on config")
+	conf.UserGroupResolver.Type = "ldap"
+	err = partition.updatePartitionDetails(conf)
+	assert.NilError(t, err, "unable to update partition config")
+	assert.Equal(t, partition.GetUserGroupResolverType(), "test", "resolver cannot be updated on running partition")
 }

@@ -117,13 +117,17 @@ partitions:
 const configMultiPartitions = `
 partitions: 
   - name: gpu
+    usergroupresolver:
+      type: test
     preemption:
       enabled: false
     queues: 
     - name: root
   - name: default
+    usergroupresolver:
+      type: ""
     nodesortpolicy:
-        type: fair
+      type: fair
     queues: 
     - name: root
       queues: 
@@ -285,7 +289,6 @@ func setup(t *testing.T, config string, partitionCount int) *scheduler.Partition
 	ctx, err := scheduler.NewClusterContext(rmID, policyGroup, []byte(config))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 	schedulerContext.Store(ctx)
-
 	assert.Equal(t, partitionCount, len(schedulerContext.Load().GetPartitionMapClone()))
 
 	// Check default partition
@@ -533,6 +536,7 @@ func TestGetConfigYAML(t *testing.T) {
 	ctx, err := scheduler.NewClusterContext(rmID, policyGroup, []byte(startConf))
 	assert.NilError(t, err, "Error when load clusterInfo from config")
 	schedulerContext.Store(ctx)
+	defer schedulerContext.Load().Stop()
 	// No err check: new request always returns correctly
 	//nolint: errcheck
 	req, _ := http.NewRequest("GET", "", nil)
@@ -568,6 +572,7 @@ func TestGetConfigYAML(t *testing.T) {
 
 func TestGetConfigJSON(t *testing.T) {
 	setup(t, startConf, 1)
+	defer schedulerContext.Load().Stop()
 	// No err check: new request always returns correctly
 	//nolint: errcheck
 	req, _ := http.NewRequest("GET", "", nil)
@@ -600,6 +605,7 @@ func TestGetConfigJSON(t *testing.T) {
 
 func TestGetClusterUtilJSON(t *testing.T) {
 	setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 
 	// check build information of RM
 	buildInfoMap := make(map[string]string)
@@ -722,6 +728,7 @@ func addAndConfirmApplicationExists(t *testing.T, partitionName string, partitio
 func TestGetPartitionNodesUtilJSON(t *testing.T) {
 	// setup
 	partition := setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 	appID := "app1"
 
 	// create test nodes
@@ -776,12 +783,13 @@ func TestGetNodeUtilisations(t *testing.T) {
 
 	// setup partitions
 	ctx, err := scheduler.NewClusterContext(rmID, policyGroup, []byte(configMultiPartitions))
-	assert.NilError(t, err, "Error when load clusterInfo from config")
+	assert.NilError(t, err, "Error when creating clusterInfo from config")
 	schedulerContext.Store(ctx)
-	assert.NilError(t, err, "Error when load clusterInfo from config")
-	schedulerContext.Load().GetPartition("default")
+	defer schedulerContext.Load().Stop()
 	defaultPartition := schedulerContext.Load().GetPartition(common.GetNormalizedPartitionName("default", rmID))
+	assert.Assert(t, defaultPartition != nil, "Default partition should not be nil")
 	gpuPartition := schedulerContext.Load().GetPartition(common.GetNormalizedPartitionName("gpu", rmID))
+	assert.Assert(t, gpuPartition != nil, "Gpu partition should not be nil")
 
 	// add nodes to partitions
 	node1 := addNode(t, defaultPartition, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10}))
@@ -842,10 +850,13 @@ func getNodesUtilByType(t *testing.T, nodesUtilList []*dao.NodesUtilDAOInfo, res
 
 func TestPartitions(t *testing.T) { //nolint:funlen
 	schedulerContext.Store(&scheduler.ClusterContext{})
+	// The resolver is protected by a once(). Need to stop and clear the resolver before we create a new partition
+	// to ensure the partition will have the expected setup. Clean up after the test to not impact other tests.
+	defer schedulerContext.Load().Stop()
 
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
+	assert.NilError(t, err, "partition handler request failed")
 
 	resp := &MockResponseWriter{}
 	var partitionInfo []*dao.PartitionInfo
@@ -855,6 +866,8 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	assert.Check(t, partitionInfo != nil, "partitionInfo should not be nil")
 	assert.Equal(t, len(partitionInfo), 0)
 
+	// before we overwrite the context clean up
+	schedulerContext.Load().Stop()
 	defaultPartition := setup(t, configMultiPartitions, 2)
 	partitionName := defaultPartition.Name
 
@@ -913,7 +926,7 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	assert.Check(t, allocCreated)
 
 	req, err = http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
-	assert.NilError(t, err, "App Handler request failed")
+	assert.NilError(t, err, "partition handler request failed")
 	resp = &MockResponseWriter{}
 	getPartitions(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &partitionInfo)
@@ -943,15 +956,19 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	assert.DeepEqual(t, cs["default"].Capacity.Utilization, map[string]int64{"memory": 30, "vcore": 70})
 	assert.Equal(t, cs["default"].State, "Active")
 	assert.Assert(t, cs["default"].PreemptionEnabled, "preemption should be enabled on default")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.Type, "fair")
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
+	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
 
 	assert.Assert(t, cs["gpu"] != nil)
 	assert.Equal(t, cs["gpu"].ClusterID, "rm-123")
 	assert.Equal(t, cs["gpu"].Name, "gpu")
-	assert.Equal(t, cs["default"].NodeSortingPolicy.Type, "fair")
-	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["vcore"], 1.0)
-	assert.Equal(t, cs["default"].NodeSortingPolicy.ResourceWeights["memory"], 1.0)
 	assert.Equal(t, cs["gpu"].Applications["total"], 0)
 	assert.Assert(t, !cs["gpu"].PreemptionEnabled, "preemption should be disabled on gpu")
+
+	// only one resolver for the system, gpu is defined first so we get the one defined there: test
+	assert.Equal(t, cs["gpu"].UserGroupResolver.Type, "test", "resolver should be set to test")
+	assert.Equal(t, cs["default"].UserGroupResolver.Type, "test", "resolver should be set to test")
 }
 
 func TestMetricsNotEmpty(t *testing.T) {
@@ -966,7 +983,7 @@ func TestMetricsNotEmpty(t *testing.T) {
 //nolint:funlen
 func TestGetPartitionQueuesHandler(t *testing.T) {
 	setup(t, configTwoLevelQueues, 2)
-
+	defer schedulerContext.Load().Stop()
 	NewWebApp(schedulerContext.Load(), nil)
 
 	tMaxResource, err := resources.NewResourceFromConf(map[string]string{"memory": "600000"})
@@ -1051,6 +1068,7 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 	partitionQueuesHandler := "/ws/v1/partition/default/queue/"
 	queueA := "root.a"
 	setup(t, configTwoLevelQueues, 2)
+	defer schedulerContext.Load().Stop()
 
 	NewWebApp(schedulerContext.Load(), nil)
 
@@ -1136,6 +1154,8 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 
 func TestGetClusterInfo(t *testing.T) {
 	schedulerContext.Store(&scheduler.ClusterContext{})
+	// clean up started background routines when done
+	defer schedulerContext.Load().Stop()
 	resp := &MockResponseWriter{}
 	req, err := http.NewRequest("GET", "/ws/v1/clusters", strings.NewReader(""))
 	assert.NilError(t, err, "error while creating http request")
@@ -1145,6 +1165,8 @@ func TestGetClusterInfo(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, 0, len(data))
 
+	// before we create a new context clean up
+	schedulerContext.Load().Stop()
 	setup(t, configTwoLevelQueues, 2)
 
 	resp = &MockResponseWriter{}
@@ -1164,6 +1186,7 @@ func TestGetClusterInfo(t *testing.T) {
 
 func TestGetPartitionNodes(t *testing.T) {
 	partition := setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 
 	// create test application
 	appID := "app1"
@@ -1241,6 +1264,7 @@ func TestGetPartitionNodes(t *testing.T) {
 
 func TestGetPartitionNode(t *testing.T) {
 	partition := setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 
 	// create test application
 	appID := "app-1"
@@ -1384,6 +1408,7 @@ func TestGetQueueApplicationsHandler(t *testing.T) {
 	handlerSuffix := "/applications"
 	defaultQueue := "root.default"
 	part := setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 
 	// add an application
 	app := addApp(t, "app-1", part, defaultQueue, false)
@@ -1527,6 +1552,7 @@ func checkIllegalGetAppsRequest(t *testing.T, url string, params httprouter.Para
 
 func TestGetPartitionApplicationsByStateHandler(t *testing.T) {
 	defaultPartition := setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 	NewWebApp(schedulerContext.Load(), nil)
 
 	// add a new application
@@ -1658,6 +1684,7 @@ func checkGetQueueAppByIllegalStateOrStatus(t *testing.T, partition, queue, stat
 
 func TestGetQueueApplicationsByStateHandler(t *testing.T) {
 	defaultPartition := setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 	NewWebApp(schedulerContext.Load(), nil)
 
 	// Accept status
@@ -1697,6 +1724,7 @@ func TestGetQueueApplicationsByStateHandler(t *testing.T) {
 //nolint:funlen
 func TestGetApplicationHandler(t *testing.T) {
 	part := setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 
 	// add 1 application
 	app := addApp(t, "app-1", part, "root.default", false)
@@ -1973,6 +2001,8 @@ func TestFullStateDumpPath(t *testing.T) {
 	configs.SetConfigMap(configMap)
 
 	prepareSchedulerContext(t)
+	// prepareSchedulerContext hides creating a new context so make sure we clean up after use
+	defer schedulerContext.Load().Stop()
 
 	partitionContext := schedulerContext.Load().GetPartitionMapClone()
 	ctx := partitionContext[normalizedPartitionName]
@@ -1997,6 +2027,8 @@ func TestFullStateDumpPath(t *testing.T) {
 
 func TestSpecificUserResourceUsage(t *testing.T) {
 	prepareUserAndGroupContext(t, groupsLimitsConfig)
+	// prepareUserAndGroupContext hides creating a new context so make sure we clean up after use
+	defer schedulerContext.Load().Stop()
 
 	// Test existed user query
 	req, err := createRequest(t, "/ws/v1/partition/default/usage/user/", map[string]string{"user": "testuser", "group": "testgroup"})
@@ -2069,6 +2101,8 @@ func TestSpecificUserResourceUsage(t *testing.T) {
 
 func TestSpecificGroupResourceUsage(t *testing.T) {
 	prepareUserAndGroupContext(t, groupsLimitsConfig)
+	// prepareUserAndGroupContext hides creating a new context so make sure we clean up after use
+	defer schedulerContext.Load().Stop()
 	// Test existed group query
 	req, err := createRequest(t, "/ws/v1/partition/default/usage/group", map[string]string{"user": "testuser", "group": "testgroup"})
 	assert.NilError(t, err)
@@ -2135,7 +2169,8 @@ func TestSpecificGroupResourceUsage(t *testing.T) {
 
 func TestUsersAndGroupsResourceUsage(t *testing.T) {
 	prepareUserAndGroupContext(t, groupsLimitsConfig)
-	var req *http.Request
+	// prepareUserAndGroupContext hides creating a new context so make sure we clean up after use
+	defer schedulerContext.Load().Stop()
 	req, err := http.NewRequest("GET", "/ws/v1/partition/default/usage/users", strings.NewReader(""))
 	assert.NilError(t, err, "Get Users Resource Usage Handler request failed")
 	resp := &MockResponseWriter{}
@@ -2189,6 +2224,8 @@ func TestUsersAndGroupsResourceUsage(t *testing.T) {
 
 func TestGetEvents(t *testing.T) {
 	prepareSchedulerContext(t)
+	// prepareSchedulerContext hides creating a new context so make sure we clean up after use
+	defer schedulerContext.Load().Stop()
 	appEvent, nodeEvent, queueEvent := addEvents(t)
 
 	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
@@ -2231,6 +2268,7 @@ func TestGetEventsWhenTrackingDisabled(t *testing.T) {
 
 func TestGetStream(t *testing.T) {
 	setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 	ev, req := initEventsAndCreateRequest(t)
 	defer ev.Stop()
 	cancelCtx, cancel := context.WithCancel(context.Background())
@@ -2310,6 +2348,7 @@ func TestGetStream_NotFlusherImpl(t *testing.T) {
 
 func TestGetStream_Count(t *testing.T) {
 	setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 	ev, req := initEventsAndCreateRequest(t)
 	defer ev.Stop()
 	cancelCtx, cancel := context.WithCancel(context.Background())
@@ -2397,6 +2436,7 @@ func TestGetStream_NoWriteDeadline(t *testing.T) {
 
 func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
 	setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
 	ev, req := initEventsAndCreateRequest(t)
 	defer ev.Stop()
 	resp := NewResponseRecorderWithDeadline()
@@ -2650,8 +2690,8 @@ func prepareSchedulerContext(t *testing.T) {
 	config := []byte(configDefault)
 	var err error
 	ctx, err := scheduler.NewClusterContext(rmID, policyGroup, config)
-	schedulerContext.Store(ctx)
 	assert.NilError(t, err, "Error when load clusterInfo from config")
+	schedulerContext.Store(ctx)
 	assert.Equal(t, 1, len(schedulerContext.Load().GetPartitionMapClone()))
 }
 
@@ -2773,7 +2813,7 @@ func runHealthCheckTest(t *testing.T, expected *dao.SchedulerHealthDAOInfo) {
 
 func TestGetPartitionRuleHandler(t *testing.T) {
 	setup(t, configDefault, 1)
-
+	defer schedulerContext.Load().Stop()
 	NewWebApp(schedulerContext.Load(), nil)
 
 	// test partition not exists

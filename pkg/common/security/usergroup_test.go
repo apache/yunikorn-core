@@ -32,6 +32,8 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+const unknown = "unknown"
+
 func (c *UserGroupCache) getUGsize() int {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
@@ -63,13 +65,16 @@ var osResolver = configs.UserGroupResolver{
 
 // UserGroupResolver Config for the unknown resolver
 var unknownResolver = configs.UserGroupResolver{
-	Type: "unknown",
+	Type: unknown,
 }
 
 // UserGroupResolver Config for the LDAP resolver
 var ldapResolver = configs.UserGroupResolver{
 	Type: "ldap",
 }
+
+// UserGroupResolver Config for the LDAP resolver
+var defResolver = configs.UserGroupResolver{}
 
 func TestGetUserGroupCache(t *testing.T) {
 	testCases := []struct {
@@ -92,6 +97,10 @@ func TestGetUserGroupCache(t *testing.T) {
 			name:     "LdapResolver",
 			resolver: ldapResolver,
 		},
+		{
+			name:     "DefaultResolver",
+			resolver: defResolver,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -100,6 +109,11 @@ func TestGetUserGroupCache(t *testing.T) {
 			testCache := GetUserGroupCache(tc.resolver, &ConfigReaderMock{}, &LdapAccessMock{})
 			assert.Assert(t, testCache != nil, "Cache create failed")
 			assert.Equal(t, 0, testCache.getUGsize(), "Cache is not empty: %v", testCache.getUGmap())
+			currentType := tc.resolver.Type
+			if tc.resolver.Type == unknown {
+				currentType = defType
+			}
+			assert.Equal(t, testCache.GetResolverType(), currentType, "Cache type is not correct")
 
 			testCache.Stop()
 			assert.Assert(t, instance == nil, "instance should be nil")
@@ -230,7 +244,7 @@ func TestBrokenUserGroup(t *testing.T) {
 			assert.Equal(t, 2, testCache.getUGsize(), "Cache not updated should have 2 entries %d", len(testCache.ugs))
 			assert.Equal(t, 4, testCache.getUGGroupSize("testuser3"), "User 'testuser3' not resolved correctly: duplicate primary group not filtered %v", ug)
 
-			ug, err = testCache.GetUserGroup("unknown")
+			ug, err = testCache.GetUserGroup(unknown)
 			assert.ErrorContains(t, err, "lookup failed for user: unknown")
 
 			ug, err = testCache.GetUserGroup("testuser4")
@@ -289,7 +303,7 @@ func TestGetUserGroupFail(t *testing.T) {
 
 			// resolve a non existing user
 			ugi := &si.UserGroupInformation{
-				User:   "unknown",
+				User:   unknown,
 				Groups: nil,
 			}
 			ug, err = testCache.GetUserGroup(ugi.User)
@@ -363,12 +377,12 @@ func TestCacheCleanUp(t *testing.T) {
 			testCache.lock.Unlock()
 
 			// resolve a non existing user
-			_, err = testCache.GetUserGroup("unknown")
+			_, err = testCache.GetUserGroup(unknown)
 			if err == nil {
 				t.Error("Lookup should have failed: unknown user")
 			}
 			testCache.lock.Lock()
-			ug = testCache.ugs["unknown"]
+			ug = testCache.ugs[unknown]
 			if !ug.failed {
 				t.Error("User 'unknown' not resolved as a failure")
 			}
@@ -427,10 +441,10 @@ func TestIntervalCacheCleanUp(t *testing.T) {
 
 			testCache.lock.Unlock()
 			// resolve a non existing user
-			_, err = testCache.GetUserGroup("unknown")
+			_, err = testCache.GetUserGroup(unknown)
 			assert.Assert(t, err != nil, "Lookup should have failed: unknown user")
 			testCache.lock.Lock()
-			ug = testCache.ugs["unknown"]
+			ug = testCache.ugs[unknown]
 			assert.Assert(t, ug.failed, "User 'unknown' not resolved as a failure")
 
 			// expire the failed lookup
@@ -492,7 +506,7 @@ func TestConvertUGI(t *testing.T) {
 				t.Errorf("User 'testuser1' not resolved correctly: %v", ug)
 			}
 			// try unknown user without groups
-			ugi.User = "unknown"
+			ugi.User = unknown
 			ug, err = testCache.ConvertUGI(ugi, false)
 			if err == nil {
 				t.Errorf("unknown user, no groups, convert should have failed: %v", ug)
@@ -533,7 +547,7 @@ func TestConvertUGI(t *testing.T) {
 			}
 
 			// try unknown user with empty group when forced
-			ugi.User = "unknown"
+			ugi.User = unknown
 			ugi.Groups = []string{}
 			ug, err = testCache.ConvertUGI(ugi, true)
 			exceptedGroup := []string{common.AnonymousGroup}

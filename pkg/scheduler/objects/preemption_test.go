@@ -176,7 +176,7 @@ func TestCheckPreconditions(t *testing.T) {
 		return node
 	}
 	preemptionAttemptsRemaining := 1
-	result := app.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}), true, 1*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+	result, _ := app.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}), true, 1*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
 	assert.Check(t, result == nil, "unexpected result")
 	assertAllocationLog(t, ask, []string{common.PreemptionPreconditionsFailed, common.PreemptionDoesNotHelp})
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)

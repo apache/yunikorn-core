@@ -2246,3 +2246,50 @@ func TestTryPreemption_AskQueue_Under_DiffParent_With_OG_And_UG_ResTypes(t *test
 		})
 	}
 }
+
+func Test_PreemptForAppOnReservedNode(t *testing.T) {
+	rootQ, err := createRootQueue(map[string]string{"first": "6"})
+	assert.NilError(t, err, "root queue create failed")
+	var childQ *Queue
+	childQ, err = createManagedQueueGuaranteed(rootQ, "child", false, map[string]string{"first": "10"}, map[string]string{"first": "10"}, nil)
+	assert.NilError(t, err, "child queue create failed")
+	node1 := newNode("node1", map[string]resources.Quantity{"first": 6})
+	node1.SetOccupiedResource(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	iterator := getNodeIteratorFn(node1)
+	getNode := func(id string) *Node {
+		if id == node1.NodeID {
+			return node1
+		}
+		return nil
+	}
+
+	app := newApplication(appID1, "default", childQ.QueuePath)
+	app.SetQueue(childQ)
+	childQ.AddApplication(app)
+
+	// (1) no-priority ask, RESERVED on node1 ask does not fit in free node resources
+	askLow := newAllocationAsk(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	// must be more than wait timeout (default 60min) + delay (default 2sec) ago
+	askLow.createTime = time.Now().Add(-90 * time.Minute)
+	assert.NilError(t, app.AddAllocationAsk(askLow), "ask addition to app should not have failed")
+	assert.NilError(t, app.Reserve(node1, askLow), "reservation on node should not have failed")
+	nodeRes := node1.GetReservations()
+	assert.Equal(t, len(nodeRes), 1, "expected 1 reservation")
+	nodeRes[0].createTime = nodeRes[0].createTime.Add(-90 * time.Minute)
+
+	// priority ask on the SAME app that will enter preemption as node is full (usage + reservation)
+	askHigh := newAllocationAskPriority(aKey2, "repro-app", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3}), 100)
+	askHigh.allowPreemptOther = true
+	askHigh.createTime = time.Now().Add(-10 * time.Second)
+	assert.NilError(t, app.AddAllocationAsk(askHigh), "add high ask")
+
+	remaining := 2
+	// waiting ask fits on the node, fits in the queue created 10 sec ago (larger than preemption delay)
+	// headroom == max for the queue
+	// preemption turned on with a 1-second delay and at least 1 attempt remaining
+	// unreserve must not block on the node and reserve the node for this preemption
+	// NOTE: deadlock detection in locking fails this test if regressed
+	result := app.tryAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), true, 1*time.Second, &remaining, iterator, iterator, getNode)
+	assert.Assert(t, result != nil, "expected and allocation result back")
+	assert.Equal(t, result.ResultType, Reserved, "expected result type to be Reserved")
+}

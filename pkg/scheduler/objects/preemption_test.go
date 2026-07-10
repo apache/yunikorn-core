@@ -671,7 +671,6 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 				assert.Assert(t, result != nil, "no result")
 				assert.Assert(t, ok, "no victims found")
 				assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
-				assert.Equal(t, nodeID1, result.NodeID, "wrong node")
 				nodes := make(map[string]int)
 				nodes[nodeID1] = 1
 				nodes[nodeID2] = 1

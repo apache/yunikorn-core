@@ -47,17 +47,18 @@ import (
 )
 
 var (
-	reservationDelay       = 2 * time.Second
-	reservationWaitTimeout = 60 * time.Minute
-	// Make it configurable
+	// Make these settings configurable?
+	reservationDelay          = 2 * time.Second
+	reservationWaitTimeout    = 60 * time.Minute
 	completingTimeout         = 30 * time.Second
 	terminatedTimeout         = 3 * 24 * time.Hour
 	defaultPlaceholderTimeout = 15 * time.Minute
+	// global app loggers (rate limited)
+	initAppLogOnce        sync.Once
+	initReqNodeLogOnce    sync.Once
+	rateLimitedAppLog     *log.RateLimitedLogger
+	rateLimitedReqNodeLog *log.RateLimitedLogger
 )
-var initAppLogOnce sync.Once
-var rateLimitedAppLog *log.RateLimitedLogger
-var initReqNodeLogOnce sync.Once
-var rateLimitedReqNodeLog *log.RateLimitedLogger
 
 const (
 	Soft string = "Soft"
@@ -1425,13 +1426,8 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		}
 
 		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
-			// Cancel the reservation after wait time expires
-			createTime := reserve.createTime
-
-			askAge := time.Since(createTime.Add(reservationWaitTimeout))
-
-			// Has wait time reached?
-			if askAge > reservationWaitTimeout {
+			// Cancel the reservation after wait time expires, but not for required node asks
+			if ask.GetRequiredNode() == "" && time.Since(reserve.createTime) > reservationWaitTimeout {
 				num := sa.unReserveInternal(reserve)
 				sa.queue.UnReserve(sa.ApplicationID, num)
 				log.Log(log.SchedApplication).Info("Cancelled reservation as wait time expired",

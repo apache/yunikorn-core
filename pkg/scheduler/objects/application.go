@@ -514,6 +514,17 @@ func (sa *Application) GetAllocationAsk(allocationKey string) *Allocation {
 	return sa.requests[allocationKey]
 }
 
+// GetAllocationNodeID returns the node ID for a confirmed allocation identified by allocationKey.
+// Returns an empty string if the allocation does not exist.
+func (sa *Application) GetAllocationNodeID(allocationKey string) string {
+	sa.RLock()
+	defer sa.RUnlock()
+	if alloc := sa.allocations[allocationKey]; alloc != nil {
+		return alloc.GetNodeID()
+	}
+	return ""
+}
+
 // GetAllocatedResource returns the currently allocated resources for this application
 func (sa *Application) GetAllocatedResource() *resources.Resource {
 	sa.RLock()
@@ -797,6 +808,51 @@ func (sa *Application) DeallocateAsk(allocKey string) (*resources.Resource, erro
 		return sa.deallocateAsk(ask)
 	}
 	return nil, fmt.Errorf("failed to locate ask with key %s", allocKey)
+}
+
+// RollbackAllocation atomically reverts an allocated ask back to pending state.
+// This is used when the shim fails to bind a pod after the core has allocated it,
+// allowing the task to be re-scheduled on a different node.
+// The application must be in Accepted or Running state for rollback to succeed.
+func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource, error) {
+	sa.Lock()
+	defer sa.Unlock()
+
+	if !sa.IsAccepted() && !sa.IsRunning() {
+		return nil, fmt.Errorf("cannot rollback allocation %s: application %s is in state %s", allocKey, sa.ApplicationID, sa.CurrentState())
+	}
+
+	ask := sa.requests[allocKey]
+	if ask == nil {
+		return nil, fmt.Errorf("failed to locate ask with key %s for rollback", allocKey)
+	}
+	alloc := sa.allocations[allocKey]
+	if alloc == nil {
+		return nil, fmt.Errorf("failed to locate allocation with key %s for rollback", allocKey)
+	}
+
+	// Restore pending FIRST. This ensures hasZeroAllocations() sees pending > 0 when
+	// we later decrement allocatedResource, preventing a spurious CompleteApplication event.
+	if _, err := sa.deallocateAsk(ask); err != nil {
+		return nil, fmt.Errorf("failed to deallocate ask %s during rollback on app %s: %w", allocKey, sa.ApplicationID, err)
+	}
+
+	// Clear stale node assignment on the ask so it is re-schedulable cleanly.
+	ask.SetNodeID("")
+
+	res := alloc.GetAllocatedResource()
+	sa.allocatedResource = resources.Sub(sa.allocatedResource, res)
+	sa.allocatedResource.Prune()
+	sa.decUserResourceUsage(res, false)
+	delete(sa.allocations, allocKey)
+
+	sa.appEvents.SendRemoveAllocationEvent(sa.ApplicationID, allocKey, res, si.TerminationType_SCHEDULING_FAILED_ON_RM)
+
+	log.Log(log.SchedApplication).Info("allocation rolled back to pending ask",
+		zap.String("appID", sa.ApplicationID),
+		zap.String("allocationKey", allocKey))
+
+	return res, nil
 }
 
 func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error) {

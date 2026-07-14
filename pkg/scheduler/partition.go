@@ -1504,6 +1504,45 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 		return nil, nil
 	}
 
+	// Handle shim-initiated scheduling failure: roll the allocation back to a pending ask
+	// so the core can re-schedule it on a different node. This bypasses the normal
+	// remove-and-destroy path entirely. We return nil,nil to suppress the echo back to
+	// the shim (the shim initiated this release; no confirmation is needed).
+	if release.TerminationType == si.TerminationType_SCHEDULING_FAILED_ON_RM {
+		queue := app.GetQueue()
+		// Retrieve node ID before rolling back (RollbackAllocation clears it on the ask).
+		nodeID := app.GetAllocationNodeID(allocationKey)
+		res, err := app.RollbackAllocation(allocationKey)
+		if err != nil {
+			log.Log(log.SchedPartition).Warn("failed to rollback allocation",
+				zap.String("appID", appID),
+				zap.String("allocationKey", allocationKey),
+				zap.Error(err))
+			return nil, nil
+		}
+		if node := pc.GetNode(nodeID); node != nil {
+			node.RemoveAllocation(allocationKey)
+		} else {
+			log.Log(log.SchedPartition).Warn("node not found while rolling back allocation",
+				zap.String("appID", appID),
+				zap.String("allocationKey", allocationKey),
+				zap.String("nodeID", nodeID))
+		}
+		if err := queue.DecAllocatedResource(res); err != nil {
+			log.Log(log.SchedPartition).Warn("failed to release resources from queue during rollback",
+				zap.String("appID", appID),
+				zap.String("allocationKey", allocationKey),
+				zap.Error(err))
+		}
+		pc.updateAllocationCount(-1)
+		metrics.GetQueueMetrics(queue.GetQueuePath()).AddReleasedContainers(1)
+		log.Log(log.SchedPartition).Info("allocation rolled back to pending ask",
+			zap.String("appID", appID),
+			zap.String("allocationKey", allocationKey),
+			zap.String("nodeID", nodeID))
+		return nil, nil
+	}
+
 	// **** DO NOT MOVE **** this must be called before any allocations are released.
 	// Processing a removal while in the Completing state could race with the state change. The race occurs between
 	// removing the allocation and updating the queue after node processing. If the state change removes the queue link

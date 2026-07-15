@@ -4012,6 +4012,255 @@ func TestAppSubmissionTime(t *testing.T) {
 	assert.Equal(t, app.submissionTime, time.Unix(0, 30), "app submission time is not set properly")
 }
 
+// TestGetAllocationNodeID verifies the node ID lookup for confirmed allocations.
+func TestGetAllocationNodeID(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+
+	// Unknown key returns empty string.
+	assert.Equal(t, "", app.GetAllocationNodeID("nonexistent"), "unknown key should return empty string")
+
+	// Empty key returns empty string.
+	assert.Equal(t, "", app.GetAllocationNodeID(""), "empty key should return empty string")
+
+	// Existing allocation returns the correct node ID.
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	alloc := newAllocationWithKey(aKey, appID1, nodeID1, res)
+	app.allocations[aKey] = alloc
+	assert.Equal(t, nodeID1, app.GetAllocationNodeID(aKey), "existing allocation should return its node ID")
+
+	// A second allocation with a different node returns its own node ID independently.
+	alloc2 := newAllocationWithKey(aKey2, appID1, nodeID2, res)
+	app.allocations[aKey2] = alloc2
+	assert.Equal(t, nodeID2, app.GetAllocationNodeID(aKey2), "second allocation should return its own node ID")
+	assert.Equal(t, nodeID1, app.GetAllocationNodeID(aKey), "first allocation node ID should be unchanged")
+
+	// After removing an allocation, the key returns empty string again.
+	delete(app.allocations, aKey)
+	assert.Equal(t, "", app.GetAllocationNodeID(aKey), "removed allocation should return empty string")
+}
+
+// TestRollbackAllocationInvalidState verifies that RollbackAllocation returns an error
+// when the application is not in Accepted or Running state.
+func TestRollbackAllocationInvalidState(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	for _, state := range []string{New.String(), Completing.String(), Completed.String(), Rejected.String(), Failed.String()} {
+		app := newApplication(appID1, "default", "root.unknown")
+		app.queue = queue
+		app.SetState(state)
+		// inject a fake ask and allocation so the state check is the only failure path
+		ask := newAllocationAsk(aKey, appID1, res)
+		app.requests[aKey] = ask
+		alloc := newAllocationWithKey(aKey, appID1, nodeID1, res)
+		app.allocations[aKey] = alloc
+
+		_, rollbackErr := app.RollbackAllocation(aKey)
+		assert.Assert(t, rollbackErr != nil, "expected error for state %s", state)
+		assert.Assert(t, strings.Contains(rollbackErr.Error(), state), "error should mention the invalid state %q, got: %s", state, rollbackErr.Error())
+	}
+}
+
+// TestRollbackAllocationAskNotFound verifies that RollbackAllocation returns an error
+// when the ask key does not exist in the application's request map.
+func TestRollbackAllocationAskNotFound(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root.unknown")
+	app.queue = queue
+	app.SetState(Accepted.String())
+
+	_, err = app.RollbackAllocation("nonexistent-key")
+	assert.Assert(t, err != nil, "expected error for missing ask key")
+	assert.Assert(t, strings.Contains(err.Error(), "nonexistent-key"), "error should mention the missing key")
+}
+
+// TestRollbackAllocationAllocationNotFound verifies that RollbackAllocation returns an
+// error when the ask exists in requests but no corresponding allocation has been recorded.
+func TestRollbackAllocationAllocationNotFound(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root.unknown")
+	app.queue = queue
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	ask := newAllocationAsk(aKey, appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Assert(t, app.IsAccepted(), "app should be in Accepted state")
+	// ask is in requests but no allocation has been added
+
+	_, err = app.RollbackAllocation(aKey)
+	assert.Assert(t, err != nil, "expected error when no allocation exists for the ask")
+	assert.Assert(t, strings.Contains(err.Error(), aKey), "error should mention the missing allocation key")
+}
+
+// TestRollbackAllocationFromAccepted verifies a successful rollback when the application
+// is in Accepted state. The allocation is injected directly into internal state to avoid
+// the Running-state transition triggered by AddAllocation.
+func TestRollbackAllocationFromAccepted(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root.unknown")
+	app.queue = queue
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	// Add ask → app moves to Accepted, ask enters requests.
+	ask := newAllocationAsk(aKey, appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Assert(t, app.IsAccepted(), "app should be in Accepted state")
+
+	// Simulate the core allocating the ask: mark it allocated and record the allocation
+	// in internal state without triggering the Running state transition.
+	_, err = app.AllocateAsk(aKey)
+	assert.NilError(t, err, "AllocateAsk should succeed")
+	ask.SetNodeID(nodeID1)
+
+	app.Lock()
+	alloc := newAllocationWithKey(aKey, appID1, nodeID1, res)
+	app.allocations[aKey] = alloc
+	app.allocatedResource = resources.Add(app.allocatedResource, res)
+	app.incUserResourceUsage(res)
+	app.Unlock()
+
+	assert.Assert(t, app.IsAccepted(), "app should still be in Accepted state before rollback")
+
+	// Execute rollback.
+	returned, err := app.RollbackAllocation(aKey)
+	assert.NilError(t, err, "rollback should succeed from Accepted state")
+	assert.Assert(t, resources.Equals(returned, res), "returned resource should match allocation resource, got %v", returned)
+
+	// Allocation is removed from the map.
+	assert.Assert(t, app.allocations[aKey] == nil, "allocation should have been removed from map")
+
+	// Pending resource is restored.
+	assert.Assert(t, resources.Equals(app.GetPendingResource(), res), "pending resource should be restored, got %v", app.GetPendingResource())
+
+	// Ask still exists in requests (rolled back to pending, not deleted).
+	assert.Assert(t, app.GetAllocationAsk(aKey) != nil, "ask should still exist in requests after rollback")
+
+	// allocatedResource is back to zero.
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should be zero after rollback, got %v", app.GetAllocatedResource())
+
+	// Node ID is cleared on the ask so it can be rescheduled on a different node.
+	assert.Equal(t, app.GetAllocationAsk(aKey).GetNodeID(), "", "ask node ID should be cleared after rollback")
+
+	// App remains in Accepted state (pending > 0 prevents Completing transition).
+	assert.Assert(t, app.IsAccepted(), "app should remain in Accepted state after rollback")
+}
+
+// TestRollbackAllocationFromRunning verifies a successful rollback from Running state,
+// including full resource accounting and UGM tracking validation.
+func TestRollbackAllocationFromRunning(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root.unknown")
+	app.queue = queue
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	// Standard allocation flow: ask → Accepted, allocate → Running.
+	ask := newAllocationAsk(aKey, appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	assert.Assert(t, app.IsAccepted(), "app should be in Accepted state after adding ask")
+
+	delta, err := app.AllocateAsk(aKey)
+	assert.NilError(t, err, "AllocateAsk should succeed")
+	assert.Assert(t, resources.Equals(delta, res), "AllocateAsk delta should equal res, got %v", delta)
+	ask.SetNodeID(nodeID1)
+
+	alloc := newAllocationWithKey(aKey, appID1, nodeID1, res)
+	app.AddAllocation(alloc)
+	assert.Assert(t, app.IsRunning(), "app should be in Running state after AddAllocation")
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "pending should be zero before rollback")
+	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "allocated should equal res before rollback")
+	assertUserGroupResource(t, getTestUserGroup(), res)
+
+	// Execute rollback.
+	returned, err := app.RollbackAllocation(aKey)
+	assert.NilError(t, err, "rollback should succeed from Running state")
+	assert.Assert(t, resources.Equals(returned, res), "returned resource should match allocation resource, got %v", returned)
+
+	// Allocation is removed.
+	assert.Assert(t, app.allocations[aKey] == nil, "allocation should have been removed from map")
+
+	// Pending resource is restored.
+	assert.Assert(t, resources.Equals(app.GetPendingResource(), res), "pending resource should be restored after rollback, got %v", app.GetPendingResource())
+
+	// Ask still exists in requests.
+	assert.Assert(t, app.GetAllocationAsk(aKey) != nil, "ask should still exist in requests after rollback")
+
+	// allocatedResource is back to zero.
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should be zero after rollback, got %v", app.GetAllocatedResource())
+
+	// Node ID is cleared so the ask can land on a different node.
+	assert.Equal(t, app.GetAllocationAsk(aKey).GetNodeID(), "", "ask node ID should be cleared after rollback")
+
+	// UGM resource usage is decremented.
+	assertUserGroupResource(t, getTestUserGroup(), nil)
+}
+
+// TestRollbackAllocationPartial verifies that rolling back one of several allocations
+// leaves the remaining allocations and their accounting untouched.
+func TestRollbackAllocationPartial(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root.unknown")
+	app.queue = queue
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	// Allocate first ask.
+	ask1 := newAllocationAsk(aKey, appID1, res)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "ask1 should have been added")
+	_, err = app.AllocateAsk(aKey)
+	assert.NilError(t, err, "AllocateAsk for ask1 should succeed")
+	ask1.SetNodeID(nodeID1)
+	alloc1 := newAllocationWithKey(aKey, appID1, nodeID1, res)
+	app.AddAllocation(alloc1)
+
+	// Allocate second ask.
+	ask2 := newAllocationAsk(aKey2, appID1, res)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "ask2 should have been added")
+	_, err = app.AllocateAsk(aKey2)
+	assert.NilError(t, err, "AllocateAsk for ask2 should succeed")
+	ask2.SetNodeID(nodeID2)
+	alloc2 := newAllocationWithKey(aKey2, appID1, nodeID2, res)
+	app.AddAllocation(alloc2)
+
+	doubleRes := resources.Multiply(res, 2)
+	assert.Assert(t, app.IsRunning(), "app should be Running with two allocations")
+	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), doubleRes), "allocated should be 2x res, got %v", app.GetAllocatedResource())
+	assertUserGroupResource(t, getTestUserGroup(), doubleRes)
+
+	// Roll back only the first allocation.
+	returned, err := app.RollbackAllocation(aKey)
+	assert.NilError(t, err, "partial rollback should succeed")
+	assert.Assert(t, resources.Equals(returned, res), "returned resource should equal res, got %v", returned)
+
+	// Second allocation is untouched.
+	assert.Assert(t, app.allocations[aKey2] != nil, "second allocation should still exist")
+	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "allocated should be 1x res after partial rollback, got %v", app.GetAllocatedResource())
+
+	// First ask is back to pending; second ask remains allocated.
+	assert.Assert(t, resources.Equals(app.GetPendingResource(), res), "pending should be restored to res for the rolled-back ask, got %v", app.GetPendingResource())
+
+	// UGM reflects only the remaining allocation.
+	assertUserGroupResource(t, getTestUserGroup(), res)
+
+	// App remains Running because the second allocation is still active.
+	assert.Assert(t, app.IsRunning(), "app should remain Running after partial rollback")
+}
+
 func TestApplicationBackoff(t *testing.T) {
 	rootQ, err := createRootQueue(map[string]string{"first": "10"})
 	assert.NilError(t, err, "unexpected error when creating root queue")

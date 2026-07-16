@@ -499,7 +499,7 @@ func (sn *Node) preReserveConditions(ask *Allocation) error {
 	// Is this node suitable to run the pod?
 	if len(feasibleNodes) > 0 {
 		if _, ok := feasibleNodes[sn.NodeID]; !ok {
-			log.Log(log.SchedApplication).Debug("skipping node as it is not feasible to run the pod",
+			log.Log(log.SchedNode).Debug("skipping node as it is not feasible to run the pod",
 				zap.String("allocationKey", ask.GetAllocationKey()),
 				zap.String("node", sn.NodeID))
 			return errors.New("skipping node as it is not feasible to run the pod")

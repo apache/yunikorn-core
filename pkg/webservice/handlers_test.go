@@ -1079,7 +1079,7 @@ func assertPartitionQueueDaoInfo(t *testing.T, partitionQueueDAOInfo *dao.Partit
 }
 
 func assertPartitionQueueDaoInfoBackoffAndQuotaPreemptionFields(t *testing.T, partitionQueueDAOInfo *dao.PartitionQueueDAOInfo, unschedAskBackoff uint64, askBackoffDelay string) {
-	assert.Assert(t, partitionQueueDAOInfo.QuotaPreemptionStartTime.IsZero(), "quota preemption start time should be zero")
+	assert.Equal(t, partitionQueueDAOInfo.QuotaPreemptionStartTime, int64(0), "quota preemption start time should be zero")
 	assert.Equal(t, partitionQueueDAOInfo.IsQuotaPreemptionRunning, false, "quota preemption should not be running")
 	assert.Equal(t, partitionQueueDAOInfo.UnschedAskBackoff, unschedAskBackoff, "unsched ask backoff mismatch")
 	assert.Equal(t, partitionQueueDAOInfo.AskBackoffDelay, askBackoffDelay, "ask backoff delay mismatch")

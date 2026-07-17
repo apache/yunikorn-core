@@ -2030,7 +2030,7 @@ func TestGetPartitionQueueDAOInfoQuotaPreemptionFields(t *testing.T) {
 		target dao.PartitionQueueDAOInfo
 	}{
 		{"default values", root, dao.PartitionQueueDAOInfo{IsQuotaPreemptionRunning: false}},
-		{"running", queue, dao.PartitionQueueDAOInfo{QuotaPreemptionStartTime: startTime, IsQuotaPreemptionRunning: true}},
+		{"running", queue, dao.PartitionQueueDAOInfo{QuotaPreemptionStartTime: startTime.UnixNano(), IsQuotaPreemptionRunning: true}},
 	}
 
 	for _, tt := range tests {
@@ -2044,7 +2044,7 @@ func TestGetPartitionQueueDAOInfoQuotaPreemptionFields(t *testing.T) {
 	t.Run("cleared after setQuotaPreemptionState(false)", func(t *testing.T) {
 		queue.setQuotaPreemptionState(false)
 		got := queue.GetPartitionQueueDAOInfo(false)
-		assert.Assert(t, got.QuotaPreemptionStartTime.IsZero())
+		assert.Equal(t, got.QuotaPreemptionStartTime, int64(0))
 		assert.Equal(t, got.IsQuotaPreemptionRunning, false)
 	})
 }

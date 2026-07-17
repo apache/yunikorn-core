@@ -18,8 +18,6 @@ limitations under the License.
 
 package dao
 
-import "time"
-
 type TemplateInfo struct {
 	MaxApplications    uint64            `json:"maxApplications,omitempty"`
 	MaxResource        map[string]int64  `json:"maxResource,omitempty"`
@@ -57,7 +55,7 @@ type PartitionQueueDAOInfo struct {
 	QuotaPreemptionDelay     string                  `json:"quotaPreemptionDelay,omitempty"`
 	IsPriorityFence          bool                    `json:"isPriorityFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
 	PriorityOffset           int32                   `json:"priorityOffset,omitempty"`
-	QuotaPreemptionStartTime time.Time               `json:"quotaPreemptionStartTime,omitempty"`
+	QuotaPreemptionStartTime int64                   `json:"quotaPreemptionStartTime,omitempty"`
 	IsQuotaPreemptionRunning bool                    `json:"isQuotaPreemptionRunning"` // no omitempty, false shows quota preemption status better
 	UnschedAskBackoff        uint64                  `json:"unschedAskBackoff,omitempty"`
 	AskBackoffDelay          string                  `json:"askBackoffDelay,omitempty"`

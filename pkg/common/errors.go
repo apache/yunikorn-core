@@ -30,7 +30,8 @@ var (
 	// ErrorNodeAlreadyReserved returned when the node is already reserved, failing the reservation
 	ErrorNodeAlreadyReserved = errors.New("node is already reserved")
 	// ErrorNodeNotFitReserve returned when the allocation does not fit on an empty node, failing the reservation
-	ErrorNodeNotFitReserve = errors.New("reservation does not fit on node")
+	ErrorNodeNotFitReserve  = errors.New("reservation does not fit on node")
+	ErrorPreFilterPredicate = errors.New("prefilter predicates failed")
 )
 
 // Constant messages for AllocationLog entries

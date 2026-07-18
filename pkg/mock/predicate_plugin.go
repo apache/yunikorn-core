@@ -34,29 +34,35 @@ type PredicatePlugin struct {
 	nodes             map[string]int
 }
 
-func (f *PredicatePlugin) PredicatesPreFilter(args *si.PredicatesArgs) (map[string]struct{}, error) {
-	feasibleNodes := make(map[string]struct{})
+func (f *PredicatePlugin) PreFilterPredicates(args *si.PreFilterPredicatesArgs) *si.PreFilterPredicatesResponse {
+	feasibleNodes := make(map[string]*si.Empty)
+	result := &si.PreFilterPredicatesResponse{
+		Success:       false,
+		FeasibleNodes: map[string]*si.Empty{},
+	}
 	if f.mustPreFilterFail {
 		log.Log(log.Test).Info("fake predicate prefilter plugin fail: must fail set")
-		return feasibleNodes, fmt.Errorf("fake predicate plugin failed")
+		return result
 	}
 	for k, v := range f.nodes {
 		if args.Allocate {
-			if v > 0 && v < 200 {
-				feasibleNodes[k] = struct{}{}
+			if v < 0 {
+				feasibleNodes[k] = &si.Empty{}
 			}
 		} else {
-			if v < 100 {
-				feasibleNodes[k] = struct{}{}
+			if v > 0 {
+				feasibleNodes[k] = &si.Empty{}
 			}
 		}
 	}
 	log.Log(log.Test).Info("fake predicate prefilter plugin pass",
 		zap.Bool("allocate", args.Allocate),
 		zap.String("allocationKey", args.AllocationKey),
-		zap.String("node", args.NodeID),
+		zap.Any("feasibleNodes", feasibleNodes),
 		zap.Int("feasibleNodes", len(feasibleNodes)))
-	return feasibleNodes, nil
+	result.Success = true
+	result.FeasibleNodes = feasibleNodes
+	return result
 }
 
 func (f *PredicatePlugin) Predicates(args *si.PredicatesArgs) error {
@@ -72,9 +78,10 @@ func (f *PredicatePlugin) Predicates(args *si.PredicatesArgs) error {
 }
 
 // NewPredicatePlugin returns a mock that can either always fail or fail based on the node that is checked.
-// mustFail will cause the predicate check to always fail
-// nodes allows specifying which node to fail for which check using the nodeID:
-// possible values: -1 fail reserve, 0 fail always, 1 fail alloc (defaults to always)
+// mustPreFilterFail will cause the predicate prefilter check to fail always
+// mustFilterFail will cause the predicate filter check to fail always
+// nodes allows specifying which node to make it to feasibleNodes list based on its own value:
+// possible values: 1 - Feasible in case of reserve, -1 Feasible in case of allow, 0 Not feasible always
 func NewPredicatePlugin(mustPreFilterFail bool, mustFilterFail bool, nodes map[string]int) *PredicatePlugin {
 	return &PredicatePlugin{
 		mustPreFilterFail: mustPreFilterFail,

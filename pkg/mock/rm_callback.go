@@ -41,8 +41,12 @@ func (f *ResourceManagerCallback) Predicates(_ *si.PredicatesArgs) error {
 	return nil
 }
 
-func (f *ResourceManagerCallback) PredicatesPreFilter(_ *si.PredicatesArgs) (map[string]struct{}, error) {
-	return map[string]struct{}{}, nil
+func (f *ResourceManagerCallback) PreFilterPredicates(_ *si.PreFilterPredicatesArgs) *si.PreFilterPredicatesResponse {
+	// simulate "ideal" preemption check
+	return &si.PreFilterPredicatesResponse{
+		Success:       true,
+		FeasibleNodes: map[string]*si.Empty{},
+	}
 }
 
 func (f *ResourceManagerCallback) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {

@@ -1854,7 +1854,6 @@ func TestRequiredNodeCancelOtherReservations(t *testing.T) {
 
 	// the second one should be reserved as the 2nd node is not scheduling
 	result = partition.tryAllocate()
-	println(result.String())
 	if result != nil {
 		t.Fatal("2nd allocation did not return the correct allocation")
 	}
@@ -3650,10 +3649,10 @@ func TestFailReplacePlaceholder(t *testing.T) {
 		t.Fatalf("empty cluster placeholder allocate returned allocation: %s", result)
 	}
 	// plugin to let the pre-check fail on node-1 only, means we cannot replace the placeholder
-	plugin := mock.NewPredicatePlugin(false, false, map[string]int{nodeID1: 101, nodeID2: 1})
+	plugin := mock.NewPredicatePlugin(false, false, map[string]int{nodeID1: 0, nodeID2: 1})
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer func() {
-		passPlugin := mock.NewPredicatePlugin(false, false, nil)
+		passPlugin := mock.NewPredicatePlugin(false, false, map[string]int{nodeID1: 0, nodeID2: 1})
 		plugins.RegisterSchedulerPlugin(passPlugin)
 	}()
 	var tgRes, res *resources.Resource

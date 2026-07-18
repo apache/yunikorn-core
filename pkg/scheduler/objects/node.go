@@ -489,12 +489,9 @@ func (sn *Node) preAllocateConditions(ask *Allocation) error {
 // Checking pre-conditions in the shim for a reservation.
 func (sn *Node) preReserveConditions(ask *Allocation) error {
 	// run predicates for this pod before in hand and fetch feasible nodes
-	feasibleNodes, err := ask.preAllocateConditions(false)
-	if err != nil {
-		preErrors := make(map[string]int, 1)
-		preErrors[err.Error()]++
-		ask.SendPredicatesFailedEvent(preErrors)
-		return err
+	feasibleNodes, predicatesResult := ask.preAllocateConditions(false)
+	if !predicatesResult {
+		return common.ErrorPreFilterPredicate
 	}
 	// Is this node suitable to run the pod?
 	if len(feasibleNodes) > 0 {

@@ -622,24 +622,23 @@ func (a *Allocation) GetAllocationName() string {
 	return a.tags[siCommon.DomainYuniKorn+siCommon.KeyPodName]
 }
 
-func (a *Allocation) preAllocateConditions(allocate bool) (map[string]struct{}, error) {
-	var feasibleNodes map[string]struct{}
-	var err error
+func (a *Allocation) preAllocateConditions(allocate bool) (map[string]*si.Empty, bool) {
+	var prefilterResult *si.PreFilterPredicatesResponse
 	if plugin := plugins.GetResourceManagerCallbackPlugin(); plugin != nil {
-		if feasibleNodes, err = plugin.PredicatesPreFilter(&si.PredicatesArgs{
+		if prefilterResult = plugin.PreFilterPredicates(&si.PreFilterPredicatesArgs{
 			AllocationKey: a.allocationKey,
-			NodeID:        "",
 			Allocate:      allocate,
-		}); err != nil {
-			log.Log(log.SchedNode).Debug("running predicates failed",
+		}); prefilterResult != nil && !prefilterResult.Success {
+			log.Log(log.SchedNode).Debug("running prefilter predicates failed",
 				zap.String("allocationKey", a.allocationKey),
-				zap.Bool("allocate", allocate),
-				zap.Error(err))
-			msg := err.Error()
-			a.LogAllocationFailure(msg, allocate)
-			return map[string]struct{}{}, err
+				zap.Bool("allocate", allocate))
+			a.LogAllocationFailure(common.ErrorPreFilterPredicate.Error(), allocate)
+			podPredicateErrors := make(map[string]int, 1)
+			podPredicateErrors[common.ErrorPreFilterPredicate.Error()]++
+			a.SendPredicatesFailedEvent(podPredicateErrors)
+			return prefilterResult.GetFeasibleNodes(), false
 		}
 	}
 	// all predicate plugins passed
-	return feasibleNodes, nil
+	return prefilterResult.GetFeasibleNodes(), true
 }

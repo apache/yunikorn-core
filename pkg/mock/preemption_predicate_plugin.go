@@ -49,20 +49,27 @@ type errHolder struct {
 	err error
 }
 
-func (m *PreemptionPredicatePlugin) PredicatesPreFilter(args *si.PredicatesArgs) (map[string]struct{}, error) {
+func (m *PreemptionPredicatePlugin) PreFilterPredicates(args *si.PreFilterPredicatesArgs) *si.PreFilterPredicatesResponse {
 	m.RLock()
 	defer m.RUnlock()
-	feasibleNodes := make(map[string]struct{})
+	feasibleNodes := make(map[string]*si.Empty)
+	result := &si.PreFilterPredicatesResponse{
+		Success:       false,
+		FeasibleNodes: map[string]*si.Empty{},
+	}
+
 	if m.mustPreFilterFail {
 		m.errHolder.err = fmt.Errorf("fake preemption predicate prefilter plugin failed")
-		return feasibleNodes, m.errHolder.err
+		return result
 	}
 	for k, v := range m.nodes {
 		if v > 0 {
-			feasibleNodes[k] = struct{}{}
+			feasibleNodes[k] = &si.Empty{}
 		}
 	}
-	return feasibleNodes, nil
+	result.Success = true
+	result.FeasibleNodes = feasibleNodes
+	return result
 }
 
 func (m *PreemptionPredicatePlugin) Predicates(args *si.PredicatesArgs) error {
@@ -128,9 +135,11 @@ func (m *PreemptionPredicatePlugin) GetPredicateError() error {
 }
 
 // NewPreemptionPredicatePlugin returns a mock plugin that can handle multiple predicate scenarios.
-// reservations: provide a list of allocations and node IDs for which the reservation predicate succeeds
-// allocs: provide a list of allocations and node IDs for which the allocation predicate succeeds
 // preempt: a slice of preemption scenarios configured for the plugin to check
+// mustPreFilterFail will cause the predicate prefilter check to fail always
+// mustFilterFail will cause the predicate filter check to fail always
+// nodes allows specifying which node to make it to feasibleNodes list based on its own value:
+// possible values: 1 - Feasible always, 0 or -1 - Not feasible always
 func NewPreemptionPredicatePlugin(preempt []Preemption, nodes map[string]int, mustPreFilterFail, mustFilterFail bool) *PreemptionPredicatePlugin {
 	return &PreemptionPredicatePlugin{
 		preemptions:       preempt,

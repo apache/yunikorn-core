@@ -552,8 +552,8 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 	victimsByNode := make(map[string][]*Allocation)
 
 	// run predicates for this pod before in hand and fetch feasible nodes
-	feasibleNodes, err := p.ask.preAllocateConditions(true)
-	if err != nil {
+	feasibleNodes, predicatesResult := p.ask.preAllocateConditions(true)
+	if !predicatesResult {
 		return "", nil, false
 	}
 

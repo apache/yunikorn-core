@@ -1143,34 +1143,27 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 		requiredNode := request.GetRequiredNode()
 
 		// run predicates for this pod before in hand and fetch feasible nodes
-		var podPredicateErrors map[string]int
-		feasibleNodes, err := request.preAllocateConditions(true)
-		if err != nil {
-			podPredicateErrors = make(map[string]int, 1)
-			podPredicateErrors[err.Error()]++
-			request.SendPredicatesFailedEvent(podPredicateErrors)
-		}
+		feasibleNodes, predicatesResult := request.preAllocateConditions(true)
 
 		// does request have any constraint to run on specific node?
 		if requiredNode != "" {
 			skipRequiredNode := false
-			if len(podPredicateErrors) > 0 {
-				skipRequiredNode = true
-			}
-			// Is this node suitable to run the pod?
-			if len(feasibleNodes) > 0 {
-				if _, ok := feasibleNodes[requiredNode]; !ok {
-					skipRequiredNode = true
+			if predicatesResult {
+				// Is this node suitable to run the pod?
+				if len(feasibleNodes) > 0 {
+					if _, ok := feasibleNodes[requiredNode]; !ok {
+						skipRequiredNode = true
+					}
 				}
+			} else {
+				skipRequiredNode = true
 			}
 			if skipRequiredNode {
 				getRateLimitedAppLog().Info("skipping required node as it is not feasible to run the pod",
 					zap.String("allocationKey", request.GetAllocationKey()),
-					zap.String("required node", requiredNode),
-					zap.Error(err))
+					zap.String("required node", requiredNode))
 				continue
 			}
-
 			result := sa.tryRequiredNode(request, getNodeFn)
 			if result != nil {
 				return result
@@ -1182,7 +1175,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 
 		iterator := nodeIterator()
 		if iterator != nil {
-			if result := sa.tryNodes(request, iterator, feasibleNodes, len(podPredicateErrors) != 0); result != nil {
+			if result := sa.tryNodes(request, iterator, feasibleNodes, predicatesResult); result != nil {
 				// have a candidate return it
 				return result
 			}
@@ -1415,11 +1408,8 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 		resKey := reqFit.GetAllocationKey()
 
 		// run predicates for this pod before in hand and fetch feasible nodes
-		feasibleNodes, err := reqFit.preAllocateConditions(true)
-		if err != nil {
-			preErrors := make(map[string]int, 1)
-			preErrors[err.Error()]++
-			reqFit.SendPredicatesFailedEvent(preErrors)
+		feasibleNodes, predicatesResult := reqFit.preAllocateConditions(true)
+		if !predicatesResult {
 			return nil
 		}
 		iterator.ForEachNode(func(node *Node) bool {
@@ -1432,7 +1422,6 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 			if !node.preAllocateCheck(reqFit.GetAllocatedResource(), resKey) {
 				return true
 			}
-			
 			// Is this node suitable to run the pod?
 			if len(feasibleNodes) > 0 {
 				if _, ok := feasibleNodes[node.NodeID]; !ok {
@@ -1571,25 +1560,21 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		}
 		// check allocation possibility
 		skipReservedNode := false
-		var podPredicateErrors map[string]int
-		feasibleNodes, err := ask.preAllocateConditions(true)
-		if err != nil {
-			podPredicateErrors = make(map[string]int, 1)
-			podPredicateErrors[err.Error()]++
-			ask.SendPredicatesFailedEvent(podPredicateErrors)
-			skipReservedNode = true
-		}
-		// Is this node suitable to run the pod?
-		if len(feasibleNodes) > 0 {
-			if _, ok := feasibleNodes[reserve.node.NodeID]; !ok {
-				skipReservedNode = true
+		feasibleNodes, predicatesResult := ask.preAllocateConditions(true)
+		if predicatesResult {
+			// Is this node suitable to run the pod?
+			if len(feasibleNodes) > 0 {
+				if _, ok := feasibleNodes[reserve.node.NodeID]; !ok {
+					skipReservedNode = true
+				}
 			}
+		} else {
+			skipReservedNode = true
 		}
 		if skipReservedNode {
 			getRateLimitedAppLog().Info("skipping reserved node as it is not feasible to run the pod",
 				zap.String("allocationKey", ask.GetAllocationKey()),
-				zap.String("reserved node", reserve.node.NodeID),
-				zap.Error(err))
+				zap.String("reserved node", reserve.node.NodeID))
 			continue
 		}
 		result, _ := sa.tryNode(reserve.node, ask) //nolint:errcheck
@@ -1654,11 +1639,8 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 	var allocResult *AllocationResult
 
 	// run predicates for this pod before in hand and fetch feasible nodes
-	feasibleNodes, err := ask.preAllocateConditions(true)
-	if err != nil {
-		preErrors := make(map[string]int, 1)
-		preErrors[err.Error()]++
-		ask.SendPredicatesFailedEvent(preErrors)
+	feasibleNodes, predicatesResult := ask.preAllocateConditions(true)
+	if !predicatesResult {
 		return nil
 	}
 
@@ -1700,7 +1682,7 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 
 // Try all the nodes for a request. The resultType is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator, feasibleNodes map[string]struct{}, isPredicateError bool) *AllocationResult {
+func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator, feasibleNodes map[string]*si.Empty, predicatesResult bool) *AllocationResult {
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
 	// check if the alloc is reserved or not
@@ -1723,9 +1705,9 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator, feasible
 			return true
 		}
 
-		// Is there any pod predicate errors? No node would be picked up for allocation in case of any errors
+		// Is there any prefilter predicate failures? No node would be picked up for allocation in case of any failures in predicates results
 		// and better to get into process of picking up a node for reservation right away
-		if !isPredicateError {
+		if predicatesResult {
 			// Is this node suitable to run the pod?
 			if len(feasibleNodes) > 0 {
 				if _, ok := feasibleNodes[node.NodeID]; !ok {

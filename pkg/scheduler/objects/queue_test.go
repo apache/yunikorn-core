@@ -39,6 +39,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects/template"
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
+	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -2013,6 +2014,69 @@ func TestGetPartitionQueueDAOInfo(t *testing.T) {
 	assert.Equal(t, leafDAO.IsPreemptionFence, false, "queue should not be a fence")
 	assert.Equal(t, leafDAO.PreemptionDelay, "10s", "incorrect delay returned")
 	assert.Equal(t, leafDAO.SortingPolicy, "fifo", "incorrect policy returned")
+}
+
+func TestGetPartitionQueueDAOInfoQuotaPreemptionFields(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+	queue, err := createManagedQueue(root, "quota-queue", false, map[string]string{"memory": "1000"})
+	assert.NilError(t, err, "failed to create quota queue")
+	startTime := time.Now().Add(time.Hour)
+	queue.quotaPreemptionStartTime = startTime
+	queue.isQuotaPreemptionRunning = true
+	tests := []struct {
+		name   string
+		input  *Queue
+		target dao.PartitionQueueDAOInfo
+	}{
+		{"default values", root, dao.PartitionQueueDAOInfo{IsQuotaPreemptionRunning: false}},
+		{"running", queue, dao.PartitionQueueDAOInfo{QuotaPreemptionStartTime: startTime.UnixNano(), IsQuotaPreemptionRunning: true}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.input.GetPartitionQueueDAOInfo(false)
+			assert.Equal(t, got.QuotaPreemptionStartTime, tt.target.QuotaPreemptionStartTime, "quota preemption start time not exposed correctly")
+			assert.Equal(t, got.IsQuotaPreemptionRunning, tt.target.IsQuotaPreemptionRunning, "quota preemption running flag not exposed correctly")
+		})
+	}
+
+	t.Run("cleared after setQuotaPreemptionState(false)", func(t *testing.T) {
+		queue.setQuotaPreemptionState(false)
+		got := queue.GetPartitionQueueDAOInfo(false)
+		assert.Equal(t, got.QuotaPreemptionStartTime, int64(0))
+		assert.Equal(t, got.IsQuotaPreemptionRunning, false)
+	})
+}
+
+func TestGetPartitionQueueDAOInfoBackoffFields(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+	props := map[string]string{
+		configs.ApplicationUnschedulableAsksBackoffDelay: "123s",
+		configs.ApplicationUnschedulableAsksBackoff:      "12",
+	}
+	queue, err := createManagedQueueWithProps(root, "backoff-queue", false, nil, props)
+	assert.NilError(t, err, "failed to create queue with backoff properties")
+	tests := []struct {
+		name   string
+		input  *Queue
+		target dao.PartitionQueueDAOInfo
+	}{
+		{"default values", root, dao.PartitionQueueDAOInfo{
+			UnschedAskBackoff: 0,
+			AskBackoffDelay:   configs.DefaultAskBackOffDelay.String(),
+		}},
+		{"configured backoff properties", queue, dao.PartitionQueueDAOInfo{UnschedAskBackoff: 12, AskBackoffDelay: (123 * time.Second).String()}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.input.GetPartitionQueueDAOInfo(false)
+			assert.Equal(t, got.UnschedAskBackoff, tt.target.UnschedAskBackoff, "unsched ask backoff not exposed correctly")
+			assert.Equal(t, got.AskBackoffDelay, tt.target.AskBackoffDelay, "ask backoff delay not exposed correctly")
+		})
+	}
 }
 
 func getAllocatingAcceptedApps() map[string]bool {

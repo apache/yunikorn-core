@@ -26,33 +26,37 @@ type TemplateInfo struct {
 }
 
 type PartitionQueueDAOInfo struct {
-	QueueName              string                  `json:"queuename"` // no omitempty, queue name should not be empty
-	Status                 string                  `json:"status,omitempty"`
-	Partition              string                  `json:"partition"` // no omitempty, partition name should not be empty
-	PendingResource        map[string]int64        `json:"pendingResource,omitempty"`
-	MaxResource            map[string]int64        `json:"maxResource,omitempty"`
-	GuaranteedResource     map[string]int64        `json:"guaranteedResource,omitempty"`
-	AllocatedResource      map[string]int64        `json:"allocatedResource,omitempty"`
-	PreemptingResource     map[string]int64        `json:"preemptingResource,omitempty"`
-	HeadRoom               map[string]int64        `json:"headroom,omitempty"`
-	IsLeaf                 bool                    `json:"isLeaf"`    // no omitempty, a false value gives a quick way to understand whether it's leaf.
-	IsManaged              bool                    `json:"isManaged"` // no omitempty, a false value gives a quick way to understand whether it's managed.
-	Properties             map[string]string       `json:"properties,omitempty"`
-	Parent                 string                  `json:"parent,omitempty"`
-	TemplateInfo           *TemplateInfo           `json:"template,omitempty"`
-	Children               []PartitionQueueDAOInfo `json:"children,omitempty"`
-	ChildNames             []string                `json:"childNames,omitempty"`
-	AbsUsedCapacity        map[string]int64        `json:"absUsedCapacity,omitempty"`
-	MaxRunningApps         uint64                  `json:"maxRunningApps,omitempty"`
-	RunningApps            uint64                  `json:"runningApps,omitempty"`
-	CurrentPriority        int32                   `json:"currentPriority"` // no omitempty, as the current priority value may be 0, which is a valid priority level
-	AllocatingAcceptedApps []string                `json:"allocatingAcceptedApps,omitempty"`
-	SortingPolicy          string                  `json:"sortingPolicy,omitempty"`
-	PrioritySorting        bool                    `json:"prioritySorting"`   // no omitempty, false shows priority sorting status better
-	PreemptionEnabled      bool                    `json:"preemptionEnabled"` // no omitempty, false shows preemption status better
-	IsPreemptionFence      bool                    `json:"isPreemptionFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
-	PreemptionDelay        string                  `json:"preemptionDelay,omitempty"`
-	QuotaPreemptionDelay   string                  `json:"quotaPreemptionDelay,omitempty"`
-	IsPriorityFence        bool                    `json:"isPriorityFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
-	PriorityOffset         int32                   `json:"priorityOffset,omitempty"`
+	QueueName                string                  `json:"queuename"` // no omitempty, queue name should not be empty
+	Status                   string                  `json:"status,omitempty"`
+	Partition                string                  `json:"partition"` // no omitempty, partition name should not be empty
+	PendingResource          map[string]int64        `json:"pendingResource,omitempty"`
+	MaxResource              map[string]int64        `json:"maxResource,omitempty"`
+	GuaranteedResource       map[string]int64        `json:"guaranteedResource,omitempty"`
+	AllocatedResource        map[string]int64        `json:"allocatedResource,omitempty"`
+	PreemptingResource       map[string]int64        `json:"preemptingResource,omitempty"`
+	HeadRoom                 map[string]int64        `json:"headroom,omitempty"`
+	IsLeaf                   bool                    `json:"isLeaf"`    // no omitempty, a false value gives a quick way to understand whether it's leaf.
+	IsManaged                bool                    `json:"isManaged"` // no omitempty, a false value gives a quick way to understand whether it's managed.
+	Properties               map[string]string       `json:"properties,omitempty"`
+	Parent                   string                  `json:"parent,omitempty"`
+	TemplateInfo             *TemplateInfo           `json:"template,omitempty"`
+	Children                 []PartitionQueueDAOInfo `json:"children,omitempty"`
+	ChildNames               []string                `json:"childNames,omitempty"`
+	AbsUsedCapacity          map[string]int64        `json:"absUsedCapacity,omitempty"`
+	MaxRunningApps           uint64                  `json:"maxRunningApps,omitempty"`
+	RunningApps              uint64                  `json:"runningApps,omitempty"`
+	CurrentPriority          int32                   `json:"currentPriority"` // no omitempty, as the current priority value may be 0, which is a valid priority level
+	AllocatingAcceptedApps   []string                `json:"allocatingAcceptedApps,omitempty"`
+	SortingPolicy            string                  `json:"sortingPolicy,omitempty"`
+	PrioritySorting          bool                    `json:"prioritySorting"`   // no omitempty, false shows priority sorting status better
+	PreemptionEnabled        bool                    `json:"preemptionEnabled"` // no omitempty, false shows preemption status better
+	IsPreemptionFence        bool                    `json:"isPreemptionFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
+	PreemptionDelay          string                  `json:"preemptionDelay,omitempty"`
+	QuotaPreemptionDelay     string                  `json:"quotaPreemptionDelay,omitempty"`
+	IsPriorityFence          bool                    `json:"isPriorityFence"` // no omitempty, a false value gives a quick way to understand whether it's fenced.
+	PriorityOffset           int32                   `json:"priorityOffset,omitempty"`
+	QuotaPreemptionStartTime int64                   `json:"quotaPreemptionStartTime,omitempty"`
+	IsQuotaPreemptionRunning bool                    `json:"isQuotaPreemptionRunning"` // no omitempty, false shows quota preemption status better
+	UnschedAskBackoff        uint64                  `json:"unschedAskBackoff,omitempty"`
+	AskBackoffDelay          string                  `json:"askBackoffDelay,omitempty"`
 }

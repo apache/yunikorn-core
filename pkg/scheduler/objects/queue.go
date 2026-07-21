@@ -956,6 +956,12 @@ func (sq *Queue) GetPartitionQueueDAOInfo(include bool) dao.PartitionQueueDAOInf
 	queueInfo.QuotaPreemptionDelay = sq.quotaPreemptionDelay.String()
 	queueInfo.IsPriorityFence = sq.priorityPolicy == policies.FencePriorityPolicy
 	queueInfo.PriorityOffset = sq.priorityOffset
+	if !sq.quotaPreemptionStartTime.IsZero() {
+		queueInfo.QuotaPreemptionStartTime = sq.quotaPreemptionStartTime.UnixNano()
+	}
+	queueInfo.IsQuotaPreemptionRunning = sq.isQuotaPreemptionRunning
+	queueInfo.UnschedAskBackoff = sq.unschedAskBackoff
+	queueInfo.AskBackoffDelay = sq.askBackoffDelay.String()
 	queueInfo.Properties = make(map[string]string)
 	for k, v := range sq.properties {
 		queueInfo.Properties[k] = v

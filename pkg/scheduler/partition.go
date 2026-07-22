@@ -1509,38 +1509,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	// remove-and-destroy path entirely. We return nil,nil to suppress the echo back to
 	// the shim (the shim initiated this release; no confirmation is needed).
 	if release.TerminationType == si.TerminationType_SCHEDULING_FAILED_ON_RM {
-		queue := app.GetQueue()
-		// Retrieve node ID before rolling back (RollbackAllocation clears it on the ask).
-		nodeID := app.GetAllocationNodeID(allocationKey)
-		res, err := app.RollbackAllocation(allocationKey)
-		if err != nil {
-			log.Log(log.SchedPartition).Warn("failed to rollback allocation",
-				zap.String("appID", appID),
-				zap.String("allocationKey", allocationKey),
-				zap.Error(err))
-			return nil, nil
-		}
-		if node := pc.GetNode(nodeID); node != nil {
-			node.RemoveAllocation(allocationKey)
-		} else {
-			log.Log(log.SchedPartition).Warn("node not found while rolling back allocation",
-				zap.String("appID", appID),
-				zap.String("allocationKey", allocationKey),
-				zap.String("nodeID", nodeID))
-		}
-		if err := queue.DecAllocatedResource(res); err != nil {
-			log.Log(log.SchedPartition).Warn("failed to release resources from queue during rollback",
-				zap.String("appID", appID),
-				zap.String("allocationKey", allocationKey),
-				zap.Error(err))
-		}
-		pc.updateAllocationCount(-1)
-		metrics.GetQueueMetrics(queue.GetQueuePath()).AddReleasedContainers(1)
-		log.Log(log.SchedPartition).Info("allocation rolled back to pending ask",
-			zap.String("appID", appID),
-			zap.String("allocationKey", allocationKey),
-			zap.String("nodeID", nodeID))
-		return nil, nil
+		return pc.rollbackAllocation(appID, allocationKey, app)
 	}
 
 	// **** DO NOT MOVE **** this must be called before any allocations are released.
@@ -1567,34 +1536,7 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 			continue
 		}
 		if release.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
-			confirmed = alloc.GetRelease()
-			// we need to check the resources equality
-			delta := resources.Sub(confirmed.GetAllocatedResource(), alloc.GetAllocatedResource())
-			// Any negative value in the delta means that at least one of the requested resource in the
-			// placeholder is larger than the real allocation. The node and queue need adjusting.
-			// The reverse case is handled during allocation.
-			if delta.HasNegativeValue() {
-				// This looks incorrect but the delta is negative and the result will be an increase of the
-				// total tracked. The total will later be deducted from the queue usage.
-				total.SubFrom(delta)
-				log.Log(log.SchedPartition).Warn("replacing placeholder: placeholder is larger than real allocation",
-					zap.String("allocationKey", confirmed.GetAllocationKey()),
-					zap.Stringer("requested resource", confirmed.GetAllocatedResource()),
-					zap.String("placeholderKey", alloc.GetAllocationKey()),
-					zap.Stringer("placeholder resource", alloc.GetAllocatedResource()))
-			}
-			// replacements could be on a different node and different size handle all cases
-			if confirmed.GetNodeID() == alloc.GetNodeID() {
-				// this is the real swap on the node, adjust usage if needed
-				node.ReplaceAllocation(alloc.GetAllocationKey(), confirmed, delta)
-			} else {
-				// we have already added the real allocation to the new node, just remove the placeholder
-				node.RemoveAllocation(alloc.GetAllocationKey())
-			}
-			log.Log(log.SchedPartition).Info("replacing placeholder allocation on node",
-				zap.String("nodeID", alloc.GetNodeID()),
-				zap.String("allocationKey", alloc.GetAllocationKey()),
-				zap.String("allocation nodeID", confirmed.GetNodeID()))
+			confirmed = pc.replacePlaceholderOnNode(alloc, node, total)
 		} else if node.RemoveAllocation(alloc.GetAllocationKey()) != nil {
 			// all non replacement are real removes: must update the queue usage
 			total.AddTo(alloc.GetAllocatedResource())
@@ -1642,6 +1584,78 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 	}
 
 	return released, confirmed
+}
+
+// replacePlaceholderOnNode handles a placeholder replacement on a node. It adjusts the total resource tracking
+// when the placeholder is larger than the real allocation, updates the node accordingly, and returns the confirmed
+// real allocation.
+func (pc *PartitionContext) replacePlaceholderOnNode(alloc *objects.Allocation, node *objects.Node, total *resources.Resource) *objects.Allocation {
+	confirmed := alloc.GetRelease()
+	// we need to check the resources equality
+	delta := resources.Sub(confirmed.GetAllocatedResource(), alloc.GetAllocatedResource())
+	// Any negative value in the delta means that at least one of the requested resource in the
+	// placeholder is larger than the real allocation. The node and queue need adjusting.
+	// The reverse case is handled during allocation.
+	if delta.HasNegativeValue() {
+		// This looks incorrect but the delta is negative and the result will be an increase of the
+		// total tracked. The total will later be deducted from the queue usage.
+		total.SubFrom(delta)
+		log.Log(log.SchedPartition).Warn("replacing placeholder: placeholder is larger than real allocation",
+			zap.String("allocationKey", confirmed.GetAllocationKey()),
+			zap.Stringer("requested resource", confirmed.GetAllocatedResource()),
+			zap.String("placeholderKey", alloc.GetAllocationKey()),
+			zap.Stringer("placeholder resource", alloc.GetAllocatedResource()))
+	}
+	// replacements could be on a different node and different size handle all cases
+	if confirmed.GetNodeID() == alloc.GetNodeID() {
+		// this is the real swap on the node, adjust usage if needed
+		node.ReplaceAllocation(alloc.GetAllocationKey(), confirmed, delta)
+	} else {
+		// we have already added the real allocation to the new node, just remove the placeholder
+		node.RemoveAllocation(alloc.GetAllocationKey())
+	}
+	log.Log(log.SchedPartition).Info("replacing placeholder allocation on node",
+		zap.String("nodeID", alloc.GetNodeID()),
+		zap.String("allocationKey", alloc.GetAllocationKey()),
+		zap.String("allocation nodeID", confirmed.GetNodeID()))
+	return confirmed
+}
+
+// rollbackAllocation handles a shim-initiated scheduling failure by rolling the allocation back to a pending ask
+// so the core can re-schedule it on a different node.
+// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
+func (pc *PartitionContext) rollbackAllocation(appID, allocationKey string, app *objects.Application) ([]*objects.Allocation, *objects.Allocation) {
+	queue := app.GetQueue()
+	// Retrieve node ID before rolling back (RollbackAllocation clears it on the ask).
+	nodeID := app.GetAllocationNodeID(allocationKey)
+	res, err := app.RollbackAllocation(allocationKey)
+	if err != nil {
+		log.Log(log.SchedPartition).Warn("failed to rollback allocation",
+			zap.String("appID", appID),
+			zap.String("allocationKey", allocationKey),
+			zap.Error(err))
+		return nil, nil
+	}
+	if node := pc.GetNode(nodeID); node != nil {
+		node.RemoveAllocation(allocationKey)
+	} else {
+		log.Log(log.SchedPartition).Warn("node not found while rolling back allocation",
+			zap.String("appID", appID),
+			zap.String("allocationKey", allocationKey),
+			zap.String("nodeID", nodeID))
+	}
+	if err := queue.DecAllocatedResource(res); err != nil {
+		log.Log(log.SchedPartition).Warn("failed to release resources from queue during rollback",
+			zap.String("appID", appID),
+			zap.String("allocationKey", allocationKey),
+			zap.Error(err))
+	}
+	pc.updateAllocationCount(-1)
+	log.Log(log.SchedPartition).Info("allocation rolled back to pending ask",
+		zap.String("appID", appID),
+		zap.String("allocationKey", allocationKey),
+		zap.String("nodeID", nodeID))
+	return nil, nil
 }
 
 // updatePhAllocationCount checks the released allocations and updates the partition context counter of allocated

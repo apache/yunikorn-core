@@ -822,12 +822,8 @@ func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource,
 		return nil, fmt.Errorf("cannot rollback allocation %s: application %s is in state %s", allocKey, sa.ApplicationID, sa.CurrentState())
 	}
 
-	ask := sa.requests[allocKey]
+	ask := sa.allocations[allocKey]
 	if ask == nil {
-		return nil, fmt.Errorf("failed to locate ask with key %s for rollback", allocKey)
-	}
-	alloc := sa.allocations[allocKey]
-	if alloc == nil {
 		return nil, fmt.Errorf("failed to locate allocation with key %s for rollback", allocKey)
 	}
 
@@ -840,7 +836,7 @@ func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource,
 	// Clear stale node assignment on the ask so it is re-schedulable cleanly.
 	ask.SetNodeID("")
 
-	res := alloc.GetAllocatedResource()
+	res := ask.GetAllocatedResource()
 	sa.allocatedResource = resources.Sub(sa.allocatedResource, res)
 	sa.allocatedResource.Prune()
 	sa.decUserResourceUsage(res, false)

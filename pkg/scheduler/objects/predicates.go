@@ -21,7 +21,6 @@ package objects
 import (
 	"fmt"
 	"strings"
-	"sync"
 
 	"go.uber.org/zap"
 
@@ -114,9 +113,7 @@ func (pcr *predicateCheckResult) populateVictims(victimsByNode map[string][]*All
 	}
 }
 
-// preemptPredicateCheck performs a single predicate check and reports the resultType on a channel
-func preemptPredicateCheck(plugin api.ResourceManagerCallback, ch chan<- *predicateCheckResult, wg *sync.WaitGroup, args *si.PreemptionPredicatesArgs) {
-	defer wg.Done()
+func PredicateChecks(plugin api.ResourceManagerCallback, args *si.PreemptionPredicatesArgs) *predicateCheckResult {
 	result := &predicateCheckResult{
 		allocationKey:   args.AllocationKey,
 		nodeID:          args.NodeID,
@@ -149,7 +146,7 @@ func preemptPredicateCheck(plugin api.ResourceManagerCallback, ch chan<- *predic
 			result.predicateErrors = response.GetErrorMessage()
 		}
 	}
-	ch <- result
+	return result
 }
 
 func (p *predicateCheckResult) String() string {

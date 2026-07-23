@@ -26,6 +26,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -67,39 +68,41 @@ func (p *PreemptionContext) tryPreemption() {
 	p.sortAllocations()
 
 	// Are there any victims/asks to preempt?
-	victims := p.GetVictims()
+	var victims []*Allocation
+	var finalVictims []*Allocation
+	victims = p.GetVictims()
 	if len(victims) > 0 {
-		log.Log(log.SchedRequiredNodePreemption).Info("Found victims for required node preemption",
-			zap.String("ds allocation key", p.requiredAsk.GetAllocationKey()),
-			zap.String("allocation name", p.requiredAsk.GetAllocationName()),
-			zap.Int("no.of victims", len(victims)))
-		for _, victim := range victims {
-			err := victim.MarkPreempted()
-			if err != nil {
-				log.Log(log.SchedRequiredNodePreemption).Warn("allocation is already released, so not proceeding further on the daemon set preemption process",
-					zap.String("applicationID", p.requiredAsk.GetApplicationID()),
-					zap.String("allocationKey", victim.GetAllocationKey()))
-				continue
+		finalVictims = p.runPredicates(victims)
+		if len(finalVictims) > 0 {
+			for _, victim := range finalVictims {
+				err := victim.MarkPreempted()
+				if err != nil {
+					log.Log(log.SchedRequiredNodePreemption).Warn("allocation is already released, so not proceeding further on the daemon set preemption process",
+						zap.String("applicationID", p.requiredAsk.GetApplicationID()),
+						zap.String("allocationKey", victim.GetAllocationKey()))
+					continue
+				}
+				if victimQueue := p.application.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
+					victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
+				} else {
+					log.Log(log.SchedRequiredNodePreemption).Warn("BUG: Queue not found for daemon set preemption victim",
+						zap.String("queue", p.application.queue.Name),
+						zap.String("victimApplicationID", victim.GetApplicationID()),
+						zap.String("victimAllocationKey", victim.GetAllocationKey()))
+				}
+				victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
 			}
-			if victimQueue := p.application.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
-				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
-			} else {
-				log.Log(log.SchedRequiredNodePreemption).Warn("BUG: Queue not found for daemon set preemption victim",
-					zap.String("queue", p.application.queue.Name),
-					zap.String("victimApplicationID", victim.GetApplicationID()),
-					zap.String("victimAllocationKey", victim.GetAllocationKey()))
-			}
-			victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
+			p.requiredAsk.MarkTriggeredPreemption()
+			p.application.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
+				"preempting allocations to free up resources to run daemon set ask: "+p.requiredAsk.GetAllocationKey())
 		}
-		p.requiredAsk.MarkTriggeredPreemption()
-		p.application.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
-			"preempting allocations to free up resources to run daemon set ask: "+p.requiredAsk.GetAllocationKey())
-	} else {
+	}
+	if len(victims) == 0 || len(finalVictims) == 0 {
 		p.requiredAsk.LogAllocationFailure(common.NoVictimForRequiredNode, true)
 		p.requiredAsk.SendRequiredNodePreemptionFailedEvent(p.node.NodeID)
 		getRateLimitedReqNodeLog().Info("no victim found for required node preemption",
-			zap.String("allocation key", p.requiredAsk.GetAllocationKey()),
-			zap.String("allocation name", p.requiredAsk.GetAllocationName()),
+			zap.String("allocationKey", p.requiredAsk.GetAllocationKey()),
+			zap.String("allocationName", p.requiredAsk.GetAllocationName()),
 			zap.String("node", p.node.NodeID),
 			zap.Int("total allocations", result.totalAllocations),
 			zap.Int("requiredNode allocations", result.requiredNodeAllocations),
@@ -171,12 +174,66 @@ func (p *PreemptionContext) GetVictims() []*Allocation {
 		}
 	}
 
-	// Did we found the useful set of victims?
+	// Did we find the useful set of victims?
 	if len(victims) > 0 && resources.StrictlyGreaterThanOrEquals(
 		resources.Add(currentResource, p.node.GetAvailableResource()), p.requiredAsk.GetAllocatedResource()) {
 		return victims
 	}
 	return nil
+}
+
+// runPredicates Run Predicate checks to confirm whether collected victims from the required node is
+// good enough to move forward on the preemption further or not
+func (p *PreemptionContext) runPredicates(victims []*Allocation) []*Allocation {
+	finalVictims := make([]*Allocation, 0)
+	plugin := plugins.GetResourceManagerCallbackPlugin()
+	if plugin == nil {
+		log.Log(log.SchedRequiredNodePreemption).Debug("No RM callback plugin registered, using chosen victims as is",
+			zap.String("node", p.node.NodeID),
+			zap.String("allocationKey", p.requiredAsk.GetAllocationKey()))
+		return victims
+	} else {
+		// run predicates for this pod before in hand and fetch feasible nodes
+		feasibleNodes, predicatesResult := p.requiredAsk.preAllocateConditions(true)
+		if !predicatesResult {
+			return finalVictims
+		}
+		// Is this node suitable to run the pod?
+		if len(feasibleNodes) > 0 {
+			if _, ok := feasibleNodes[p.node.NodeID]; !ok {
+				log.Log(log.SchedRequiredNodePreemption).Debug("skipping node as it is not feasible to run the pod",
+					zap.String("allocationKey", p.requiredAsk.GetAllocationKey()),
+					zap.String("node", p.node.NodeID))
+				return finalVictims
+			}
+		}
+		keys := make([]string, 0)
+		for _, victim := range victims {
+			keys = append(keys, victim.GetAllocationKey())
+		}
+		args := &si.PreemptionPredicatesArgs{
+			AllocationKey:         p.requiredAsk.GetAllocationKey(),
+			NodeID:                p.node.NodeID,
+			PreemptAllocationKeys: keys,
+			StartIndex:            int32(0),
+		}
+		predicateResult := PredicateChecks(plugin, args)
+		if !predicateResult.success || predicateResult.index == -1 {
+			log.Log(log.SchedRequiredNodePreemption).Debug("running predicate checks failed",
+				zap.String("allocationKey", p.requiredAsk.GetAllocationKey()),
+				zap.String("node", p.node.NodeID))
+			return finalVictims
+		}
+		log.Log(log.SchedRequiredNodePreemption).Info("Found victims for required node preemption",
+			zap.String("allocationKey", p.requiredAsk.GetAllocationKey()),
+			zap.String("allocationName", p.requiredAsk.GetAllocationName()),
+			zap.Int("total victims", len(victims)))
+		victimsByNode := make(map[string][]*Allocation)
+		victimsByNode[p.node.NodeID] = victims
+		predicateResult.populateVictims(victimsByNode)
+		finalVictims = predicateResult.victims
+	}
+	return finalVictims
 }
 
 // for test only

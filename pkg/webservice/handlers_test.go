@@ -1799,7 +1799,7 @@ func TestGetApplicationHandler(t *testing.T) {
 	getApplication(resp, req)
 	err = json.Unmarshal(resp.outputBytes, &appsDao)
 	assert.NilError(t, err, unmarshalError)
-	assert.Assert(t, deadline.Equal(*appsDao.BackoffDeadline))
+	assert.Equal(t, *appsDao.BackoffDeadline, deadline.UnixNano())
 
 	// test nonexistent partition
 	var req1 *http.Request

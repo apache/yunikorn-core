@@ -23,22 +23,38 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/metrics/history"
 	"github.com/apache/yunikorn-core/pkg/scheduler"
 )
 
 const base = "http://localhost:9080"
 
+func waitForServerReady(t *testing.T) {
+	err := common.WaitForCondition(10*time.Millisecond, 3*time.Second, func() bool {
+		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", "9080"), 100*time.Millisecond)
+		if err == nil {
+			defer conn.Close()
+			return true
+		}
+		return false
+	})
+	assert.NilError(t, err, "webapp failed to start in 3 seconds")
+}
+
 func Test_RedirectDebugHandler(t *testing.T) {
 	defer ResetIMHistory()
 	s := NewWebApp(&scheduler.ClusterContext{}, history.NewInternalMetricsHistory(5))
 	s.StartWebApp()
+	waitForServerReady(t)
 	defer func(s *WebService) {
 		err := s.StopWebApp()
 		if err != nil {
@@ -74,6 +90,7 @@ func Test_RedirectDebugHandler(t *testing.T) {
 func Test_RouterHandling(t *testing.T) {
 	s := NewWebApp(&scheduler.ClusterContext{}, nil)
 	s.StartWebApp()
+	waitForServerReady(t)
 	defer func(s *WebService) {
 		err := s.StopWebApp()
 		if err != nil {
@@ -112,6 +129,7 @@ func Test_RouterHandling(t *testing.T) {
 func Test_HeaderChecks(t *testing.T) {
 	s := NewWebApp(&scheduler.ClusterContext{}, nil)
 	s.StartWebApp()
+	waitForServerReady(t)
 	defer func(s *WebService) {
 		err := s.StopWebApp()
 		if err != nil {
@@ -173,6 +191,7 @@ func Test_GzipCompression(t *testing.T) {
 
 	s := NewWebApp(&scheduler.ClusterContext{}, nil)
 	s.StartWebApp()
+	waitForServerReady(t)
 	defer func() {
 		if err := s.StopWebApp(); err != nil {
 			t.Fatal("failed to stop webapp")
@@ -249,6 +268,7 @@ func Test_GzipCompression(t *testing.T) {
 func Test_GzipMinCompressionSize(t *testing.T) {
 	s := NewWebApp(&scheduler.ClusterContext{}, nil)
 	s.StartWebApp()
+	waitForServerReady(t)
 	defer func() {
 		if err := s.StopWebApp(); err != nil {
 			t.Fatal("failed to stop webapp")
@@ -315,6 +335,7 @@ func Test_GzipClientAcceptsGzip(t *testing.T) {
 func Test_GzipExcludesEventStream(t *testing.T) {
 	s := NewWebApp(&scheduler.ClusterContext{}, nil)
 	s.StartWebApp()
+	waitForServerReady(t)
 	defer func() {
 		if err := s.StopWebApp(); err != nil {
 			t.Fatal("failed to stop webapp")
@@ -345,6 +366,7 @@ func Test_GzipVaryHeaderNotDuplicated(t *testing.T) {
 
 	s := NewWebApp(&scheduler.ClusterContext{}, nil)
 	s.StartWebApp()
+	waitForServerReady(t)
 	defer func() {
 		if err := s.StopWebApp(); err != nil {
 			t.Fatal("failed to stop webapp")

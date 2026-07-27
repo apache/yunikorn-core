@@ -21,6 +21,7 @@ package events
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -33,8 +34,10 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
-var once sync.Once
-var ev EventSystem
+var (
+	once sync.Once
+	ev   EventSystem
+)
 
 type EventSystem interface {
 	// AddEvent adds an event record to the event system for processing:
@@ -77,17 +80,48 @@ type EventSystem interface {
 	GetEventStreams() []EventStreamData
 }
 
+// GetEventSystem returns the event system instance. Initialization happens during the first call.
+// This does not start the service or publisher. Call StartService or StartServiceWithPublisher
+// on the returned system to start the service.
+func GetEventSystem() EventSystem {
+	once.Do(func() {
+		Init()
+	})
+	return ev
+}
+
+// Init Initializes the event system.
+// Only exported for testing.
+func Init() {
+	store := newEventStore(getRequestCapacity())
+	buffer := newEventRingBuffer(getRingBufferCapacity())
+	evImpl := &EventSystemImpl{
+		Store:         store,
+		channel:       make(chan *si.EventRecord, configs.DefaultEventChannelSize),
+		eventBuffer:   buffer,
+		eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
+		streaming:     NewEventStreaming(buffer),
+	}
+	evImpl.stopped.Store(true)
+	// start the callback for this instance: must be done
+	configs.AddConfigMapCallback(evImpl.eventSystemId, func() {
+		go evImpl.reloadConfig()
+	})
+
+	ev = evImpl
+}
+
 // EventSystemImpl main implementation of the event system which is used for history tracking.
 type EventSystemImpl struct {
 	eventSystemId string
-	Store         *EventStore // storing eventChannel
-	publisher     *EventPublisher
+	Store         *EventStore // storing eventChannel, exported for test
+	publisher     *eventPublisher
 	eventBuffer   *eventRingBuffer
 	streaming     *EventStreaming
 
 	channel chan *si.EventRecord // channelling input eventChannel
-	stop    chan bool            // whether the service is stopped
-	stopped bool
+	stop    chan struct{}        // channel to stop the system
+	stopped atomic.Bool          // whether the service is stopped
 
 	trackingEnabled    bool
 	requestCapacity    uint64
@@ -111,14 +145,6 @@ func (ec *EventSystemImpl) GetEventsFromID(id, count uint64) ([]*si.EventRecord,
 	return ec.eventBuffer.GetEventsFromID(id, count)
 }
 
-// GetEventSystem returns the event system instance. Initialization happens during the first call.
-func GetEventSystem() EventSystem {
-	once.Do(func() {
-		Init()
-	})
-	return ev
-}
-
 // IsEventTrackingEnabled whether history tracking is currently enabled or not.
 func (ec *EventSystemImpl) IsEventTrackingEnabled() bool {
 	ec.RLock()
@@ -126,51 +152,75 @@ func (ec *EventSystemImpl) IsEventTrackingEnabled() bool {
 	return ec.trackingEnabled
 }
 
-// GetRequestCapacity returns the capacity of an intermediate storage which is used by the shim publisher.
-func (ec *EventSystemImpl) GetRequestCapacity() uint64 {
-	ec.RLock()
-	defer ec.RUnlock()
-	return ec.requestCapacity
-}
-
-// GetRingBufferCapacity returns the capacity of the buffer which stores historical elements.
-func (ec *EventSystemImpl) GetRingBufferCapacity() uint64 {
-	ec.RLock()
-	defer ec.RUnlock()
-	return ec.ringBufferCapacity
-}
-
-// Init Initializes the event system.
-// Only exported for testing.
-func Init() {
-	store := newEventStore(getRequestCapacity())
-	buffer := newEventRingBuffer(getRingBufferCapacity())
-	ev = &EventSystemImpl{
-		Store:         store,
-		channel:       make(chan *si.EventRecord, configs.DefaultEventChannelSize),
-		stop:          make(chan bool),
-		stopped:       false,
-		eventBuffer:   buffer,
-		eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
-		publisher:     CreateShimPublisher(store),
-		streaming:     NewEventStreaming(buffer),
-	}
-}
-
 // StartService starts the event processing in the background. See the interface for details.
 func (ec *EventSystemImpl) StartService() {
 	ec.StartServiceWithPublisher(true)
 }
 
+// Stop stops the event system, including the shim publisher if it was started.
+func (ec *EventSystemImpl) Stop() {
+	// no need to stop twice
+	if ec.stopped.Load() {
+		return
+	}
+	ec.stopped.Store(true)
+	ec.Lock()
+	defer ec.Unlock()
+	log.Log(log.Events).Info("Stopping event system handler")
+
+	configs.RemoveConfigMapCallback(ec.eventSystemId)
+
+	ec.stop <- struct{}{}
+	if ec.channel != nil {
+		close(ec.channel)
+		ec.channel = nil
+	}
+	if ec.publisher != nil {
+		ec.publisher.stop()
+		ec.publisher = nil
+	}
+}
+
+// GetEventStreams returns the current active event streams.
+func (ec *EventSystemImpl) GetEventStreams() []EventStreamData {
+	return ec.streaming.GetEventStreams()
+}
+
+// AddEvent adds an event record to the event system. See the interface for details.
+func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
+	if event != nil {
+		event.Message = truncateEventMessage(event.Message)
+	}
+	// all events get tracked, even ones we drop
+	metrics.GetEventMetrics().IncEventsCreated()
+	// not running just track the metric
+	if ec.stopped.Load() {
+		metrics.GetEventMetrics().IncEventsNotChanneled()
+		return
+	}
+	ec.RLock()
+	defer ec.RUnlock()
+
+	select {
+	case ec.channel <- event:
+		metrics.GetEventMetrics().IncEventsChanneled()
+	default:
+		log.Log(log.Events).Debug("could not add Event to channel")
+		metrics.GetEventMetrics().IncEventsNotChanneled()
+	}
+}
+
 // StartServiceWithPublisher starts the event processing background routines.
 // Only exported for testing.
 func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
+	if !ec.stopped.Load() {
+		log.Log(log.Events).Info("Event system is already running")
+		return
+	}
+	ec.stopped.Store(false)
 	ec.Lock()
 	defer ec.Unlock()
-
-	configs.AddConfigMapCallback(ec.eventSystemId, func() {
-		go ec.reloadConfig()
-	})
+	ec.stop = make(chan struct{})
 
 	ec.trackingEnabled = isTrackingEnabled()
 	ec.ringBufferCapacity = getRingBufferCapacity()
@@ -196,111 +246,40 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 		}
 	}()
 	if withPublisher {
-		ec.publisher.StartService()
+		ec.publisher = createShimPublisher(ec.Store)
+		ec.publisher.start()
 	}
 }
 
-// Stop stops the event system.
-func (ec *EventSystemImpl) Stop() {
-	ec.Lock()
-	defer ec.Unlock()
-
-	configs.RemoveConfigMapCallback(ec.eventSystemId)
-
-	if ec.stopped {
-		return
-	}
-
-	ec.stop <- true
-	if ec.channel != nil {
-		close(ec.channel)
-		ec.channel = nil
-	}
-	ec.publisher.Stop()
-	ec.stopped = true
-}
-
-func (ec *EventSystemImpl) isStopped() bool {
-	return ec.stopped || ec.channel == nil
-}
-
-// AddEvent adds an event record to the event system. See the interface for details.
-func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
-	if event != nil {
-		event.Message = truncateEventMessage(event.Message)
-	}
-
-	metrics.GetEventMetrics().IncEventsCreated()
-
+// getRequestCapacity returns the capacity of an intermediate storage which is used by the shim publisher.
+func (ec *EventSystemImpl) getRequestCapacity() uint64 {
 	ec.RLock()
 	defer ec.RUnlock()
-
-	if ec.isStopped() {
-		metrics.GetEventMetrics().IncEventsNotChanneled()
-		return
-	}
-
-	select {
-	case ec.channel <- event:
-		metrics.GetEventMetrics().IncEventsChanneled()
-	default:
-		log.Log(log.Events).Debug("could not add Event to channel")
-		metrics.GetEventMetrics().IncEventsNotChanneled()
-	}
+	return ec.requestCapacity
 }
 
-// truncates event message to 1024 characters for k8s compatibility
-func truncateEventMessage(message string) string {
-	const k8sEventMessageLimit = 1024
-	if len(message) <= k8sEventMessageLimit {
-		return message
-	}
-	return message[:k8sEventMessageLimit-3] + "..."
+// getRingBufferCapacity returns the capacity of the buffer which stores historical elements.
+func (ec *EventSystemImpl) getRingBufferCapacity() uint64 {
+	ec.RLock()
+	defer ec.RUnlock()
+	return ec.ringBufferCapacity
 }
 
-func isTrackingEnabled() bool {
-	return common.GetConfigurationBool(configs.GetConfigMap(), configs.CMEventTrackingEnabled, configs.DefaultEventTrackingEnabled)
-}
-
-func getRequestCapacity() uint64 {
-	capacity := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRequestCapacity, configs.DefaultEventRequestCapacity)
-	if capacity == 0 {
-		log.Log(log.Events).Warn("Request capacity is set to 0, using default",
-			zap.String("property", configs.CMEventRequestCapacity),
-			zap.Uint64("default", configs.DefaultEventRequestCapacity))
-		return configs.DefaultEventRequestCapacity
-	}
-	return capacity
-}
-
-func getRingBufferCapacity() uint64 {
-	capacity := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRingBufferCapacity, configs.DefaultEventRingBufferCapacity)
-	if capacity == 0 {
-		log.Log(log.Events).Warn("Ring buffer capacity is set to 0, using default",
-			zap.String("property", configs.CMEventRingBufferCapacity),
-			zap.Uint64("default", configs.DefaultEventRingBufferCapacity))
-		return configs.DefaultEventRingBufferCapacity
-	}
-	return capacity
-}
-
+// isRestartNeeded returns true if the tracking mode has switched from off to on or vice versa.
+// Returns false if tracking mode has not changed
 func (ec *EventSystemImpl) isRestartNeeded() bool {
 	ec.RLock()
 	defer ec.RUnlock()
 	return isTrackingEnabled() != ec.trackingEnabled
 }
 
-// Restart restarts the event system, used during config update.
-func (ec *EventSystemImpl) Restart() {
+// restart restarts the event system, used during config update.
+func (ec *EventSystemImpl) restart() {
 	ec.Stop()
 	ec.StartServiceWithPublisher(true)
 }
 
-// GetEventStreams returns the current active event streams.
-func (ec *EventSystemImpl) GetEventStreams() []EventStreamData {
-	return ec.streaming.GetEventStreams()
-}
-
+// CloseAllStreams closes all existing streams.
 // VisibleForTesting
 func (ec *EventSystemImpl) CloseAllStreams() {
 	ec.streaming.Lock()
@@ -310,6 +289,7 @@ func (ec *EventSystemImpl) CloseAllStreams() {
 	}
 }
 
+// reloadConfig function called by the config
 func (ec *EventSystemImpl) reloadConfig() {
 	ec.Lock()
 	ec.requestCapacity = getRequestCapacity()
@@ -321,6 +301,47 @@ func (ec *EventSystemImpl) reloadConfig() {
 	ec.eventBuffer.Resize(ec.ringBufferCapacity)
 
 	if ec.isRestartNeeded() {
-		ec.Restart()
+		log.Log(log.Events).Info("Restarting event system handler on config reload")
+		ec.restart()
 	}
+}
+
+// truncateEventMessage limits the event message to 1024 characters for k8s compatibility
+func truncateEventMessage(message string) string {
+	const k8sEventMessageLimit = 1024
+	if len(message) <= k8sEventMessageLimit {
+		return message
+	}
+	return message[:k8sEventMessageLimit-3] + "..."
+}
+
+// isTrackingEnabled gets the current state of tracking from the configuration.
+func isTrackingEnabled() bool {
+	return common.GetConfigurationBool(configs.GetConfigMap(), configs.CMEventTrackingEnabled, configs.DefaultEventTrackingEnabled)
+}
+
+// getRequestCapacity returns the size of an intermediate storage from the configuration, using the
+// configs.DefaultEventRequestCapacity if 0 or not defined.
+func getRequestCapacity() uint64 {
+	capacity := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRequestCapacity, configs.DefaultEventRequestCapacity)
+	if capacity == 0 {
+		log.Log(log.Events).Warn("Request capacity is set to 0, using default",
+			zap.String("property", configs.CMEventRequestCapacity),
+			zap.Uint64("default", configs.DefaultEventRequestCapacity))
+		return configs.DefaultEventRequestCapacity
+	}
+	return capacity
+}
+
+// getRingBufferCapacity returns the ring buffer capacity from the configuration, using the
+// configs.DefaultEventRingBufferCapacity if 0 or not defined.
+func getRingBufferCapacity() uint64 {
+	capacity := common.GetConfigurationUint(configs.GetConfigMap(), configs.CMEventRingBufferCapacity, configs.DefaultEventRingBufferCapacity)
+	if capacity == 0 {
+		log.Log(log.Events).Warn("Ring buffer capacity is set to 0, using default",
+			zap.String("property", configs.CMEventRingBufferCapacity),
+			zap.Uint64("default", configs.DefaultEventRingBufferCapacity))
+		return configs.DefaultEventRingBufferCapacity
+	}
+	return capacity
 }

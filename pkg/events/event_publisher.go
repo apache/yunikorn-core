@@ -19,6 +19,7 @@
 package events
 
 import (
+	"sync/atomic"
 	"time"
 
 	"go.uber.org/zap"
@@ -30,33 +31,44 @@ import (
 // stores the push event internal
 var defaultPushEventInterval = 2 * time.Second
 
-type EventPublisher struct {
+type eventPublisher struct {
 	store             *EventStore
 	pushEventInterval time.Duration
-	stop              chan struct{}
+	stopCh            chan struct{}
+	stopped           atomic.Bool
 }
 
-func CreateShimPublisher(store *EventStore) *EventPublisher {
-	publisher := &EventPublisher{
+func createShimPublisher(store *EventStore) *eventPublisher {
+	publisher := &eventPublisher{
 		store:             store,
 		pushEventInterval: defaultPushEventInterval,
-		stop:              make(chan struct{}),
 	}
+	publisher.stopped.Store(true)
 	return publisher
 }
 
-func (sp *EventPublisher) StartService() {
-	log.Log(log.Events).Info("Starting shim event publisher")
+func (sp *eventPublisher) start() {
+	log.Log(log.Events).Info("Starting event publisher")
+	// handle a restart correctly
+	if sp.stopped.Load() {
+		sp.stopped.Store(false)
+		sp.stopCh = make(chan struct{})
+	} else {
+		log.Log(log.Events).Info("Event publisher already running")
+		return
+	}
 	go func() {
 		for {
 			select {
-			case <-sp.stop:
+			case <-sp.stopCh:
+				log.Log(log.Events).Info("Event publisher exiting")
 				return
 			case <-time.After(sp.pushEventInterval):
 				messages := sp.store.CollectEvents()
 				if len(messages) > 0 {
 					if eventPlugin := plugins.GetResourceManagerCallbackPlugin(); eventPlugin != nil {
-						log.Log(log.Events).Debug("Sending eventChannel", zap.Int("number of messages", len(messages)))
+						log.Log(log.Events).Debug("Sending eventChannel",
+							zap.Int("number of messages", len(messages)))
 						eventPlugin.SendEvent(messages)
 					}
 				}
@@ -65,11 +77,18 @@ func (sp *EventPublisher) StartService() {
 	}()
 }
 
-func (sp *EventPublisher) Stop() {
-	log.Log(log.Events).Info("Stopping shim event publisher")
-	close(sp.stop)
+func (sp *eventPublisher) stop() {
+	if sp.stopped.Load() {
+		log.Log(log.Events).Info("Event publisher already stopped")
+		return
+	}
+	log.Log(log.Events).Info("Stopping event publisher")
+	sp.stopCh <- struct{}{}
+	close(sp.stopCh)
+	sp.stopCh = nil
+	sp.stopped.Store(true)
 }
 
-func (sp *EventPublisher) getEventStore() *EventStore {
+func (sp *eventPublisher) getEventStore() *EventStore {
 	return sp.store
 }

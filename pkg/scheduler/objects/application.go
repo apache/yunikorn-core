@@ -1142,28 +1142,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 
 		requiredNode := request.GetRequiredNode()
 
-		// run predicates for this pod before in hand and fetch feasible nodes
-		feasibleNodes, predicatesResult := request.preAllocateConditions(true)
-
 		// does request have any constraint to run on specific node?
 		if requiredNode != "" {
-			skipRequiredNode := false
-			if predicatesResult {
-				// Is this node suitable to run the pod?
-				if len(feasibleNodes) > 0 {
-					if _, ok := feasibleNodes[requiredNode]; !ok {
-						skipRequiredNode = true
-					}
-				}
-			} else {
-				skipRequiredNode = true
-			}
-			if skipRequiredNode {
-				getRateLimitedAppLog().Info("skipping required node as it is not feasible to run the pod",
-					zap.String("allocationKey", request.GetAllocationKey()),
-					zap.String("required node", requiredNode))
-				continue
-			}
 			result := sa.tryRequiredNode(request, getNodeFn)
 			if result != nil {
 				return result
@@ -1175,7 +1155,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 
 		iterator := nodeIterator()
 		if iterator != nil {
-			if result := sa.tryNodes(request, iterator, feasibleNodes, predicatesResult); result != nil {
+			if result := sa.tryNodes(request, iterator); result != nil {
 				// have a candidate return it
 				return result
 			}
@@ -1221,7 +1201,7 @@ func (sa *Application) tryRequiredNode(request *Allocation, getNodeFn func(strin
 		num = sa.cancelReservations(reservations)
 	}
 	_, thisReserved := sa.reservations[allocationKey]
-	result, _ := sa.tryNode(node, request) //nolint:errcheck
+	result, _ := sa.tryNode(node, request, false) //nolint:errcheck
 	if result != nil {
 		result.CancelledReservations = num
 		// check if the node was reserved and we allocated after a release
@@ -1577,7 +1557,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 				zap.String("reserved node", reserve.node.NodeID))
 			continue
 		}
-		result, _ := sa.tryNode(reserve.node, ask) //nolint:errcheck
+		result, _ := sa.tryNode(reserve.node, ask, true) //nolint:errcheck
 
 		// allocation worked fix the resultType and return
 		if result != nil {
@@ -1665,7 +1645,7 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 				return true
 			}
 		}
-		result, _ := sa.tryNode(node, ask) //nolint:errcheck
+		result, _ := sa.tryNode(node, ask, true) //nolint:errcheck
 		// allocation worked: update resultType and return
 		if result != nil {
 			result.ResultType = AllocatedReserved
@@ -1682,7 +1662,7 @@ func (sa *Application) tryNodesNoReserve(ask *Allocation, iterator NodeIterator,
 
 // Try all the nodes for a request. The resultType is an allocation or reservation of a node.
 // New allocations can only be reserved after a delay.
-func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator, feasibleNodes map[string]*si.Empty, predicatesResult bool) *AllocationResult {
+func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *AllocationResult {
 	var nodeToReserve *Node
 	scoreReserved := math.Inf(1)
 	// check if the alloc is reserved or not
@@ -1691,6 +1671,9 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator, feasible
 	var allocResult *AllocationResult
 	var predicateErrors map[string]int
 	tryNodeCycleStart := time.Now()
+
+	// run predicates for this pod before in hand and fetch feasible nodes
+	feasibleNodes, predicatesResult := ask.preAllocateConditions(true)
 
 	iterator.ForEachNode(func(node *Node) bool {
 		// skip the node if the node is not schedulable
@@ -1718,7 +1701,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator, feasible
 				}
 			}
 			tryNodeStart := time.Now()
-			result, err := sa.tryNode(node, ask)
+			result, err := sa.tryNode(node, ask, true)
 			if err != nil {
 				if predicateErrors == nil {
 					predicateErrors = make(map[string]int)
@@ -1801,7 +1784,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator, feasible
 }
 
 // tryNode tries allocating on one specific node
-func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, error) {
+func (sa *Application) tryNode(node *Node, ask *Allocation, doPredicateChecks bool) (*AllocationResult, error) {
 	toAllocate := ask.GetAllocatedResource()
 	allocationKey := ask.GetAllocationKey()
 	// create the key for the reservation
@@ -1809,11 +1792,12 @@ func (sa *Application) tryNode(node *Node, ask *Allocation) (*AllocationResult, 
 		// skip schedule onto node
 		return nil, nil
 	}
-	// skip the node if conditions can not be satisfied
-	if err := node.preAllocateConditions(ask); err != nil {
-		return nil, err
+	if doPredicateChecks {
+		// skip the node if conditions can not be satisfied
+		if err := node.preAllocateConditions(ask); err != nil {
+			return nil, err
+		}
 	}
-
 	// everything OK really allocate
 	if node.TryAddAllocation(ask) {
 		if err := sa.queue.TryIncAllocatedResource(ask.GetAllocatedResource()); err != nil {

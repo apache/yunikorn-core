@@ -1,0 +1,22 @@
+[
+  {
+    "applicationID": "sc-app-early",
+    "allocationKey": "e-1",
+    "nodeID": "sc-node:1"
+  },
+  {
+    "applicationID": "sc-app-early",
+    "allocationKey": "e-2",
+    "nodeID": "sc-node:1"
+  },
+  {
+    "applicationID": "sc-app-late",
+    "allocationKey": "l-1",
+    "nodeID": "sc-node:1"
+  },
+  {
+    "applicationID": "sc-app-early",
+    "allocationKey": "e-3",
+    "nodeID": "sc-node:1"
+  }
+]

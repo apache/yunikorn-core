@@ -1,0 +1,22 @@
+[
+  {
+    "applicationID": "sc-app-low",
+    "allocationKey": "low-1",
+    "nodeID": "sc-node:1"
+  },
+  {
+    "applicationID": "sc-app-low",
+    "allocationKey": "low-2",
+    "nodeID": "sc-node:1"
+  },
+  {
+    "applicationID": "sc-app-low",
+    "allocationKey": "low-2",
+    "terminationType": "PREEMPTED_BY_SCHEDULER"
+  },
+  {
+    "applicationID": "sc-app-high",
+    "allocationKey": "high-1",
+    "nodeID": "sc-node:1"
+  }
+]

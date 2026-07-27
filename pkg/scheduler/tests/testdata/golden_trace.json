@@ -1,0 +1,72 @@
+[
+  {
+    "applicationID": "golden-app-priority",
+    "allocationKey": "p-high",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-priority",
+    "allocationKey": "p-mid",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-priority",
+    "allocationKey": "p-low",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-remove",
+    "allocationKey": "r-1",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-remove",
+    "allocationKey": "r-3",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-remove",
+    "allocationKey": "r-4",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-gang",
+    "allocationKey": "g-placeholder",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-gang",
+    "allocationKey": "g-placeholder",
+    "terminationType": "PLACEHOLDER_REPLACED"
+  },
+  {
+    "applicationID": "golden-app-gang",
+    "allocationKey": "g-real",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-priority",
+    "allocationKey": "p-recover-high",
+    "nodeID": "golden-node-main:1"
+  },
+  {
+    "applicationID": "golden-app-low",
+    "allocationKey": "low-1",
+    "nodeID": "golden-node-preempt:1"
+  },
+  {
+    "applicationID": "golden-app-low",
+    "allocationKey": "low-2",
+    "nodeID": "golden-node-preempt:1"
+  },
+  {
+    "applicationID": "golden-app-low",
+    "allocationKey": "low-2",
+    "terminationType": "PREEMPTED_BY_SCHEDULER"
+  },
+  {
+    "applicationID": "golden-app-high",
+    "allocationKey": "high-1",
+    "nodeID": "golden-node-preempt:1"
+  }
+]

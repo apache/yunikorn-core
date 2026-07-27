@@ -1,0 +1,17 @@
+[
+  {
+    "applicationID": "sc-app-gang",
+    "allocationKey": "g-placeholder",
+    "nodeID": "sc-node:1"
+  },
+  {
+    "applicationID": "sc-app-gang",
+    "allocationKey": "g-placeholder",
+    "terminationType": "PLACEHOLDER_REPLACED"
+  },
+  {
+    "applicationID": "sc-app-gang",
+    "allocationKey": "g-real",
+    "nodeID": "sc-node:1"
+  }
+]

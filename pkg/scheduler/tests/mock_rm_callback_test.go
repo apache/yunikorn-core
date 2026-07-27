@@ -30,6 +30,33 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+// traceEntry is a single, append-only observation of a scheduling decision as delivered to the
+// RM via UpdateAllocation. It is one of three kinds:
+//   - a "new allocation" entry: ApplicationID/AllocationKey/NodeID set, TerminationType empty;
+//   - a "release" entry: ApplicationID/AllocationKey/TerminationType set, NodeID empty;
+//   - a "rejection" entry: ApplicationID/AllocationKey/Rejected set, the rest empty.
+//
+// See golden_trace_test.go for how this is used to build a golden decision-trace.
+//
+// All three kinds carry the application ID because an allocation key only identifies the work, not
+// whose work it is: a regression that releases the right key against the wrong application - which is
+// exactly what a mistake in preemption victim selection or in placeholder replacement looks like -
+// is invisible in a trace that records the key alone. The partition is deliberately NOT recorded:
+// every workload here runs on the single "default" partition, so the column would be constant, and
+// its value is the normalised name, which would write the RM ID into every golden line.
+//
+// A rejection records that the core refused the allocation, not why. The reason
+// (si.RejectedAllocation.Reason) is a free-text message built from whatever error the partition
+// returned, so pinning it in a golden would turn any rewording of an error string into a failed
+// decision-regression test - which is the opposite of what these goldens are for.
+type traceEntry struct {
+	ApplicationID   string `json:"applicationID,omitempty"`
+	AllocationKey   string `json:"allocationKey"`
+	NodeID          string `json:"nodeID,omitempty"`
+	TerminationType string `json:"terminationType,omitempty"`
+	Rejected        bool   `json:"rejected,omitempty"`
+}
+
 type mockRMCallback struct {
 	mock.ResourceManagerCallback
 	acceptedApplications map[string]bool
@@ -40,6 +67,24 @@ type mockRMCallback struct {
 	Allocations          map[string]*si.Allocation
 	releasedPhs          map[string]*si.AllocationRelease
 	appStates            map[string]string
+
+	// traceEnabled turns the capture below on. It is off by default because this mock is shared with
+	// every other test in the package, including BenchmarkScheduling, which drives 10k allocations
+	// per run through this callback: capturing them would add an append per allocation, inside the
+	// callback's write lock, on the path being measured. Only the golden-trace tests call
+	// enableTrace.
+	traceEnabled bool
+
+	// trace is an ordered, append-only record of every allocation, release and rejection observed via
+	// UpdateAllocation, in the exact order the RMProxy delivered them. RMProxy.handleRMEvents
+	// (rmproxy.go) drains its pending event queue from a single goroutine, so the callbacks arrive
+	// in the order the events were enqueued - but enqueue order is not by itself decision order,
+	// because events reach that queue from more than one goroutine (the scheduling goroutine and the
+	// allocation-event goroutine both enqueue). What makes the captured order the decision order is
+	// the workload: the golden-trace tests advance scheduling from a single goroutine calling
+	// MultiStepSchedule and drain both queues between batches (traceProbe.sync), so at most one batch
+	// of decisions is ever in flight. Used by golden_trace_test.go for the golden-trace test.
+	trace []traceEntry
 
 	locking.RWMutex
 }
@@ -88,14 +133,79 @@ func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error
 			nodeAllocations = append(nodeAllocations, alloc)
 			m.nodeAllocations[alloc.NodeID] = nodeAllocations
 		}
+		if m.traceEnabled {
+			m.trace = append(m.trace, traceEntry{
+				ApplicationID: alloc.ApplicationID,
+				AllocationKey: alloc.AllocationKey,
+				NodeID:        alloc.NodeID,
+			})
+		}
 	}
 	for _, alloc := range response.Released {
 		delete(m.Allocations, alloc.AllocationKey)
 		if alloc.TerminationType == si.TerminationType_PLACEHOLDER_REPLACED {
 			m.releasedPhs[alloc.AllocationKey] = alloc
 		}
+		if m.traceEnabled {
+			m.trace = append(m.trace, traceEntry{
+				ApplicationID:   alloc.ApplicationID,
+				AllocationKey:   alloc.AllocationKey,
+				TerminationType: alloc.TerminationType.String(),
+			})
+		}
+	}
+	// Rejections arrive on this same callback, from RMProxy.processRMRejectedAllocationEvent. They are
+	// captured because a decision trace that records only what WAS allocated cannot tell a rejected
+	// ask apart from one that was simply never scheduled: both show up as a missing row, and those two
+	// are different regressions - a quota or validation change against an ordering change. Recorded as
+	// an entry rather than checked here because this callback runs on the RMProxy's event goroutine,
+	// where a failed assertion could not stop the test anyway; as a trace entry it lands in the golden
+	// comparison and in the phase-length barriers, both of which run on the test goroutine.
+	for _, alloc := range response.RejectedAllocations {
+		if m.traceEnabled {
+			m.trace = append(m.trace, traceEntry{
+				ApplicationID: alloc.ApplicationID,
+				AllocationKey: alloc.AllocationKey,
+				Rejected:      true,
+			})
+		}
 	}
 	return nil
+}
+
+// enableTrace turns on decision-trace capture for this mock. Called by the golden-trace tests only,
+// see the traceEnabled field.
+func (m *mockRMCallback) enableTrace() {
+	m.Lock()
+	defer m.Unlock()
+	m.traceEnabled = true
+}
+
+// getTrace returns a copy of the ordered decision trace captured so far. Safe for concurrent use.
+func (m *mockRMCallback) getTrace() []traceEntry {
+	m.RLock()
+	defer m.RUnlock()
+
+	trace := make([]traceEntry, len(m.trace))
+	copy(trace, m.trace)
+	return trace
+}
+
+// getNodeAllocations returns the allocations this RM was told about for the given node.
+// Note that unlike Allocations this history is append-only: nodeAllocations is never pruned when an
+// allocation is released, so it is a record of what was placed on the node rather than of what is
+// still live there.
+//
+// The returned slice is a fresh slice, so it can be walked while the mock keeps recording, but its
+// elements are the *si.Allocation pointers the mock was handed, not copies: they are shared with the
+// caller's other readers and must be treated as read-only.
+func (m *mockRMCallback) getNodeAllocations(nodeID string) []*si.Allocation {
+	m.RLock()
+	defer m.RUnlock()
+
+	allocations := make([]*si.Allocation, len(m.nodeAllocations[nodeID]))
+	copy(allocations, m.nodeAllocations[nodeID])
+	return allocations
 }
 
 func (m *mockRMCallback) UpdateNode(response *si.NodeResponse) error {

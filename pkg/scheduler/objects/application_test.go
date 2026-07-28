@@ -4123,8 +4123,7 @@ func TestRollbackAllocationFromAccepted(t *testing.T) {
 	ask.SetNodeID(nodeID1)
 
 	app.Lock()
-	alloc := newAllocationWithKey(aKey, appID1, nodeID1, res)
-	app.allocations[aKey] = alloc
+	app.allocations[aKey] = ask
 	app.allocatedResource = resources.Add(app.allocatedResource, res)
 	app.incUserResourceUsage(res)
 	app.Unlock()
@@ -4176,8 +4175,7 @@ func TestRollbackAllocationFromRunning(t *testing.T) {
 	assert.Assert(t, resources.Equals(delta, res), "AllocateAsk delta should equal res, got %v", delta)
 	ask.SetNodeID(nodeID1)
 
-	alloc := newAllocationWithKey(aKey, appID1, nodeID1, res)
-	app.AddAllocation(alloc)
+	app.AddAllocation(ask)
 	assert.Assert(t, app.IsRunning(), "app should be in Running state after AddAllocation")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "pending should be zero before rollback")
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "allocated should equal res before rollback")
@@ -4224,8 +4222,7 @@ func TestRollbackAllocationPartial(t *testing.T) {
 	_, err = app.AllocateAsk(aKey)
 	assert.NilError(t, err, "AllocateAsk for ask1 should succeed")
 	ask1.SetNodeID(nodeID1)
-	alloc1 := newAllocationWithKey(aKey, appID1, nodeID1, res)
-	app.AddAllocation(alloc1)
+	app.AddAllocation(ask1)
 
 	// Allocate second ask.
 	ask2 := newAllocationAsk(aKey2, appID1, res)
@@ -4234,8 +4231,7 @@ func TestRollbackAllocationPartial(t *testing.T) {
 	_, err = app.AllocateAsk(aKey2)
 	assert.NilError(t, err, "AllocateAsk for ask2 should succeed")
 	ask2.SetNodeID(nodeID2)
-	alloc2 := newAllocationWithKey(aKey2, appID1, nodeID2, res)
-	app.AddAllocation(alloc2)
+	app.AddAllocation(ask2)
 
 	doubleRes := resources.Multiply(res, 2)
 	assert.Assert(t, app.IsRunning(), "app should be Running with two allocations")

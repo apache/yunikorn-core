@@ -5426,3 +5426,139 @@ func TestUpdateResolver(t *testing.T) {
 	assert.NilError(t, err, "unable to update partition config")
 	assert.Equal(t, partition.GetUserGroupResolverType(), "test", "resolver cannot be updated on running partition")
 }
+
+// TestRemoveAllocationSchedulingFailedOnRM verifies that a SCHEDULING_FAILED_ON_RM release rolls the
+// allocation back to a pending ask: allocation count decrements, node allocation is removed, and the
+// queue allocated resource is decremented. The function must return nil, nil (no echo to the shim).
+func TestRemoveAllocationSchedulingFailedOnRM(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+	node := setupNode(t, nodeID1, partition, nodeRes)
+
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application failed")
+
+	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+
+	// Add a pending ask, then transition it to allocated on nodeID1.
+	ask := newAllocationAsk(allocKey, appID1, askRes)
+	_, _, err = partition.UpdateAllocation(ask)
+	assert.NilError(t, err, "add ask failed")
+
+	alloc := newAllocation(allocKey, appID1, nodeID1, askRes)
+	_, allocCreated, err := partition.UpdateAllocation(alloc)
+	assert.NilError(t, err, "transition to allocated failed")
+	assert.Check(t, allocCreated, "allocation should have been created")
+
+	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "allocation count should be 1 before rollback")
+	assert.Assert(t, node.GetAllocation(allocKey) != nil, "node should have the allocation before rollback")
+	queueAllocBefore := partition.GetQueue(defQueue).GetAllocatedResource().Clone()
+	assert.Assert(t, resources.StrictlyGreaterThanZero(queueAllocBefore), "queue should have allocated resources before rollback")
+
+	release := &si.AllocationRelease{
+		PartitionName:   "test",
+		ApplicationID:   appID1,
+		AllocationKey:   allocKey,
+		TerminationType: si.TerminationType_SCHEDULING_FAILED_ON_RM,
+	}
+	released, confirmed := partition.removeAllocation(release)
+
+	assert.Assert(t, released == nil, "SCHEDULING_FAILED_ON_RM should not echo released allocations to the shim")
+	assert.Assert(t, confirmed == nil, "SCHEDULING_FAILED_ON_RM should not return a confirmed allocation")
+	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "allocation count should be 0 after rollback")
+	assert.Assert(t, node.GetAllocation(allocKey) == nil, "node should not have the allocation after rollback")
+	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero after rollback")
+	assert.Assert(t, resources.StrictlyGreaterThanZero(app.GetPendingResource()), "ask should be pending again after rollback")
+}
+
+// TestRemoveAllocationSchedulingFailedOnRMRollbackError verifies that when RollbackAllocation returns an
+// error (allocation key not found in app), removeAllocation logs a warning and returns nil, nil without
+// modifying the allocation count.
+func TestRemoveAllocationSchedulingFailedOnRMRollbackError(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+	setupNode(t, nodeID1, partition, nodeRes)
+
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application failed")
+
+	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+	ask := newAllocationAsk(allocKey, appID1, askRes)
+	_, _, err = partition.UpdateAllocation(ask)
+	assert.NilError(t, err, "add ask failed")
+
+	alloc := newAllocation(allocKey, appID1, nodeID1, askRes)
+	_, allocCreated, err := partition.UpdateAllocation(alloc)
+	assert.NilError(t, err, "transition to allocated failed")
+	assert.Check(t, allocCreated)
+
+	// Use a non-existent allocation key to force RollbackAllocation to fail.
+	release := &si.AllocationRelease{
+		PartitionName:   "test",
+		ApplicationID:   appID1,
+		AllocationKey:   "does-not-exist",
+		TerminationType: si.TerminationType_SCHEDULING_FAILED_ON_RM,
+	}
+	released, confirmed := partition.removeAllocation(release)
+
+	assert.Assert(t, released == nil, "should return nil on rollback error")
+	assert.Assert(t, confirmed == nil, "should return nil on rollback error")
+	// Allocation count must be unchanged since the rollback failed.
+	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "allocation count should be unchanged after failed rollback")
+}
+
+// TestRemoveAllocationSchedulingFailedOnRMNodeNotFound verifies that when the node referenced by the
+// allocation has already been removed, the rollback still succeeds: the allocation is removed from the
+// app and queue, the allocation count is decremented, and the function returns nil, nil.
+func TestRemoveAllocationSchedulingFailedOnRMNodeNotFound(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+	setupNode(t, nodeID1, partition, nodeRes)
+
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application failed")
+
+	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+	ask := newAllocationAsk(allocKey, appID1, askRes)
+	_, _, err = partition.UpdateAllocation(ask)
+	assert.NilError(t, err, "add ask failed")
+
+	alloc := newAllocation(allocKey, appID1, nodeID1, askRes)
+	_, allocCreated, err := partition.UpdateAllocation(alloc)
+	assert.NilError(t, err, "transition to allocated failed")
+	assert.Check(t, allocCreated)
+
+	assert.Equal(t, 1, partition.GetTotalAllocationCount(), "allocation count should be 1 before rollback")
+
+	// Remove the node to simulate it disappearing before the shim sends the failure release.
+	partition.nodes.RemoveNode(nodeID1)
+
+	release := &si.AllocationRelease{
+		PartitionName:   "test",
+		ApplicationID:   appID1,
+		AllocationKey:   allocKey,
+		TerminationType: si.TerminationType_SCHEDULING_FAILED_ON_RM,
+	}
+	released, confirmed := partition.removeAllocation(release)
+
+	assert.Assert(t, released == nil, "SCHEDULING_FAILED_ON_RM should not echo released allocations to the shim")
+	assert.Assert(t, confirmed == nil, "SCHEDULING_FAILED_ON_RM should not return a confirmed allocation")
+	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "allocation count should be decremented even when node is missing")
+	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue resource should be zero after rollback")
+	assert.Assert(t, resources.StrictlyGreaterThanZero(app.GetPendingResource()), "ask should be pending again after rollback")
+}

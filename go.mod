@@ -22,7 +22,7 @@ module github.com/apache/yunikorn-core
 go 1.25.0
 
 require (
-	github.com/apache/yunikorn-scheduler-interface v0.0.0-20260528033204-c474acff6d53
+	github.com/apache/yunikorn-scheduler-interface v0.0.0-20260727092410-674338955bdf
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0

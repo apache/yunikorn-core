@@ -93,14 +93,20 @@ func GetEventSystem() EventSystem {
 // Init Initializes the event system.
 // Only exported for testing.
 func Init() {
-	store := newEventStore(getRequestCapacity())
-	buffer := newEventRingBuffer(getRingBufferCapacity())
+	// load from config for setting in two places
+	confRequestCapacity := getRequestCapacity()
+	confRingBufferCapacity := getRingBufferCapacity()
+
+	store := newEventStore(confRequestCapacity)
+	buffer := newEventRingBuffer(confRingBufferCapacity)
 	evImpl := &EventSystemImpl{
-		Store:         store,
-		channel:       make(chan *si.EventRecord, configs.DefaultEventChannelSize),
-		eventBuffer:   buffer,
-		eventSystemId: fmt.Sprintf("event-system-%d", time.Now().Unix()),
-		streaming:     NewEventStreaming(buffer),
+		Store:              store,
+		eventBuffer:        buffer,
+		eventSystemId:      fmt.Sprintf("event-system-%d", time.Now().Unix()),
+		streaming:          NewEventStreaming(buffer),
+		trackingEnabled:    isTrackingEnabled(),
+		requestCapacity:    confRequestCapacity,
+		ringBufferCapacity: confRingBufferCapacity,
 	}
 	evImpl.stopped.Store(true)
 	// start the callback for this instance: must be done
@@ -159,16 +165,13 @@ func (ec *EventSystemImpl) StartService() {
 
 // Stop stops the event system, including the shim publisher if it was started.
 func (ec *EventSystemImpl) Stop() {
-	// no need to stop twice
-	if ec.stopped.Load() {
-		return
-	}
-	ec.stopped.Store(true)
 	ec.Lock()
 	defer ec.Unlock()
+	// no need to stop twice
+	if !ec.stopped.CompareAndSwap(false, true) {
+		return
+	}
 	log.Log(log.Events).Info("Stopping event system handler")
-
-	configs.RemoveConfigMapCallback(ec.eventSystemId)
 
 	ec.stop <- struct{}{}
 	if ec.channel != nil {
@@ -193,38 +196,37 @@ func (ec *EventSystemImpl) AddEvent(event *si.EventRecord) {
 	}
 	// all events get tracked, even ones we drop
 	metrics.GetEventMetrics().IncEventsCreated()
+	ec.RLock()
+	defer ec.RUnlock()
 	// not running just track the metric
 	if ec.stopped.Load() {
 		metrics.GetEventMetrics().IncEventsNotChanneled()
 		return
 	}
-	ec.RLock()
-	defer ec.RUnlock()
 
 	select {
 	case ec.channel <- event:
 		metrics.GetEventMetrics().IncEventsChanneled()
 	default:
-		log.Log(log.Events).Debug("could not add Event to channel")
-		metrics.GetEventMetrics().IncEventsNotChanneled()
+		// make sure we do not drop events when running. events generated while turned off are not "dropped"
+		log.Log(log.Events).Info("Event dropped due to channel full or closed",
+			zap.Int("channelSize", len(ec.channel)))
+		metrics.GetEventMetrics().IncEventsDropped()
 	}
 }
 
 // StartServiceWithPublisher starts the event processing background routines.
 // Only exported for testing.
 func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
-	if !ec.stopped.Load() {
+	ec.Lock()
+	defer ec.Unlock()
+	if !ec.stopped.CompareAndSwap(true, false) {
 		log.Log(log.Events).Info("Event system is already running")
 		return
 	}
-	ec.stopped.Store(false)
-	ec.Lock()
-	defer ec.Unlock()
-	ec.stop = make(chan struct{})
-
 	ec.trackingEnabled = isTrackingEnabled()
-	ec.ringBufferCapacity = getRingBufferCapacity()
-	ec.requestCapacity = getRequestCapacity()
+	ec.stop = make(chan struct{})
+	ec.channel = make(chan *si.EventRecord, configs.DefaultEventChannelSize)
 
 	go func() {
 		log.Log(log.Events).Info("Starting event system handler")
@@ -291,17 +293,24 @@ func (ec *EventSystemImpl) CloseAllStreams() {
 
 // reloadConfig function called by the config
 func (ec *EventSystemImpl) reloadConfig() {
+	// load from config for setting in two places
+	confRequestCapacity := getRequestCapacity()
+	confRingBufferCapacity := getRingBufferCapacity()
+
 	ec.Lock()
-	ec.requestCapacity = getRequestCapacity()
-	ec.ringBufferCapacity = getRingBufferCapacity()
+	ec.requestCapacity = confRequestCapacity
+	ec.ringBufferCapacity = confRingBufferCapacity
 	ec.Unlock()
 
 	// resize the ring buffer & event store with new capacity
-	ec.Store.SetStoreSize(ec.requestCapacity)
-	ec.eventBuffer.Resize(ec.ringBufferCapacity)
+	ec.Store.SetStoreSize(confRequestCapacity)
+	ec.eventBuffer.Resize(confRingBufferCapacity)
 
 	if ec.isRestartNeeded() {
 		log.Log(log.Events).Info("Restarting event system handler on config reload")
+		ec.Lock()
+		ec.trackingEnabled = isTrackingEnabled()
+		ec.Unlock()
 		ec.restart()
 	}
 }

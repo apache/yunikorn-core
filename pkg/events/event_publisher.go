@@ -50,13 +50,11 @@ func createShimPublisher(store *EventStore) *eventPublisher {
 func (sp *eventPublisher) start() {
 	log.Log(log.Events).Info("Starting event publisher")
 	// handle a restart correctly
-	if sp.stopped.Load() {
-		sp.stopped.Store(false)
-		sp.stopCh = make(chan struct{})
-	} else {
+	if !sp.stopped.CompareAndSwap(true, false) {
 		log.Log(log.Events).Info("Event publisher already running")
 		return
 	}
+	sp.stopCh = make(chan struct{})
 	go func() {
 		for {
 			select {
@@ -78,7 +76,7 @@ func (sp *eventPublisher) start() {
 }
 
 func (sp *eventPublisher) stop() {
-	if sp.stopped.Load() {
+	if !sp.stopped.CompareAndSwap(false, true) {
 		log.Log(log.Events).Info("Event publisher already stopped")
 		return
 	}
@@ -86,7 +84,6 @@ func (sp *eventPublisher) stop() {
 	sp.stopCh <- struct{}{}
 	close(sp.stopCh)
 	sp.stopCh = nil
-	sp.stopped.Store(true)
 }
 
 func (sp *eventPublisher) getEventStore() *EventStore {

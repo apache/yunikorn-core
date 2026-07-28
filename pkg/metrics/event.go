@@ -18,12 +18,16 @@
 
 package metrics
 
-import "github.com/prometheus/client_golang/prometheus"
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	dto "github.com/prometheus/client_model/go"
+)
 
 type EventMetrics struct {
 	totalEventsCreated      prometheus.Gauge
 	totalEventsChanneled    prometheus.Gauge
 	totalEventsNotChanneled prometheus.Gauge
+	totalEventsDropped      prometheus.Gauge
 	totalEventsProcessed    prometheus.Gauge
 	totalEventsStored       prometheus.Gauge
 	totalEventsNotStored    prometheus.Gauge
@@ -53,6 +57,13 @@ func initEventMetrics() *EventMetrics {
 			Subsystem: EventSubsystem,
 			Name:      "total_not_channeled",
 			Help:      "total events not channeled",
+		})
+	metrics.totalEventsDropped = prometheus.NewGauge(
+		prometheus.GaugeOpts{
+			Namespace: Namespace,
+			Subsystem: EventSubsystem,
+			Name:      "total_dropped",
+			Help:      "total events dropped",
 		})
 	metrics.totalEventsProcessed = prometheus.NewGauge(
 		prometheus.GaugeOpts{
@@ -93,6 +104,7 @@ func (em *EventMetrics) Reset() {
 	em.totalEventsCreated.Set(0)
 	em.totalEventsChanneled.Set(0)
 	em.totalEventsNotChanneled.Set(0)
+	em.totalEventsDropped.Set(0)
 	em.totalEventsStored.Set(0)
 	em.totalEventsNotStored.Set(0)
 	em.totalEventsProcessed.Set(0)
@@ -110,6 +122,10 @@ func (em *EventMetrics) IncEventsNotChanneled() {
 	em.totalEventsNotChanneled.Inc()
 }
 
+func (em *EventMetrics) IncEventsDropped() {
+	em.totalEventsDropped.Inc()
+}
+
 func (em *EventMetrics) IncEventsProcessed() {
 	em.totalEventsProcessed.Inc()
 }
@@ -124,4 +140,74 @@ func (em *EventMetrics) IncEventsNotStored() {
 
 func (em *EventMetrics) AddEventsCollected(collectedEvents int) {
 	em.totalEventsCollected.Add(float64(collectedEvents))
+}
+
+// Event system metrics
+
+func (em *EventMetrics) GetEventsCreated() int {
+	metricDto := &dto.Metric{}
+	if err := em.totalEventsCreated.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value)
+	}
+	return -1
+}
+
+func (em *EventMetrics) GetEventsChanneled() int {
+	metricDto := &dto.Metric{}
+	if err := em.totalEventsChanneled.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value)
+	}
+	return -1
+}
+
+func (em *EventMetrics) GetEventsNotChanneled() int {
+	metricDto := &dto.Metric{}
+	if err := em.totalEventsNotChanneled.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value)
+	}
+	return -1
+}
+
+func (em *EventMetrics) GetEventsDropped() int {
+	metricDto := &dto.Metric{}
+	if err := em.totalEventsDropped.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value)
+	}
+	return -1
+}
+
+// Publisher metrics
+
+func (em *EventMetrics) GetEventsProcessed() int {
+	metricDto := &dto.Metric{}
+	if err := em.totalEventsProcessed.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value)
+	}
+	return -1
+}
+
+// Event store metrics
+
+func (em *EventMetrics) GetEventsStored() int {
+	metricDto := &dto.Metric{}
+	if err := em.totalEventsStored.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value)
+	}
+	return -1
+}
+
+func (em *EventMetrics) GetEventsNotStored() int {
+	metricDto := &dto.Metric{}
+	if err := em.totalEventsNotStored.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value)
+	}
+	return -1
+}
+
+func (em *EventMetrics) GetEventsCollected() int {
+	metricDto := &dto.Metric{}
+	if err := em.totalEventsCollected.Write(metricDto); err == nil {
+		return int(*metricDto.Gauge.Value)
+	}
+	return -1
 }

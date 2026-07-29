@@ -19,6 +19,7 @@
 package events
 
 import (
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -29,6 +30,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
+	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -38,11 +40,18 @@ func TestSimpleStartAndStop(t *testing.T) {
 	eventSystem := GetEventSystem()
 	// adding event to stopped eventSystem does not cause panic
 	eventSystem.AddEvent(nil)
+	time.Sleep(10 * time.Millisecond) // tiny sleep to yield
+	before := runtime.NumGoroutine()
 	eventSystem.StartService()
 	defer eventSystem.Stop()
+	after := runtime.NumGoroutine()
+	assert.Equal(t, before+2, after, "expected 2 new go routines: handler and publisher")
 	// add an event
 	eventSystem.AddEvent(nil)
 	eventSystem.Stop()
+	time.Sleep(10 * time.Millisecond) // tiny sleep to yield
+	after = runtime.NumGoroutine()
+	assert.Equal(t, before, after, "expected all go routines to exit")
 	// adding event to stopped eventSystem does not cause panic
 	eventSystem.AddEvent(nil)
 }
@@ -51,7 +60,8 @@ func TestSimpleStartAndStop(t *testing.T) {
 // should be retrieved from the EventStore
 func TestSingleEventStoredCorrectly(t *testing.T) {
 	Init()
-	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
+	assert.Assert(t, ok, "expected an EventSystemImpl")
 	// don't run publisher, because it can collect the event while we're waiting
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()
@@ -84,7 +94,8 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 
 func TestGetEvents(t *testing.T) {
 	Init()
-	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
+	assert.Assert(t, ok, "expected an EventSystemImpl")
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()
 
@@ -116,13 +127,14 @@ func TestConfigUpdate(t *testing.T) {
 	defer configs.SetConfigMap(map[string]string{})
 
 	Init()
-	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
+	assert.Assert(t, ok, "expected an EventSystemImpl")
 	eventSystem.StartService()
 	defer eventSystem.Stop()
 
 	assert.Assert(t, eventSystem.IsEventTrackingEnabled())
-	assert.Equal(t, eventSystem.GetRingBufferCapacity(), uint64(configs.DefaultEventRingBufferCapacity))
-	assert.Equal(t, eventSystem.GetRequestCapacity(), uint64(configs.DefaultEventRequestCapacity))
+	assert.Equal(t, eventSystem.getRingBufferCapacity(), uint64(configs.DefaultEventRingBufferCapacity))
+	assert.Equal(t, eventSystem.getRequestCapacity(), uint64(configs.DefaultEventRequestCapacity))
 	assert.Equal(t, eventSystem.eventBuffer.capacity, uint64(configs.DefaultEventRingBufferCapacity))
 
 	// update config and wait for refresh
@@ -142,8 +154,8 @@ func TestConfigUpdate(t *testing.T) {
 	)
 	assert.NilError(t, err, "timed out waiting for config refresh")
 
-	assert.Equal(t, eventSystem.GetRingBufferCapacity(), newRingBufferCapacity)
-	assert.Equal(t, eventSystem.GetRequestCapacity(), newRequestCapacity)
+	assert.Equal(t, eventSystem.getRingBufferCapacity(), newRingBufferCapacity)
+	assert.Equal(t, eventSystem.getRequestCapacity(), newRequestCapacity)
 	assert.Equal(t, eventSystem.eventBuffer.capacity, newRingBufferCapacity)
 }
 
@@ -182,6 +194,9 @@ func TestRequestCapacity(t *testing.T) {
 	configs.SetConfigMap(config)
 	capacity = getRequestCapacity()
 	assert.Equal(t, uint64(configs.DefaultEventRequestCapacity), capacity)
+
+	// reset to empty
+	configs.SetConfigMap(map[string]string{})
 }
 
 func TestRingBufferCapacity(t *testing.T) {
@@ -206,6 +221,9 @@ func TestRingBufferCapacity(t *testing.T) {
 	configs.SetConfigMap(config)
 	capacity = getRingBufferCapacity()
 	assert.Equal(t, uint64(configs.DefaultEventRingBufferCapacity), capacity)
+
+	// reset to empty
+	configs.SetConfigMap(map[string]string{})
 }
 
 func TestTruncateEventMessage(t *testing.T) {
@@ -246,8 +264,10 @@ func getTestString(stringLength int) string {
 // TestAddEventConcurrentStop verifies AddEvent and Stop can run concurrently without data races.
 func TestAddEventConcurrentStop(t *testing.T) {
 	Init()
-	eventSystem := GetEventSystem().(*EventSystemImpl) //nolint:errcheck
+	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
+	assert.Assert(t, ok, "expected an EventSystemImpl")
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.Stop()
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -269,4 +289,43 @@ func TestAddEventConcurrentStop(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+// TestAddEventConcurrentStop verifies AddEvent and Stop can run concurrently without data races.
+func TestAddEventAfterRestart(t *testing.T) {
+	Init()
+	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
+	assert.Assert(t, ok, "expected an EventSystemImpl")
+	metrics.GetEventMetrics().Reset()
+	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.Stop()
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	eventCount := 10000
+	go func() {
+		defer wg.Done()
+		for i := range eventCount {
+			eventSystem.AddEvent(&si.EventRecord{
+				Type:    si.EventRecord_REQUEST,
+				Message: strconv.Itoa(i),
+			})
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(time.Millisecond)
+		eventSystem.restart()
+	}()
+
+	wg.Wait()
+	counted := metrics.GetEventMetrics().GetEventsDropped()
+	assert.Equal(t, counted, 0, "should not have dropped an event")
+	counted = metrics.GetEventMetrics().GetEventsCreated()
+	assert.Equal(t, counted, eventCount, "number of created events incorrect")
+	counted = metrics.GetEventMetrics().GetEventsChanneled()
+	notCounted := metrics.GetEventMetrics().GetEventsNotChanneled()
+	assert.Equal(t, counted+notCounted, eventCount, "total number of (not)channeled events incorrect")
 }

@@ -19,6 +19,7 @@
 package events
 
 import (
+	"runtime"
 	"testing"
 	"time"
 
@@ -32,25 +33,38 @@ import (
 
 // creating a Publisher with nil store should still provide a non-nil object
 func TestCreateShimPublisher(t *testing.T) {
-	publisher := CreateShimPublisher(nil)
+	publisher := createShimPublisher(nil)
 	assert.Assert(t, publisher != nil, "publisher should not be nil")
 }
 
-// StartService() and Stop() functions should not cause panic
+// StartService() and stop() functions should not cause panic
 func TestServiceStartStopInternal(t *testing.T) {
 	store := newEventStore(1000)
-	publisher := CreateShimPublisher(store)
-	publisher.StartService()
-	defer publisher.Stop()
+	publisher := createShimPublisher(store)
+	defer publisher.stop()
 	assert.Equal(t, publisher.getEventStore(), store)
+	// start and stop simulate a restart
+	before := runtime.NumGoroutine()
+	publisher.start()
+	publisher.stop()
+	time.Sleep(10 * time.Millisecond) // tiny sleep to yield
+	assert.Equal(t, before, runtime.NumGoroutine(), "expected no new go routine after start and stop")
+
+	// start should not fail or panic
+	before = runtime.NumGoroutine()
+	publisher.start()
+	after := runtime.NumGoroutine()
+	assert.Equal(t, before+1, after, "expected 1 new go routine")
+	publisher.start()
+	assert.Equal(t, after, runtime.NumGoroutine(), "Already started should not create new go routine")
 }
 
 func TestNoFillWithoutEventPluginRegistered(t *testing.T) {
 	store := newEventStore(1000)
-	publisher := CreateShimPublisher(store)
+	publisher := createShimPublisher(store)
 	publisher.pushEventInterval = time.Millisecond
-	publisher.StartService()
-	defer publisher.Stop()
+	publisher.start()
+	defer publisher.stop()
 
 	event := &si.EventRecord{
 		Type:          si.EventRecord_REQUEST,
@@ -80,10 +94,10 @@ func TestPublisherSendsEvent(t *testing.T) {
 	}
 
 	store := newEventStore(1000)
-	publisher := CreateShimPublisher(store)
+	publisher := createShimPublisher(store)
 	publisher.pushEventInterval = time.Millisecond
-	publisher.StartService()
-	defer publisher.Stop()
+	publisher.start()
+	defer publisher.stop()
 
 	event := &si.EventRecord{
 		Type:          si.EventRecord_REQUEST,

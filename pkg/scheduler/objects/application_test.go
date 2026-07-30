@@ -4300,3 +4300,35 @@ func TestApplicationBackoff(t *testing.T) {
 	assert.Assert(t, result == nil)
 	assert.Assert(t, app.GetBackoffDeadline().After(beforeTryAlloc))
 }
+
+func TestReservationReleasedCallback(t *testing.T) {
+	app := newApplication(appID1, "default", "root.unknown")
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	// callback not set - should not panic
+	app.executeReservationReleasedCallback(5)
+
+	// callback with released = 0 - should not be called
+	called := make(chan int, 1)
+	app.SetReservationReleasedCallback(func(released int) {
+		called <- released
+	})
+	app.executeReservationReleasedCallback(0)
+	select {
+	case <-called:
+		t.Fatal("callback should not be called when released = 0")
+	case <-time.After(10 * time.Millisecond):
+		// expected
+	}
+
+	// callback with released > 0 - should be called with correct value
+	app.executeReservationReleasedCallback(3)
+	select {
+	case val := <-called:
+		assert.Equal(t, 3, val, "callback called with wrong value")
+	case <-time.After(time.Second):
+		t.Fatal("callback was not called")
+	}
+}

@@ -402,6 +402,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	// all is OK update the app and add it to the partition
 	app.SetQueue(queue)
 	app.SetTerminatedCallback(pc.moveTerminatedApp)
+	app.SetReservationReleasedCallback(pc.decReservationCount)
 	queue.AddApplication(app)
 	pc.applications[appID] = app
 	pc.appQueueMapping.AddAppQueueMapping(appID, queue)
@@ -418,7 +419,8 @@ func (pc *PartitionContext) removeApplication(appID string) []*objects.Allocatio
 		return nil
 	}
 	// Remove all asks and thus all reservations and pending resources (queue included)
-	_ = app.RemoveAllocationAsk("")
+	released := app.RemoveAllocationAsk("")
+	pc.decReservationCount(released)
 	// Remove app from queue
 	if queue := app.GetQueue(); queue != nil {
 		queue.RemoveApplication(app)
@@ -1580,7 +1582,8 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 
 	if release.TerminationType != si.TerminationType_TIMEOUT {
 		// handle ask releases as well
-		_ = app.RemoveAllocationAsk(allocationKey)
+		released := app.RemoveAllocationAsk(allocationKey)
+		pc.decReservationCount(released)
 	}
 
 	return released, confirmed

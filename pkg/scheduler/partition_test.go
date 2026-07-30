@@ -5562,3 +5562,41 @@ func TestRemoveAllocationSchedulingFailedOnRMNodeNotFound(t *testing.T) {
 	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue resource should be zero after rollback")
 	assert.Assert(t, resources.StrictlyGreaterThanZero(app.GetPendingResource()), "ask should be pending again after rollback")
 }
+
+func TestRemoveAppWithReservations(t *testing.T) {
+	setupUGM()
+	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	app := newApplication(appID1, "default", "root.parent.sub-leaf")
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "10"})
+	assert.NilError(t, err, "failed to create resource")
+
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app to partition")
+
+	ask1 := newAllocationAsk(allocKey, appID1, res)
+	ask1.SetRequiredNode(nodeID1)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err, "failed to add ask")
+	ask2 := newAllocationAsk(allocKey2, appID1, res)
+	ask2.SetRequiredNode(nodeID1)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err, "failed to add ask")
+
+	// ask1 occupies node1
+	result := partition.tryAllocate()
+	assert.Assert(t, result != nil && result.Request != nil, "no alloc")
+	assert.Equal(t, objects.Allocated, result.ResultType)
+	assert.Equal(t, 0, partition.getReservationCount())
+
+	// ask2 gets reserved
+	result = partition.tryAllocate()
+	assert.Assert(t, result == nil)
+	assert.Equal(t, 1, partition.getReservationCount())
+
+	// remove the application - reservation count must be decremented
+	partition.removeApplication(appID1)
+	assert.Equal(t, 0, partition.getReservationCount())
+}

@@ -107,6 +107,8 @@ func TestCompressResponseSelfEncodedHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
+	// promhttp sets Content-Encoding but never Vary, so the middleware must add it.
+	assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"))
 	// Exactly one layer of gzip: decoding once must produce the original bytes.
 	assert.DeepEqual(t, payload, gunzip(t, rec.Body.Bytes()))
 }
@@ -129,6 +131,7 @@ func TestCompressResponseSelfEncodedSmallBody(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
+	assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"))
 	assert.DeepEqual(t, payload, gunzip(t, rec.Body.Bytes()))
 }
 
@@ -148,6 +151,7 @@ func TestCompressResponseSelfEncodedPreservesStatus(t *testing.T) {
 
 	assert.Equal(t, http.StatusAccepted, rec.Code)
 	assert.Equal(t, "gzip", rec.Header().Get("Content-Encoding"))
+	assert.Equal(t, "Accept-Encoding", rec.Header().Get("Vary"))
 }
 
 // TestCompressResponseCompressesLargeBody is the happy path: a plain handler with a
@@ -183,6 +187,8 @@ func TestCompressResponseSmallBodyUncompressed(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "", rec.Header().Get("Content-Encoding"))
+	// Nothing was encoded, so neither header is set - see Test_GzipMinCompressionSize.
+	assert.Equal(t, "", rec.Header().Get("Vary"))
 	assert.DeepEqual(t, payload, rec.Body.Bytes())
 }
 
@@ -200,6 +206,8 @@ func TestCompressResponseNoGzipRequested(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 	assert.Equal(t, "", rec.Header().Get("Content-Encoding"))
+	// The middleware hands off before wrapping, so it adds no headers of its own.
+	assert.Equal(t, "", rec.Header().Get("Vary"))
 	assert.DeepEqual(t, payload, rec.Body.Bytes())
 }
 

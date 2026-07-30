@@ -86,10 +86,19 @@ func (d *deferredGzipResponseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
-// passThrough commits to sending the response uncompressed: it flushes any buffered
-// bytes to the underlying writer and marks the decision as final.
+// passThrough commits to sending the body as the handler produced it: it flushes any
+// buffered bytes to the underlying writer and marks the decision as final.
+//
+// Vary is added only when the response actually carries an encoding. A handler that
+// compressed the body itself (promhttp) sets Content-Encoding but never Vary, and a
+// compressed response without Vary lets a shared cache serve those bytes to a client
+// that cannot decode them. A body this middleware simply chose not to compress carries
+// neither header, which is the contract Test_GzipMinCompressionSize asserts.
 func (d *deferredGzipResponseWriter) passThrough() {
 	d.decided = true
+	if d.ResponseWriter.Header().Get("Content-Encoding") != "" {
+		d.ResponseWriter.Header().Add("Vary", "Accept-Encoding")
+	}
 	if d.statusCode != 0 {
 		d.ResponseWriter.WriteHeader(d.statusCode)
 	}

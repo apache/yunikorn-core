@@ -223,7 +223,7 @@ func NewNodeCollection(partition string) NodeCollection {
 		Partition:   partition,
 		nsp:         NewNodeSortingPolicy(policies.FairSortPolicy.String(), nil),
 		nodes:       make(map[string]*nodeRef),
-		sortedNodes: btree.NewBTreeGOptions(nodeRefLess, btree.Options{Degree: 7}),
+		sortedNodes: btree.NewBTreeGOptions(nodeRefLess, btree.Options{Degree: 7}), // Degree=7 here is experimentally the most efficient for up to around 5k nodes
 	}
 
 	unreservedIterator := NewTreeIterator(acceptUnreserved, bsc.cloneSortedNodes)

@@ -70,9 +70,9 @@ type baseNodeCollection struct {
 	Partition string // partition used with this collection
 
 	// Private fields need protection
-	nsp         NodeSortingPolicy   // node sorting policy
-	nodes       map[string]*nodeRef // nodes assigned to this collection
-	sortedNodes *btree.BTreeG[nodeRef]        // nodes sorted by score
+	nsp         NodeSortingPolicy      // node sorting policy
+	nodes       map[string]*nodeRef    // nodes assigned to this collection
+	sortedNodes *btree.BTreeG[nodeRef] // nodes sorted by score
 
 	unreservedIterator *treeIterator
 	fullIterator       *treeIterator

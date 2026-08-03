@@ -3576,7 +3576,6 @@ func TestQueue_setPreemptionTime(t *testing.T) {
 		{"empty", nil, map[string]string{}, nil, 0, 0, false, false},
 		{"no delays", resources.Zero, map[string]string{"test": "100"}, nil, 0, 0, false, false},
 		{"max removed", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, nil, 10, 10, false, false},
-		{"max removed update", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), nil, nil, 0, 10, true, true},
 		{"delay added", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 0, 10, false, true},
 		{"delay change set start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 5, 10, true, true},
 		{"delay change no start", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "100"}, nil, 5, 10, false, false},
@@ -3590,6 +3589,16 @@ func TestQueue_setPreemptionTime(t *testing.T) {
 		{"max lowered again", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 110}), 10, 10, true, false},
 		{"max lowered again but usage is lesser than newer max", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, resources.NewResourceFromMap(map[string]resources.Quantity{"test": 5}), 10, 10, true, true},
 		{"max lowered again 2nd", resources.NewResourceFromMap(map[string]resources.Quantity{"test": 100}), map[string]string{"test": "10"}, nil, 10, 5, true, true},
+		{"res type in max not in usage - usage below max", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000, "memory": 1000}), map[string]string{"vcore": "100", "memory": "1000"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 50000}), 0, 10, false, false},
+		{"res type in max not in usage - usage exceeds max", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000, "memory": 1000}), map[string]string{"vcore": "100", "memory": "1000"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 150000}), 0, 10, false, true},
+		{"res type in usage not in max - usage below max", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000}), map[string]string{"vcore": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 50000, "memory": 500}), 0, 10, false, false},
+		{"res type in usage not in max - usage exceeds max", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000}), map[string]string{"vcore": "100"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 150000, "memory": 500}), 0, 10, false, true},
+		{"disjoint res types between max and usage", resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 2}), map[string]string{"gpu": "2"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 50000, "memory": 500}), 0, 10, false, false},
+		{"multi res types - one exceeds, one below", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000, "memory": 1000}), map[string]string{"vcore": "100", "memory": "1000"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 50000, "memory": 1500}), 0, 10, false, true},
+		{"multi res types - quota lowered for one type", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000, "memory": 1000}), map[string]string{"vcore": "50", "memory": "1000"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 80000, "memory": 500}), 10, 10, false, true},
+		{"multi res types - disjoint oldMax and max res", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000, "memory": 1000}), map[string]string{"gpu": "2"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 50000, "memory": 500}), 10, 10, false, false},
+		{"multi res types - oldMax strictly greater than max across types", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000, "memory": 2000}), map[string]string{"vcore": "50", "memory": "1000"}, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 80000, "memory": 1500}), 10, 10, false, true},
+		{"multi res types - max removed update with start time reset", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000, "memory": 1000}), nil, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 150000, "memory": 1500}), 10, 10, true, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

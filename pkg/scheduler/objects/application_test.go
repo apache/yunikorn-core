@@ -4332,3 +4332,101 @@ func TestReservationReleasedCallback(t *testing.T) {
 		t.Fatal("callback was not called")
 	}
 }
+
+func TestUnreserveForApp(t *testing.T) {
+	resMap := map[string]string{"first": "10"}
+	rootQ, err := createRootQueue(resMap)
+	assert.NilError(t, err)
+	childQ, err := createManagedQueue(rootQ, "child", false, resMap)
+	assert.NilError(t, err)
+
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3})
+
+	// app1 holds the reservation, app2 is the triggering app
+	app1 := newApplication(appID1, "default", childQ.QueuePath)
+	app1.SetQueue(childQ)
+	childQ.applications[appID1] = app1
+	ask1 := newAllocationAsk(aKey, appID1, allocRes)
+	err = app1.AddAllocationAsk(ask1)
+	assert.NilError(t, err)
+	err = app1.reserveInternal(node, ask1)
+	assert.NilError(t, err)
+
+	app2 := newApplication(appID2, "default", childQ.QueuePath)
+	app2.SetQueue(childQ)
+	childQ.applications[appID2] = app2
+
+	// different app: unreserveForApp uses the locked UnReserve path
+	res := app1.reservations[aKey]
+	assert.Assert(t, res != nil)
+	num := app2.unreserveForApp(res)
+	assert.Equal(t, num, 1, "expected reservation to be released")
+	assert.Equal(t, app1.NodeReservedForAsk(aKey), "", "reservation should be removed from app1")
+
+	// same app: re-reserve and use same-app path
+	err = app1.reserveInternal(node, ask1)
+	assert.NilError(t, err)
+	res = app1.reservations[aKey]
+	assert.Assert(t, res != nil)
+	num = app1.unreserveForApp(res)
+	assert.Equal(t, num, 1, "expected reservation to be released via internal path")
+	assert.Equal(t, app1.NodeReservedForAsk(aKey), "", "reservation should be removed")
+}
+
+func TestCancelMatchingReservations(t *testing.T) {
+	resMap := map[string]string{"first": "10"}
+	rootQ, err := createRootQueue(resMap)
+	assert.NilError(t, err)
+	childQ, err := createManagedQueue(rootQ, "child", false, resMap)
+	assert.NilError(t, err)
+
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 10})
+	allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2})
+
+	app := newApplication(appID1, "default", childQ.QueuePath)
+	app.SetQueue(childQ)
+	childQ.applications[appID1] = app
+
+	// reserve ask1 on node1, ask2 on node2
+	ask1 := newAllocationAsk(aKey, appID1, allocRes)
+	err = app.AddAllocationAsk(ask1)
+	assert.NilError(t, err)
+	err = app.reserveInternal(node1, ask1)
+	assert.NilError(t, err)
+
+	ask2 := newAllocationAsk(aKey2, appID1, allocRes)
+	err = app.AddAllocationAsk(ask2)
+	assert.NilError(t, err)
+	err = app.reserveInternal(node2, ask2)
+	assert.NilError(t, err)
+
+	// gather both reservations
+	reservations := append(node1.GetReservations(), node2.GetReservations()...)
+	assert.Equal(t, len(reservations), 2, "expected 2 reservations total")
+
+	// cancel only the first ask's reservation using predicate on allocKey
+	released, remaining := app.cancelMatchingReservations(reservations, func(res *reservation) bool {
+		return res.allocKey == aKey
+	})
+	assert.Equal(t, released, 1, "expected 1 reservation released")
+	assert.Equal(t, remaining, 1, "expected 1 reservation remaining")
+	assert.Equal(t, app.NodeReservedForAsk(aKey), "", "first reservation should be gone")
+	assert.Equal(t, app.NodeReservedForAsk(aKey2), nodeID2, "second reservation should remain")
+
+	// cancel all remaining
+	reservations = node2.GetReservations()
+	released, remaining = app.cancelMatchingReservations(reservations, func(res *reservation) bool {
+		return true
+	})
+	assert.Equal(t, released, 1, "expected 1 reservation released")
+	assert.Equal(t, remaining, 0, "expected no reservations remaining")
+
+	// empty list returns zero
+	released, remaining = app.cancelMatchingReservations(nil, func(res *reservation) bool {
+		return true
+	})
+	assert.Equal(t, released, 0)
+	assert.Equal(t, remaining, 0)
+}

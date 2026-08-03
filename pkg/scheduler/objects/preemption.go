@@ -165,40 +165,21 @@ func (p *Preemptor) initWorkingState() int {
 	p.iterator.ForEachNode(func(node *Node) bool {
 		isReserved := false
 		if node.IsReserved() && !node.isReservedForAllocation(p.ask.GetAllocationKey()) {
-			leftCount := 0
-			for _, res := range node.GetReservations() {
-				leftCount++
-				// Is Allocation daemon set?
-				// Has this allocation already triggered preemption?
+			askPriority := p.ask.priority
+			released, remaining := p.application.cancelMatchingReservations(node.GetReservations(), func(res *reservation) bool {
 				if res.alloc.requiredNode != "" || res.alloc.HasTriggeredPreemption() {
-					continue
+					return false
 				}
-				// Cancel reservation based on its priority and waiting time in reservation queue
-				if res.alloc.GetPriority() < p.ask.priority && time.Since(res.createTime) > reservationWaitTimeout {
-					log.Log(log.SchedPreemption).Info("Cancelling reservation to consider node for preemption",
-						zap.String("triggeringAppID", p.application.ApplicationID),
-						zap.String("triggeringAllocationKey", p.ask.allocationKey),
-						zap.String("reservingAppID", res.appID),
-						zap.String("reservingAllocationKey", res.allocKey),
-						zap.String("node", node.NodeID))
-					num := 0
-					if p.application.ApplicationID == res.appID {
-						num = res.app.unReserveInternal(res)
-						res.app.queue.UnReserve(res.app.ApplicationID, num)
-					} else {
-						num = res.app.UnReserve(res.node, res.alloc)
-						res.app.GetQueue().UnReserve(res.app.ApplicationID, num)
-					}
-					totalReservationCancel += num
-					leftCount -= num
-				}
-			}
-			log.Log(log.SchedPreemption).Debug("Reservations left on node are cleanup",
+				return res.alloc.GetPriority() < askPriority && time.Since(res.createTime) > reservationWaitTimeout
+			})
+			totalReservationCancel += released
+			log.Log(log.SchedPreemption).Debug("Reservations left on node after cleanup",
 				zap.String("triggeringAppID", p.application.ApplicationID),
 				zap.String("triggeringAllocationKey", p.ask.allocationKey),
 				zap.String("node", node.NodeID),
-				zap.Int("leftCount", leftCount))
-			isReserved = leftCount > 0
+				zap.Int("released", released),
+				zap.Int("remaining", remaining))
+			isReserved = remaining > 0
 		}
 		if !node.IsSchedulable() || isReserved || !node.FitInNode(p.ask.GetAllocatedResource()) {
 			// node is not available, remove any potential victims from consideration

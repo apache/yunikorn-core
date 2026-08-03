@@ -21,7 +21,7 @@ package objects
 import (
 	"fmt"
 
-	"github.com/google/btree"
+	"github.com/tidwall/btree"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/locking"
@@ -56,18 +56,14 @@ type nodeRef struct {
 	nodeScore float64 // node score
 }
 
-func (nr nodeRef) Less(than btree.Item) bool {
-	other, ok := than.(nodeRef)
-	if !ok {
-		return false
-	}
-	if nr.nodeScore < other.nodeScore {
+func nodeRefLess(a, b nodeRef) bool {
+	if a.nodeScore < b.nodeScore {
 		return true
 	}
-	if other.nodeScore < nr.nodeScore {
+	if b.nodeScore < a.nodeScore {
 		return false
 	}
-	return nr.node.NodeID < other.node.NodeID
+	return a.node.NodeID < b.node.NodeID
 }
 
 type baseNodeCollection struct {
@@ -76,7 +72,7 @@ type baseNodeCollection struct {
 	// Private fields need protection
 	nsp         NodeSortingPolicy   // node sorting policy
 	nodes       map[string]*nodeRef // nodes assigned to this collection
-	sortedNodes *btree.BTree        // nodes sorted by score
+	sortedNodes *btree.BTreeG[nodeRef]        // nodes sorted by score
 
 	unreservedIterator *treeIterator
 	fullIterator       *treeIterator
@@ -109,7 +105,7 @@ func (nc *baseNodeCollection) AddNode(node *Node) error {
 		nodeScore: nc.scoreNode(node),
 	}
 	nc.nodes[node.NodeID] = &nref
-	nc.sortedNodes.ReplaceOrInsert(nref)
+	nc.sortedNodes.Set(nref)
 	return nil
 }
 
@@ -174,11 +170,11 @@ func (nc *baseNodeCollection) GetFullNodeIterator() NodeIterator {
 	return nc.fullIterator
 }
 
-func (nc *baseNodeCollection) cloneSortedNodes() *btree.BTree {
+func (nc *baseNodeCollection) cloneSortedNodes() *btree.BTreeG[nodeRef] {
 	nc.Lock()
 	defer nc.Unlock()
 
-	return nc.sortedNodes.Clone()
+	return nc.sortedNodes.Copy()
 }
 
 // Sets the node sorting policy.
@@ -188,11 +184,11 @@ func (nc *baseNodeCollection) SetNodeSortingPolicy(policy NodeSortingPolicy) {
 	nc.nsp = policy
 
 	// sortedNodes must be rebuilt since sort ordering is different
-	nc.sortedNodes.Clear(false)
+	nc.sortedNodes.Clear()
 	for _, nref := range nc.nodes {
 		node := nref.node
 		nref.nodeScore = nc.scoreNode(node)
-		nc.sortedNodes.ReplaceOrInsert(*nref)
+		nc.sortedNodes.Set(*nref)
 	}
 }
 
@@ -217,7 +213,7 @@ func (nc *baseNodeCollection) NodeUpdated(node *Node) {
 	if nref.nodeScore != updatedScore {
 		nc.sortedNodes.Delete(*nref)
 		nref.nodeScore = nc.scoreNode(node)
-		nc.sortedNodes.ReplaceOrInsert(*nref)
+		nc.sortedNodes.Set(*nref)
 	}
 }
 
@@ -227,7 +223,7 @@ func NewNodeCollection(partition string) NodeCollection {
 		Partition:   partition,
 		nsp:         NewNodeSortingPolicy(policies.FairSortPolicy.String(), nil),
 		nodes:       make(map[string]*nodeRef),
-		sortedNodes: btree.New(7), // Degree=7 here is experimentally the most efficient for up to around 5k nodes
+		sortedNodes: btree.NewBTreeGOptions(nodeRefLess, btree.Options{Degree: 7}),
 	}
 
 	unreservedIterator := NewTreeIterator(acceptUnreserved, bsc.cloneSortedNodes)

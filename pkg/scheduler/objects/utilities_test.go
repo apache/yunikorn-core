@@ -23,7 +23,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/btree"
+	"github.com/tidwall/btree"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -331,15 +331,15 @@ func assertAllocationLog(t *testing.T, ask *Allocation, message []string) {
 }
 
 func getNodeIteratorFn(nodes ...*Node) func() NodeIterator {
-	tree := btree.New(7)
+	tree := btree.NewBTreeG(nodeRefLess)
 	for _, node := range nodes {
-		tree.ReplaceOrInsert(nodeRef{
+		tree.Set(nodeRef{
 			node, 1,
 		})
 	}
 
 	return func() NodeIterator {
-		return NewTreeIterator(acceptAll, func() *btree.BTree {
+		return NewTreeIterator(acceptAll, func() *btree.BTreeG[nodeRef] {
 			return tree
 		})
 	}

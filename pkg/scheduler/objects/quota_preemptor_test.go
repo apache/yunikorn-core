@@ -160,7 +160,9 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 	notSuitableVictims := make([]*Allocation, 0)
 	oversizedVictims := make([]*Allocation, 0)
 	overflowVictims := make([]*Allocation, 0)
+	overflowVictims1 := make([]*Allocation, 0)
 	shortfallVictims := make([]*Allocation, 0)
+	shortfallVictims1 := make([]*Allocation, 0)
 
 	suitableVictims = append(suitableVictims, createVictim(t, "ask1", node, 5, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})))
 	// ask2 uses {first:8} (smaller than ask1's {first:10}) so it is deterministically sorted first and preempted
@@ -173,10 +175,19 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 	overflowVictims = append(overflowVictims, createVictim(t, "ask41", node, 2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})))
 	overflowVictims = append(overflowVictims, createVictim(t, "ask42", node, 1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9})))
 
+	overflowVictims1 = append(overflowVictims1, createVictim(t, "ask4_1", node, 3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})))
+	overflowVictims1 = append(overflowVictims1, createVictim(t, "ask41_1", node, 2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})))
+	overflowVictims1 = append(overflowVictims1, createVictim(t, "ask42_1", node, 1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9})))
+
 	shortfallVictims = append(shortfallVictims, createVictim(t, "ask5", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})))
 	shortfallVictims = append(shortfallVictims, createVictim(t, "ask51", node, 3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})))
 	shortfallVictims = append(shortfallVictims, createVictim(t, "ask52", node, 2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3})))
 	shortfallVictims = append(shortfallVictims, createVictim(t, "ask53", node, 1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4})))
+
+	shortfallVictims1 = append(shortfallVictims1, createVictim(t, "ask5_1", node, 4, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})))
+	shortfallVictims1 = append(shortfallVictims1, createVictim(t, "ask51_1", node, 3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6})))
+	shortfallVictims1 = append(shortfallVictims1, createVictim(t, "ask52_1", node, 2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3})))
+	shortfallVictims1 = append(shortfallVictims1, createVictim(t, "ask53_1", node, 1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4})))
 
 	notSuitableVictims = append(notSuitableVictims, createVictim(t, "ask6", node, 3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 11})))
 
@@ -207,9 +218,9 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 		{"victims available but none is suitable ", leaf, oldMax, newMax, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), notSuitableVictims, nil, 1, []string{}},
 		{"skip over sized victims", leaf, oldMax, newMax, nil, preemptable, oversizedVictims, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 9}), 2, []string{"ask21"}},
 		{"guaranteed not set", leaf, oldMax, newMax, nil, preemptable, overflowVictims, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 3, []string{"ask4"}},
-		{"guaranteed set but lower than max", leaf, oldMax, newMax, lowerGuaranteed, preemptable, overflowVictims, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 3, []string{"ask4"}},
+		{"guaranteed set but lower than max", leaf, oldMax, newMax, lowerGuaranteed, preemptable, overflowVictims1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 3, []string{"ask4_1"}},
 		{"best effort - guaranteed set and equals max", leaf, oldMax, newMax, guaranteed, bestEffortPreemptable, shortfallVictims, bestEffortClaimedResource, 4, []string{"ask52", "ask53"}},
-		{"best effort - guaranteed set, max not set earlier but now", leaf, nil, newMax, guaranteed, bestEffortPreemptable, shortfallVictims, bestEffortClaimedResource, 4, []string{"ask52", "ask53"}},
+		{"best effort - guaranteed set, max not set earlier but now", leaf, nil, newMax, guaranteed, bestEffortPreemptable, shortfallVictims1, bestEffortClaimedResource, 4, []string{"ask52_1", "ask53_1"}},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {

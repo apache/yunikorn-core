@@ -160,6 +160,9 @@ func resetQueue(queue *Queue) {
 	queue.guaranteedResource = nil
 	queue.isQuotaPreemptionRunning = false
 	queue.preemptingResource = nil
+	for _, child := range queue.GetCopyOfChildren() {
+		resetQueue(child)
+	}
 }
 
 // regular pods

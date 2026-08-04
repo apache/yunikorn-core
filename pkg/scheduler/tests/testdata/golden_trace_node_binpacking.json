@@ -1,0 +1,22 @@
+[
+  {
+    "applicationID": "sc-app-pack",
+    "allocationKey": "a1",
+    "nodeID": "sc-node-a:1"
+  },
+  {
+    "applicationID": "sc-app-pack",
+    "allocationKey": "a2",
+    "nodeID": "sc-node-a:1"
+  },
+  {
+    "applicationID": "sc-app-pack",
+    "allocationKey": "a3",
+    "nodeID": "sc-node-a:1"
+  },
+  {
+    "applicationID": "sc-app-pack",
+    "allocationKey": "a4",
+    "nodeID": "sc-node-a:1"
+  }
+]

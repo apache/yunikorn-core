@@ -3340,6 +3340,47 @@ func TestTryAllocateWithReservedHeadRoomChecking(t *testing.T) {
 	// reset wait timeout
 }
 
+// TestTryReservedAllocateRequiredNodeNotCancelledOnTimeout verifies that required node reservations
+// are not cancelled even if they exceed the reservationWaitTimeout.
+func TestTryReservedAllocateRequiredNodeNotCancelledOnTimeout(t *testing.T) {
+	setupUGM()
+
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "2G"})
+	assert.NilError(t, err, "failed to create basic resource")
+	headRoom, err := resources.NewResourceFromConf(map[string]string{"memory": "1G"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	app := newApplication(appID1, "default", "root")
+	ask := newAllocationAsk(aKey, appID1, res)
+	ask.SetRequiredNode(nodeID1)
+	queue, err := createRootQueue(map[string]string{"memory": "1G"})
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	node1 := newNodeRes(nodeID1, res)
+	node2 := newNodeRes(nodeID2, res)
+	// reserve on the required node
+	err = app.Reserve(node1, ask)
+	assert.NilError(t, err, "reservation should not have failed")
+
+	iter := getNodeIteratorFn(node1, node2)
+
+	// headroom is insufficient, but reservation should NOT be cancelled (required node)
+	result := app.tryReservedAllocate(headRoom, iter)
+	assert.Assert(t, result == nil, "result is expected to be nil due to insufficient headroom")
+	assert.Equal(t, len(app.reservations), 1, "required node reservation should not be cancelled")
+
+	// set the reservation time to well beyond the timeout
+	app.reservations[ask.allocationKey].createTime = time.Now().Add(-90 * time.Minute)
+
+	// even after timeout, required node reservation must NOT be cancelled
+	result = app.tryReservedAllocate(headRoom, iter)
+	assert.Assert(t, result == nil, "result is expected to be nil due to insufficient headroom")
+	assert.Equal(t, len(app.reservations), 1, "required node reservation must not be cancelled on timeout")
+}
+
 func TestUpdateRunnableStatus(t *testing.T) {
 	app := newApplication(appID0, "default", "root.unknown")
 	assert.Assert(t, app.runnableInQueue)

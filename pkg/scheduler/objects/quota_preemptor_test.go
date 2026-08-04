@@ -696,9 +696,9 @@ func createQueueSetups(t *testing.T, parent *Queue, leafResG configs.Resources, 
 }
 
 func createVictim(t *testing.T, allocKey string, node *Node, adjustment int, allocRes *resources.Resource) *Allocation {
-	createTime := time.Now()
+	baseTime := time.Now().Truncate(time.Hour).Add(30 * time.Minute)
 	allocation := createAllocation(allocKey, "app1", node.NodeID, true, false, 10, false, allocRes)
-	allocation.createTime = createTime.Add(-time.Minute * time.Duration(adjustment))
+	allocation.createTime = baseTime.Add(-time.Minute * time.Duration(adjustment))
 	assert.Assert(t, node.TryAddAllocation(allocation))
 	return allocation
 }

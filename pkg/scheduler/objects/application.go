@@ -1227,33 +1227,49 @@ func (sa *Application) tryRequiredNode(request *Allocation, getNodeFn func(strin
 	return result
 }
 
+// unreserveForApp handles the lock-aware unreserve for a single reservation.
+// Uses the internal unlocked path when the reservation belongs to this app.
+func (sa *Application) unreserveForApp(res *reservation) int {
+	var num int
+	if sa.ApplicationID == res.appID {
+		num = sa.unReserveInternal(res)
+		sa.queue.UnReserve(sa.ApplicationID, num)
+	} else {
+		num = res.app.UnReserve(res.node, res.alloc)
+		res.app.GetQueue().UnReserve(res.app.ApplicationID, num)
+	}
+	if num > 0 {
+		log.Log(log.SchedApplication).Info("Reservation cancelled",
+			zap.String("triggeringAppID", sa.ApplicationID),
+			zap.String("reservingAppID", res.appID),
+			zap.String("reservingAllocationKey", res.allocKey),
+			zap.String("node", res.nodeID))
+	}
+	return num
+}
+
+// cancelMatchingReservations cancels reservations that match the predicate.
+// Returns the number of reservations released and the number remaining.
+func (sa *Application) cancelMatchingReservations(reservations []*reservation, shouldCancel func(*reservation) bool) (released, remaining int) {
+	remaining = len(reservations)
+	for _, res := range reservations {
+		if !shouldCancel(res) {
+			continue
+		}
+		num := sa.unreserveForApp(res)
+		released += num
+		remaining -= num
+	}
+	return
+}
+
 // cancelReservations will cancel all non required node reservations for a node. The list of reservations passed in is
 // a copy of all reservations of a single node. This is called during the required node allocation cycle only.
 // The returned int value is used to update the partition counter of active reservations.
 func (sa *Application) cancelReservations(reservations []*reservation) int {
-	var released, num int
-	// un reserve all the apps that were reserved on the node
-	for _, res := range reservations {
-		// cleanup if the reservation does not have this node as a requirement
-		if res.alloc.requiredNode != "" {
-			continue
-		}
-		thisApp := res.app.ApplicationID == sa.ApplicationID
-		if thisApp {
-			num = sa.unReserveInternal(res)
-			sa.queue.UnReserve(sa.ApplicationID, num)
-		} else {
-			num = res.app.UnReserve(res.node, res.alloc)
-			res.app.GetQueue().UnReserve(res.app.ApplicationID, num)
-		}
-		log.Log(log.SchedApplication).Info("Cancelled reservation for required node allocation",
-			zap.String("triggered by appID", sa.ApplicationID),
-			zap.String("affected application ID", res.appID),
-			zap.String("affected allocationKey", res.allocKey),
-			zap.String("required node", res.nodeID),
-			zap.Int("reservations count", num))
-		released += num
-	}
+	released, _ := sa.cancelMatchingReservations(reservations, func(res *reservation) bool {
+		return res.alloc.requiredNode == ""
+	})
 	return released
 }
 

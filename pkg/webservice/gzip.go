@@ -64,6 +64,14 @@ func (d *deferredGzipResponseWriter) WriteHeader(code int) {
 // commits to gzip streaming. After the decision is made, writes go directly to the
 // chosen writer.
 func (d *deferredGzipResponseWriter) Write(b []byte) (int, error) {
+	// A handler is allowed to encode the response body itself, in which case it has
+	// already set Content-Encoding by the time it writes. Compressing again would
+	// produce a doubly encoded body advertised by a single Content-Encoding, which no
+	// client can decode. Hand the response over untouched instead.
+	if !d.decided && d.ResponseWriter.Header().Get("Content-Encoding") != "" {
+		d.passThrough()
+	}
+
 	if d.decided {
 		if d.useGzip {
 			return d.gz.Write(b)
@@ -76,6 +84,31 @@ func (d *deferredGzipResponseWriter) Write(b []byte) (int, error) {
 		d.switchToGzip()
 	}
 	return n, err
+}
+
+// passThrough commits to sending the body as the handler produced it: it flushes any
+// buffered bytes to the underlying writer and marks the decision as final.
+//
+// Vary is added only when the response actually carries an encoding. A handler that
+// compressed the body itself (promhttp) sets Content-Encoding but never Vary, and a
+// compressed response without Vary lets a shared cache serve those bytes to a client
+// that cannot decode them. A body this middleware simply chose not to compress carries
+// neither header, which is the contract Test_GzipMinCompressionSize asserts.
+func (d *deferredGzipResponseWriter) passThrough() {
+	d.decided = true
+	if d.ResponseWriter.Header().Get("Content-Encoding") != "" {
+		d.ResponseWriter.Header().Add("Vary", "Accept-Encoding")
+	}
+	if d.statusCode != 0 {
+		d.ResponseWriter.WriteHeader(d.statusCode)
+	}
+	if d.buf.Len() > 0 {
+		if _, err := d.ResponseWriter.Write(d.buf.Bytes()); err != nil {
+			log.Log(log.REST).Error("failed to write buffered response bytes",
+				zap.Error(err))
+		}
+		d.buf.Reset()
+	}
 }
 
 // switchToGzip commits to gzip encoding: sets response headers, flushes the buffered
@@ -100,14 +133,7 @@ func (d *deferredGzipResponseWriter) switchToGzip() {
 // The gzip writer is closed if compression was used.
 func (d *deferredGzipResponseWriter) finalize() {
 	if !d.decided {
-		d.decided = true
-		if d.statusCode != 0 {
-			d.ResponseWriter.WriteHeader(d.statusCode)
-		}
-		if _, err := d.ResponseWriter.Write(d.buf.Bytes()); err != nil {
-			log.Log(log.REST).Error("failed to write buffered response bytes",
-				zap.Error(err))
-		}
+		d.passThrough()
 	}
 	if d.useGzip {
 		if closeErr := d.gz.Close(); closeErr != nil {
@@ -124,7 +150,10 @@ func (d *deferredGzipResponseWriter) finalize() {
 // gzip framing overhead exceeding the size savings.
 //
 // Responses are always served uncompressed when the client has not requested gzip,
-// ensuring full backwards compatibility.
+// ensuring full backwards compatibility. Handlers that encode the response body
+// themselves (for example promhttp, which performs its own gzip content negotiation)
+// are detected via the Content-Encoding header they set and are passed through
+// untouched, so their bodies are never compressed twice.
 //
 // The event-stream endpoint (/ws/v1/events/stream) is excluded because it uses
 // server-sent events with http.Flusher, which requires writing directly to the

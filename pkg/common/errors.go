@@ -31,7 +31,7 @@ var (
 	ErrorNodeAlreadyReserved = errors.New("node is already reserved")
 	// ErrorNodeNotFitReserve returned when the allocation does not fit on an empty node, failing the reservation
 	ErrorNodeNotFitReserve  = errors.New("reservation does not fit on node")
-	ErrorPreFilterPredicate = errors.New("prefilter predicates failed")
+	ErrorPreFilterPredicate = errors.New("predicate checks failed. Unable to find the suitable node to run this pod")
 )
 
 // Constant messages for AllocationLog entries

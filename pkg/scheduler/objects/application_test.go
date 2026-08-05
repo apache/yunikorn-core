@@ -3505,7 +3505,7 @@ func assertEventsForPredicateFailures(t *testing.T, allocKey string, event *si.E
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
 	assert.Equal(t, "app-1", event.ReferenceID)
 	assert.Equal(t, allocKey, event.ObjectID)
-	assert.Check(t, strings.Contains(event.Message, "failed (1x); "))
+	assert.Check(t, strings.Contains(event.Message, "Unschedulable request '"+allocKey+"':"))
 }
 
 func TestRequiredNodePreemption(t *testing.T) {

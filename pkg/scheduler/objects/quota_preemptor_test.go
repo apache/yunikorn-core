@@ -597,7 +597,8 @@ func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
 	}{
 		// claimed = ask1(9)+ask2(10) + ask4(9) + ask6(8)+ask7(9)+ask8(10)+ask9(11)+ask10(12) + ask11(9)+ask12(10)+ask13(11) = 19+9+50+30 = 108
 		{"Guaranteed set on one side of queue hierarchy - suitable victims available", parent, oldMax, newMax, leafGVictims, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 108}), 13, []string{"ask1", "ask2", "ask4", "ask6", "ask7", "ask8", "ask9", "ask10", "ask11", "ask12", "ask13"}},
-		{"Guaranteed set on one side of queue hierarchy - victims available but none suitable", parent, oldMax, newMax, leafGNotSuitableVictims, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 110}), 1, []string{}},
+		// no victim fits the budget, so nothing is claimed even though one candidate is selected
+		{"Guaranteed set on one side of queue hierarchy - victims available but none suitable", parent, oldMax, newMax, leafGNotSuitableVictims, resources.NewResource(), 1, []string{}},
 		// claimed = ask1(9)+ask2(10) + ask4(9) + ask6(8)+ask7(9)+ask8(10)+ask9(11) + ask11(9)+ask12(10) = 19+9+38+19 = 85
 		{"Guaranteed set not set on any queue - suitable victims available", parent1, oldMax, newMax, leafVictims, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 85}), 14, []string{"ask1", "ask2", "ask4", "ask6", "ask7", "ask8", "ask9", "ask11", "ask12"}},
 		// each leaf preempts the smaller victim (ask_even = {first:12}), claimed = 5 × 12 = 60
@@ -621,7 +622,7 @@ func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
 			}
 			assertPreemptedAllocationKeys(t, allAllocs, tc.preemptedKeys)
 			time.Sleep(500 * time.Millisecond)
-			assertQuotaPreemptionEvent(t, len(tc.preemptedKeys), "Quota Preemption results summary: preemptable resources: "+resources.Multiply(preemptableResource, -1).String()+", claimed resources: "+tc.claimedResources.String()+", selected victims: "+strconv.Itoa(tc.totalVictims)+", preempted victims: "+strconv.Itoa(len(tc.preemptedKeys)), eventSystem.Store.CollectEvents())
+			assertQuotaPreemptionEvent(t, tc.totalVictims, "Quota Preemption results summary: preemptable resources: "+resources.Multiply(preemptableResource, -1).String()+", claimed resources: "+tc.claimedResources.String()+", selected victims: "+strconv.Itoa(tc.totalVictims)+", preempted victims: "+strconv.Itoa(len(tc.preemptedKeys)), eventSystem.Store.CollectEvents())
 			for _, v := range tc.victims {
 				removeAllocationAsks(node, v)
 			}
@@ -651,9 +652,9 @@ func assertPreemptedAllocationKeys(t *testing.T, allocations []*Allocation, expe
 	}
 }
 
-func assertQuotaPreemptionEvent(t *testing.T, victims int, results string, records []*si.EventRecord) {
+func assertQuotaPreemptionEvent(t *testing.T, selectedVictims int, results string, records []*si.EventRecord) {
 	recordsLen := len(records)
-	if victims > 0 {
+	if selectedVictims > 0 {
 		assert.Equal(t, si.EventRecord_QUEUE, records[recordsLen-1].Type)
 		assert.Equal(t, si.EventRecord_SET, records[recordsLen-1].EventChangeType)
 		assert.Equal(t, si.EventRecord_QUEUE_PREEMPTION, records[recordsLen-1].EventChangeDetail)

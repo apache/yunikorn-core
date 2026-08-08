@@ -2646,6 +2646,30 @@ func TestTryAllocatePreemptNodeWithReservationsNotPossibleToCancel(t *testing.T)
 	assert.Assert(t, allocs[1].IsPreempted(), "alloc2 should have been preempted")
 }
 
+// assertMaxPriorityConsistent recomputes askMaxPriority (and the pendingPriorities histogram it is
+// derived from) via a full scan over sa.requests and compares against the incrementally maintained
+// values. This guards the incremental accounting that replaced the old O(N^2)
+// updateAskMaxPriority rescan.
+func assertMaxPriorityConsistent(t *testing.T, app *Application) {
+	t.Helper()
+	app.RLock()
+	defer app.RUnlock()
+	wantMax := configs.MinPriority
+	wantHistogram := make(map[int32]int)
+	for _, req := range app.requests {
+		if req.IsAllocated() {
+			continue
+		}
+		wantMax = max(wantMax, req.GetPriority())
+		wantHistogram[req.GetPriority()]++
+	}
+	assert.Equal(t, app.askMaxPriority, wantMax, "askMaxPriority inconsistent with full scan over requests")
+	assert.Equal(t, len(app.pendingPriorities), len(wantHistogram), "pendingPriorities histogram size mismatch")
+	for p, count := range wantHistogram {
+		assert.Equal(t, app.pendingPriorities[p], count, "pendingPriorities count mismatch for priority %d", p)
+	}
+}
+
 func TestMaxAskPriority(t *testing.T) {
 	app := newApplication(appID1, "default", "root.unknown")
 	if app == nil || app.ApplicationID != appID1 {
@@ -2660,32 +2684,38 @@ func TestMaxAskPriority(t *testing.T) {
 
 	// initial state
 	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "wrong default priority")
+	assertMaxPriorityConsistent(t, app)
 
 	// p=10 added
 	ask1 := newAllocationAskPriority("prio-10", appID1, res, 10)
 	err = app.AddAllocationAsk(ask1)
 	assert.NilError(t, err, "ask should have been updated on app")
 	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after adding p=10")
+	assertMaxPriorityConsistent(t, app)
 
 	// p=5 added
 	ask2 := newAllocationAskPriority("prio-5", appID1, res, 5)
 	err = app.AddAllocationAsk(ask2)
 	assert.NilError(t, err, "ask should have been added to app")
 	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after adding p=5")
+	assertMaxPriorityConsistent(t, app)
 
 	// p=15 added
 	ask3 := newAllocationAskPriority("prio-15", appID1, res, 15)
 	err = app.AddAllocationAsk(ask3)
 	assert.NilError(t, err, "ask should have been added to app")
 	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after adding p=15")
+	assertMaxPriorityConsistent(t, app)
 
 	// p=10 removed
 	app.RemoveAllocationAsk(ask1.GetAllocationKey())
 	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after removing p=10")
+	assertMaxPriorityConsistent(t, app)
 
 	// p=15 removed
 	app.RemoveAllocationAsk(ask3.GetAllocationKey())
 	assert.Equal(t, app.GetAskMaxPriority(), int32(5), "wrong priority after removing p=15")
+	assertMaxPriorityConsistent(t, app)
 
 	// re-add removed asks
 	err = app.AddAllocationAsk(ask1)
@@ -2694,26 +2724,109 @@ func TestMaxAskPriority(t *testing.T) {
 	assert.NilError(t, err, "ask should have been added to app")
 
 	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after re-adding asks")
+	assertMaxPriorityConsistent(t, app)
 
 	// update to allocated for p=15
 	_, err = app.AllocateAsk(ask3.GetAllocationKey())
 	assert.NilError(t, err, "ask should have been updated")
 	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=15 to allocated")
+	assertMaxPriorityConsistent(t, app)
 
 	// update to allocated for p=5
 	_, err = app.AllocateAsk(ask2.GetAllocationKey())
 	assert.NilError(t, err, "ask should have been updated")
 	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=5 to allocated")
+	assertMaxPriorityConsistent(t, app)
 
 	// update to unallocated for p=5
 	_, err = app.DeallocateAsk(ask2.GetAllocationKey())
 	assert.NilError(t, err, "ask should have been updated")
 	assert.Equal(t, app.GetAskMaxPriority(), int32(10), "wrong priority after updating p=5 to unallocated")
+	assertMaxPriorityConsistent(t, app)
 
 	// update to unallocated for p=15
 	_, err = app.DeallocateAsk(ask3.GetAllocationKey())
 	assert.NilError(t, err, "ask should have been updated")
 	assert.Equal(t, app.GetAskMaxPriority(), int32(15), "wrong priority after updating p=15 to unallocated")
+	assertMaxPriorityConsistent(t, app)
+}
+
+// TestAddAllocationAskReplaceExistingPendingAsk covers the replace-existing-ask branch of
+// AddAllocationAsk: re-submitting an ask under a key that is already tracked and still pending.
+// The displaced ask has to leave the pending histogram before addAllocationAskInternal counts the
+// replacement, or a single allocation key is counted twice and the priority it was originally
+// submitted at never drops out again. The full rescan this replaced could not get that wrong: it
+// derived the maximum from sa.requests, which only ever holds one ask per key.
+func TestAddAllocationAskReplaceExistingPendingAsk(t *testing.T) {
+	app := newApplication(appID1, "default", "root.default")
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	err = app.AddAllocationAsk(newAllocationAskPriority(aKey, appID1, res, 5))
+	assert.NilError(t, err, "ask should have been added to app")
+	assertMaxPriorityConsistent(t, app)
+
+	// same key, still pending, different priority: the replace branch
+	replacement := newAllocationAskPriority(aKey, appID1, res, 3)
+	err = app.AddAllocationAsk(replacement)
+	assert.NilError(t, err, "ask should have been updated on app")
+
+	app.RLock()
+	assert.Equal(t, len(app.pendingPriorities), 1, "pending histogram must only hold the replacement's priority")
+	assert.Equal(t, app.pendingPriorities[3], 1, "wrong pending count for the replacement priority")
+	app.RUnlock()
+	assert.Equal(t, app.GetAskMaxPriority(), int32(3), "wrong priority after replacing p=5 with p=3")
+	assertMaxPriorityConsistent(t, app)
+
+	// allocating the only ask must empty the histogram: a double counted key would leave the
+	// replaced ask's priority behind.
+	_, err = app.AllocateAsk(aKey)
+	assert.NilError(t, err, "ask should have been allocated")
+	app.RLock()
+	assert.Equal(t, len(app.pendingPriorities), 0, "allocating the only ask must empty the pending histogram")
+	app.RUnlock()
+	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "wrong priority after allocating the only ask")
+	assertMaxPriorityConsistent(t, app)
+}
+
+// TestRollbackAllocationAskNotTracked covers deallocateAsk running for an ask that sa.requests no
+// longer holds. removeAsksInternal("") wipes sa.requests and the pending histogram but deliberately
+// leaves sa.allocations alone until the shim confirms the releases, so a SCHEDULING_FAILED_ON_RM
+// release arriving in that window reaches RollbackAllocation, which looks the entry up in
+// sa.allocations and deallocates it. deallocateAsk must not count that ask as pending again: the
+// application does not track it any more, so nothing would ever take it back out of the histogram.
+func TestRollbackAllocationAskNotTracked(t *testing.T) {
+	setupUGM()
+	defer setupUGM()
+	app := newApplication(appID1, "default", "root.default")
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAskPriority(aKey, appID1, res, 5)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	_, err = app.AllocateAsk(aKey)
+	assert.NilError(t, err, "ask should have been allocated")
+	// confirm the allocation so it lands in sa.allocations, which is what RollbackAllocation looks in
+	app.AddAllocation(ask)
+
+	// wipe the asks: sa.allocations (and so the rollback target) survives this
+	app.RemoveAllocationAsk("")
+	assert.Assert(t, app.GetAllocationAsk(aKey) == nil, "ask should no longer be tracked in requests")
+	assert.Assert(t, app.IsAccepted() || app.IsRunning(), "app must still be rollback-eligible, is %s", app.CurrentState())
+
+	_, err = app.RollbackAllocation(aKey)
+	assert.NilError(t, err, "rollback of the confirmed allocation should have succeeded")
+
+	app.RLock()
+	assert.Equal(t, len(app.pendingPriorities), 0, "rollback of an untracked ask must not change the pending histogram")
+	app.RUnlock()
+	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "rollback of an untracked ask must not change askMaxPriority")
+	assertMaxPriorityConsistent(t, app)
 }
 
 func TestAskEvents(t *testing.T) {
@@ -3962,6 +4075,87 @@ func TestTryPlaceHolderAllocateDifferentNodes(t *testing.T) {
 	assert.Equal(t, result.Request, ph.GetRelease(), "placeholder should link to real allocation")
 	// placeholder data remains unchanged until RM confirms the replacement
 	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+}
+
+// revertTriggerPredicatePlugin is a test-local predicate plugin whose Predicates call has the side
+// effect of marking a specific placeholder as preempted, then returning nil (i.e. the predicate
+// check itself still "passes"). This is used to reach the narrow window in tryPlaceholderAllocate
+// between the loop's IsPreempted() guard and the ph.SetReleased(true) call, so that SetReleased
+// fails and the revert path is exercised (see TestTryPlaceHolderAllocateRevertsOnPreemptedPlaceholder).
+type revertTriggerPredicatePlugin struct {
+	mockCommon.ResourceManagerCallback
+	ph *Allocation
+}
+
+func (p *revertTriggerPredicatePlugin) Predicates(_ *si.PredicatesArgs) error {
+	_ = p.ph.MarkPreempted() //nolint:errcheck
+	return nil
+}
+
+// TestTryPlaceHolderAllocateRevertsOnPreemptedPlaceholder drives tryPlaceholderAllocate down the
+// path where ph.SetReleased(true) fails because the placeholder became preempted in between the
+// loop's own IsPreempted() guard and the SetReleased(true) call. This exercises the FIRST revert
+// branch inside the phAllocs loop (injected via node.preReserveConditions): sa.deallocateAsk(request),
+// ClearRelease() on both sides, and continue.
+//
+// Because ph is registered only at the Application level (app.AddAllocation/addPlaceholderData) and
+// never actually consumes capacity on the *Node object itself (matching the pattern of every other
+// TestTryPlaceHolderAllocate* test in this file, none of which call node.AddAllocation(ph) either),
+// the node's tracked available resources are unaffected by ph and still show room for reqFit. As a
+// result, once the first branch reverts and falls through to the fallback ForEachNode retry
+// (phFit/reqFit, using node.preAllocateCheck/preAllocateConditions), that retry also finds room,
+// proceeds to TryAddAllocation + allocateAsk + SetReleased(true) on the SAME still-preempted ph, and
+// that SetReleased(true) call fails again for the same reason - so the SECOND/fallback revert branch
+// (node.RemoveAllocation, deallocateAsk, ClearRelease on both sides) is exercised too, verified by the
+// log line "allocation is already preempted, so not proceeding further and reverting to old state"
+// appearing twice when run with -v. The function then returns nil with all state reverted, which is
+// exactly what the assertions below check.
+func TestTryPlaceHolderAllocateRevertsOnPreemptedPlaceholder(t *testing.T) {
+	// node capacity equals the placeholder's (and the real ask's) resource size; this keeps the
+	// scenario minimal (single node, single ph, single ask) while both revert branches above still
+	// get exercised, since node-level capacity tracking is independent of the ph's Application-level
+	// bookkeeping in this test setup.
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	app := newApplication(appID0, "default", "root.default")
+
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ph := newPlaceholderAlloc(appID0, nodeID1, res, tg1)
+	app.AddAllocation(ph)
+	app.addPlaceholderData(ph)
+	assertPlaceholderData(t, app, tg1, 1, 0, 0, res)
+
+	// same size as the placeholder so we go down the main swap path, not the "placeholder is
+	// larger, cancel it" branch.
+	ask := newAllocationAsk(aKey, appID0, res)
+	ask.taskGroupName = tg1
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	// register a plugin whose Predicates call marks ph preempted right before SetReleased(true)
+	// is invoked, forcing that call to fail and the revert path to run.
+	plugin := &revertTriggerPredicatePlugin{ph: ph}
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result := app.tryPlaceholderAllocate(iterator, getNode)
+	assert.Assert(t, result == nil, "result should be nil: both the first swap attempt and the fallback retry failed SetReleased(true) on the still-preempted placeholder and reverted")
+	assert.Assert(t, ph.IsPreempted(), "placeholder should remain marked preempted (side effect stuck)")
+	assert.Assert(t, !ph.IsReleased(), "placeholder should not be released: the failing SetReleased(true) call never set it")
+	assert.Assert(t, !ask.IsAllocated(), "ask should have been reverted back to pending by deallocateAsk")
+	assert.Assert(t, ask.GetRelease() == nil, "ask's release link should have been cleared by the revert")
+	assert.Assert(t, ph.GetRelease() == nil, "placeholder's release link should have been cleared by the revert")
+
+	assertMaxPriorityConsistent(t, app)
 }
 
 func TestTryNodesNoReserve(t *testing.T) {

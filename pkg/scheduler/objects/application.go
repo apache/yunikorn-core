@@ -1084,15 +1084,17 @@ func (sa *Application) canReplace(request *Allocation) bool {
 func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption bool, preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator, fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) *AllocationResult {
 	sa.Lock()
 	defer sa.Unlock()
-	if sa.sortedRequests == nil {
+	if len(sa.sortedRequests) == 0 {
 		return nil
 	}
 	// calculate the users' headroom, includes group check which requires the applicationID
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
 	unschedulable := uint64(0)
+	// constant for the cycle: hoisted out of the loop below. Safe to call unconditionally here
+	// because the len check above guarantees at least one iteration would occur.
+	backoffThreshold := sa.queue.GetMaxAppUnschedAskBackoff()
 	// get all the requests from the app sorted in order
 	for _, request := range sa.sortedRequests {
-		backoffThreshold := sa.queue.GetMaxAppUnschedAskBackoff()
 		if backoffThreshold > 0 && unschedulable >= backoffThreshold {
 			log.Log(log.SchedApplication).Info("too many unschedulable asks in the application, waiting",
 				zap.String("application ID", sa.ApplicationID),

@@ -2114,9 +2114,14 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	sa.allocatedResource = resources.NewResource()
 	sa.allocatedPlaceholder = resources.NewResource()
 	sa.allocations = make(map[string]*Allocation)
+
 	// When the resource trackers are zero we should not expect anything to come in later.
 	if resources.IsZero(sa.pending) {
-		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
+		event := CompleteApplication
+		if sa.IsFailing() {
+			event = FailApplication
+		}
+		if err := sa.HandleApplicationEvent(event); err != nil {
 			log.Log(log.SchedApplication).Warn("Application state not changed to Completing while removing all allocations",
 				zap.String("currentState", sa.CurrentState()),
 				zap.Error(err))

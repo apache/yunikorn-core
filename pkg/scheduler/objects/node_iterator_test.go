@@ -22,7 +22,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/google/btree"
+	"github.com/tidwall/btree"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/resources"
@@ -30,7 +30,7 @@ import (
 
 func TestTreeIterator_AcceptAll(t *testing.T) {
 	tree := getTree()
-	treeItr := NewTreeIterator(acceptAll, func() *btree.BTree {
+	treeItr := NewTreeIterator(acceptAll, func() *btree.BTreeG[nodeRef] {
 		return tree
 	})
 
@@ -45,7 +45,7 @@ func TestTreeIterator_AcceptAll(t *testing.T) {
 
 func TestTreeIterator_AcceptUnreserved(t *testing.T) {
 	tree := getTree()
-	treeItr := NewTreeIterator(acceptUnreserved, func() *btree.BTree {
+	treeItr := NewTreeIterator(acceptUnreserved, func() *btree.BTreeG[nodeRef] {
 		return tree
 	})
 
@@ -65,14 +65,14 @@ func TestTreeIterator_AcceptUnreserved(t *testing.T) {
 	}
 }
 
-func getTree() *btree.BTree {
+func getTree() *btree.BTreeG[nodeRef] {
 	nodesReserved := newSchedNodeList(0, 5, true)
 	nodes := newSchedNodeList(5, 10, false)
 	nodes = append(nodes, nodesReserved...)
 
-	tree := btree.New(7)
+	tree := btree.NewBTreeG(nodeRefLess)
 	for _, n := range nodes {
-		tree.ReplaceOrInsert(nodeRef{
+		tree.Set(nodeRef{
 			node:      n,
 			nodeScore: 1,
 		})

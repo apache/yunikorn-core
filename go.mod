@@ -24,7 +24,6 @@ go 1.25.0
 require (
 	github.com/apache/yunikorn-scheduler-interface v0.0.0-20260727092410-674338955bdf
 	github.com/go-ldap/ldap/v3 v3.4.13
-	github.com/google/btree v1.1.3
 	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/julienschmidt/httprouter v1.3.0
@@ -33,6 +32,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.67.5
 	github.com/sasha-s/go-deadlock v0.3.9
+	github.com/tidwall/btree v1.8.1
 	go.uber.org/zap v1.27.1
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/exp v0.0.0-20260312153236-7ab1446f8b90

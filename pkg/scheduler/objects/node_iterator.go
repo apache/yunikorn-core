@@ -19,7 +19,7 @@
 package objects
 
 import (
-	"github.com/google/btree"
+	"github.com/tidwall/btree"
 )
 
 // NodeIterator iterates over a list of nodes based on the defined policy
@@ -30,25 +30,26 @@ type NodeIterator interface {
 
 type treeIterator struct {
 	accept  func(*Node) bool
-	getTree func() *btree.BTree
+	getTree func() *btree.BTreeG[nodeRef]
 }
 
 // ForEachNode Calls the provided "f" function on the sorted Node object until it returns false.
 // The accept() function checks if the node should be a candidate or not.
 func (ti *treeIterator) ForEachNode(f func(*Node) bool) {
-	ti.getTree().Ascend(func(item btree.Item) bool {
-		if ref, ok := item.(nodeRef); ok {
+	ti.getTree().Walk(func(refs []nodeRef) bool {
+		for _, ref := range refs {
 			node := ref.node
 			if ti.accept(node) {
-				return f(node)
+				if !f(node) {
+					return false
+				}
 			}
 		}
-
 		return true
 	})
 }
 
-func NewTreeIterator(accept func(*Node) bool, getTree func() *btree.BTree) *treeIterator {
+func NewTreeIterator(accept func(*Node) bool, getTree func() *btree.BTreeG[nodeRef]) *treeIterator {
 	ti := &treeIterator{
 		getTree: getTree,
 		accept:  accept,

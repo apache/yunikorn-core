@@ -36,10 +36,14 @@ type treeIterator struct {
 // ForEachNode Calls the provided "f" function on the sorted Node object until it returns false.
 // The accept() function checks if the node should be a candidate or not.
 func (ti *treeIterator) ForEachNode(f func(*Node) bool) {
-	ti.getTree().Scan(func(ref nodeRef) bool {
-		node := ref.node
-		if ti.accept(node) {
-			return f(node)
+	ti.getTree().Walk(func(refs []nodeRef) bool {
+		for _, ref := range refs {
+			node := ref.node
+			if ti.accept(node) {
+				if !f(node) {
+					return false
+				}
+			}
 		}
 		return true
 	})

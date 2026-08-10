@@ -590,7 +590,11 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	}
 
 	// ensure required data structures are populated
-	p.initWorkingState()
+	// building the data structures can cancel reservations on the nodes we walk. Those reservations are
+	// gone whether or not the preemption below succeeds, so the release must be accounted for here
+	// instead of on the return paths: all but one of them bail out without an allocation result.
+	released := p.initWorkingState()
+	p.application.executeReservationReleasedCallback(released)
 
 	// try to find a node to schedule on and victims to preempt
 	nodeID, victims, ok := p.tryNodes()

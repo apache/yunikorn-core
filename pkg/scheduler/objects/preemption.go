@@ -89,36 +89,36 @@ func NewPreemptor(application *Application, headRoom *resources.Resource, preemp
 
 // CheckPreconditions performs simple sanity checks designed to determine if preemption should be attempted
 // for an ask. If checks succeed, updates the ask preemption check time.
-func (p *Preemptor) CheckPreconditions() bool {
+func CheckPreconditions(ask *Allocation, preemptionDelay time.Duration) bool {
 	now := time.Now()
 
 	// skip if ask is not allowed to preempt other tasks
-	if !p.ask.IsAllowPreemptOther() {
+	if !ask.IsAllowPreemptOther() {
 		return false
 	}
 
 	// skip if ask has previously triggered preemption
-	if p.ask.HasTriggeredPreemption() {
+	if ask.HasTriggeredPreemption() {
 		return false
 	}
 
 	// skip if ask requires a specific node (this should be handled by required node preemption algorithm)
-	if p.ask.GetRequiredNode() != "" {
+	if ask.GetRequiredNode() != "" {
 		return false
 	}
 
 	// skip if preemption delay has not yet passed
-	if now.Before(p.ask.GetCreateTime().Add(p.preemptionDelay)) {
+	if now.Before(ask.GetCreateTime().Add(preemptionDelay)) {
 		return false
 	}
 
 	// skip if attempt frequency hasn't been reached again
-	if now.Before(p.ask.GetPreemptCheckTime().Add(preemptAttemptFrequency)) {
+	if now.Before(ask.GetPreemptCheckTime().Add(preemptAttemptFrequency)) {
 		return false
 	}
 
 	// mark this ask as having been checked recently to avoid doing extra work in the next scheduling cycle
-	p.ask.UpdatePreemptCheckTime()
+	ask.UpdatePreemptCheckTime()
 
 	return true
 }

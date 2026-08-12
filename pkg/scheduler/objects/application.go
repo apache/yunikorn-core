@@ -1561,10 +1561,8 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 		ask.LogAllocationFailure(common.PreemptionMaxAttemptsExhausted, true)
 		return nil, false
 	}
-	preemptor := NewPreemptor(sa, headRoom, preemptionDelay, ask, iterator, nodesTried)
-
 	// validate prerequisites for preemption of an ask and mark ask for preemption if successful
-	if !preemptor.CheckPreconditions() {
+	if !CheckPreconditions(ask, preemptionDelay) {
 		ask.LogAllocationFailure(common.PreemptionPreconditionsFailed, true)
 		return nil, false
 	}
@@ -1575,6 +1573,7 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 	defer metrics.GetSchedulerMetrics().ObserveTryPreemptionLatency(tryPreemptionStart)
 
 	// attempt preemption
+	preemptor := NewPreemptor(sa, headRoom, preemptionDelay, ask, iterator, nodesTried)
 	return preemptor.TryPreemption()
 }
 

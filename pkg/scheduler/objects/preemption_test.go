@@ -135,43 +135,44 @@ func TestCheckPreconditions(t *testing.T) {
 	ask.createTime = time.Now().Add(-1 * time.Minute)
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err)
-	preemptor := NewPreemptor(app, resources.NewResource(), 30*time.Second, ask, iterator(), false)
+	// the checks run without a preemptor: they only need the ask and the delay
+	preemptionDelay := 30 * time.Second
 
 	// success case
-	assert.Assert(t, preemptor.CheckPreconditions(), "preconditions failed")
+	assert.Assert(t, CheckPreconditions(ask, preemptionDelay), "preconditions failed")
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)
 
 	// verify ask which opted-out of preempting others is disqualified
 	ask.allowPreemptOther = false
-	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded when ask doesn't allow preempt other")
+	assert.Assert(t, !CheckPreconditions(ask, preemptionDelay), "preconditions succeeded when ask doesn't allow preempt other")
 	ask.allowPreemptOther = true
-	assert.Assert(t, preemptor.CheckPreconditions(), "preconditions failed")
+	assert.Assert(t, CheckPreconditions(ask, preemptionDelay), "preconditions failed")
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)
 
 	// verify previously triggered preemption disqualifies ask
 	ask.MarkTriggeredPreemption()
-	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded when ask has already triggered preemption")
+	assert.Assert(t, !CheckPreconditions(ask, preemptionDelay), "preconditions succeeded when ask has already triggered preemption")
 	ask.preemptionTriggered = false
-	assert.Assert(t, preemptor.CheckPreconditions(), "preconditions failed")
+	assert.Assert(t, CheckPreconditions(ask, preemptionDelay), "preconditions failed")
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)
 
 	// verify that ask requiring a specific node is disqualified
 	ask.SetRequiredNode("node1")
-	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded with ask requiring a specific node")
+	assert.Assert(t, !CheckPreconditions(ask, preemptionDelay), "preconditions succeeded with ask requiring a specific node")
 	ask.SetRequiredNode("")
-	assert.Assert(t, preemptor.CheckPreconditions(), "preconditions failed")
+	assert.Assert(t, CheckPreconditions(ask, preemptionDelay), "preconditions failed")
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)
 
 	// verify that recently created ask is disqualified
 	ask.createTime = time.Now()
-	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded with newly-created ask")
+	assert.Assert(t, !CheckPreconditions(ask, preemptionDelay), "preconditions succeeded with newly-created ask")
 	ask.createTime = time.Now().Add(-1 * time.Minute)
-	assert.Assert(t, preemptor.CheckPreconditions(), "preconditions failed")
+	assert.Assert(t, CheckPreconditions(ask, preemptionDelay), "preconditions failed")
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)
 
 	// verify that recently checked ask is disqualified
 	ask.preemptCheckTime = time.Now()
-	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded with recently tried ask")
+	assert.Assert(t, !CheckPreconditions(ask, preemptionDelay), "preconditions succeeded with recently tried ask")
 	getNode := func(nodeID string) *Node {
 		return node
 	}
@@ -180,8 +181,8 @@ func TestCheckPreconditions(t *testing.T) {
 	assert.Check(t, result == nil, "unexpected result")
 	assertAllocationLog(t, ask, []string{common.PreemptionPreconditionsFailed, common.PreemptionDoesNotHelp})
 	ask.preemptCheckTime = time.Now().Add(-1 * time.Minute)
-	assert.Assert(t, preemptor.CheckPreconditions(), "preconditions failed")
-	assert.Assert(t, !preemptor.CheckPreconditions(), "preconditions succeeded on successive run")
+	assert.Assert(t, CheckPreconditions(ask, preemptionDelay), "preconditions failed")
+	assert.Assert(t, !CheckPreconditions(ask, preemptionDelay), "preconditions succeeded on successive run")
 }
 
 func TestCheckPreemptionQueueGuarantees(t *testing.T) {

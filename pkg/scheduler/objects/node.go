@@ -706,7 +706,7 @@ func (sn *Node) getListeners() []NodeListener {
 func (sn *Node) SendNodeAddedEvent() {
 	sn.RLock()
 	defer sn.RUnlock()
-	sn.nodeEvents.SendNodeAddedEvent(sn.NodeID, sn.totalResource.Clone())
+	sn.nodeEvents.SendNodeAddedEvent(sn.NodeID, sn.totalResource.Clone(), sn.GetInstanceType())
 }
 
 func (sn *Node) SendNodeRemovedEvent() {

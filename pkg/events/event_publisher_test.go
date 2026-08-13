@@ -20,6 +20,7 @@ package events
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,24 +40,40 @@ func TestCreateShimPublisher(t *testing.T) {
 
 // StartService() and stop() functions should not cause panic
 func TestServiceStartStopInternal(t *testing.T) {
+	countPublisherGoroutines := func() int {
+		buf := make([]byte, 2*1024)
+		n := runtime.Stack(buf, true)
+		return strings.Count(string(buf[:n]), "(*eventPublisher).start.func1")
+	}
+
+	// wait for any background publisher goroutine to finish exiting
+	err := common.WaitForCondition(time.Millisecond, time.Second, func() bool {
+		return countPublisherGoroutines() == 0
+	})
+	assert.NilError(t, err, "expected initial publisher goroutines count to be 0")
+
 	store := newEventStore(1000)
 	publisher := createShimPublisher(store)
 	defer publisher.stop()
 	assert.Equal(t, publisher.getEventStore(), store)
+
 	// start and stop simulate a restart
-	before := runtime.NumGoroutine()
 	publisher.start()
 	publisher.stop()
-	time.Sleep(10 * time.Millisecond) // tiny sleep to yield
-	assert.Equal(t, before, runtime.NumGoroutine(), "expected no new go routine after start and stop")
+	err = common.WaitForCondition(time.Millisecond, time.Second, func() bool {
+		return countPublisherGoroutines() == 0
+	})
+	assert.NilError(t, err, "expected no new go routine after start and stop")
 
 	// start should not fail or panic
-	before = runtime.NumGoroutine()
 	publisher.start()
-	after := runtime.NumGoroutine()
-	assert.Equal(t, before+1, after, "expected 1 new go routine")
+	err = common.WaitForCondition(time.Millisecond, time.Second, func() bool {
+		return countPublisherGoroutines() == 1
+	})
+	assert.NilError(t, err, "expected 1 new go routine")
+
 	publisher.start()
-	assert.Equal(t, after, runtime.NumGoroutine(), "Already started should not create new go routine")
+	assert.Equal(t, 1, countPublisherGoroutines(), "Already started should not create new go routine")
 }
 
 func TestNoFillWithoutEventPluginRegistered(t *testing.T) {

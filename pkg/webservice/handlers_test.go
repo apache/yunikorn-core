@@ -2607,7 +2607,7 @@ func assertYunikornError(t *testing.T, output, errMsg string) {
 	assert.Equal(t, errMsg, ykErr.Message)
 }
 
-func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
+func addEvents(t *testing.T) (*si.EventRecord, *si.EventRecord, *si.EventRecord) {
 	t.Helper()
 	events.Init()
 	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
@@ -2616,7 +2616,7 @@ func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
 		"cpu": 1,
 	}).ToProto()
 
-	appEvent = &si.EventRecord{
+	appEvent := &si.EventRecord{
 		Type:              si.EventRecord_APP,
 		TimestampNano:     100,
 		Message:           "app event",
@@ -2627,7 +2627,7 @@ func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
 		Resource:          protoRes,
 	}
 	ev.AddEvent(appEvent)
-	nodeEvent = &si.EventRecord{
+	nodeEvent := &si.EventRecord{
 		Type:              si.EventRecord_NODE,
 		TimestampNano:     101,
 		Message:           "node event",
@@ -2638,7 +2638,7 @@ func addEvents(t *testing.T) (appEvent, nodeEvent, queueEvent *si.EventRecord) {
 		Resource:          protoRes,
 	}
 	ev.AddEvent(nodeEvent)
-	queueEvent = &si.EventRecord{
+	queueEvent := &si.EventRecord{
 		Type:              si.EventRecord_QUEUE,
 		TimestampNano:     102,
 		Message:           "queue event",

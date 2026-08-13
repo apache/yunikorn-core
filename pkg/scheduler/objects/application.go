@@ -1252,8 +1252,9 @@ func (sa *Application) unreserveForApp(res *reservation) int {
 
 // cancelMatchingReservations cancels reservations that match the predicate.
 // Returns the number of reservations released and the number remaining.
-func (sa *Application) cancelMatchingReservations(reservations []*reservation, shouldCancel func(*reservation) bool) (released, remaining int) {
-	remaining = len(reservations)
+func (sa *Application) cancelMatchingReservations(reservations []*reservation, shouldCancel func(*reservation) bool) (int, int) {
+	released := 0
+	remaining := len(reservations)
 	for _, res := range reservations {
 		if !shouldCancel(res) {
 			continue
@@ -1262,7 +1263,7 @@ func (sa *Application) cancelMatchingReservations(reservations []*reservation, s
 		released += num
 		remaining -= num
 	}
-	return
+	return released, remaining
 }
 
 // cancelReservations will cancel all non required node reservations for a node. The list of reservations passed in is

@@ -122,9 +122,8 @@ partitions:
 	// Wait for all nodes to be accepted
 	startTime := time.Now()
 	mockRM.waitForMinAcceptedNodes(b, numNodes, 5000)
-	duration := time.Since(startTime)
-	b.Logf("Total time to add %d node in %s, %f per second", numNodes, duration, float64(numNodes)/duration.Seconds())
-
+	duration1 := time.Since(startTime)
+	b.Logf("Total time to add %d nodes in %s, %f nodes per second", numNodes, duration1, float64(numNodes)/duration1.Seconds())
 	// Request pods
 	app1NumPods := numPods / 2
 	app1Asks := make([]*si.Allocation, app1NumPods)
@@ -139,13 +138,6 @@ partitions:
 			},
 			ApplicationID: appID1,
 		}
-	}
-	err = proxy.UpdateAllocation(&si.AllocationRequest{
-		Allocations: app1Asks,
-		RmID:        "rm:123",
-	})
-	if err != nil {
-		b.Error(err.Error())
 	}
 
 	app2NumPods := numPods - app1NumPods
@@ -162,6 +154,16 @@ partitions:
 			ApplicationID: appID2,
 		}
 	}
+
+	b.ResetTimer()
+	startTime = time.Now()
+	err = proxy.UpdateAllocation(&si.AllocationRequest{
+		Allocations: app1Asks,
+		RmID:        "rm:123",
+	})
+	if err != nil {
+		b.Error(err.Error())
+	}
 	err = proxy.UpdateAllocation(&si.AllocationRequest{
 		Allocations: app2Asks,
 		RmID:        "rm:123",
@@ -169,21 +171,16 @@ partitions:
 	if err != nil {
 		b.Error(err.Error())
 	}
-
-	// Reset  timer for this benchmark
-	duration = time.Since(startTime)
-	b.Logf("Total time to add %d pods in %s, %f per second", numPods, duration, float64(numPods)/duration.Seconds())
-	startTime = time.Now()
-	b.ResetTimer()
-
 	// Wait for all pods to be allocated
 	mockRM.waitForMinAllocations(b, numPods, 300000)
-
 	// Stop timer and calculate duration
 	b.StopTimer()
-	duration = time.Since(startTime)
-
-	b.Logf("Total time to allocate %d containers in %s, %f per second", numPods, duration, float64(numPods)/duration.Seconds())
+	duration2 := time.Since(startTime)
+	b.Logf("Total time to add %d pods in %s, %f pods per second", numPods, duration2, float64(numPods)/duration2.Seconds())
+	b.ReportAllocs()
+	// ReportMetric must run after ResetTimer; ResetTimer clears any custom metrics reported before it.
+	b.ReportMetric(float64(numNodes)/duration1.Seconds(), "nodes/s")
+	b.ReportMetric(float64(numPods)/duration2.Seconds(), "pods/s")
 }
 
 func BenchmarkScheduling(b *testing.B) {
@@ -196,6 +193,9 @@ func BenchmarkScheduling(b *testing.B) {
 	for _, test := range tests {
 		name := fmt.Sprintf("%vNodes/%vPods", test.numNodes, test.numPods)
 		b.Run(name, func(b *testing.B) {
+			if b.N > 1 {
+				b.Skip("Single-run benchmark")
+			}
 			benchmarkScheduling(b, test.numNodes, test.numPods)
 		})
 	}

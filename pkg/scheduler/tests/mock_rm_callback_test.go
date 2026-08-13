@@ -19,6 +19,7 @@
 package tests
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -86,11 +87,17 @@ type mockRMCallback struct {
 	// of decisions is ever in flight. Used by golden_trace_test.go for the golden-trace test.
 	trace []traceEntry
 
+	// allocCond is broadcast whenever new allocations are recorded, so waiters can be woken the moment
+	// the target count is reached instead of polling. It is backed by the write side of the embedded
+	// RWMutex so the predicate (len(Allocations)) is evaluated under the same lock that guards Wait,
+	// which is what prevents a missed signal between the check and the wait.
+	allocCond *sync.Cond
+
 	locking.RWMutex
 }
 
 func newMockRMCallbackHandler() *mockRMCallback {
-	return &mockRMCallback{
+	m := &mockRMCallback{
 		acceptedApplications: make(map[string]bool),
 		rejectedApplications: make(map[string]bool),
 		acceptedNodes:        make(map[string]bool),
@@ -100,6 +107,8 @@ func newMockRMCallbackHandler() *mockRMCallback {
 		releasedPhs:          make(map[string]*si.AllocationRelease),
 		appStates:            make(map[string]string),
 	}
+	m.allocCond = sync.NewCond(&m.RWMutex)
+	return m
 }
 
 func (m *mockRMCallback) UpdateApplication(response *si.ApplicationResponse) error {
@@ -123,6 +132,9 @@ func (m *mockRMCallback) UpdateApplication(response *si.ApplicationResponse) err
 func (m *mockRMCallback) UpdateAllocation(response *si.AllocationResponse) error {
 	m.Lock()
 	defer m.Unlock()
+	if len(response.New) > 0 {
+		defer m.allocCond.Broadcast()
+	}
 	for _, alloc := range response.New {
 		m.Allocations[alloc.AllocationKey] = alloc
 		if val, ok := m.nodeAllocations[alloc.NodeID]; ok {
@@ -296,15 +308,23 @@ func (m *mockRMCallback) waitForAllocations(t *testing.T, nAlloc int, timeoutMs 
 }
 
 func (m *mockRMCallback) waitForMinAllocations(tb testing.TB, nAlloc int, timeoutMs int) {
-	var allocLen int
-	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
-		m.RLock()
-		defer m.RUnlock()
-		allocLen = len(m.Allocations)
-		return allocLen >= nAlloc
+	deadline := time.Now().Add(time.Duration(timeoutMs) * time.Millisecond)
+	// sync.Cond has no timeout, so wake the waiter once at the deadline to re-check and bail out.
+	timer := time.AfterFunc(time.Duration(timeoutMs)*time.Millisecond, func() {
+		m.Lock()
+		defer m.Unlock()
+		m.allocCond.Broadcast()
 	})
-	if err != nil {
-		tb.Fatalf("Failed to wait for min allocations expected %d, actual %d, called from: %s", nAlloc, allocLen, caller())
+	defer timer.Stop()
+
+	m.Lock()
+	defer m.Unlock()
+	for len(m.Allocations) < nAlloc {
+		if time.Now().After(deadline) {
+			tb.Fatalf("Failed to wait for min allocations expected %d, actual %d, called from: %s", nAlloc, len(m.Allocations), caller())
+			return
+		}
+		m.allocCond.Wait()
 	}
 }
 

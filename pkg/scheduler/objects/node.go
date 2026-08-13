@@ -39,15 +39,21 @@ const (
 	UnknownInstanceType = "UNKNOWN"
 )
 
+// +lockclass:Node
+// +checklocksguardedby:RWMutex
 type Node struct {
 	// Fields for fast access These fields are considered read only.
 	// Values should only be set when creating a new node and never changed.
-	NodeID    string
-	Hostname  string
-	Rackname  string
+	// +checklocksunguarded
+	NodeID string
+	// +checklocksunguarded
+	Hostname string
+	// +checklocksunguarded
+	Rackname string
+	// +checklocksunguarded
 	Partition string
 
-	// Private fields need protection
+	// +checklocksunguarded
 	attributes        map[string]string
 	totalResource     *resources.Resource
 	occupiedResource  *resources.Resource
@@ -58,7 +64,8 @@ type Node struct {
 
 	reservations map[string]*reservation // a map of reservations
 	listeners    []NodeListener          // a list of node listeners
-	nodeEvents   *schedEvt.NodeEvents
+	// +checklocksunguarded
+	nodeEvents *schedEvt.NodeEvents
 
 	locking.RWMutex
 }
@@ -94,12 +101,14 @@ func NewNode(proto *si.NodeInfo) *Node {
 	return sn
 }
 
+// YUNIKORN-3415: guarded fields read without the lock; String() runs under the node lock elsewhere so it cannot lock
+// +lockstringerignore
 func (sn *Node) String() string {
 	if sn == nil {
 		return "node is nil"
 	}
 	return fmt.Sprintf("NodeID %s, Partition %s, Schedulable %t, Total %s, Allocated %s, #allocations %d",
-		sn.NodeID, sn.Partition, sn.schedulable, sn.totalResource, sn.allocatedResource, len(sn.allocations))
+		sn.NodeID, sn.Partition, sn.schedulable, sn.totalResource, sn.allocatedResource, len(sn.allocations)) // +checklocksignore
 }
 
 // Set the attributes and fast access fields.
@@ -209,6 +218,7 @@ func (sn *Node) SetOccupiedResource(occupiedResource *resources.Resource) {
 
 // refresh node available resource based on the latest total, allocated and occupied resources.
 // this call assumes the caller already acquires the lock.
+// +checklocks:sn.RWMutex
 func (sn *Node) refreshAvailableResource() {
 	sn.availableResource = sn.totalResource.Clone()
 	sn.availableResource.SubFrom(sn.allocatedResource)
@@ -247,6 +257,7 @@ func (sn *Node) GetForeignAllocations() []*Allocation {
 	return sn.getAllocations(true)
 }
 
+// +checklocksread:sn.RWMutex
 func (sn *Node) getAllocations(foreign bool) []*Allocation {
 	arr := make([]*Allocation, 0)
 	for _, v := range sn.allocations {
@@ -704,6 +715,8 @@ func (sn *Node) RemoveListener(listener NodeListener) {
 }
 
 // Notifies listeners of changes to this node. This method must not be called while locks are held.
+// The body only reads the lock, so the derivation would exclude a writer alone: keep the wider rule.
+// +checklocksexclude:sn.RWMutex
 func (sn *Node) notifyListeners() {
 	for _, listener := range sn.getListeners() {
 		listener.NodeUpdated(sn)

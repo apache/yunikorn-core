@@ -38,9 +38,12 @@ type HealthChecker struct {
 	confWatcherId string
 
 	// mutable values require locking
+	// +checklocks:RWMutex
 	stopChan *chan struct{}
-	period   time.Duration
-	enabled  bool
+	// +checklocks:RWMutex
+	period time.Duration
+	// +checklocks:RWMutex
+	enabled bool
 
 	locking.RWMutex
 }

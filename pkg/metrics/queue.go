@@ -60,6 +60,7 @@ type QueueMetrics struct {
 	containerMetrics     *prometheus.CounterVec
 	resourceMetricsLabel *prometheus.GaugeVec
 	// Track known resource types
+	// +checklocks:lock
 	knownResourceTypes map[string]struct{}
 	lock               locking.Mutex
 }

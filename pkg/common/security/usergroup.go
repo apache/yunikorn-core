@@ -48,9 +48,10 @@ var stopped atomic.Bool      // whether UserGroupCache is stopped (needed for mu
 // UserGroupCache for the user entries.
 type UserGroupCache struct {
 	lock     locking.RWMutex
-	interval time.Duration
-	myType   string
-	ugs      map[string]*UserGroup
+	interval time.Duration // set on creation and never changed, no lock needed
+	myType   string        // set while creating the singleton and never changed after
+	// +checklocks:lock
+	ugs map[string]*UserGroup
 	// methods that allow mocking of the class or extending to use non OS solutions
 	lookup        func(userName string) (*user.User, error)
 	lookupGroupID func(gid string) (*user.Group, error)
@@ -99,7 +100,9 @@ func GetUserGroupCache(ugr configs.UserGroupResolver, ldapConfigReader ConfigRea
 			instance = GetUserGroupNoResolve()
 			instance.myType = defType // do not use the type from the config as it might not be clean.
 		}
-		instance.ugs = make(map[string]*UserGroup)
+		// the map is initialised without the lock: the write happens inside the sync.Once,
+		// before the instance is returned to any caller, which is what orders it
+		instance.ugs = make(map[string]*UserGroup) // +checklocksignore
 		log.Log(log.Security).Info("starting UserGroupCache cleaner",
 			zap.Stringer("cleanerInterval", instance.interval))
 		go instance.run()
@@ -199,6 +202,11 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 // GetUserGroup get the user group information for a single user. An error will still return a UserGroup.
 // The Failed flag in the object will be set to true for any failures.
 // The information is cached, negatively and positively.
+// The resolver is reached through a function valued field, so no analysis can see that this
+// call ends in os/user, and from there in the name service switch and whatever directory it
+// is configured against. The declaration is what says so.
+//
+// +blocking
 func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 	// check if we have a user to resolve
 	if userName == "" {

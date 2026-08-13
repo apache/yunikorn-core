@@ -42,6 +42,7 @@ type eventRange struct {
 // If needed, we calculate the id of the event based on slice positions.
 //
 // Retrieving the records can be achieved with GetEventsFromID.
+// +checklocksguardedby:RWMutex
 type eventRingBuffer struct {
 	events       []*si.EventRecord
 	capacity     uint64 // capacity of the buffer
@@ -101,6 +102,7 @@ func (e *eventRingBuffer) GetEventsFromID(id uint64, count uint64) ([]*si.EventR
 }
 
 // getEventsFromID unlocked version of GetEventsFromID
+// +checklocksread:e.RWMutex
 func (e *eventRingBuffer) getEventsFromID(id uint64, count uint64) ([]*si.EventRecord, uint64, uint64) {
 	lowest := e.getLowestID()
 
@@ -149,6 +151,7 @@ func (e *eventRingBuffer) GetLastEventID() uint64 {
 }
 
 // unlocked version of GetLastEventID()
+// +checklocksread:e.RWMutex
 func (e *eventRingBuffer) getLastEventID() uint64 {
 	if e.id == 0 {
 		return 0
@@ -160,6 +163,7 @@ func (e *eventRingBuffer) getLastEventID() uint64 {
 // ranges if the buffer is full and the requested start position is behind the current head.
 // Example: a buffer of capacity 20 is wrapped, head is at 10, and we want events from position 15. This means
 // two ranges (15->20, 0->9).
+// +checklocksread:e.RWMutex
 func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange) []*si.EventRecord {
 	if r2 == nil {
 		dst := make([]*si.EventRecord, r1.end-r1.start)
@@ -178,6 +182,7 @@ func (e *eventRingBuffer) getEntriesFromRanges(r1, r2 *eventRange) []*si.EventRe
 // id2pos translates the unique event ID to an index in the event slice.
 // If the event is present, the position will be returned and the found flag will be true.
 // If the event ID is not present, the position returned is 0 and the flag is false.
+// +checklocksread:e.RWMutex
 func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 	// id out of range?
 	if id < e.lowestId || id >= e.id {
@@ -191,6 +196,7 @@ func (e *eventRingBuffer) id2pos(id uint64) (uint64, bool) {
 }
 
 // getLowestID returns the current lowest available id in the buffer.
+// +checklocksread:e.RWMutex
 func (e *eventRingBuffer) getLowestID() uint64 {
 	return e.lowestId
 }
@@ -203,6 +209,7 @@ func newEventRingBuffer(capacity uint64) *eventRingBuffer {
 }
 
 // called from Resize(), this function updates the lowest event id available in the buffer
+// +checklocks:e.RWMutex
 func (e *eventRingBuffer) updateLowestID(beginSize, endSize uint64) {
 	// if buffer size is increasing, lowestId stays the same
 	if beginSize < endSize {

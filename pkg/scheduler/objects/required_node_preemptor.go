@@ -62,6 +62,7 @@ func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation, application *
 	return preemptor
 }
 
+// +checklocksread:p.application.RWMutex
 func (p *PreemptionContext) tryPreemption() {
 	result := p.filterAllocations()
 	p.sortAllocations()
@@ -92,7 +93,8 @@ func (p *PreemptionContext) tryPreemption() {
 			victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
 		}
 		p.requiredAsk.MarkTriggeredPreemption()
-		p.application.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
+		// YUNIKORN-3411: same round trip, see timeoutStateTimer
+		p.application.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER, // +lockblockingignore
 			"preempting allocations to free up resources to run daemon set ask: "+p.requiredAsk.GetAllocationKey())
 	} else {
 		p.requiredAsk.LogAllocationFailure(common.NoVictimForRequiredNode, true)

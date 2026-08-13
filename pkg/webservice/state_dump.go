@@ -35,6 +35,9 @@ const (
 	stateLogCallDepth = 2
 )
 
+// stateDump serialises the state dumps, it guards no state of its own. It is an unexported package
+// level variable, so the exclusion on doStateDump below is enforced for the callers in this package
+// and skipped for callers elsewhere.
 var stateDump locking.Mutex // ensures only one state dump can be handled at a time
 
 type AggregatedStateInfo struct {
@@ -60,6 +63,7 @@ func getFullStateDump(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// +checklocksexclude:stateDump
 func doStateDump(w io.Writer) error {
 	stateDump.Lock()
 	defer stateDump.Unlock()

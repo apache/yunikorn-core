@@ -23,6 +23,7 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
 )
 
+// +checklocksguardedby:RWMutex
 type SchedulerPlugins struct {
 	ResourceManagerCallbackPlugin api.ResourceManagerCallback
 	StateDumpPlugin               api.StateDumpPlugin

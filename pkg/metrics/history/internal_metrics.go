@@ -27,6 +27,7 @@ import (
 // This class collects basic information about the cluster
 // for the web UI's front page.
 // For more detailed metrics collection use Prometheus.
+// +checklocksguardedby:RWMutex
 type InternalMetricsHistory struct {
 	records []*MetricsRecord
 	limit   int

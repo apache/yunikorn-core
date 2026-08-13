@@ -33,8 +33,9 @@ const defaultChannelBufSize = 1000
 // EventStreaming implements the event streaming logic.
 // New events are immediately forwarded to all active consumers.
 type EventStreaming struct {
-	buffer       *eventRingBuffer
-	stopCh       chan struct{}
+	buffer *eventRingBuffer // set on creation and never changed, no lock needed
+	stopCh chan struct{}    // set on creation and never changed, no lock needed
+	// +checklocks:RWMutex
 	eventStreams map[*EventStream]eventConsumerDetails
 	locking.RWMutex
 }
@@ -159,6 +160,7 @@ func (e *EventStreaming) RemoveEventStream(consumer *EventStream) {
 	e.removeEventStream(consumer)
 }
 
+// +checklocks:e.RWMutex
 func (e *EventStreaming) removeEventStream(consumer *EventStream) {
 	if details, ok := e.eventStreams[consumer]; ok {
 		log.Log(log.Events).Info("Removing event stream consumer", zap.String("name", details.name),

@@ -49,18 +49,24 @@ var (
 )
 
 // Queue structure inside Scheduler
+// +lockclass:Queue
+// +checklocksguardedby:RWMutex
 type Queue struct {
+	// +checklocksunguarded
 	QueuePath string // Fully qualified path for the queue
-	Name      string // Queue name as in the config etc.
+	// +checklocksunguarded
+	Name string // Queue name as in the config etc.
 
-	// Private fields need protection
-	sortType             policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
-	children             map[string]*Queue         // Only for direct children, parent queue only
-	childPriorities      map[string]int32          // cached priorities for child queues
-	applications         map[string]*Application   // only for leaf queue
-	appPriorities        map[string]int32          // cached priorities for application
-	reservedApps         map[string]int            // applications reserved within this queue, with reservation count
-	parent               *Queue                    // link back to the parent in the scheduler
+	sortType        policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
+	children        map[string]*Queue       // Only for direct children, parent queue only
+	childPriorities map[string]int32        // cached priorities for child queues
+	applications    map[string]*Application // only for leaf queue
+	appPriorities   map[string]int32        // cached priorities for application
+	reservedApps    map[string]int          // applications reserved within this queue, with reservation count
+	// link back to the parent in the scheduler, set on creation and never changed:
+	// read without the lock on purpose, see the parent first idiom in the queue locking rules
+	// +checklocksunguarded
+	parent               *Queue
 	pending              *resources.Resource       // pending resource for the apps in the queue
 	allocatedResource    *resources.Resource       // allocated resource for the apps in the queue
 	preemptingResource   *resources.Resource       // preempting resource for the apps in the queue
@@ -75,21 +81,28 @@ type Queue struct {
 	// The queue properties should be treated as immutable the value is a merge of the
 	// parent properties with the config for this queue only manipulated during creation
 	// of the queue or via a queue configuration update.
-	properties               map[string]string
-	adminACL                 security.ACL        // admin ACL
-	submitACL                security.ACL        // submit ACL
-	maxResource              *resources.Resource // When not set, max = nil
-	guaranteedResource       *resources.Resource // When not set, Guaranteed == 0
-	isLeaf                   bool                // this is a leaf queue or not (i.e. parent)
-	isManaged                bool                // queue is part of the config, not auto created
-	stateMachine             *fsm.FSM            // the state of the queue for scheduling
-	stateTime                time.Time           // last time the state was updated (needed for cleanup)
-	maxRunningApps           uint64
-	runningApps              uint64
-	allocatingAcceptedApps   map[string]bool
-	template                 *template.Template
-	queueEvents              *schedEvt.QueueEvents
-	appQueueMapping          *AppQueueMapping // appID mapping to queues
+	properties         map[string]string
+	adminACL           security.ACL        // admin ACL
+	submitACL          security.ACL        // submit ACL
+	maxResource        *resources.Resource // When not set, max = nil
+	guaranteedResource *resources.Resource // When not set, Guaranteed == 0
+	isLeaf             bool                // this is a leaf queue or not (i.e. parent)
+	isManaged          bool                // queue is part of the config, not auto created
+	// the state of the queue for scheduling, set on creation and never replaced, the
+	// state machine has its own locking
+	// +checklocksunguarded
+	stateMachine           *fsm.FSM
+	stateTime              time.Time // last time the state was updated (needed for cleanup)
+	maxRunningApps         uint64
+	runningApps            uint64
+	allocatingAcceptedApps map[string]bool
+	template               *template.Template
+	// set before the queue is added to its parent and never changed, no lock needed
+	// +checklocksunguarded
+	queueEvents *schedEvt.QueueEvents
+	// appID mapping to queues, set on creation and never changed, no lock needed
+	// +checklocksunguarded
+	appQueueMapping          *AppQueueMapping
 	quotaPreemptionStartTime time.Time
 	isQuotaPreemptionRunning bool
 	unschedAskBackoff        uint64
@@ -99,6 +112,10 @@ type Queue struct {
 }
 
 // newBlankQueue creates a new empty queue objects with all values initialised.
+// The queue it returns cannot be reached by anything else yet, which is what lets its callers
+// finish building it without the queue lock. The claim is checked here: publishing the queue
+// anywhere on the way to the return is reported.
+// +checklocksreturnsfresh
 func newBlankQueue() *Queue {
 	return &Queue{
 		children:                 make(map[string]*Queue),
@@ -134,6 +151,9 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool, a
 		sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 	}
 	sq.parent = parent
+	// the queue is still being built and cannot be reached by anything else, so the fields
+	// below are set and the helpers called without holding the queue lock; newBlankQueue
+	// declares that and the analysis checks it holds all the way to addChildQueue
 	sq.isManaged = true
 	sq.maxRunningApps = conf.MaxApplications
 	sq.updateMaxRunningAppsMetrics()
@@ -141,6 +161,11 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool, a
 	// update the properties
 	if _, err := sq.applyConf(conf, silence); err != nil {
 		return nil, errors.Join(errors.New("configured queue creation failed: "), err)
+	}
+
+	// set the events before the queue is added to the parent as that publishes the queue
+	if !silence {
+		sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
 	}
 
 	// add to the parent, we might have an overall lock already
@@ -158,10 +183,10 @@ func NewConfiguredQueue(conf configs.QueueConfig, parent *Queue, silence bool, a
 	}
 
 	if !silence {
-		sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
 		log.Log(log.SchedQueue).Info("configured queue added to scheduler",
 			zap.String("queueName", sq.QueuePath))
-		sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
+		// YUNIKORN-3419: isManaged read after the queue is published to its parent
+		sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged) // +checklocksignore
 	}
 	return sq, nil
 }
@@ -208,9 +233,12 @@ func newDynamicQueueInternal(name string, leaf bool, parent *Queue, appQueueMapp
 	sq.Name = strings.ToLower(name)
 	sq.QueuePath = parent.QueuePath + configs.DOT + sq.Name
 	sq.parent = parent
+	// as above: the queue is not reachable yet so no lock is taken
 	sq.isManaged = false
 	sq.isLeaf = leaf
 	sq.appQueueMapping = appQueueMapping
+	// set the events before the queue is added to the parent as that publishes the queue
+	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
 
 	// add to the parent, we might have a partition lock already
 	// still need to make sure we lock the parent so we do not interfere with scheduling
@@ -220,15 +248,16 @@ func newDynamicQueueInternal(name string, leaf bool, parent *Queue, appQueueMapp
 	}
 
 	sq.UpdateQueueProperties(nil)
-	sq.queueEvents = schedEvt.NewQueueEvents(events.GetEventSystem())
 	log.Log(log.SchedQueue).Info("dynamic queue added to scheduler",
 		zap.String("queueName", sq.QueuePath))
-	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged)
+	// YUNIKORN-3419: same as above
+	sq.queueEvents.SendNewQueueEvent(sq.QueuePath, sq.isManaged) // +checklocksignore
 
 	return sq, nil
 }
 
 // applyTemplate uses input template to initialize properties, maxResource, and guaranteedResource
+// +checklocks:sq.RWMutex
 func (sq *Queue) applyTemplate(childTemplate *template.Template) {
 	sq.maxRunningApps = childTemplate.GetMaxApplications()
 	sq.properties = childTemplate.GetProperties()
@@ -277,7 +306,7 @@ func (sq *Queue) MergeParentProperties() {
 // mergeProperties merges filtered parent properties with this queue's config properties.
 // Config properties already set on the queue (from applyConf) override parent properties.
 // The parent map is a clean copy from getProperties() and becomes the resulting map.
-// lock free call
+// +checklocks:sq.RWMutex
 func (sq *Queue) mergeProperties(parent map[string]string) {
 	config := sq.properties
 	for key, value := range parent {
@@ -356,6 +385,7 @@ func (sq *Queue) ApplyConf(conf configs.QueueConfig) (*resources.Resource, error
 // lock free call, must be called holding the queue lock or during create only.
 // If the silence flag is set to true, the function will not log when setting users and groups.
 // This function MUST be called holding the lock for the queue.
+// +checklocks:sq.RWMutex
 func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) (*resources.Resource, error) {
 	// Set the ACLs
 	var err error
@@ -419,6 +449,7 @@ func (sq *Queue) applyConf(conf configs.QueueConfig, silence bool) (*resources.R
 // setPreemptionTime set the time the quota preemption should be triggered when a quota is changed.
 // Updates the time if the delay is set / changes and the preemption is not running yet.
 // This function MUST be called holding the lock for the queue.
+// +checklocks:sq.RWMutex
 func (sq *Queue) setPreemptionTime(oldMaxResource *resources.Resource, oldDelay time.Duration) {
 	// if quota preemption is running nothing we do not have an influence
 	if sq.isQuotaPreemptionRunning {
@@ -571,6 +602,7 @@ func (sq *Queue) getQuotaPreemptionRunning() bool {
 }
 
 // setResourcesFromConf sets the maxResource and guaranteedResource of the queue from the config.
+// +checklocks:sq.RWMutex
 func (sq *Queue) setResourcesFromConf(resource configs.Resources) error {
 	maxResource, err := resources.NewResourceFromConf(resource.Max)
 	if err != nil {
@@ -592,6 +624,7 @@ func (sq *Queue) setResourcesFromConf(resource configs.Resources) error {
 	return nil
 }
 
+// +checklocks:sq.RWMutex
 func (sq *Queue) setResources(guaranteedResource, maxResource *resources.Resource) {
 	switch {
 	case resources.StrictlyGreaterThanZero(maxResource):
@@ -665,6 +698,7 @@ func (sq *Queue) SetMaxRunningApps(maxApps uint64) {
 
 // setTemplate sets the template on the queue based on the config.
 // lock free call, must be called holding the queue lock or during create only
+// +checklocks:sq.RWMutex
 func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 	t, err := template.FromConf(&conf)
 	if err != nil {
@@ -676,6 +710,7 @@ func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 
 // resetProperties resets values derived from queue properties to their defaults.
 // This function MUST be called holding the lock for the queue.
+// +checklocks:sq.RWMutex
 func (sq *Queue) resetProperties() {
 	sq.sortType = policies.FifoSortPolicy
 	if !sq.isLeaf {
@@ -809,7 +844,8 @@ func (sq *Queue) CurrentState() string {
 }
 
 // handleQueueEvent processes the state event for the queue.
-// The state machine handles the locking.
+// The state machine has its own locking, the queue lock guards the state time update.
+// +checklocks:sq.RWMutex
 func (sq *Queue) handleQueueEvent(event ObjectEvent) error {
 	err := sq.stateMachine.Event(context.Background(), event.String(), sq.QueuePath)
 	// err is nil the state transition was done
@@ -1160,6 +1196,11 @@ func (sq *Queue) removeChildQueue(name string) {
 
 // addChildQueue add a child queue to this queue.
 // note: both child.isLeaf and child.isManaged must be already configured
+// The child must still be unreachable when it gets here, which is what lets its fields be read
+// and written below without the child lock. That is a contract on the caller now rather than a
+// comment: it is checked at every call site. Inserting the child into this queue's guarded map
+// publishes it as far as the callers are concerned, so nothing here may be repeated by them.
+// +checklocksfresh:child
 func (sq *Queue) addChildQueue(child *Queue) error {
 	sq.Lock()
 	defer sq.Unlock()
@@ -1212,7 +1253,8 @@ func (sq *Queue) MarkQueueForRemoval() {
 	log.Log(log.SchedQueue).Info("marking managed queue for deletion",
 		zap.String("queue", sq.QueuePath))
 	sq.doRemoveQueue()
-	if len(sq.children) > 0 {
+	// YUNIKORN-3419: guarded queue field read without the lock (parent-first path / after release / loop variable)
+	if len(sq.children) > 0 { // +checklocksignore
 		for _, child := range children {
 			child.MarkQueueForRemoval()
 		}
@@ -1283,21 +1325,22 @@ func (sq *Queue) isRoot() bool {
 // Guard against going over max resources if set
 func (sq *Queue) TryIncAllocatedResource(alloc *resources.Resource) error {
 	// check this queue: failure stops checks if the allocation is not part of a node addition
+	// YUNIKORN-3419: guarded queue field read without the lock (parent-first path / after release / loop variable)
 	if !sq.allocatedResFits(alloc) {
 		return fmt.Errorf("allocation (%v) puts queue '%s' over maximum allocation (%v), current usage (%v)",
-			alloc, sq.QueuePath, sq.maxResource, sq.allocatedResource)
+			alloc, sq.QueuePath, sq.maxResource, sq.allocatedResource) // +checklocksignore
 	}
 	// check the parent: need to pass before updating
 	if sq.parent != nil {
 		if err := sq.parent.TryIncAllocatedResource(alloc); err != nil {
 			// only log the warning if we get to the leaf: otherwise we could spam the log with the same message
 			// each time we return from a recursive call. Worst case (hierarchy depth-1) times.
-			if sq.isLeaf {
+			if sq.isLeaf { // +checklocksignore
 				log.Log(log.SchedQueue).Warn("parent queue exceeds maximum resource",
 					zap.String("leafQueue", sq.QueuePath),
 					zap.Stringer("allocationRequest", alloc),
-					zap.Stringer("queueUsage", sq.allocatedResource),
-					zap.Stringer("maxResource", sq.maxResource),
+					zap.Stringer("queueUsage", sq.allocatedResource), // +checklocksignore
+					zap.Stringer("maxResource", sq.maxResource),      // +checklocksignore
 					zap.Error(err))
 			}
 			return err
@@ -1370,21 +1413,22 @@ func (sq *Queue) DecAllocatedResource(alloc *resources.Resource) error {
 	}
 
 	// check this queue: failure stops checks
+	// YUNIKORN-3419: same as above
 	if alloc != nil && !sq.resourceFitsAllocated(alloc) {
 		return fmt.Errorf("released allocation (%v) is larger than '%s' queue allocation (%v)",
-			alloc, sq.QueuePath, sq.allocatedResource)
+			alloc, sq.QueuePath, sq.allocatedResource) // +checklocksignore
 	}
 	// check the parent: need to pass before updating
 	if sq.parent != nil {
 		if err := sq.parent.DecAllocatedResource(alloc); err != nil {
 			// only log the warning if we get to the leaf: otherwise we spam the log with the same message
 			// each time we return from a recursive call. Worst case (hierarchy depth-1) times.
-			if sq.isLeaf {
+			if sq.isLeaf { // +checklocksignore
 				log.Log(log.SchedQueue).Warn("released allocation is larger than parent queue allocated resource",
 					zap.String("leafQueue", sq.QueuePath),
 					zap.Stringer("allocationRequest", alloc),
-					zap.Stringer("queueUsage", sq.allocatedResource),
-					zap.Stringer("maxResource", sq.maxResource),
+					zap.Stringer("queueUsage", sq.allocatedResource), // +checklocksignore
+					zap.Stringer("maxResource", sq.maxResource),      // +checklocksignore
 					zap.Error(err))
 			}
 			return err
@@ -1825,7 +1869,8 @@ func (sq *Queue) getOutStandingRequestsInternal(parentHeadroom *resources.Resour
 		// all these requests are qualified to trigger the up scaling.
 		for _, app := range sq.sortApplications(false) {
 			// calculate the users' headroom
-			userHeadroom := ugm.GetUserManager().Headroom(app.queuePath, app.ApplicationID, app.user)
+			// YUNIKORN-3419: application fields read without the application lock while walking the sorted application list
+			userHeadroom := ugm.GetUserManager().Headroom(app.queuePath, app.ApplicationID, app.user) // +checklocksignore
 			appTotal := app.getOutstandingRequests(headRoom, userHeadroom, total)
 			outstandingTotal.AddTo(appTotal)
 			headRoom = resources.SubOnlyExisting(headRoom, appTotal)
@@ -1972,6 +2017,7 @@ func (sq *Queue) SupportTaskGroup() bool {
 }
 
 // updateGuaranteedResourceMetrics updates guaranteed resource metrics.
+// +checklocksread:sq.RWMutex
 func (sq *Queue) updateGuaranteedResourceMetrics() {
 	queueMetrics := metrics.GetQueueMetrics(sq.QueuePath)
 	resourcesToUpdate := map[string]resources.Quantity{}
@@ -1982,6 +2028,7 @@ func (sq *Queue) updateGuaranteedResourceMetrics() {
 }
 
 // updateMaxResourceMetrics updates max resource metrics.
+// +checklocksread:sq.RWMutex
 func (sq *Queue) updateMaxResourceMetrics() {
 	queueMetrics := metrics.GetQueueMetrics(sq.QueuePath)
 	resourcesToUpdate := map[string]resources.Quantity{}
@@ -1992,6 +2039,7 @@ func (sq *Queue) updateMaxResourceMetrics() {
 }
 
 // updateAllocatedResourceMetrics updates allocated resource metrics for all queue types.
+// +checklocksread:sq.RWMutex
 func (sq *Queue) updateAllocatedResourceMetrics() {
 	for k, v := range sq.allocatedResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueueAllocatedResourceMetrics(k, float64(v))
@@ -1999,6 +2047,7 @@ func (sq *Queue) updateAllocatedResourceMetrics() {
 }
 
 // updatePendingResourceMetrics updates pending resource metrics for all queue types.
+// +checklocksread:sq.RWMutex
 func (sq *Queue) updatePendingResourceMetrics() {
 	for k, v := range sq.pending.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePendingResourceMetrics(k, float64(v))
@@ -2006,12 +2055,14 @@ func (sq *Queue) updatePendingResourceMetrics() {
 }
 
 // updatePreemptingResourceMetrics updates preempting resource metrics for all queue types.
+// +checklocksread:sq.RWMutex
 func (sq *Queue) updatePreemptingResourceMetrics() {
 	for k, v := range sq.preemptingResource.Resources {
 		metrics.GetQueueMetrics(sq.QueuePath).SetQueuePreemptingResourceMetrics(k, float64(v))
 	}
 }
 
+// +checklocksread:sq.RWMutex
 func (sq *Queue) updateMaxRunningAppsMetrics() {
 	metrics.GetQueueMetrics(sq.QueuePath).SetQueueMaxRunningAppsMetrics(sq.maxRunningApps)
 }
@@ -2020,6 +2071,8 @@ func (sq *Queue) removeMetrics() {
 	metrics.RemoveQueueMetrics(sq.QueuePath)
 }
 
+// YUNIKORN-3420: String() takes the receiver lock; formatting under the write lock self-deadlocks
+// +lockstringerignore
 func (sq *Queue) String() string {
 	sq.RLock()
 	defer sq.RUnlock()
@@ -2295,7 +2348,8 @@ func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPr
 	shouldFenceByMax := false
 	maxResource := sq.GetMaxResource()
 	if maxResource != nil && len(maxResource.Resources) > 0 {
-		projected := resources.Add(sq.allocatedResource, askResource)
+		// YUNIKORN-3419: same as above
+		projected := resources.Add(sq.allocatedResource, askResource) // +checklocksignore
 		shouldFenceByMax = !maxResource.StrictlyGreaterThanOrEqualsOnlyExisting(projected)
 	}
 	// Return this queue as fence root if:
@@ -2314,6 +2368,7 @@ func (sq *Queue) GetCurrentPriority() int32 {
 	return sq.getCurrentPriority()
 }
 
+// +checklocksread:sq.RWMutex
 func (sq *Queue) getCurrentPriority() int32 {
 	return priorityValueByPolicy(sq.priorityPolicy, sq.priorityOffset, sq.currentPriority)
 }
@@ -2388,6 +2443,7 @@ func (sq *Queue) updateQueuePriorityInternal(queueName string, priority int32) i
 	return sq.recalculatePriority()
 }
 
+// +checklocks:sq.RWMutex
 func (sq *Queue) recalculatePriority() int32 {
 	var items map[string]int32
 	if sq.isLeaf {

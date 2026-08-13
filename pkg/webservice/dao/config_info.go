@@ -21,8 +21,10 @@ package dao
 import "github.com/apache/yunikorn-core/pkg/common/configs"
 
 type ValidateConfResponse struct {
-	Allowed bool   `json:"allowed"` // no omitempty, a false value gives a quick way to understand the result.
-	Reason  string `json:"reason,omitempty"`
+	Allowed       bool   `json:"allowed"` // no omitempty, a false value gives a quick way to understand the result.
+	Reason        string `json:"reason,omitempty"`
+	Checksum      string `json:"checksum,omitempty"`  // checksum calculated over the submitted configuration, empty when not allowed
+	ChecksumMatch bool   `json:"checksumMatch"`       // true when the checksum in the submitted config matched the calculated checksum
 }
 
 type ConfigDAOInfo struct {

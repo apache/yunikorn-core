@@ -229,9 +229,12 @@ func (cc *ClusterContext) processRMConfigUpdateEvent(event *rmevent.RMConfigUpda
 		event.Channel <- &rmevent.Result{Succeeded: false, Reason: err.Error()}
 		return
 	}
-	// skip update if config has not changed
+	// skip update if the config has not changed: the checksum is calculated over the config again which lets
+	// us detect a real change even if the config map was updated for an unrelated reason
 	oldConf := configs.ConfigContext.Get(cc.policyGroup)
-	if conf.Checksum == oldConf.Checksum {
+	if oldConf != nil && conf.Checksum == oldConf.Checksum {
+		log.Log(log.SchedContext).Info("configuration checksum unchanged, skipping config update",
+			zap.String("rmID", rmID), zap.String("checksum", conf.Checksum))
 		event.Channel <- &rmevent.Result{
 			Succeeded: true,
 		}

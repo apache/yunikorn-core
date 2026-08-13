@@ -392,6 +392,39 @@ func TestValidateConf(t *testing.T) {
 	}
 }
 
+func TestValidateConfChecksum(t *testing.T) {
+	conf, err := configs.LoadSchedulerConfigFromByteArray([]byte(baseConf))
+	assert.NilError(t, err, "unexpected error loading base config")
+	expected := conf.Checksum
+
+	confTests := []struct {
+		name         string
+		content      string
+		wantAllowed  bool
+		wantChecksum string
+		wantChkMatch bool
+	}{
+		{"no checksum in config", baseConf, true, expected, false},
+		{"correct checksum in config", baseConf + "checksum: " + expected + "\n", true, expected, true},
+		{"incorrect checksum in config", baseConf + "checksum: TEST\n", true, expected, false},
+		{"invalid config has no checksum", invalidConf, false, "", false},
+	}
+	for _, test := range confTests {
+		t.Run(test.name, func(t *testing.T) {
+			req, err := http.NewRequest("POST", "", strings.NewReader(test.content))
+			assert.NilError(t, err, "new http request must not return an error")
+			resp := &MockResponseWriter{}
+			validateConf(resp, req)
+			var vcr dao.ValidateConfResponse
+			err = json.Unmarshal(resp.outputBytes, &vcr)
+			assert.NilError(t, err, unmarshalError)
+			assert.Equal(t, vcr.Allowed, test.wantAllowed, "allowed flag incorrect")
+			assert.Equal(t, vcr.Checksum, test.wantChecksum, "checksum not as expected")
+			assert.Equal(t, vcr.ChecksumMatch, test.wantChkMatch, "checksum match flag not as expected")
+		})
+	}
+}
+
 func TestUserGroupLimits(t *testing.T) {
 	confTests := []struct {
 		content          string

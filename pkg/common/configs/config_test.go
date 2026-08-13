@@ -1750,24 +1750,68 @@ partitions:
 func TestGetConfigurationString(t *testing.T) {
 	configBytes := []byte(validConf)
 	checksum := "checksum: " + fmt.Sprintf("%X", sha256.Sum256(configBytes))
+	// the checksum is calculated on the partitions key so the leading newline should not be part of it
+	confFromPartitions := strings.TrimPrefix(validConf, "\n")
 	testCases := []struct {
 		name           string
 		requestBytes   []byte
 		expectedConfig string
 	}{
 		{"No checksum", configBytes, validConf},
-		{"Checksum at the beginning", []byte(checksum + validConf), validConf},
+		{"Checksum at the beginning", []byte(checksum + validConf), confFromPartitions},
+		{"Checksum at the beginning with newline", []byte(checksum + "\n" + validConf), confFromPartitions},
 		{"Checksum at the end", []byte(validConf + checksum), validConf},
-		{"Checksum in the middle", []byte(validConf + checksum + "extra config"), validConf + "extra config"},
+		{"Checksum at the end with newline", []byte(validConf + checksum + "\n"), validConf},
 		{"Empty config and checksum", []byte(""), ""},
 		{"Empty checksum", []byte(validConf + "checksum: "), validConf},
-		{"Empty config", []byte("" + checksum), ""},
+		{"Only checksum no partitions", []byte(checksum), ""},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.expectedConfig, GetConfigurationString(tc.requestBytes))
 		})
 	}
+}
+
+func TestSetChecksum(t *testing.T) {
+	content := []byte(validConf)
+	expected := fmt.Sprintf("%X", sha256.Sum256([]byte(GetConfigurationString(content))))
+	testCases := []struct {
+		name string
+		old  string
+	}{
+		{"missing checksum is set", ""},
+		{"incorrect checksum is overridden", "TEST"},
+		{"correct checksum is kept", expected},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			conf := &SchedulerConfig{Checksum: tc.old}
+			SetChecksum(content, conf)
+			assert.Equal(t, expected, conf.Checksum, "checksum not set to the calculated value")
+		})
+	}
+	// final nil check, must not panic
+	SetChecksum(content, nil)
+}
+
+func TestChecksumSerialisation(t *testing.T) {
+	conf, err := LoadSchedulerConfigFromByteArray([]byte(validConf))
+	assert.NilError(t, err, "unexpected error loading config")
+	// serialise the config the way it is stored in the config map, partitions first, checksum line last
+	stored, err := yaml.Marshal(conf)
+	assert.NilError(t, err, "unexpected error serialising config")
+	// serialise again with an empty checksum, the checksum line is omitted
+	conf.Checksum = ""
+	noChecksum, err := yaml.Marshal(conf)
+	assert.NilError(t, err, "unexpected error serialising config without checksum")
+	assert.Equal(t, string(noChecksum), GetConfigurationString(stored),
+		"stripped config does not match the serialisation without a checksum")
+	// setChecksum check for the generated checksum
+	expected := fmt.Sprintf("%X", sha256.Sum256(noChecksum))
+	SetChecksum(stored, conf)
+	assert.Equal(t, expected, conf.Checksum,
+		"checksum from SetChecksum does not match the manual recalculation")
 }
 
 func prepareUserLimitsConfig(leafQueueMaxApps uint64, leafQueueMaxResource string) string {

@@ -22,6 +22,7 @@ import "github.com/apache/yunikorn-core/pkg/locking"
 
 // AppQueueMapping maintains a mapping between application IDs and their corresponding queues.
 type AppQueueMapping struct {
+	// +checklocks:RWMutex
 	byAppID map[string]*Queue
 	locking.RWMutex
 }

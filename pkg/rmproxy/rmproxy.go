@@ -45,6 +45,7 @@ type RMProxy struct {
 	// Internal fields
 	pendingRMEvents chan interface{}
 
+	// +checklocks:RWMutex
 	rmIDToCallback map[string]api.ResourceManagerCallback
 
 	locking.RWMutex

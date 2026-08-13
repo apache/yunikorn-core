@@ -70,16 +70,21 @@ type baseNodeCollection struct {
 	Partition string // partition used with this collection
 
 	// Private fields need protection
-	nsp         NodeSortingPolicy      // node sorting policy
-	nodes       map[string]*nodeRef    // nodes assigned to this collection
+	// +checklocks:RWMutex
+	nsp NodeSortingPolicy // node sorting policy
+	// +checklocks:RWMutex
+	nodes map[string]*nodeRef // nodes assigned to this collection
+	// +checklocks:RWMutex
 	sortedNodes *btree.BTreeG[nodeRef] // nodes sorted by score
 
+	// the iterators are created with the collection and never replaced, no lock needed
 	unreservedIterator *treeIterator
 	fullIterator       *treeIterator
 
 	locking.RWMutex
 }
 
+// +checklocksread:nc.RWMutex
 func (nc *baseNodeCollection) scoreNode(node *Node) float64 {
 	if nc.nsp == nil {
 		return 0

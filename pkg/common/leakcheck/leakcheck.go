@@ -48,6 +48,12 @@ import (
 // the list stops new KINDS of leak from being added, it is not a proof that the
 // exempted counts stay put.
 //
+// Two matching caveats: the three ".func1" entries key on positional,
+// compiler-assigned closure names, so inserting an earlier closure in the same
+// method silently breaks the match (goleak v1.3.0 cannot match the creator
+// frame); and a test that catches one of these goroutines mid-body, rather than
+// parked in its select, sees a different top frame and can fail spuriously.
+//
 // The list is the baseline that was present when detection was switched on, and
 // it is meant to be burned down rather than extended. Each exemption names its
 // goroutine and the JIRA that tracks removing it.

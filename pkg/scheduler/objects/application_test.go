@@ -2329,6 +2329,47 @@ func TestTryAllocateFit(t *testing.T) {
 	assert.Equal(t, "node1", result.NodeID, "wrong node")
 }
 
+// TestTryAllocateAllocatedAskInSortedRequests pins the scream-then-repair guard that backs the
+// pending-only invariant of sortedRequests: an allocated ask can only still be in the slice if the
+// remove-on-allocate pairing has been broken. The guard uses DPanic, which panics under the
+// development logger the tests run with, so a broken pairing fails hard here while production only
+// logs and self-heals.
+func TestTryAllocateAllocatedAskInSortedRequests(t *testing.T) {
+	setupUGM()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	queue, err := createRootQueue(map[string]string{"first": "5"})
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root")
+	app.queue = queue
+	ask := newAllocationAsk(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	// build the ghost white-box: allocateAsk marks the ask allocated and drops it from the
+	// pending-only slice, putting it straight back is exactly the broken pairing under test
+	_, err = app.allocateAsk(ask)
+	assert.NilError(t, err, "ask should have been allocated")
+	app.sortedRequests.insert(ask)
+	assert.Assert(t, ask.IsAllocated(), "ask should be allocated")
+	assert.Equal(t, len(app.sortedRequests), 1, "ghost ask should be in sortedRequests")
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("tryAllocate should have panicked on an allocated ask in sortedRequests")
+		}
+		assert.Assert(t, strings.Contains(fmt.Sprint(r), "allocated ask found in pending-only sortedRequests"), "unexpected panic: %v", r)
+	}()
+	preemptionAttemptsRemaining := 0
+	app.tryAllocate(node.GetAvailableResource(), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+}
+
 func TestTryAllocatePreemptQueue(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 20})
 	nodeMap := map[string]*Node{"node1": node}

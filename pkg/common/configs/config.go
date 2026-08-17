@@ -230,14 +230,15 @@ func GetConfigurationString(requestBytes []byte) string {
 		return ""
 	}
 	key := []byte(checksumKey)
-	// look for the checksum in the head of the config first, then in the tail
-	head := min(checksumScanWindow, length)
-	checksumIdx := bytes.Index(requestBytes[:head], key)
-	if checksumIdx == -1 {
-		tail := max(length-checksumScanWindow, 0)
-		if idx := bytes.Index(requestBytes[tail:], key); idx != -1 {
-			checksumIdx = tail + idx
-		}
+	// look for the checksum in the tail of the config first, then in the head, as the Checksum is the last field of the
+	// SchedulerConfig so standard yaml serialisation places it in the tail of the config
+	tail := max(length-checksumScanWindow, 0)
+	checksumIdx := bytes.Index(requestBytes[tail:], key)
+	if checksumIdx != -1 {
+		checksumIdx += tail
+	} else {
+		head := min(checksumScanWindow, length)
+		checksumIdx = bytes.Index(requestBytes[:head], key)
 	}
 	// no checksum found: the whole content is used to calculate the checksum
 	if checksumIdx == -1 {

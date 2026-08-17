@@ -2422,7 +2422,7 @@ func Test_PreemptReleasesReservationsOnSuccess(t *testing.T) {
 	preemptions := []mock.Preemption{
 		mock.NewPreemption(true, "alloc3", nodeID2, []string{"alloc2"}, 0, 0),
 	}
-	plugin := mock.NewPreemptionPredicatePlugin(nil, nil, preemptions)
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
 

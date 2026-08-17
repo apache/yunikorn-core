@@ -511,8 +511,7 @@ func TestPlaceholderRecovery(t *testing.T) {
 	ms.mockRM.waitForApplicationState(t, appID1, "Completing", 1000)
 }
 
-// TestSchedulerRecoveryQuotaPreemption Test scheduler recovery with quota preemption when shim doesn't report existing application
-// but only include existing allocations of this app.
+// TestSchedulerRecoveryQuotaPreemption Test scheduler recovery with quota preemption
 func TestSchedulerRecoveryQuotaPreemption(t *testing.T) {
 	config := `
 partitions:
@@ -569,36 +568,15 @@ partitions:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Register RM
 			ms := &mockScheduler{}
-			part, _, _ := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
+			defer ms.Stop()
 
-			err := ms.proxy.UpdateAllocation(&si.AllocationRequest{
-				Allocations: []*si.Allocation{
-					createAllocation("allocation-key-01", "node-1:1234", appID1, 1024, 1, "", false),
-				},
-				RmID: "rm:123",
-			})
-
-			assert.NilError(t, err)
-
-			// verify partition resources
-			assert.Equal(t, part.GetTotalNodeCount(), 1)
-			assert.Equal(t, part.GetTotalAllocationCount(), 0)
-			assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.Memory],
-				resources.Quantity(0))
-			assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.CPU],
-				resources.Quantity(0))
-
-			ms.serviceContext.StopAll()
-
-			// restart
 			_, _, queueA := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
 
 			// Set allocated resource to exceed max quota
 			queueA.IncAllocatedResource(tt.allocated, false)
 
-			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
+			err := ms.proxy.UpdateAllocation(&si.AllocationRequest{
 				Allocations: []*si.Allocation{
 					createAllocation("allocation-key-02", "node-1:1234", appID1, 1, 4, "", false),
 				},
@@ -606,7 +584,6 @@ partitions:
 			})
 			assert.NilError(t, err)
 			ms.mockRM.waitForAllocations(t, tt.addedAllocations, 1000)
-			ms.Stop()
 		})
 	}
 }

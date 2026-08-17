@@ -41,7 +41,7 @@ func TestCreateShimPublisher(t *testing.T) {
 // StartService() and stop() functions should not cause panic
 func TestServiceStartStopInternal(t *testing.T) {
 	countPublisherGoroutines := func() int {
-		buf := make([]byte, 2*1024)
+		buf := make([]byte, 64*1024)
 		n := runtime.Stack(buf, true)
 		return strings.Count(string(buf[:n]), "(*eventPublisher).start.func1")
 	}

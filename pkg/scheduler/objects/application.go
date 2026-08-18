@@ -824,6 +824,10 @@ func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource,
 		return nil, fmt.Errorf("cannot rollback allocation %s: application %s is in state %s", allocKey, sa.ApplicationID, sa.CurrentState())
 	}
 
+	if sa.requests[allocKey] == nil {
+		return nil, fmt.Errorf("failed to locate ask with key %s for rollback", allocKey)
+	}
+
 	ask := sa.allocations[allocKey]
 	if ask == nil {
 		return nil, fmt.Errorf("failed to locate allocation with key %s for rollback", allocKey)

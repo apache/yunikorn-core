@@ -53,7 +53,7 @@ type errorBuf struct {
 	sync.Mutex
 }
 
-func (b *errorBuf) Write(p []byte) (n int, err error) {
+func (b *errorBuf) Write(p []byte) (int, error) {
 	if b == nil {
 		return len(p), nil
 	}

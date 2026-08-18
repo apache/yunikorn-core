@@ -374,21 +374,20 @@ func TestGetRemainingGuaranteedResource(t *testing.T) {
 	}
 }
 
-func setup(t *testing.T) (rootQ, parentQ, childQ1, childQ2, childQ3 *Queue) {
+func setup(t *testing.T) (*Queue, *Queue, *Queue, *Queue, *Queue) {
 	rootQ, err := createRootQueue(map[string]string{})
 	assert.NilError(t, err)
-	var parent1Q *Queue
-	parentQ, err = createManagedQueue(rootQ, "parent", true, map[string]string{})
+	parentQ, err := createManagedQueue(rootQ, "parent", true, map[string]string{})
 	assert.NilError(t, err)
-	parent1Q, err = createManagedQueue(rootQ, "parent1", true, map[string]string{})
+	parent1Q, err := createManagedQueue(rootQ, "parent1", true, map[string]string{})
 	assert.NilError(t, err)
-	childQ1, err = createManagedQueue(parentQ, "child1", false, map[string]string{})
+	childQ1, err := createManagedQueue(parentQ, "child1", false, map[string]string{})
 	assert.NilError(t, err)
-	childQ2, err = createManagedQueue(parentQ, "child2", false, map[string]string{})
+	childQ2, err := createManagedQueue(parentQ, "child2", false, map[string]string{})
 	assert.NilError(t, err)
-	childQ3, err = createManagedQueue(parent1Q, "child3", false, map[string]string{})
+	childQ3, err := createManagedQueue(parent1Q, "child3", false, map[string]string{})
 	assert.NilError(t, err)
-	return
+	return rootQ, parentQ, childQ1, childQ2, childQ3
 }
 
 func assertRemaining(t *testing.T, rootQ *Queue, parentQ *Queue, childQ2 *Queue, childQ1 *Queue, askQueue *Queue, res1 res) {

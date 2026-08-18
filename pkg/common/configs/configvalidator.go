@@ -827,8 +827,11 @@ func getLongestPlacementPaths(rules []PlacementRule) ([]placementStaticPath, err
 	return paths, nil
 }
 
-func getLongestStaticPath(rule PlacementRule) (staticPath, ruleChain string, foundDynamicRule bool, err error) {
+func getLongestStaticPath(rule PlacementRule) (string, string, bool, error) {
 	rules := getRuleChain(rule)
+	var staticPath string
+	var ruleChain string
+	var foundDynamicRule bool
 
 	for _, r := range rules {
 		if ruleChain == "" {
@@ -853,7 +856,7 @@ func getLongestStaticPath(rule PlacementRule) (staticPath, ruleChain string, fou
 		if qualified {
 			if staticPath != "" {
 				// error, only the first fixed rule can be fully qualified
-				err = fmt.Errorf("illegal fully qualified 'fixed' rule with value %s", queueName)
+				err := fmt.Errorf("illegal fully qualified 'fixed' rule with value %s", queueName)
 				return staticPath, ruleChain, foundDynamicRule, err
 			}
 			staticPath = queueName

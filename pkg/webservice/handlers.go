@@ -169,16 +169,24 @@ func validateQueue(queuePath string) error {
 
 func validateConf(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w, r.Method)
+	var result dao.ValidateConfResponse
 	requestBytes, err := io.ReadAll(r.Body)
 	if err == nil {
-		_, err = configs.LoadSchedulerConfigFromByteArray(requestBytes)
+		var conf *configs.SchedulerConfig
+		conf, err = configs.ParseAndValidateConfig(requestBytes)
+		if err == nil {
+			// capture the checksum that was submitted with the config before it is overridden with the calculated one,
+			// to report whether the submitted checksum was correct
+			submittedChecksum := conf.Checksum
+			configs.SetChecksum(requestBytes, conf)
+			result.Allowed = true
+			result.Checksum = conf.Checksum
+			result.ChecksumMatch = submittedChecksum == conf.Checksum
+		}
 	}
-	var result dao.ValidateConfResponse
 	if err != nil {
 		result.Allowed = false
 		result.Reason = err.Error()
-	} else {
-		result.Allowed = true
 	}
 	if err = json.NewEncoder(w).Encode(result); err != nil {
 		buildJSONErrorResponse(w, err.Error(), http.StatusInternalServerError)

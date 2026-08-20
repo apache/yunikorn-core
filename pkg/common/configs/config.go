@@ -24,12 +24,24 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"go.uber.org/zap"
 	"go.yaml.in/yaml/v3"
 
 	"github.com/apache/yunikorn-core/pkg/log"
+)
+
+const (
+	// checksumKey is the YAML key that holds the checksum in a serialised scheduler config.
+	checksumKey = "checksum:"
+	// partitionsKey is the first YAML key of a serialised scheduler config. It must always be present
+	// and is used to locate the start of the config when the checksum is stored before it.
+	partitionsKey = "partitions:"
+	// checksumScanWindow is the number of bytes scanned at the start and the end of a serialised config
+	// to locate the checksum line. Any checksum line would never exceed this size ("checksum: " plus a 64 character
+	// hex string with an optional trailing newline and quotes).
+	// Scanning only the head and the tail keeps the detection cheap on large configs which could be megabytes in size.
+	checksumScanWindow = 80
 )
 
 // SchedulerConfig can contain multiple partitions. Each partition contains the queue definition for a logical
@@ -168,9 +180,25 @@ func LoadSchedulerConfigFromByteArray(content []byte) (*SchedulerConfig, error) 
 	return conf, err
 }
 
+// SetChecksum calculates the sha256 checksum for the serialised config and stores it in the config.
+// The config might already contain a checksum read from the YAML, it could be missing or set to an incorrect value.
+// The correct checksum will always override it, the action taken is logged so that an incorrect checksum can be traced.
 func SetChecksum(content []byte, conf *SchedulerConfig) {
-	noChecksumContent := GetConfigurationString(content)
-	conf.Checksum = fmt.Sprintf("%X", sha256.Sum256([]byte(noChecksumContent)))
+	// nil safety
+	if conf == nil {
+		return
+	}
+	checksum := fmt.Sprintf("%X", sha256.Sum256([]byte(GetConfigurationString(content))))
+	old := conf.Checksum
+	conf.Checksum = checksum
+	switch {
+	case old == "":
+		log.Log(log.Config).Debug("checksum not set in configuration, calculated and stored",
+			zap.String("checksum", checksum))
+	case old != checksum:
+		log.Log(log.Config).Warn("checksum in configuration incorrect, overriding with calculated value",
+			zap.String("oldChecksum", old), zap.String("newChecksum", checksum))
+	}
 }
 
 func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
@@ -193,18 +221,41 @@ func ParseAndValidateConfig(content []byte) (*SchedulerConfig, error) {
 	return conf, nil
 }
 
+// GetConfigurationString returns the serialised config content without checksum.
+// The checksum is placed at the start or the end of the config and to avoid walking a potentially very large
+// config end to end, only the first and the last checksumScanWindow bytes are scanned for the checksum key.
 func GetConfigurationString(requestBytes []byte) string {
-	conf := string(requestBytes)
-	checksum := "checksum: "
-	checksumLength := 64 + len(checksum)
-	if strings.Contains(conf, checksum) {
-		checksum += strings.Split(conf, checksum)[1]
-		checksum = strings.TrimRight(checksum, "\n")
-		if len(checksum) > checksumLength {
-			checksum = checksum[:checksumLength]
-		}
+	length := len(requestBytes)
+	if length == 0 {
+		return ""
 	}
-	return strings.ReplaceAll(conf, checksum, "")
+	key := []byte(checksumKey)
+	// look for the checksum in the tail of the config first, then in the head, as the Checksum is the last field of the
+	// SchedulerConfig so standard yaml serialisation places it in the tail of the config
+	tail := max(length-checksumScanWindow, 0)
+	checksumIdx := bytes.Index(requestBytes[tail:], key)
+	if checksumIdx != -1 {
+		checksumIdx += tail
+	} else {
+		head := min(checksumScanWindow, length)
+		checksumIdx = bytes.Index(requestBytes[:head], key)
+	}
+	// no checksum found: the whole content is used to calculate the checksum
+	if checksumIdx == -1 {
+		return string(requestBytes)
+	}
+	// a checksum is present: use the partitions key to decide whether it sits before or after the config
+	partitionsIdx := bytes.Index(requestBytes, []byte(partitionsKey))
+	if partitionsIdx == -1 {
+		// no partitions in the config: nothing to calculate a checksum over
+		return ""
+	}
+	if checksumIdx < partitionsIdx {
+		// checksum stored before the config: the config runs from the partitions key to the end
+		return string(requestBytes[partitionsIdx:])
+	}
+	// checksum stored after the config: the config runs up to the checksum line
+	return string(requestBytes[:checksumIdx])
 }
 
 // DefaultSchedulerConfig contains the default scheduler configuration; used if no other is provided

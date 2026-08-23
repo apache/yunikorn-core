@@ -2335,7 +2335,7 @@ func (sa *Application) notifyRMAllocationReleased(released []*Allocation, termin
 	if len(released) == 0 || sa.rmEventHandler == nil {
 		return
 	}
-	c := make(chan *rmevent.Result)
+	c := make(chan *rmevent.Result, 1)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                sa.rmID,

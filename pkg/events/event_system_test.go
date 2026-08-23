@@ -165,7 +165,8 @@ func TestEventStreaming(t *testing.T) {
 	eventSystem.StartService()
 	defer eventSystem.Stop()
 
-	eventSystem.CreateEventStream("test", 10)
+	stream := eventSystem.CreateEventStream("test", 10)
+	defer eventSystem.RemoveStream(stream)
 	streams := eventSystem.GetEventStreams()
 
 	assert.Equal(t, 1, len(streams))

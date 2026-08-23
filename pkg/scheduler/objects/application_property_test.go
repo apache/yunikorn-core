@@ -486,7 +486,7 @@ func pickRandomExistingKey(rng *rand.Rand, keyPriority map[string]int32) (string
 // failure is reproducible via `go test -run .../seed-<seed>`.
 // It returns the number of distinct pending priorities observed this step, so the caller can track
 // coverage high-water marks without a second pass over pendingKeys.
-func assertFuzzInvariants(t *testing.T, app *Application, keyPriority map[string]int32, pendingKeys map[string]bool, seed int64, step int) (distinctPendingPriorities int) {
+func assertFuzzInvariants(t *testing.T, app *Application, keyPriority map[string]int32, pendingKeys map[string]bool, seed int64, step int) int {
 	t.Helper()
 
 	wantHistogram := make(map[int32]int)

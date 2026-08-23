@@ -106,7 +106,15 @@ func (e *EventStreaming) CreateEventStream(name string, count uint64) *EventStre
 		// map, so "local" will also contain the new event.
 		seen := make(map[*si.EventRecord]bool)
 		for _, event := range history {
-			consumer <- event
+			select {
+			case consumer <- event:
+			case <-e.stopCh:
+				close(consumer)
+				return
+			case <-stop:
+				close(consumer)
+				return
+			}
 			seen[event] = true
 		}
 		for {

@@ -2791,12 +2791,14 @@ func TestAddAllocationAskReplaceExistingPendingAsk(t *testing.T) {
 	assertMaxPriorityConsistent(t, app)
 }
 
-// TestRollbackAllocationAskNotTracked covers deallocateAsk running for an ask that sa.requests no
-// longer holds. removeAsksInternal("") wipes sa.requests and the pending histogram but deliberately
+// TestRollbackAllocationAskNotTracked covers RollbackAllocation being handed a "ghost": an ask that
+// sa.requests no longer holds while sa.allocations still does. That state is reachable in
+// production: removeAsksInternal("") wipes sa.requests and the pending histogram but deliberately
 // leaves sa.allocations alone until the shim confirms the releases, so a SCHEDULING_FAILED_ON_RM
-// release arriving in that window reaches RollbackAllocation, which looks the entry up in
-// sa.allocations and deallocates it. deallocateAsk must not count that ask as pending again: the
-// application does not track it any more, so nothing would ever take it back out of the histogram.
+// release arriving in that window reaches RollbackAllocation. Since YUNIKORN-3360 the rollback is
+// rejected outright when the ask is not in sa.requests, and this test pins that guard: the call must
+// return an error and leave the allocation, the allocated resource and the pending histogram
+// untouched.
 func TestRollbackAllocationAskNotTracked(t *testing.T) {
 	setupUGM()
 	defer setupUGM()
@@ -2820,12 +2822,14 @@ func TestRollbackAllocationAskNotTracked(t *testing.T) {
 	assert.Assert(t, app.IsAccepted() || app.IsRunning(), "app must still be rollback-eligible, is %s", app.CurrentState())
 
 	_, err = app.RollbackAllocation(aKey)
-	assert.NilError(t, err, "rollback of the confirmed allocation should have succeeded")
+	assert.ErrorContains(t, err, "failed to locate ask", "rollback of an untracked ask should have been rejected")
 
 	app.RLock()
-	assert.Equal(t, len(app.pendingPriorities), 0, "rollback of an untracked ask must not change the pending histogram")
+	assert.Assert(t, app.allocations[aKey] == ask, "rejected rollback must leave the confirmed allocation in place")
+	assert.Equal(t, len(app.pendingPriorities), 0, "rejected rollback must not change the pending histogram")
 	app.RUnlock()
-	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "rollback of an untracked ask must not change askMaxPriority")
+	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "rejected rollback must not change the allocated resource")
+	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "rejected rollback must not change askMaxPriority")
 	assertMaxPriorityConsistent(t, app)
 }
 

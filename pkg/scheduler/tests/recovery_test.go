@@ -511,8 +511,7 @@ func TestPlaceholderRecovery(t *testing.T) {
 	ms.mockRM.waitForApplicationState(t, appID1, "Completing", 1000)
 }
 
-// TestSchedulerRecoveryQuotaPreemption Test scheduler recovery with quota preemption when shim doesn't report existing application
-// but only include existing allocations of this app.
+// TestSchedulerRecoveryQuotaPreemption Test scheduler recovery with quota preemption
 func TestSchedulerRecoveryQuotaPreemption(t *testing.T) {
 	config := `
 partitions:
@@ -554,59 +553,43 @@ partitions:
 	configPreemptionEnabledAndDelaySetAtParent = strings.ReplaceAll(configPreemptionEnabledAndDelaySetAtParent, "PROPERTIES_STR", "")
 
 	tests := []struct {
-		name             string
-		config           string
-		allocated        *resources.Resource
-		addedAllocations int
+		name                string
+		config              string
+		allocated           *resources.Resource
+		preemptionScheduled bool
 	}{
-		{"preemption not configured explicitly at partition level", configPreemptionDefault, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 1},
-		{"preemption disabled at partition level", configPreemptionDisabled, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 1},
-		{"preemption enabled at partition level, but delay not set at queue level", configPreemptionEnabled, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 1},
-		{"preemption enabled, delay set but usage is lower than max resources", configPreemptionEnabledAndDelaySet, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 4}), 1},
-		{"preemption enabled, delay set, usage is higher than max resources", configPreemptionEnabledAndDelaySet, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 0},
-		{"preemption enabled, delay set at parent queue but inherited and usage is higher than max resources in leaf queue.", configPreemptionEnabledAndDelaySetAtParent, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), 0},
+		{"preemption not configured explicitly at partition level", configPreemptionDefault, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), false},
+		{"preemption disabled at partition level", configPreemptionDisabled, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), false},
+		{"preemption enabled at partition level, but delay not set at queue level", configPreemptionEnabled, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), false},
+		{"preemption enabled, delay set but usage is lower than max resources", configPreemptionEnabledAndDelaySet, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 4}), false},
+		{"preemption enabled, delay set, usage is higher than max resources", configPreemptionEnabledAndDelaySet, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), true},
+		{"preemption enabled, delay set at parent queue but inherited and usage is higher than max resources in leaf queue.", configPreemptionEnabledAndDelaySetAtParent, resources.NewResourceFromMap(map[string]resources.Quantity{common.Memory: 6}), true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Register RM
 			ms := &mockScheduler{}
-			part, _, _ := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
+			defer ms.Stop()
 
-			err := ms.proxy.UpdateAllocation(&si.AllocationRequest{
-				Allocations: []*si.Allocation{
-					createAllocation("allocation-key-01", "node-1:1234", appID1, 1024, 1, "", false),
-				},
-				RmID: "rm:123",
-			})
+			part, _, queueA := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
 
+			// Recover existing allocation to simulate shim reporting running allocations during recovery
+			existingAlloc := createAllocation("existing-alloc-01", "node-1:1234", appID1,
+				int(tt.allocated.Resources[common.Memory]),
+				int(tt.allocated.Resources[common.CPU]), "", false)
+			err := registerAllocations(part, []*si.Allocation{existingAlloc})
 			assert.NilError(t, err)
 
-			// verify partition resources
-			assert.Equal(t, part.GetTotalNodeCount(), 1)
-			assert.Equal(t, part.GetTotalAllocationCount(), 0)
-			assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.Memory],
-				resources.Quantity(0))
-			assert.Equal(t, part.GetNode("node-1:1234").GetAllocatedResource().Resources[common.CPU],
-				resources.Quantity(0))
+			// Verify allocation is recovered and queue usage is updated
+			assert.Equal(t, queueA.GetAllocatedResource().Resources[common.Memory], tt.allocated.Resources[common.Memory])
 
-			ms.serviceContext.StopAll()
-
-			// restart
-			_, _, queueA := doRecoverySetup(t, tt.config, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
-
-			// Set allocated resource to exceed max quota
-			queueA.IncAllocatedResource(tt.allocated, false)
-
-			err = ms.proxy.UpdateAllocation(&si.AllocationRequest{
-				Allocations: []*si.Allocation{
-					createAllocation("allocation-key-02", "node-1:1234", appID1, 1, 4, "", false),
-				},
-				RmID: "rm:123",
-			})
-			assert.NilError(t, err)
-			ms.mockRM.waitForAllocations(t, tt.addedAllocations, 1000)
-			ms.Stop()
+			// Verify quota preemption start time is scheduled based on configuration and usage
+			queueDAO := queueA.GetPartitionQueueDAOInfo(false)
+			if tt.preemptionScheduled {
+				assert.Assert(t, queueDAO.QuotaPreemptionStartTime != 0, "quota preemption start time should be scheduled")
+			} else {
+				assert.Equal(t, queueDAO.QuotaPreemptionStartTime, int64(0), "quota preemption start time should not be scheduled")
+			}
 		})
 	}
 }

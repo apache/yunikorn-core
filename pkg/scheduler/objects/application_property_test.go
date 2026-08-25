@@ -43,26 +43,29 @@ import (
 //
 // The point is coverage of state combinations rather than of entry points: TestMaxAskPriority pins
 // the handful of transitions that are easy to reason about by hand, while this test reaches the
-// interleavings that are not - a replaced ask whose priority differs from the one it displaces, a
-// rollback of an allocation whose ask has already been dropped, an allocate that empties the top
-// priority bucket while lower buckets still hold pending asks. Those are precisely the cases where
-// incremental bookkeeping and a full rescan can disagree.
+// interleavings that are not - a replaced ask whose priority differs from the one it displaces, an
+// attempted rollback of an allocation whose ask has already been dropped, an allocate that empties
+// the top priority bucket while lower buckets still hold pending asks. Those are precisely the cases
+// where incremental bookkeeping and a full rescan can disagree.
 func TestApplicationPropertyFuzzHistogram(t *testing.T) {
-	// A "ghost" rollback (case 7 reverting an allocation whose ask sa.requests no longer holds) needs
-	// a specific remove-then-release interleaving, so it is rare enough that individual seeds
-	// legitimately see none - measured, 6 of the 20 seeds below produce zero. Assert that coverage
-	// over the whole seed set rather than per seed: that still fails loudly if a change stops the
-	// fuzzer reaching the state at all, without making the test flaky on the seeds that never do.
-	totalGhostRollbacks := 0
+	// A "ghost" rollback attempt (case 7 picking a confirmed allocation whose ask sa.requests no
+	// longer holds) first needs a specific remove-then-release interleaving, but once one exists the
+	// YUNIKORN-3360 guard rejects the rollback and so leaves the entry in sa.allocations for case 7 to
+	// pick again - measured, every one of the 20 seeds below reaches the state a few hundred times.
+	// The coverage floor is still asserted over the whole seed set rather than per seed so it keeps
+	// holding if that accumulation stops: it only has to fail loudly if a change stops the fuzzer
+	// reaching the state at all. Whether each individual attempt is correctly rejected is asserted in
+	// case 7 itself, not here.
+	totalGhostRollbackAttempts := 0
 	for seed := int64(0); seed < 20; seed++ {
 		t.Run(fmt.Sprintf("seed-%d", seed), func(t *testing.T) {
-			totalGhostRollbacks += runPropertyFuzz(t, seed)
+			totalGhostRollbackAttempts += runPropertyFuzz(t, seed)
 		})
 	}
-	assert.Assert(t, totalGhostRollbacks > 0, "no seed ever rolled back an ask missing from sa.requests")
+	assert.Assert(t, totalGhostRollbackAttempts > 0, "no seed ever attempted to roll back an ask missing from sa.requests")
 }
 
-// runPropertyFuzz executes one seeded run and returns the number of ghost rollbacks it performed, so
+// runPropertyFuzz executes one seeded run and returns the number of ghost rollbacks it attempted, so
 // the caller can assert that coverage across the whole seed set.
 func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	t.Helper()
@@ -119,7 +122,7 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	allocatedKeys := make(map[string]bool)
 	// confirmedKeys mirrors sa.allocations: keys handed to AddAllocation and not yet removed from
 	// sa.allocations again (only a successful RollbackAllocation does that here - application.go
-	// ~line 886). Note that it is deliberately NOT wiped by the clear-all/Failed cleanup branches in
+	// ~line 907). Note that it is deliberately NOT wiped by the clear-all/Failed cleanup branches in
 	// case 5: removeAsksInternal and cleanupAsks only ever touch sa.requests, so a stale entry does
 	// survive in sa.allocations there and the model must say so too.
 	confirmedKeys := make(map[string]bool)
@@ -132,12 +135,14 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	// that really ran deallocateAsk. A rejected call (wrong app state, unknown key) mutates nothing,
 	// so counting attempts would let this operation decay into a no-op unnoticed.
 	successfulRollbacks := 0
-	// ghostRollbacks counts the subset of those that rolled back an ask sa.requests no longer holds
-	// (case 7); replacedAsks counts the AddAllocationAsk calls that took the replace-existing-ask
-	// branch (case 8). Both are narrow branches that a small change to the candidate filters could
-	// stop reaching entirely, so both are asserted - replacedAsks per run at the end of this
-	// function, ghostRollbacks over the whole seed set by the caller.
-	ghostRollbacks := 0
+	// ghostRollbackAttempts counts the case 7 calls that targeted an ask sa.requests no longer holds;
+	// those never succeed (the YUNIKORN-3360 guard rejects them) so attempts, not successes, are what
+	// there is to count - each one is individually asserted rejected in case 7, which is what makes
+	// the count proof that the guard was exercised. replacedAsks counts the AddAllocationAsk calls
+	// that took the replace-existing-ask branch (case 8). Both are narrow branches that a small change
+	// to the candidate filters could stop reaching entirely, so both are asserted - replacedAsks per
+	// run at the end of this function, ghostRollbackAttempts over the whole seed set by the caller.
+	ghostRollbackAttempts := 0
 	replacedAsks := 0
 
 	const steps = 5000
@@ -313,10 +318,10 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 			// removeAsksInternal("") from timeoutPlaceholderProcessing case 2, which is reached from
 			// Running for a soft gang whose ResumeApplication transition is rejected (that event is
 			// only valid from New/Accepted, application_state.go ~line 125) so the app stays Running
-			// and remains rollback-eligible. deallocateAsk must not count such an ask as pending
-			// again - nothing tracks it any more, so nothing would ever take it back out of the
-			// histogram - so the reference model below only marks the key pending again when it is
-			// still tracked.
+			// and remains rollback-eligible. Since YUNIKORN-3360, RollbackAllocation rejects such a
+			// ghost before touching anything (application.go ~line 885: the ask has to be in
+			// sa.requests), so the fuzzer asserts that rejection below, and the reference model
+			// leaves the step as the no-op it now is.
 			// The only combination excluded is a confirmed key that is still tracked but already
 			// pending (deallocated without being removed): ask.deallocate() rejects that outright, so
 			// picking it would only ever burn a step.
@@ -328,7 +333,15 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 				_, tracked := keyPriority[k]
 				return !tracked
 			}); ok {
-				if _, rollbackErr := app.RollbackAllocation(key); rollbackErr == nil {
+				_, tracked := keyPriority[key]
+				_, rollbackErr := app.RollbackAllocation(key)
+				if !tracked {
+					// ghost: sa.requests no longer holds the ask. Since YUNIKORN-3360,
+					// RollbackAllocation must reject this outright and mutate nothing.
+					assert.Assert(t, rollbackErr != nil, "seed=%d step=%d: ghost rollback of %s was not rejected", seed, i, key)
+					ghostRollbackAttempts++
+				}
+				if rollbackErr == nil {
 					// only a successful call ran deallocateAsk: RollbackAllocation refuses outright
 					// unless the app is Accepted or Running (application.go ~line 864) and bails out
 					// before touching anything if the ask is no longer allocated, so a returned error
@@ -336,15 +349,10 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 					delete(confirmedKeys, key)
 					delete(allocatedKeys, key)
 					successfulRollbacks++
-					if _, tracked := keyPriority[key]; tracked {
-						// same as DeallocateAsk (case 2): the ask goes back to pending at its
-						// immutable creation priority, which keyPriority already holds.
-						pendingKeys[key] = true
-					} else {
-						// ghost rollback: the ask is gone from sa.requests, so deallocateAsk must
-						// leave the pending histogram completely untouched.
-						ghostRollbacks++
-					}
+					// a successful rollback implies the ask was tracked (the 3360 guard rejects the
+					// rest), so - same as DeallocateAsk (case 2) - it goes back to pending at its
+					// immutable creation priority, which keyPriority already holds.
+					pendingKeys[key] = true
 				}
 			}
 
@@ -389,7 +397,7 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	// operation to be rejected/no-op'd): confirm it actually drove the application through
 	// non-trivial pending/allocated/multi-priority states, so a real regression in the product's
 	// bookkeeping (e.g. removeFromPriorities) has states to be caught in.
-	t.Logf("seed=%d coverage: maxPending=%d maxAllocated=%d maxDistinctPendingPriorities=%d successfulRollbacks=%d ghostRollbacks=%d replacedAsks=%d", seed, maxPending, maxAllocated, maxDistinctPendingPriorities, successfulRollbacks, ghostRollbacks, replacedAsks)
+	t.Logf("seed=%d coverage: maxPending=%d maxAllocated=%d maxDistinctPendingPriorities=%d successfulRollbacks=%d ghostRollbackAttempts=%d replacedAsks=%d", seed, maxPending, maxAllocated, maxDistinctPendingPriorities, successfulRollbacks, ghostRollbackAttempts, replacedAsks)
 	assert.Assert(t, maxPending > 0, "seed=%d: fuzz run never observed any pending asks", seed)
 	assert.Assert(t, maxAllocated > 0, "seed=%d: fuzz run never observed any allocated asks", seed)
 	assert.Assert(t, maxDistinctPendingPriorities > 1, "seed=%d: fuzz run never observed a multi-priority pending histogram", seed)
@@ -400,11 +408,13 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	assert.Assert(t, successfulRollbacks > 0, "seed=%d: fuzz run never completed a RollbackAllocation", seed)
 	// The replace-existing-ask branch (case 8) must not double count the key in the histogram. It is
 	// only reached while pendingKeys is non-empty, so assert it really happened rather than trusting
-	// that condition to keep holding. The ghost-rollback count is returned instead of asserted here:
-	// it is too rare to demand per seed, see TestApplicationPropertyFuzzHistogram.
+	// that condition to keep holding. The ghost-rollback-attempt count is returned instead of asserted
+	// here: whether a run reaches that state at all depends on the interleaving it happens to produce,
+	// so the coverage floor for it is asserted over the whole seed set by
+	// TestApplicationPropertyFuzzHistogram.
 	assert.Assert(t, replacedAsks > 0, "seed=%d: fuzz run never took the replace-existing-ask branch", seed)
 
-	return ghostRollbacks
+	return ghostRollbackAttempts
 }
 
 // newFuzzAsk builds an Allocation directly from an si.Allocation (bypassing the shared

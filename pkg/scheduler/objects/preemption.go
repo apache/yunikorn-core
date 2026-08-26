@@ -425,7 +425,10 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 			// add goroutine for checking preemption
 			wg.Add(1)
 			expected++
-			go preemptPredicateCheck(plugin, ch, &wg, args)
+			go func() {
+				defer wg.Done()
+				ch <- PredicateChecks(plugin, args)
+			}()
 		}
 		// wait for completion and close channel
 		go func() {

@@ -311,3 +311,10 @@ func TestTrackedResourceString(t *testing.T) {
 	str := tr.String()
 	assert.Equal(t, str, "TrackedResource{}")
 }
+
+func TestTrackedResourceStringSelfLocked(t *testing.T) {
+	tr := NewTrackedResource()
+	tr.Lock()
+	defer tr.Unlock()
+	assert.Equal(t, tr.String(), "TrackedResource{}")
+}

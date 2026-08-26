@@ -49,8 +49,21 @@ func TestNewAsk(t *testing.T) {
 		t.Fatal("NewAllocationAskFromSI create failed while it should not")
 	}
 	askStr := ask.String()
-	expected := "allocationKey ask-1, applicationID app-1, Resource map[first:10], Allocated false"
+	expected := "allocationKey ask-1, applicationID app-1"
 	assert.Equal(t, askStr, expected, "Strings should have been equal")
+}
+
+func TestAllocationStringSelfLocked(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	siAsk := &si.Allocation{
+		AllocationKey:    "ask-1",
+		ApplicationID:    "app-1",
+		ResourcePerAlloc: res.ToProto(),
+	}
+	ask := NewAllocationFromSI(siAsk)
+	ask.Lock()
+	defer ask.Unlock()
+	assert.Equal(t, ask.String(), "allocationKey ask-1, applicationID app-1")
 }
 
 func TestAskAllocateDeallocate(t *testing.T) {
@@ -257,7 +270,7 @@ func TestNewAlloc(t *testing.T) {
 	alloc.SetInstanceType(instType1)
 	assert.Equal(t, alloc.GetInstanceType(), instType1, "Instance type not set as expected")
 	allocStr := alloc.String()
-	expected := "allocationKey ask-1, applicationID app-1, Resource map[first:1], Allocated false"
+	expected := "allocationKey ask-1, applicationID app-1"
 	assert.Equal(t, allocStr, expected, "Strings should have been equal")
 	assert.Assert(t, !alloc.IsPlaceholderUsed(), fmt.Sprintf("Alloc should not be placeholder replacement by default: got %t, expected %t", alloc.IsPlaceholderUsed(), false))
 }

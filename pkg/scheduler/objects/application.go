@@ -183,8 +183,8 @@ func (sa *Application) String() string {
 	if sa == nil {
 		return "application is nil"
 	}
-	return fmt.Sprintf("applicationID: %s, Partition: %s, SubmissionTime: %x, State: %s",
-		sa.ApplicationID, sa.Partition, sa.GetSubmissionTime(), sa.stateMachine.Current())
+	return fmt.Sprintf("applicationID: %s, Partition: %s, State: %s",
+		sa.ApplicationID, sa.Partition, sa.stateMachine.Current())
 }
 
 func (sa *Application) SetState(state string) {

@@ -195,8 +195,11 @@ func BenchmarkTrackedNoOrderRWMutexWrite(b *testing.B) {
 func TestMutex(t *testing.T) {
 	var mutex Mutex
 	var result atomic.Int32
+	var wg sync.WaitGroup
 	mutex.Lock()
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		mutex.Lock()
 		result.Store(2)
 		mutex.Unlock()
@@ -204,20 +207,24 @@ func TestMutex(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	result.Store(1)
 	mutex.Unlock()
-	time.Sleep(100 * time.Millisecond)
+	wg.Wait()
 	assert.Equal(t, int32(2), result.Load())
 }
 
 func TestRWMutex(t *testing.T) {
 	var mutex RWMutex
 	var count atomic.Int32
+	var wg sync.WaitGroup
 	mutex.RLock()
+	wg.Add(2)
 	go func() {
+		defer wg.Done()
 		mutex.Lock()
 		count.Add(1)
 		mutex.Unlock()
 	}()
 	go func() {
+		defer wg.Done()
 		mutex.Lock()
 		count.Add(1)
 		mutex.Unlock()
@@ -225,7 +232,7 @@ func TestRWMutex(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	before := count.Load()
 	mutex.RUnlock()
-	time.Sleep(500 * time.Millisecond)
+	wg.Wait()
 	after := count.Load()
 	assert.Equal(t, before, int32(0))
 	assert.Equal(t, after, int32(2))

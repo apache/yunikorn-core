@@ -97,7 +97,7 @@ func TestPredicateCheckResult_String(t *testing.T) {
 					newAllocationAll("alloc-key-1", "app-1", "node-1", "", nil, false, 0),
 				},
 			},
-			want: "node: node-1, alloc: alloc-1, success: true, index: 1, victims: [allocationKey alloc-key-1, applicationID app-1, Resource map[], Allocated true]",
+			want: "node: node-1, alloc: alloc-1, success: true, index: 1, victims: [allocationKey alloc-key-1, applicationID app-1]",
 		},
 		{
 			name: "result with multiple victims",
@@ -111,7 +111,7 @@ func TestPredicateCheckResult_String(t *testing.T) {
 					newAllocationAll("alloc-key-2", "app-2", "node-2", "", nil, false, 0),
 				},
 			},
-			want: "node: node-1, alloc: alloc-1, success: true, index: 2, victims: [allocationKey alloc-key-1, applicationID app-1, Resource map[], Allocated true, allocationKey alloc-key-2, applicationID app-2, Resource map[], Allocated true]",
+			want: "node: node-1, alloc: alloc-1, success: true, index: 2, victims: [allocationKey alloc-key-1, applicationID app-1, allocationKey alloc-key-2, applicationID app-2]",
 		},
 	}
 

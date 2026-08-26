@@ -59,6 +59,14 @@ func setupUGM() {
 	userManager.ClearGroupTrackers()
 }
 
+func TestApplicationStringSelfLocked(t *testing.T) {
+	app := newApplication("app-00001", "default", "root.a")
+	app.Lock()
+	defer app.Unlock()
+	s := app.String()
+	assert.Equal(t, s, "applicationID: app-00001, Partition: default, State: New")
+}
+
 // basic app creating with timeout checks
 func TestNewApplication(t *testing.T) {
 	user := security.UserGroup{

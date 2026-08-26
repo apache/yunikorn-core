@@ -57,8 +57,6 @@ func (tr *TrackedResource) String() string {
 	if tr == nil {
 		return "TrackedResource{}"
 	}
-	tr.RLock()
-	defer tr.RUnlock()
 
 	var resourceUsage []string
 	for instanceType, resourceTypeMap := range tr.TrackedResourceMap {

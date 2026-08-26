@@ -179,7 +179,7 @@ func (a *Allocation) String() string {
 	if a == nil {
 		return "nil allocation"
 	}
-	return fmt.Sprintf("allocationKey %s, applicationID %s, Resource %s, Allocated %t", a.allocationKey, a.applicationID, a.GetAllocatedResource(), a.IsAllocated())
+	return fmt.Sprintf("allocationKey %s, applicationID %s", a.allocationKey, a.applicationID)
 }
 
 // GetAllocationKey returns the allocation key for this allocation.

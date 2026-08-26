@@ -45,6 +45,15 @@ import (
 )
 
 // base test for creating a managed queue
+func TestQueueStringSelfLocked(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create root queue")
+	root.Lock()
+	defer root.Unlock()
+	s := root.String()
+	assert.Equal(t, s, "{QueuePath: root, State: Active}")
+}
+
 func TestMergeParentPropertiesNilParent(t *testing.T) {
 	// root queue has no parent
 	root, err := createRootQueue(nil)

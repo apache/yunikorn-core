@@ -2021,10 +2021,10 @@ func (sq *Queue) removeMetrics() {
 }
 
 func (sq *Queue) String() string {
-	sq.RLock()
-	defer sq.RUnlock()
-	return fmt.Sprintf("{QueuePath: %s, State: %s, StateTime: %x, MaxResource: %s}",
-		sq.QueuePath, sq.stateMachine.Current(), sq.stateTime, sq.maxResource)
+	if sq == nil {
+		return "queue is nil"
+	}
+	return fmt.Sprintf("{QueuePath: %s, State: %s}", sq.QueuePath, sq.stateMachine.Current())
 }
 
 // incRunningApps increments the number of running applications for this queue (recursively).

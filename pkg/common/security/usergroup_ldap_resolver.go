@@ -232,7 +232,7 @@ func GetLdapAccess() LdapAccess {
 	return ldapAccessImpl{}
 }
 
-// LDAPResolverConfig holds the configuration for the LDAP resolver
+// LdapConfig holds the configuration for the LDAP resolver
 type LdapConfig struct {
 	Host         string
 	Port         int
@@ -249,14 +249,10 @@ type LdapConfig struct {
 func GetUserGroupCacheLdap(reader ConfigReader, access LdapAccess) *UserGroupCache {
 	config, err := reader.ReadLdapConfig()
 	if err != nil {
-		// Log a FATAL level message - this is very prominent and will typically cause the application to exit
+		// Log a FATAL level message - this is very prominent and will cause the application to exit
 		log.Log(log.Security).Fatal("LDAP configuration not found or invalid. No secrets were loaded from the secrets directory.",
 			zap.String("secretsPath", common.LdapMountPath),
 			zap.String("resolution", "Ensure LDAP secrets are properly mounted and accessible"))
-
-		// If the Fatal log doesn't cause an exit (depends on logger configuration),
-		// we could also panic here to ensure the application stops
-		panic("LDAP configuration not found or invalid")
 	}
 
 	ldapLookup := &LdapLookup{
@@ -274,7 +270,7 @@ func GetUserGroupCacheLdap(reader ConfigReader, access LdapAccess) *UserGroupCac
 	}
 }
 
-// Default linux behaviour: a user is member of the primary group with the same name
+// LdapLookupUser mimics default linux behaviour: a user is member of the primary group with the same name
 func (LdapLookup) LdapLookupUser(userName string) (*user.User, error) {
 	log.Log(log.Security).Debug("Performing LDAP user lookup",
 		zap.String("username", userName),
@@ -286,14 +282,17 @@ func (LdapLookup) LdapLookupUser(userName string) (*user.User, error) {
 	}, nil
 }
 
+// LdapLookupGroupID mimics a linux group with a name and ID that have the same value
 func (LdapLookup) LdapLookupGroupID(gid string) (*user.Group, error) {
 	log.Log(log.Security).Debug("Looking up LDAP group ID",
 		zap.String("groupID", gid))
-	group := user.Group{Gid: gid}
-	group.Name = gid
-	return &group, nil
+	return &user.Group{
+		Gid:  gid,
+		Name: gid,
+	}, nil
 }
 
+// LDAPLookupGroupIds load the group memberships for the user from the LDAP server
 func (lu LdapLookup) LDAPLookupGroupIds(osUser *user.User) ([]string, error) {
 	sr, err := ldapSearch(lu.access, lu.config, osUser.Username)
 	if err != nil {
@@ -309,10 +308,18 @@ func (lu LdapLookup) LDAPLookupGroupIds(osUser *user.User) ([]string, error) {
 		log.Log(log.Security).Debug("LDAP 'memberOf' attributes for user",
 			zap.String("user", osUser.Username),
 			zap.Strings("attributes", attr))
-		for i := range attr {
-			s := strings.Split(attr[i], ",")
-			newgroup := strings.Split(s[0], "CN=")
-			groups = append(groups, newgroup[1])
+		// range of the values in the memberOf attribute handles 0 or more entries
+		for _, v := range attr {
+			// split the DN into parts, first part is the group name
+			// even if value has only one part s will be valid and have at least 1 entry
+			s := strings.Split(v, ",")
+			// split on the equal sign that defines this part of the DN, do not really care what the attribute name is
+			newgroup := strings.Split(s[0], "=")
+			if len(newgroup) != 2 {
+				// some illegal construct in the DN part as it did not have an equal sign
+				continue
+			}
+			groups = append(groups, strings.TrimSpace(newgroup[1]))
 		}
 	}
 	return groups, nil
@@ -321,11 +328,9 @@ func (lu LdapLookup) LDAPLookupGroupIds(osUser *user.User) ([]string, error) {
 // ldapSearch performs an LDAP search for the specified username
 // This replaces the old LDAPConn_Bind function with a more testable approach
 func ldapSearch(ldapAccess LdapAccess, ldapConf LdapConfig, userName string) (*ldap.SearchResult, error) {
-	var ldapUri string
+	ldapUri := "ldap"
 	if ldapConf.useSsl {
 		ldapUri = "ldaps"
-	} else {
-		ldapUri = "ldap"
 	}
 
 	ldapaddr := fmt.Sprintf("%s://%s:%d", ldapUri, ldapConf.Host, ldapConf.Port)
@@ -354,7 +359,8 @@ func ldapSearch(ldapAccess LdapAccess, ldapConf LdapConfig, userName string) (*l
 		return nil, err
 	}
 
-	filter := fmt.Sprintf(ldapConf.Filter, userName)
+	// defence in depth: username is limited in what it may contain via the regexp, still escape the filter to be safe.
+	filter := fmt.Sprintf(ldapConf.Filter, ldap.EscapeFilter(userName))
 	log.Log(log.Security).Debug("Executing LDAP search",
 		zap.String("baseDN", ldapConf.BaseDN),
 		zap.String("filter", filter),
@@ -376,6 +382,8 @@ func ldapSearch(ldapAccess LdapAccess, ldapConf LdapConfig, userName string) (*l
 		return nil, err
 	}
 
+	// a search that does not find the entry returns no error but a search result with no entries
+	// not found is treated the same as no group memberships during processing.
 	log.Log(log.Security).Debug("LDAP search completed successfully",
 		zap.String("username", userName),
 		zap.Int("entriesFound", len(sr.Entries)))

@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/go-ldap/ldap/v3"
+	"golang.org/x/exp/slices"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
@@ -321,24 +322,58 @@ func TestLDAPLookupGroupIds(t *testing.T) {
 			{
 				Attributes: []*ldap.EntryAttribute{
 					{
-						Name:   "memberOf",
-						Values: []string{"CN=group1,OU=groups,DC=example,DC=com", "CN=group2,OU=groups,DC=example,DC=com"},
+						Name: "memberOf",
 					},
 				},
 			},
 		},
 	}
-
 	u := &user.User{Username: "testuser"}
 	lu := &LdapLookup{
-		access: newMockLdapAccess(mockResult, nil),
 		config: LdapConfig{},
 	}
 
-	groups, err := lu.LDAPLookupGroupIds(u)
-	assert.NilError(t, err)
-	assert.Assert(t, strings.Contains(strings.Join(groups, ","), "group1"))
-	assert.Assert(t, strings.Contains(strings.Join(groups, ","), "group2"))
+	tests := []struct {
+		name     string
+		memberOf []string
+		groups   []string
+	}{
+		{"empty member", []string{}, []string{}},
+		{"nil member", nil, []string{}},
+		{"single", []string{"CN=group1,OU=groups,DC=example,DC=com"}, []string{"group1"}},
+		{"non CN", []string{"uid=1234,OU=groups,DC=example,DC=com"}, []string{"1234"}},
+		{"lowercase CN", []string{"cn=group1,OU=groups,DC=example,DC=com"}, []string{"group1"}},
+		{"multival", []string{"CN=group1,OU=groups,DC=example,DC=com", "CN=group2,OU=groups,DC=example,DC=com"}, []string{"group1", "group2"}},
+		{"mixed", []string{"CN=group1,OU=groups,DC=example,DC=com", "cn=group2,OU=groups,DC=example,DC=com"}, []string{"group1", "group2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockResult.Entries[0].Attributes[0].Values = tt.memberOf
+			lu.access = newMockLdapAccess(mockResult, nil)
+			groups, err := lu.LDAPLookupGroupIds(u)
+			assert.NilError(t, err)
+			assert.Assert(t, slices.Equal(groups, tt.groups), "group slices are not equal")
+		})
+	}
+
+	// no attributes returned on a successful search
+	t.Run("no attributes",
+		func(t *testing.T) {
+			mockResult.Entries[0].Attributes = nil
+			lu.access = newMockLdapAccess(mockResult, nil)
+			groups, err := lu.LDAPLookupGroupIds(u)
+			assert.NilError(t, err)
+			assert.Assert(t, len(groups) == 0)
+		})
+
+	// no entries found: Entries is always initialised, never nil
+	t.Run("no entries",
+		func(t *testing.T) {
+			lu.access = newMockLdapAccess(&ldap.SearchResult{Entries: make([]*ldap.Entry, 0)}, nil)
+			groups, err := lu.LDAPLookupGroupIds(u)
+			assert.NilError(t, err)
+			assert.Assert(t, len(groups) == 0)
+		})
 }
 
 func TestLDAPLookupGroupIdsError(t *testing.T) {

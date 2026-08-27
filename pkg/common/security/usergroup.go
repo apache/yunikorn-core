@@ -117,16 +117,17 @@ func (c *UserGroupCache) GetResolverType() string {
 
 // run the cleanup in a separate routine
 func (c *UserGroupCache) run() {
-	log.Log(log.Security).Info("Starting user/group cache cleaner")
+	log.Log(log.Security).Info("Starting UserGroupCache cleaner")
 	for {
 		select {
 		case <-c.stop:
+			log.Log(log.Security).Info("UserGroupCache cleaner exiting")
 			return
 		case <-time.After(c.interval):
 			runStart := time.Now()
 			c.cleanUpCache()
 			log.Log(log.Security).Debug("time consumed cleaning the UserGroupCache",
-				zap.Stringer("duration", time.Since(runStart)))
+				zap.Duration("duration", time.Since(runStart)))
 		}
 	}
 }
@@ -136,8 +137,8 @@ func (c *UserGroupCache) cleanUpCache() {
 	oldest := time.Now().Unix() - poscache
 	oldestFailed := time.Now().Unix() - negcache
 	// clean up the cache so we do not grow out of bounds
-	instance.lock.Lock()
-	defer instance.lock.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	// walk over the entries in the map and delete the expired ones, cleanup based on the resolved time.
 	// Negative cached entries will expire quicker
 	for key, val := range c.ugs {
@@ -150,8 +151,8 @@ func (c *UserGroupCache) cleanUpCache() {
 // resetCache clears the cached content, test use only
 func (c *UserGroupCache) resetCache() {
 	log.Log(log.Security).Debug("UserGroupCache reset")
-	instance.lock.Lock()
-	defer instance.lock.Unlock()
+	c.lock.Lock()
+	defer c.lock.Unlock()
 	c.ugs = make(map[string]*UserGroup)
 }
 
@@ -168,6 +169,13 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 			return UserGroup{}, fmt.Errorf("empty user cannot resolve")
 		}
 	}
+
+	// make sure the user is acceptable before doing any more work
+	// if this fails the app is rejected anyway, loading groups etc is wasting cycles
+	if !configs.UserRegExp.MatchString(ugi.User) {
+		return UserGroup{}, fmt.Errorf("invalid username, it contains invalid characters")
+	}
+
 	// try to resolve the user if group info is empty otherwise we just convert
 	if len(ugi.Groups) == 0 {
 		ug, err := c.GetUserGroup(ugi.User)
@@ -176,10 +184,6 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 		} else {
 			return ug, err
 		}
-	}
-
-	if !configs.UserRegExp.MatchString(ugi.User) {
-		return UserGroup{}, fmt.Errorf("invalid username, it contains invalid characters")
 	}
 
 	// If groups are already present we should just convert
@@ -192,7 +196,7 @@ func (c *UserGroupCache) ConvertUGI(ugi *si.UserGroupInformation, force bool) (U
 	return newUG, nil
 }
 
-// GetUserGroup get the user group information for a singe user. An error will still return a UserGroup.
+// GetUserGroup get the user group information for a single user. An error will still return a UserGroup.
 // The Failed flag in the object will be set to true for any failures.
 // The information is cached, negatively and positively.
 func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
@@ -244,8 +248,8 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 
 	// add it to the cache, even if we fail negative cache is also good to know
 	c.lock.Lock()
-	defer c.lock.Unlock()
 	c.ugs[userName] = ug
+	c.lock.Unlock()
 	return *ug, err
 }
 
@@ -253,19 +257,18 @@ func (c *UserGroupCache) GetUserGroup(userName string) (UserGroup, error) {
 func (c *UserGroupCache) Stop() {
 	// make sure that in case of multiple partitions, we call Stop() only once (the instance is shared)
 	// see ClusterContext.Stop()
-	if !stopped.Load() {
-		log.Log(log.Security).Info("Stopping UserGroupCache background cleanup")
-		close(c.stop)
-		// Clear the cache before resetting the instance
-		c.lock.Lock()
-		c.ugs = make(map[string]*UserGroup)
-		c.lock.Unlock()
-		once = &sync.Once{} // re-init so that GetUserGroupCache() can create a new instance again
-		instance = nil
-		stopped.Store(true)
+	if !stopped.CompareAndSwap(false, true) {
+		log.Log(log.Security).Info("UserGroupCache already stopped")
 		return
 	}
-	log.Log(log.Security).Info("UserGroupCache already stopped")
+	log.Log(log.Security).Info("Stopping UserGroupCache background cleanup")
+	close(c.stop)
+	// Clear the cache before resetting the instance
+	c.lock.Lock()
+	c.ugs = make(map[string]*UserGroup)
+	once = &sync.Once{} // re-init so that GetUserGroupCache() can create a new instance again
+	instance = nil      // should not be needed as any Get from now on will overwrite the instance
+	c.lock.Unlock()
 }
 
 // resolveGroups resolves the groups for the user if the user exists and updates the cache.

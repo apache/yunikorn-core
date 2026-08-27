@@ -29,41 +29,63 @@ import (
 
 type PredicatePlugin struct {
 	ResourceManagerCallback
-	mustFail bool
-	nodes    map[string]int
+	mustPreFilterFail bool
+	mustFilterFail    bool
+	nodes             map[string]int
+}
+
+func (f *PredicatePlugin) PreFilterPredicates(args *si.PreFilterPredicatesArgs) *si.PreFilterPredicatesResponse {
+	feasibleNodes := make(map[string]*si.Empty)
+	result := &si.PreFilterPredicatesResponse{
+		Success:       false,
+		FeasibleNodes: map[string]*si.Empty{},
+	}
+	if f.mustPreFilterFail {
+		log.Log(log.Test).Info("fake predicate prefilter plugin fail: must fail set")
+		return result
+	}
+	for k, v := range f.nodes {
+		if args.Allocate {
+			if v < 0 {
+				feasibleNodes[k] = &si.Empty{}
+			}
+		} else {
+			if v > 0 {
+				feasibleNodes[k] = &si.Empty{}
+			}
+		}
+	}
+	log.Log(log.Test).Info("fake predicate prefilter plugin pass",
+		zap.Bool("allocate", args.Allocate),
+		zap.String("allocationKey", args.AllocationKey),
+		zap.Any("feasibleNodes", feasibleNodes),
+		zap.Int("feasibleNodes", len(feasibleNodes)))
+	result.Success = true
+	result.FeasibleNodes = feasibleNodes
+	return result
 }
 
 func (f *PredicatePlugin) Predicates(args *si.PredicatesArgs) error {
-	if f.mustFail {
-		log.Log(log.Test).Info("fake predicate plugin fail: must fail set")
+	if f.mustFilterFail {
+		log.Log(log.Test).Info("fake predicate filter plugin fail: must fail set")
 		return fmt.Errorf("fake predicate plugin failed")
 	}
-	if fail, ok := f.nodes[args.NodeID]; ok {
-		if args.Allocate && fail >= 0 {
-			log.Log(log.Test).Info("fake predicate plugin node allocate fail",
-				zap.String("node", args.NodeID),
-				zap.Int("fail mode", fail))
-			return fmt.Errorf("fake predicate plugin failed")
-		}
-		if !args.Allocate && fail <= 0 {
-			log.Log(log.Test).Info("fake predicate plugin node reserve fail",
-				zap.String("node", args.NodeID),
-				zap.Int("fail mode", fail))
-			return fmt.Errorf("fake predicate plugin failed")
-		}
-	}
-	log.Log(log.Test).Info("fake predicate plugin pass",
+	log.Log(log.Test).Info("fake predicate filter plugin pass",
+		zap.Bool("allocate", args.Allocate),
+		zap.String("allocationKey", args.AllocationKey),
 		zap.String("node", args.NodeID))
 	return nil
 }
 
 // NewPredicatePlugin returns a mock that can either always fail or fail based on the node that is checked.
-// mustFail will cause the predicate check to always fail
-// nodes allows specifying which node to fail for which check using the nodeID:
-// possible values: -1 fail reserve, 0 fail always, 1 fail alloc (defaults to always)
-func NewPredicatePlugin(mustFail bool, nodes map[string]int) *PredicatePlugin {
+// mustPreFilterFail will cause the predicate prefilter check to fail always
+// mustFilterFail will cause the predicate filter check to fail always
+// nodes allows specifying which node to make it to feasibleNodes list based on its own value:
+// possible values: 1 - Feasible in case of reserve, -1 Feasible in case of allow, 0 Not feasible always
+func NewPredicatePlugin(mustPreFilterFail bool, mustFilterFail bool, nodes map[string]int) *PredicatePlugin {
 	return &PredicatePlugin{
-		mustFail: mustFail,
-		nodes:    nodes,
+		mustPreFilterFail: mustPreFilterFail,
+		mustFilterFail:    mustFilterFail,
+		nodes:             nodes,
 	}
 }

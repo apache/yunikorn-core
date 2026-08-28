@@ -97,6 +97,8 @@ func TestEventStreaming_WithHistoryCount(t *testing.T) {
 	assert.Equal(t, int64(6), received1.TimestampNano)
 	assert.Equal(t, int64(9), received2.TimestampNano)
 	assert.Equal(t, int64(10), received3.TimestampNano)
+	streaming.RemoveEventStream(es)
+	assert.Equal(t, 0, len(streaming.eventStreams))
 }
 
 func TestEventStreaming_TwoConsumers(t *testing.T) {
@@ -118,6 +120,9 @@ func TestEventStreaming_TwoConsumers(t *testing.T) {
 	assert.Equal(t, 0, len(streaming.eventStreams[es1].consumer))
 	assert.Equal(t, 0, len(streaming.eventStreams[es2].local))
 	assert.Equal(t, 0, len(streaming.eventStreams[es2].consumer))
+	streaming.RemoveEventStream(es1)
+	streaming.RemoveEventStream(es2)
+	assert.Equal(t, 0, len(streaming.eventStreams))
 }
 
 func TestEventStreaming_SlowConsumer(t *testing.T) {
@@ -139,12 +144,12 @@ func TestGetEventStreams(t *testing.T) {
 	streaming := NewEventStreaming(buffer)
 	defer streaming.Close()
 
-	streaming.CreateEventStream("test-1", 0)
+	es1 := streaming.CreateEventStream("test-1", 0)
 	streams := streaming.GetEventStreams()
 	assert.Equal(t, 1, len(streams))
 	assert.Equal(t, "test-1", streams[0].Name)
 
-	streaming.CreateEventStream("test-2", 0)
+	es2 := streaming.CreateEventStream("test-2", 0)
 	streams = streaming.GetEventStreams()
 	assert.Equal(t, 2, len(streams))
 	names := make(map[string]bool)
@@ -152,6 +157,9 @@ func TestGetEventStreams(t *testing.T) {
 	names[streams[1].Name] = true
 	assert.Assert(t, names["test-2"])
 	assert.Assert(t, names["test-1"])
+	streaming.RemoveEventStream(es1)
+	streaming.RemoveEventStream(es2)
+	assert.Equal(t, 0, len(streaming.eventStreams))
 }
 
 func receive(t *testing.T, input <-chan *si.EventRecord) *si.EventRecord {

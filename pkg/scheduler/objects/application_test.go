@@ -2818,7 +2818,7 @@ func TestAddAllocationAskReplaceExistingPendingAsk(t *testing.T) {
 // SCHEDULING_FAILED_ON_RM release arriving in that window reaches RollbackAllocation. Since
 // YUNIKORN-3360 the rollback is rejected outright when the ask is not in sa.requests, and this test
 // pins that guard: the call must return an error and leave the allocation, the allocated resource,
-// sortedRequests and the pending histogram untouched.
+// sortedRequests, the pending histogram and the app/queue pending resource untouched.
 func TestRollbackAllocationAskNotTracked(t *testing.T) {
 	setupUGM()
 	defer setupUGM()
@@ -2851,6 +2851,8 @@ func TestRollbackAllocationAskNotTracked(t *testing.T) {
 	app.RUnlock()
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "rejected rollback must not change the allocated resource")
 	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "rejected rollback must not change askMaxPriority")
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "rejected rollback must not re-add pending resource, got %v", app.GetPendingResource())
+	assert.Assert(t, resources.IsZero(queue.GetPendingResource()), "rejected rollback must not re-add queue pending resource, got %v", queue.GetPendingResource())
 	assertMaxPriorityConsistent(t, app)
 }
 

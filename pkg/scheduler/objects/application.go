@@ -958,18 +958,30 @@ func (sa *Application) deallocateAsk(ask *Allocation) (*resources.Resource, erro
 	// updateAskMaxPriority derived the max by scanning sa.requests, so an ask absent from sa.requests
 	// never influenced it. Without the guard the pre-existing accounting drift above would be
 	// upgraded into a ghost entry in sortedRequests that tryAllocate would try to schedule.
+	delta := ask.GetAllocatedResource()
 	if sa.requests[ask.GetAllocationKey()] == ask {
 		sa.addToPriorities(ask.GetPriority())
 		// the ask is pending again: re-insert it at the head of its (priority, createTime)
 		// tie-group so the next cycle retries it before the peers it was already tried ahead of
 		sa.sortedRequests.reinsert(ask)
+		// The pending resource follows the same rule as the histogram and sortedRequests: it only
+		// counts asks the application still tracks. For an untracked ask this add would be a
+		// permanent leak - removeAsksInternal already zeroed sa.pending when it dropped the ask,
+		// and every later removeAsksInternal("") short-circuits on the empty sa.requests, so
+		// nothing would ever subtract it again. The leak is not cosmetic: it keeps
+		// resources.IsZero(sa.pending) false forever, which blocks the Completing transition in
+		// RemoveAllAllocations/removeAsksInternal, and inflates queue pending until app removal.
+		// Guarding it here (rather than in the caller) keeps all four pending-set structures -
+		// histogram, sortedRequests, sa.pending, queue pending - behind one decision.
+		sa.pending = resources.Add(sa.pending, delta)
+		// update the pending of the queue with the same delta
+		sa.queue.incPendingResource(delta)
 	}
 
-	delta := ask.GetAllocatedResource()
-	sa.pending = resources.Add(sa.pending, delta)
-	// update the pending of the queue with the same delta
-	sa.queue.incPendingResource(delta)
-
+	// The returned delta stays the ask's resource even when the guard above rejects the ask: the
+	// allocation being rolled back genuinely occupied its node and its queue's ALLOCATED tracking,
+	// and callers (partition rollbackAllocation, tryPlaceholderAllocate's revert) use the return to
+	// unwind that side. Only the PENDING re-add is conditional on the ask still being tracked.
 	return delta, nil
 }
 

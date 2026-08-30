@@ -59,10 +59,9 @@ func (s *sortedRequests) insertAt(index int, ask *Allocation) {
 	(*s)[index] = ask
 }
 
-// remove drops the entry that IS the passed ask, matching on pointer identity and not on
-// allocationKey. The slice tracks the pending asks the application holds in sa.requests, and every
-// caller passes the tracked object. Matching on key would remove the first entry that shares the
-// key, which is a different ask than the caller asked to remove as soon as two ever coexist.
+// remove drops the entry that IS the passed ask, matching on pointer identity: that is cheaper than
+// comparing allocationKeys, and every caller passes the object it resolved from sa.requests or read
+// out of the slice itself.
 func (s *sortedRequests) remove(ask *Allocation) {
 	for i, a := range *s {
 		if a == ask {

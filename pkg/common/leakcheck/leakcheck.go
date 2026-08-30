@@ -56,28 +56,33 @@ import (
 //
 // The list is the baseline that was present when detection was switched on, and
 // it is meant to be burned down rather than extended. Each exemption names its
-// goroutine and the JIRA that tracks removing it.
+// goroutine and the JIRA that tracks it.
 func options() []goleak.Option {
 	return []goleak.Option{
-		// Event system handler (EventSystemImpl.StartServiceWithPublisher). See YUNIKORN-3366 (test cleanup) and YUNIKORN-3363 (restart-after-Stop).
+		// Event system handler (EventSystemImpl.StartServiceWithPublisher). See YUNIKORN-3370.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/events.(*EventSystemImpl).StartServiceWithPublisher.func1"),
 
-		// Event publisher (eventPublisher.start). See YUNIKORN-3363.
+		// Event publisher (eventPublisher.start). See YUNIKORN-3370.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/events.(*eventPublisher).start.func1"),
 
-		// Event stream forwarder (EventStreaming.CreateEventStream). See YUNIKORN-3364.
+		// Event stream forwarder (EventStreaming.CreateEventStream). Two bare
+		// sends: the history replay (YUNIKORN-3364, fix in #1133) and the in-loop
+		// consumer send hit by slow-consumer eviction (YUNIKORN-3436). The
+		// test-hygiene half landed as YUNIKORN-3372.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/events.(*EventStreaming).CreateEventStream.func1"),
 
-		// Partition queue cleaner (partitionManager.Run). See YUNIKORN-3366.
+		// Partition queue cleaner (partitionManager.Run). See YUNIKORN-3370.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/scheduler.(*partitionManager).cleanRoot"),
 
-		// Partition expired-application cleaner (partitionManager.Run). See YUNIKORN-3366.
+		// Partition expired-application cleaner (partitionManager.Run). See YUNIKORN-3370.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/scheduler.(*partitionManager).cleanExpiredApps"),
 
-		// User/group cache cleaner (UserGroupCache.run). See YUNIKORN-3366.
+		// User/group cache cleaner (UserGroupCache.run). See YUNIKORN-3370.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/common/security.(*UserGroupCache).run"),
 
-		// Scheduler allocation notify (ClusterContext.notifyRMNewAllocation). See YUNIKORN-3365.
+		// Scheduler allocation notify parked on an RM reply the proxy never
+		// drains at shutdown. Maintainers consider it benign at process exit; no
+		// fix scheduled. See YUNIKORN-3365.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/scheduler.(*ClusterContext).notifyRMNewAllocation"),
 	}
 }

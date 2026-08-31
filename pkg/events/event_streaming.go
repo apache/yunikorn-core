@@ -124,7 +124,15 @@ func (e *EventStreaming) CreateEventStream(name string, count uint64) *EventStre
 				// since events are processed in a single goroutine, doubling is no longer
 				// possible at this point
 				seen = make(map[*si.EventRecord]bool)
-				consumer <- event
+				select {
+				case consumer <- event:
+				case <-e.stopCh:
+					close(consumer)
+					return
+				case <-stop:
+					close(consumer)
+					return
+				}
 			}
 		}
 	}(consumer, local, stop)

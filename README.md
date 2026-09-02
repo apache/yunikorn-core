@@ -33,18 +33,18 @@ shim layer and adopt to different ResourceManager implementation including Apach
 
 ## Get Started
 
-See how to get started with running YuniKorn on Kubernetes, please read the documentation on [yunikorn.apache.org](http://yunikorn.apache.org/docs/).
+See how to get started with running YuniKorn on Kubernetes, please read the documentation on [yunikorn.apache.org](https://yunikorn.apache.org/docs/).
 
 Want to know more about the value of the YuniKorn project, and what YuniKorn can do? Here are some
 [session recordings and demos](https://yunikorn.apache.org/community/events#past-conference--meetup-recordings).
 
 ## Get Involved
 
-Please read [get involved](http://yunikorn.apache.org/community/get_involved) document if you want to discuss issues,
+Please read [get involved](https://yunikorn.apache.org/community/get_involved) document if you want to discuss issues,
 contribute your ideas, explore use cases, or participate the development.
 
-If you want to contribute code to this repo, please read the [developer doc](http://yunikorn.apache.org/docs/next/developer_guide/build).
-All the design docs are available [here](http://yunikorn.apache.org/docs/next/design/architecture).
+If you want to contribute code to this repo, please read the [developer doc](https://yunikorn.apache.org/docs/next/developer_guide/build).
+All the design docs are available [here](https://yunikorn.apache.org/docs/next/design/architecture).
 
 ## Code Structure
 
@@ -55,7 +55,7 @@ Apache YuniKorn project has the following git repositories:
 - [yunikorn-scheduler-interface](https://github.com/apache/yunikorn-scheduler-interface) : the common scheduling interface
 - [yunikorn-web](https://github.com/apache/yunikorn-web) : the web UI
 - [yunikorn-release](https://github.com/apache/yunikorn-release/): the repo manages yunikorn releases, including the helm charts
-- [yunikorn-site](https://github.com/apache/yunikorn-site/): the source code for [yunikorn website](http://yunikorn.apache.org/)
+- [yunikorn-site](https://github.com/apache/yunikorn-site/): the source code for [yunikorn website](https://yunikorn.apache.org/)
 
 The `yunikorn-core` is the brain of the scheduler, which makes placement decisions (allocate container X on node Y) according
 to the builtin rich scheduling policies. Scheduler core implementation is agnostic to the underneath resource manager system.

@@ -74,6 +74,7 @@ type QueuePreemptionSnapshot struct {
 }
 
 // NewPreemptor creates a new preemptor. The preemptor itself is not thread safe, and assumes the application lock is held.
+// +checklocksread:application.RWMutex
 func NewPreemptor(application *Application, headRoom *resources.Resource, preemptionDelay time.Duration, ask *Allocation, iterator NodeIterator, nodesTried bool) *Preemptor {
 	return &Preemptor{
 		application:     application,
@@ -134,6 +135,7 @@ func (p *Preemptor) initQueueSnapshots() {
 
 // initWorkingState builds helper data structures required to compute a solution
 // returns the number of reservations released while preparing the data structures
+// +checklocks:p.application.RWMutex
 func (p *Preemptor) initWorkingState() int {
 	// return if we have already run
 	if p.nodeAvailableMap != nil {
@@ -166,7 +168,9 @@ func (p *Preemptor) initWorkingState() int {
 		isReserved := false
 		if node.IsReserved() && !node.isReservedForAllocation(p.ask.GetAllocationKey()) {
 			askPriority := p.ask.priority
-			released, remaining := p.application.cancelMatchingReservations(node.GetReservations(), func(res *reservation) bool {
+			// application lock is held by the caller of TryPreemption, the analysis does not
+			// follow facts into the iterator closure
+			released, remaining := p.application.cancelMatchingReservations(node.GetReservations(), func(res *reservation) bool { // +checklocksignore
 				if res.alloc.requiredNode != "" || res.alloc.HasTriggeredPreemption() {
 					return false
 				}
@@ -598,6 +602,7 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 	return "", nil, false
 }
 
+// +checklocks:p.application.RWMutex
 func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	// validate that sufficient capacity can be freed
 	if !p.checkPreemptionQueueGuarantees() {
@@ -613,7 +618,9 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	p.application.executeReservationReleasedCallback(released)
 
 	// try to find a node to schedule on and victims to preempt
-	nodeID, victims, ok := p.tryNodes()
+	// predicate evaluation fans out per node and waits for the plugin under the application lock: the
+	// in-process scheduling path, same as tryNode
+	nodeID, victims, ok := p.tryNodes() // +lockblockingignore
 	if !ok {
 		// no preemption possible
 		return nil, false
@@ -718,7 +725,8 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	p.ask.MarkTriggeredPreemption()
 
 	// notify RM that victims should be released
-	p.application.notifyRMAllocationReleased(finalVictims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
+	// YUNIKORN-3411: same round trip, see timeoutStateTimer
+	p.application.notifyRMAllocationReleased(finalVictims, si.TerminationType_PREEMPTED_BY_SCHEDULER, // +lockblockingignore
 		"preempting allocations to free up resources to run ask: "+p.ask.GetAllocationKey())
 
 	// reserve the selected node for the new allocation if it will fit

@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: lint check_scripts license-check pseudo test test_all bench fsm_graph
+.PHONY: lint vetlock vetlock-toolchain check_scripts license-check pseudo test test_all bench fsm_graph
 .PHONY: build tools clean distclean
 
 # Check if this GO tools version used is at least the version of go specified in
@@ -108,13 +108,36 @@ GOLANGCI_LINT_BIN=$(GOLANGCI_LINT_PATH)/golangci-lint
 GOLANGCI_LINT_ARCHIVEBASE=golangci-lint-$(GOLANGCI_LINT_VERSION)-$(OS)-$(EXEC_ARCH)
 GOLANGCI_LINT_ARCHIVE=$(GOLANGCI_LINT_ARCHIVEBASE).tar.gz
 
+# vetlock
+# The version is pinned in the go.mod of the tools module: bump it with "go get" in that directory
+# followed by "go mod tidy".
+VETLOCK_MOD_DIR=scripts/vetlock
+VETLOCK_VERSION=$(shell "$(GO)" list -C "$(VETLOCK_MOD_DIR)" -m -f '{{ .Version }}' github.com/tigerquoll/vet-lock)
+# The path is keyed on the go version as well as the tool version: the export data of a vet tool
+# must match the toolchain that runs "go vet", so a go upgrade must rebuild the tool.
+VETLOCK_PATH=${TOOLS_DIR}/vetlock-$(VETLOCK_VERSION)-$(shell "$(GO)" env GOVERSION)
+VETLOCK_BIN=$(VETLOCK_PATH)/vet-lock
+# The go version the tools module needs against the version that is running, both without the
+# "go" prefix. Read from the go directive of the tools module, which is the newer of what that
+# module asks for and what vet-lock itself asks for, so a tool update cannot make these drift.
+VETLOCK_GO_REQUIRED=$(shell "$(GO)" list -C "$(VETLOCK_MOD_DIR)" -m -f '{{ .GoVersion }}')
+VETLOCK_GO_CURRENT=$(patsubst go%,%,$(shell "$(GO)" env GOVERSION))
+# Fixture holding a known lock violation, see the vetlock target.
+VETLOCK_CANARY=pkg/locking/checklocks_canary.go
+# The messages the canary must produce, one per class of violation it holds.
+# The last two are the derived facts: an exclusion the canary does not state, and a field guard
+# the canary states on the type rather than on the field. Both are required by name because the
+# other messages here would keep the canary green if either derivation were lost, and hundreds of
+# annotations were deleted from this repository on the strength of them.
+VETLOCK_CANARY_MESSAGES := "invalid field access" "must not hold" "already locked" "to call callbackSelfLocking" "guarded read races" "a wait under a lock" "to call derivedSelfLocking" "when accessing structGuardedValue"
+
 all:
 	$(MAKE) -C $(dir $(BASE_DIR)) build
 
-test_all: check_scripts license-check lint test
+test_all: check_scripts license-check lint vetlock test
 
 # Install tools
-tools: $(SHELLCHECK_BIN) $(GOLANGCI_LINT_BIN)
+tools: $(SHELLCHECK_BIN) $(GOLANGCI_LINT_BIN) $(VETLOCK_BIN)
 
 # Install shellcheck
 $(SHELLCHECK_BIN):
@@ -130,11 +153,99 @@ $(GOLANGCI_LINT_BIN):
 	@curl -sSfL "https://github.com/golangci/golangci-lint/releases/download/v$(GOLANGCI_LINT_VERSION)/$(GOLANGCI_LINT_ARCHIVE)" \
 		| tar -x -z --strip-components=1 -C "$(GOLANGCI_LINT_PATH)" "$(GOLANGCI_LINT_ARCHIVEBASE)/golangci-lint"
 
+# Install vetlock
+# Built from the tools module in $(VETLOCK_MOD_DIR): the analyser is a tool only dependency and
+# must not end up in the go.mod of the scheduler. Building from a module instead of using
+# "go install pkg@version" pins the whole dependency tree via its go.sum.
+$(VETLOCK_BIN): | vetlock-toolchain
+	@echo "installing vet-lock $(VETLOCK_VERSION)"
+	@mkdir -p "$(VETLOCK_PATH)"
+	@"$(GO)" build -C "$(VETLOCK_MOD_DIR)" -o "$(BASE_DIR)$(VETLOCK_BIN)" github.com/tigerquoll/vet-lock/cmd/vet-lock
+
+# Refuse to build or run the analyser with a go that is older than the tools module needs.
+# A vet tool must be built with the toolchain that runs "go vet" or the export data does not
+# match. Letting the toolchain switch happen would do exactly that: the tool would be built
+# with the newer go while "go vet" keeps running on the older one. An order only prerequisite
+# of the binary, so that the check runs before the build and before every use without making
+# the binary itself out of date.
+vetlock-toolchain:
+	@if [ "$(VETLOCK_GO_CURRENT)" != "$(VETLOCK_GO_REQUIRED)" ] && \
+		[ "$$(printf '%s\n%s\n' "$(VETLOCK_GO_CURRENT)" "$(VETLOCK_GO_REQUIRED)" | sort -V | head -1)" = "$(VETLOCK_GO_CURRENT)" ]; then \
+		echo "vet-lock needs go $(VETLOCK_GO_REQUIRED) or later, found go $(VETLOCK_GO_CURRENT)"; \
+		echo "  the analyser must be built with the same toolchain that runs \"go vet\": upgrade go"; \
+		exit 1; \
+	fi
+
 # Run lint against the previous commit for PR and branch build
 # In dev setup look at all changes on top of master
 lint: $(GOLANGCI_LINT_BIN)
 	@echo "running golangci-lint"
 	@"${GOLANGCI_LINT_BIN}" run
+
+# Check the lock annotations. Every package below pkg is analysed, a new package is picked up
+# without a change here: annotations that are missing or wrong in it fail the check as soon as it
+# is added. Note that the "+checklocks:" requirements of a function are only enforced for callers
+# in the listed packages.
+VETLOCK_PACKAGES := $(REPO)/...
+# Only the non test files of a package are analysed. "go vet" has no option to skip the test
+# variant of a package so the file list of each package is passed instead. Inferred locks are
+# turned off: those are guesses based on how often a field happens to be used under a lock,
+# they are not the documented intent and they change as unrelated code changes.
+# The vet tool runs several analyses and every one of them is named on the command line. Naming
+# them is not the same as taking the default: an analysis added by a later version of the tool
+# then has to be adopted deliberately instead of appearing as a wall of findings on an unrelated
+# change. Each analysis has its flags under its own name. "lockorder" is deliberately not named
+# here: the order in which this code base nests its lock classes is a separate piece of work. The
+# "+lockclass" annotations it shares are still carried, because "lockblocking" reports a wait made
+# while a CLASSED lock is held and a type without a class leaves it silent.
+VETLOCK_ANALYZERS := -checklocks -lockstringer -lockblocking
+VETLOCK_FLAGS := $(VETLOCK_ANALYZERS) -checklocks.inferred=false
+# The file lists of all packages are collected in a single "go list" run and a failure to list
+# aborts the target: a package that cannot be loaded must not be silently skipped. Every package
+# is then analysed, a failure only remembered, so that one bad package does not hide the findings
+# of the ones behind it. The loop keeps the accumulated status inside the pipeline subshell it
+# runs in and exits with it, the status of a pipeline is the status of its last command.
+vetlock: $(VETLOCK_BIN)
+	@echo "running vet-lock"
+	@filelists=$$("$(GO)" list -f '{{if .GoFiles}}{{$$dir := .Dir}}{{range .GoFiles}}{{$$dir}}/{{.}} {{end}}{{end}}' $(VETLOCK_PACKAGES)) || exit 1; \
+	printf '%s\n' "$$filelists" | { \
+		status=0; \
+		while read -r gofiles; do \
+			[ -n "$$gofiles" ] || continue; \
+			"$(GO)" vet "-vettool=$(BASE_DIR)$(VETLOCK_BIN)" $(VETLOCK_FLAGS) $$gofiles || status=1; \
+		done; \
+		exit $$status; \
+	}
+# Prove that the analysis still detects anything at all. The canary is a file with known
+# violations that no build compiles, it is passed explicitly which makes the analysis ignore
+# its build constraint. It is checked together with the locking package as it uses the locks
+# defined there. Both the exit code and the messages are checked: a canary that fails to build
+# or is not found would otherwise look exactly like a violation that was caught. Every class of
+# violation is required separately, one per analysis plus the extra checklocks ones, as they are
+# detected independently: an analysis that stops reporting or that is dropped from the command
+# line above would otherwise leave the canary green on the strength of the other messages.
+# The number of diagnostics is checked against the number of messages as well, so that the cases
+# the canary holds to be clean stay clean: a report that grows is a false positive the fixture
+# says must never be raised, and the messages above would keep matching through it.
+	@canary="$$("$(GO)" list -f '{{$$dir := .Dir}}{{range .GoFiles}}{{$$dir}}/{{.}} {{end}}' $(REPO)/locking) $(BASE_DIR)$(VETLOCK_CANARY)"; \
+	report=$$("$(GO)" vet "-vettool=$(BASE_DIR)$(VETLOCK_BIN)" $(VETLOCK_FLAGS) $$canary 2>&1); \
+	found=$$?; \
+	missing=""; \
+	for message in $(VETLOCK_CANARY_MESSAGES); do \
+		printf '%s' "$$report" | grep -q "$$message" || missing="$$missing $$message"; \
+	done; \
+	count=$$(printf '%s\n' "$$report" | grep -c -E '^.+:[0-9]+:[0-9]+: ' || true); \
+	expected=$$(set -- $(VETLOCK_CANARY_MESSAGES); echo $$#); \
+	if [ $$found -eq 0 ] || [ -n "$$missing" ]; then \
+		echo "vetlock canary failed: analyzer did not detect a known violation:$$missing"; \
+		printf '%s\n' "$$report"; \
+		exit 1; \
+	fi; \
+	if [ "$$count" -ne "$$expected" ]; then \
+		echo "vetlock canary failed: expected $$expected diagnostics, got $$count"; \
+		printf '%s\n' "$$report"; \
+		exit 1; \
+	fi
 
 # Check scripts
 ALLSCRIPTS := $(shell find . -not \( -path ./"${TOOLS_DIR}" -prune \) -not \( -path ./"${BUILD_DIR}" -prune \) -name '*.sh')

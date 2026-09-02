@@ -40,6 +40,8 @@ var m *Manager
 
 // Manager implements tracker. A User Group Manager to track the usage for both user and groups.
 // Holds object of both user and group trackers
+// +lockclass:UGMManager
+// +checklocksguardedby:RWMutex
 type Manager struct {
 	userTrackers              map[string]*UserTracker
 	groupTrackers             map[string]*GroupTracker
@@ -48,7 +50,8 @@ type Manager struct {
 	configuredGroups          map[string][]string                // Hold groups for all configured queue paths.
 	userLimits                map[string]map[string]*LimitConfig // Holds queue path * user limit config
 	groupLimits               map[string]map[string]*LimitConfig // Holds queue path * group limit config
-	events                    *ugmEvents
+	// +checklocksunguarded
+	events *ugmEvents // set on creation and never changed, read without the lock in ensureGroupTrackerForApp
 	locking.RWMutex
 }
 
@@ -279,6 +282,7 @@ func (m *Manager) ensureGroup(user security.UserGroup, queuePath string) string 
 // ensureGroupInternal checks the config for a matching group to track against.
 // Matching starts at the leaf queue and works upwards towards the root.
 // If nothing matches an empty string is returned.
+// +checklocksread:m.RWMutex
 func (m *Manager) ensureGroupInternal(userGroups []string, queuePath string) string {
 	if configGroups, ok := m.configuredGroups[queuePath]; ok {
 		for _, configGroup := range configGroups {
@@ -472,6 +476,7 @@ func (m *Manager) applyWildCardUserLimits(newUserWildCardLimits map[string]*Limi
 
 // clearEarlierSetUserLimits Traverse new user config and decide whether earlier usage needs to be cleared or not
 // by comparing with the existing config. Reset earlier usage only config set earlier but not now
+// +checklocks:m.RWMutex
 func (m *Manager) clearEarlierSetUserLimits(newUserLimits map[string]map[string]*LimitConfig) {
 	for queuePath, limitConfig := range m.userLimits {
 		// Is queue path exists?
@@ -497,6 +502,10 @@ func (m *Manager) clearEarlierSetUserLimits(newUserLimits map[string]map[string]
 // resetUserEarlierUsage Clear or reset earlier usage only when user already tracked for the queue path.
 // Reset the max apps and max resources to default, unlink the end leaf queue of queue path from its immediate parent and
 // eventually remove user tracker object itself from ugm if it can be removed.
+// The user tracker is locked and unlocked repeatedly by the calls below, so its lock must
+// not be held on entry.
+// +checklocks:m.RWMutex
+// +checklocksexclude:ut.RWMutex
 func (m *Manager) resetUserEarlierUsage(ut *UserTracker, queuePath string) {
 	// Is this user already tracked for the queue path?
 	hierarchy := strings.Split(queuePath, configs.DOT)
@@ -520,6 +529,7 @@ func (m *Manager) resetUserEarlierUsage(ut *UserTracker, queuePath string) {
 
 // clearEarlierSetGroupLimits Traverse new group config and decide whether earlier usage needs to be cleared or not
 // by comparing with the existing config. Reset earlier usage only config set earlier but not now
+// +checklocks:m.RWMutex
 func (m *Manager) clearEarlierSetGroupLimits(newGroupLimits map[string]map[string]*LimitConfig) {
 	for queuePath, limitConfig := range m.groupLimits {
 		// Is queue path exists?
@@ -546,6 +556,10 @@ func (m *Manager) clearEarlierSetGroupLimits(newGroupLimits map[string]map[strin
 // Decrease the group usage and collect the list of applications for which user app group linkage needs to be broken.
 // Reset the max apps and max resources to default, unlink the end leaf queue of queue path from its immediate parent and
 // eventually remove group tracker object itself from ugm if it can be removed.
+// The group tracker is locked and unlocked repeatedly by the calls below, so its lock must
+// not be held on entry.
+// +checklocks:m.RWMutex
+// +checklocksexclude:gt.RWMutex
 func (m *Manager) resetGroupEarlierUsage(gt *GroupTracker, queuePath string) {
 	hierarchy := strings.Split(queuePath, configs.DOT)
 	if gt.isQueuePathTrackedCompletely(hierarchy) {
@@ -555,7 +569,8 @@ func (m *Manager) resetGroupEarlierUsage(gt *GroupTracker, queuePath string) {
 		appUsersMap := gt.decreaseAllTrackedResourceUsage(hierarchy)
 		for app, u := range appUsersMap {
 			ut := m.userTrackers[u]
-			delete(ut.appGroupTrackers, app)
+			// YUNIKORN-3414: user tracker map mutated under the manager lock only
+			delete(ut.appGroupTrackers, app) // +checklocksignore
 		}
 		gt.clearLimits(queuePath)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
@@ -639,7 +654,8 @@ func (m *Manager) getUserTracker(user string) *UserTracker {
 }
 
 func (m *Manager) getUserWildCardLimitsConfig(queuePath string) *LimitConfig {
-	if config, ok := m.userWildCardLimitsConfig[queuePath]; ok {
+	// YUNIKORN-3413: wildcard limit config read lock-free on hot scheduling paths, races config replacement
+	if config, ok := m.userWildCardLimitsConfig[queuePath]; ok { // +checklocksignore
 		return config
 	}
 	return nil
@@ -723,7 +739,8 @@ func (m *Manager) GetUserResources(user string) *resources.Resource {
 	if ut == nil {
 		return nil
 	}
-	return ut.queueTracker.resourceUsage.Clone()
+	// YUNIKORN-3414: tracker internals read under the manager lock only
+	return ut.queueTracker.resourceUsage.Clone() // +checklocksignore
 }
 
 // GetGroupResources returns the root queue maxResources
@@ -735,5 +752,6 @@ func (m *Manager) GetGroupResources(group string) *resources.Resource {
 	if gt == nil {
 		return nil
 	}
-	return gt.queueTracker.resourceUsage.Clone()
+	// YUNIKORN-3414: same as above
+	return gt.queueTracker.resourceUsage.Clone() // +checklocksignore
 }

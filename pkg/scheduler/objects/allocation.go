@@ -37,30 +37,44 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+// +checklocksguardedby:RWMutex
 type Allocation struct {
 	// Read-only fields
-	allocationKey     string
-	applicationID     string
-	taskGroupName     string    // task group this allocation belongs to
-	placeholder       bool      // is this a placeholder allocation
-	createTime        time.Time // the time this allocation was created (used in reservations)
-	priority          int32
-	requiredNode      string
-	allowPreemptSelf  bool
+	// +checklocksunguarded
+	allocationKey string
+	// +checklocksunguarded
+	applicationID string
+	// +checklocksunguarded
+	taskGroupName string // task group this allocation belongs to
+	// +checklocksunguarded
+	placeholder bool // is this a placeholder allocation
+	// +checklocksunguarded
+	createTime time.Time // the time this allocation was created (used in reservations)
+	// +checklocksunguarded
+	priority int32
+	// +checklocksunguarded
+	requiredNode string
+	// +checklocksunguarded
+	allowPreemptSelf bool
+	// +checklocksunguarded
 	allowPreemptOther bool
-	originator        bool
-	tags              map[string]string
-	foreign           bool
-	preemptable       bool
+	// +checklocksunguarded
+	originator bool
+	// +checklocksunguarded
+	tags map[string]string
+	// +checklocksunguarded
+	foreign bool
+	// +checklocksunguarded
+	preemptable bool
 
-	// Mutable fields which need protection
-	allocated            bool
-	allocLog             map[string]*AllocationLogEntry
-	preemptionTriggered  bool
-	preemptCheckTime     time.Time
-	schedulingAttempted  bool // whether scheduler core has tried to schedule this allocation
-	scaleUpTriggered     bool // whether this allocation has triggered autoscaling or not
-	allocatedResource    *resources.Resource
+	allocated           bool
+	allocLog            map[string]*AllocationLogEntry
+	preemptionTriggered bool
+	preemptCheckTime    time.Time
+	schedulingAttempted bool // whether scheduler core has tried to schedule this allocation
+	scaleUpTriggered    bool // whether this allocation has triggered autoscaling or not
+	allocatedResource   *resources.Resource
+	// +checklocksunguarded
 	askEvents            *schedEvt.AskEvents
 	userQuotaCheckFailed bool
 	headroomCheckFailed  bool
@@ -176,6 +190,8 @@ func (a *Allocation) NewSIFromAllocation() *si.Allocation {
 	}
 }
 
+// YUNIKORN-3420: String() takes the receiver lock; formatting under the write lock self-deadlocks
+// +lockstringerignore
 func (a *Allocation) String() string {
 	if a == nil {
 		return "nil allocation"

@@ -1,3 +1,5 @@
+//go:build tools
+
 /*
  Licensed to the Apache Software Foundation (ASF) under one
  or more contributor license agreements.  See the NOTICE file
@@ -16,17 +18,11 @@
  limitations under the License.
 */
 
-package plugins
+// Package tools pins the build tools that are not imported by the code base. This is a
+// module of its own so that the tool dependencies never end up in the go.mod of the
+// scheduler itself. The blank import is what keeps the version in go.mod and go.sum.
+package tools
 
 import (
-	"github.com/apache/yunikorn-core/pkg/locking"
-	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
+	_ "github.com/tigerquoll/vet-lock/cmd/vet-lock"
 )
-
-// +checklocksguardedby:RWMutex
-type SchedulerPlugins struct {
-	ResourceManagerCallbackPlugin api.ResourceManagerCallback
-	StateDumpPlugin               api.StateDumpPlugin
-
-	locking.RWMutex
-}

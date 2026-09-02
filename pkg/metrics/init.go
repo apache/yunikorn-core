@@ -40,10 +40,11 @@ var m *Metrics
 
 type Metrics struct {
 	scheduler *SchedulerMetrics
-	queues    map[string]*QueueMetrics
-	event     *EventMetrics
-	runtime   *RuntimeMetrics
-	lock      locking.RWMutex
+	// +checklocks:lock
+	queues  map[string]*QueueMetrics
+	event   *EventMetrics
+	runtime *RuntimeMetrics
+	lock    locking.RWMutex
 }
 
 func init() {

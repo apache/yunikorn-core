@@ -162,6 +162,21 @@ func TestGetEventStreams(t *testing.T) {
 	assert.Equal(t, 0, len(streaming.eventStreams))
 }
 
+func TestEventStreaming_HistoryReplay_SlowConsumer(t *testing.T) {
+	buffer := newEventRingBuffer(1500)
+	for i := 0; i < 1500; i++ {
+		buffer.Add(&si.EventRecord{TimestampNano: int64(i)})
+	}
+	streaming := NewEventStreaming(buffer)
+	defer streaming.Close()
+
+	// requesting more historical events than defaultChannelBufSize (1000) and disconnecting
+	es := streaming.CreateEventStream("test", 1500)
+	streaming.RemoveEventStream(es)
+
+	assert.Equal(t, 0, len(streaming.eventStreams))
+}
+
 func receive(t *testing.T, input <-chan *si.EventRecord) *si.EventRecord {
 	select {
 	case event := <-input:

@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -2922,6 +2923,123 @@ func TestCleanupRejectedApps(t *testing.T) {
 	assert.Equal(t, 0, len(partition.rejectedApplications), "the partition should not have app")
 	assert.Assert(t, partition.getRejectedApplication(rejectedApp.ApplicationID) == nil, "rejected application should have been deleted")
 	assert.Equal(t, 0, len(partition.getRejectedAppsByState(objects.Expired.String())), "the partition should have 0 expired app")
+}
+
+func TestAddRejectedApplicationConcurrent(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	var wg sync.WaitGroup
+	numGoroutines := 20
+	appsPerGoroutine := 10
+	start := make(chan struct{})
+
+	// Concurrent Writers
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			<-start
+			for j := 0; j < appsPerGoroutine; j++ {
+				appID := fmt.Sprintf("app-%d-%d", workerID, j)
+				app := newApplication(appID, "default", defQueue)
+				partition.AddRejectedApplication(app, "rejected reason")
+			}
+		}(i)
+	}
+
+	// Concurrent Readers
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			<-start
+			for j := 0; j < appsPerGoroutine; j++ {
+				_ = partition.GetRejectedApplications()
+				appID := fmt.Sprintf("app-%d-%d", workerID, j)
+				_ = partition.getRejectedApplication(appID)
+				_ = partition.getRejectedAppsByState(objects.Rejected.String())
+			}
+		}(i)
+	}
+
+	close(start)
+	wg.Wait()
+	assert.Equal(t, numGoroutines*appsPerGoroutine, len(partition.GetRejectedApplications()), "all rejected applications should be tracked")
+}
+
+func TestAddRejectedApplicationConcurrentWithCleanup(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	var wg sync.WaitGroup
+	numGoroutines := 20
+	appsPerGoroutine := 10
+	start := make(chan struct{})
+
+	// Concurrent Writers
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			<-start
+			for j := 0; j < appsPerGoroutine; j++ {
+				appID := fmt.Sprintf("cleanup-app-%d-%d", workerID, j)
+				app := newApplication(appID, "default", defQueue)
+				partition.AddRejectedApplication(app, "rejected reason")
+				if j%2 == 0 {
+					app.SetState(objects.Expired.String())
+				}
+			}
+		}(i)
+	}
+
+	// Concurrent Cleaners and Readers
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			for j := 0; j < appsPerGoroutine; j++ {
+				partition.cleanupExpiredApps()
+				_ = partition.GetRejectedApplications()
+				_ = partition.getRejectedAppsByState(objects.Expired.String())
+				_ = partition.getRejectedAppsByState(objects.Rejected.String())
+			}
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	partition.cleanupExpiredApps()
+	assert.Equal(t, 0, len(partition.getRejectedAppsByState(objects.Expired.String())), "no expired apps should remain after cleanup")
+}
+
+func TestAddRejectedApplicationDuplicate(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	var wg sync.WaitGroup
+	numGoroutines := 20
+	appID := "duplicate-app"
+	start := make(chan struct{})
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			app := newApplication(appID, "default", defQueue)
+			partition.AddRejectedApplication(app, "duplicate rejected reason")
+		}()
+	}
+
+	close(start)
+	wg.Wait()
+	assert.Equal(t, 1, len(partition.GetRejectedApplications()), "duplicate rejected app should only have 1 entry")
 }
 
 func TestUpdateNode(t *testing.T) {

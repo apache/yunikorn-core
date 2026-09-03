@@ -1111,9 +1111,7 @@ func (pc *PartitionContext) GetRejectedApplications() []*objects.Application {
 	return appList
 }
 
-func (pc *PartitionContext) getAppsState(appMap map[string]*objects.Application, state string) []string {
-	pc.RLock()
-	defer pc.RUnlock()
+func (pc *PartitionContext) getAppsStateInternal(appMap map[string]*objects.Application, state string) []string {
 	var apps []string
 	for appID, app := range appMap {
 		if app.CurrentState() == state {
@@ -1126,17 +1124,23 @@ func (pc *PartitionContext) getAppsState(appMap map[string]*objects.Application,
 // getAppsByState returns a slice of applicationIDs for the current applications filtered by state
 // Completed and Rejected applications are tracked in a separate map and will never be included.
 func (pc *PartitionContext) getAppsByState(state string) []string {
-	return pc.getAppsState(pc.applications, state)
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.getAppsStateInternal(pc.applications, state)
 }
 
 // getRejectedAppsByState returns a slice of applicationIDs for the rejected applications filtered by state.
 func (pc *PartitionContext) getRejectedAppsByState(state string) []string {
-	return pc.getAppsState(pc.rejectedApplications, state)
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.getAppsStateInternal(pc.rejectedApplications, state)
 }
 
 // getCompletedAppsByState returns a slice of applicationIDs for the completed applicationIDs filtered by state.
 func (pc *PartitionContext) getCompletedAppsByState(state string) []string {
-	return pc.getAppsState(pc.completedApplications, state)
+	pc.RLock()
+	defer pc.RUnlock()
+	return pc.getAppsStateInternal(pc.completedApplications, state)
 }
 
 // cleanupExpiredApps cleans up applications in the Expired state from the three tracking maps
@@ -1763,6 +1767,8 @@ func (pc *PartitionContext) AddRejectedApplication(rejectedApplication *objects.
 			zap.String("currentState", rejectedApplication.CurrentState()),
 			zap.Error(err))
 	}
+	pc.Lock()
+	defer pc.Unlock()
 	if pc.rejectedApplications == nil {
 		pc.rejectedApplications = make(map[string]*objects.Application)
 	}

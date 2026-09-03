@@ -445,3 +445,202 @@ outer:
 
 	assert.Assert(t, checked, "Failed to find metric")
 }
+
+func TestUpdateSchedulerConfigRemovePartition(t *testing.T) {
+	context := &ClusterContext{
+		partitions:     map[string]*PartitionContext{},
+		rmEventHandler: newMockEventHandler(),
+	}
+	defer context.Stop()
+
+	config1 := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+  - name: gpu
+    queues:
+      - name: root
+`
+	conf1, err := configs.LoadSchedulerConfigFromByteArray([]byte(config1))
+	assert.NilError(t, err)
+
+	context.Lock()
+	err = context.updateSchedulerConfig(conf1, "rm:123")
+	assert.NilError(t, err)
+	context.Unlock()
+
+	assert.Equal(t, 2, len(context.GetPartitionMapClone()))
+
+	// Update config removing the 'gpu' partition
+	config2 := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+`
+	conf2, err := configs.LoadSchedulerConfigFromByteArray([]byte(config2))
+	assert.NilError(t, err)
+
+	context.Lock()
+	err = context.updateSchedulerConfig(conf2, "rm:123")
+	assert.NilError(t, err)
+	context.Unlock()
+
+	partitions := context.GetPartitionMapClone()
+	assert.Equal(t, 1, len(partitions))
+	_, ok := partitions["[rm:123]default"]
+	assert.Assert(t, ok, "default partition should still exist")
+	_, ok = partitions["[rm:123]gpu"]
+	assert.Assert(t, !ok, "gpu partition should have been removed")
+}
+
+func TestRemovePartitionsByRMID(t *testing.T) {
+	context := &ClusterContext{
+		partitions:     map[string]*PartitionContext{},
+		rmEventHandler: newMockEventHandler(),
+	}
+	defer context.Stop()
+
+	config := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+  - name: gpu
+    queues:
+      - name: root
+`
+	conf, err := configs.LoadSchedulerConfigFromByteArray([]byte(config))
+	assert.NilError(t, err)
+
+	context.Lock()
+	err = context.updateSchedulerConfig(conf, "rm:123")
+	assert.NilError(t, err)
+	context.Unlock()
+
+	assert.Equal(t, 2, len(context.GetPartitionMapClone()))
+
+	c := make(chan *rmevent.Result, 1)
+	context.removePartitionsByRMID(&rmevent.RMPartitionsRemoveEvent{
+		RmID:    "rm:123",
+		Channel: c,
+	})
+
+	result := <-c
+	assert.Assert(t, result.Succeeded)
+	assert.Equal(t, 0, len(context.GetPartitionMapClone()))
+}
+
+func TestUpdateSchedulerConfigRemovePartitionWithActiveAppsAndNodes(t *testing.T) {
+	context := &ClusterContext{
+		partitions:     map[string]*PartitionContext{},
+		rmEventHandler: newMockEventHandler(),
+	}
+	defer context.Stop()
+
+	config1 := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: '*'
+        queues:
+          - name: default
+            submitacl: '*'
+  - name: gpu
+    queues:
+      - name: root
+        submitacl: '*'
+        queues:
+          - name: default
+            submitacl: '*'
+`
+	conf1, err := configs.LoadSchedulerConfigFromByteArray([]byte(config1))
+	assert.NilError(t, err)
+
+	context.Lock()
+	err = context.updateSchedulerConfig(conf1, "rm:123")
+	assert.NilError(t, err)
+	context.Unlock()
+
+	gpuPart := context.GetPartition("[rm:123]gpu")
+	assert.Assert(t, gpuPart != nil)
+
+	// Add node to gpu partition
+	nodeInfo := &si.NodeInfo{
+		NodeID: "node-gpu-1",
+		Action: si.NodeInfo_CREATE,
+		Attributes: map[string]string{
+			siCommon.NodePartition: "[rm:123]gpu",
+		},
+		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
+	}
+	err = context.addNode(nodeInfo, true)
+	assert.NilError(t, err)
+	assert.Equal(t, 1, len(gpuPart.GetNodes()))
+
+	// Add app to gpu partition
+	app := newApplication("app-gpu-1", "[rm:123]gpu", "root.default")
+	err = gpuPart.AddApplication(app)
+	assert.NilError(t, err)
+	assert.Equal(t, 1, len(gpuPart.GetApplications()))
+
+	// Update config removing the 'gpu' partition
+	config2 := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: '*'
+        queues:
+          - name: default
+            submitacl: '*'
+`
+	conf2, err := configs.LoadSchedulerConfigFromByteArray([]byte(config2))
+	assert.NilError(t, err)
+
+	context.Lock()
+	err = context.updateSchedulerConfig(conf2, "rm:123")
+	assert.NilError(t, err)
+	context.Unlock()
+
+	// Verify gpu partition is removed and app was failed
+	partitions := context.GetPartitionMapClone()
+	assert.Equal(t, 1, len(partitions))
+	_, ok := partitions["[rm:123]gpu"]
+	assert.Assert(t, !ok, "gpu partition should have been removed")
+	assert.Assert(t, app.IsFailing() || app.IsFailed(), "app should be marked as failed/failing upon partition removal")
+}
+
+func TestClusterContextStop(t *testing.T) {
+	context := &ClusterContext{
+		partitions:     map[string]*PartitionContext{},
+		rmEventHandler: newMockEventHandler(),
+	}
+
+	config := `
+partitions:
+  - name: default
+    queues:
+      - name: root
+  - name: gpu
+    queues:
+      - name: root
+`
+	conf, err := configs.LoadSchedulerConfigFromByteArray([]byte(config))
+	assert.NilError(t, err)
+
+	context.Lock()
+	err = context.updateSchedulerConfig(conf, "rm:123")
+	assert.NilError(t, err)
+	context.Unlock()
+
+	assert.Equal(t, 2, len(context.GetPartitionMapClone()))
+
+	// Stop the cluster context
+	context.Stop()
+
+	// Invariant: all partitions must be stopped and cc.partitions must be emptied
+	assert.Equal(t, 0, len(context.GetPartitionMapClone()))
+}

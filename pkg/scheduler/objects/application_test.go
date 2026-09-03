@@ -462,7 +462,7 @@ func TestAddAllocAsk(t *testing.T) {
 	res = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	ask = newAllocationAsk(aKey, appID1, res)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been updated on app")
+	assert.NilError(t, err, "ask should have been added to app")
 	assert.Assert(t, app.IsAccepted(), "Application should be in accepted state")
 	pending := app.GetPendingResource()
 	if !resources.Equals(res, pending) {
@@ -489,10 +489,10 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, si.EventRecord_APP_REQUEST, record.EventChangeDetail, "incorrect change detail, expected app request")
 	eventSystem.Stop()
 
-	// change resource
-	ask = newAllocationAsk(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
+	// a second ask adds to the pending total
+	ask = newAllocationAsk(aKey2, appID1, res)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been updated on app")
+	assert.NilError(t, err, "ask should have been added to app")
 	pending = app.GetPendingResource()
 	if !resources.Equals(resources.Multiply(res, 2), app.GetPendingResource()) {
 		t.Errorf("pending resource not updated correctly, expected %v but was: %v", resources.Multiply(res, 2), pending)
@@ -502,9 +502,9 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "Application should have stayed in accepted state")
 
 	// test PlaceholderData
-	ask = newAllocationAskTG(aKey, appID1, tg1, res)
+	ask = newAllocationAskTG(aKey3, appID1, tg1, res)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been updated on app")
+	assert.NilError(t, err, "ask should have been added to app")
 	app.SetTimedOutPlaceholder(tg1, 1)
 	app.SetTimedOutPlaceholder(tg2, 2)
 	clonePlaceholderData := app.GetAllPlaceholderData()
@@ -513,15 +513,15 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tg1])
 	assertPlaceholderData(t, app, tg1, 1, 1, 0, res)
 
-	ask = newAllocationAskTG(aKey, appID1, tg1, res)
+	ask = newAllocationAskTG(aKey4, appID1, tg1, res)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been updated on app")
+	assert.NilError(t, err, "ask should have been added to app")
 	assert.Equal(t, len(app.placeholderData), 1)
 	assertPlaceholderData(t, app, tg1, 2, 1, 0, res)
 
-	ask = newAllocationAskTG(aKey, appID1, tg2, res)
+	ask = newAllocationAskTG(aKey5, appID1, tg2, res)
 	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "ask should have been updated on app")
+	assert.NilError(t, err, "ask should have been added to app")
 
 	assert.Equal(t, len(app.placeholderData), 2)
 	assertPlaceholderData(t, app, tg2, 1, 0, 0, res)
@@ -2751,43 +2751,44 @@ func TestMaxAskPriority(t *testing.T) {
 	assertMaxPriorityConsistent(t, app)
 }
 
-// TestAddAllocationAskReplaceExistingPendingAsk covers the replace-existing-ask branch of
-// AddAllocationAsk: re-submitting an ask under a key that is already tracked and still pending.
-// The displaced ask has to leave the pending histogram before addAllocationAskInternal counts the
-// replacement, or a single allocation key is counted twice and the priority it was originally
-// submitted at never drops out again. The full rescan this replaced could not get that wrong: it
-// derived the maximum from sa.requests, which only ever holds one ask per key.
-func TestAddAllocationAskReplaceExistingPendingAsk(t *testing.T) {
+// TestAddAllocationAskDuplicateKeyRejected pins the rejection that backs the single adder invariant
+// documented on addAllocationAskInternal: an ask under a tracked key is refused and nothing moves.
+// Both shapes are covered, a key that is still pending and one that has since been allocated.
+func TestAddAllocationAskDuplicateKeyRejected(t *testing.T) {
 	app := newApplication(appID1, "default", "root.default")
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	app.queue = queue
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	err = app.AddAllocationAsk(newAllocationAskPriority(aKey, appID1, res, 5))
+	ask := newAllocationAskPriority(aKey, appID1, res, 5)
+	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
-	assertMaxPriorityConsistent(t, app)
 
-	// same key, still pending, different priority: the replace branch
-	replacement := newAllocationAskPriority(aKey, appID1, res, 3)
-	err = app.AddAllocationAsk(replacement)
-	assert.NilError(t, err, "ask should have been updated on app")
-
+	err = app.AddAllocationAsk(newAllocationAskPriority(aKey, appID1, res, 3))
+	assert.ErrorContains(t, err, "already tracked", "duplicate add of a pending ask should have been rejected")
+	assert.Assert(t, app.GetAllocationAsk(aKey) == ask, "rejected add must leave the tracked ask in place")
+	assert.Assert(t, resources.Equals(app.GetPendingResource(), res), "rejected add must not change the pending resource")
 	app.RLock()
-	assert.Equal(t, len(app.pendingPriorities), 1, "pending histogram must only hold the replacement's priority")
-	assert.Equal(t, app.pendingPriorities[3], 1, "wrong pending count for the replacement priority")
+	assert.Equal(t, len(app.pendingPriorities), 1, "rejected add must not change the pending histogram")
+	assert.Equal(t, app.pendingPriorities[5], 1, "rejected add must not change the pending histogram")
+	assert.Equal(t, len(app.sortedRequests), 1, "rejected add must not insert into sortedRequests")
 	app.RUnlock()
-	assert.Equal(t, app.GetAskMaxPriority(), int32(3), "wrong priority after replacing p=5 with p=3")
+	assert.Equal(t, app.GetAskMaxPriority(), int32(5), "rejected add must not change askMaxPriority")
 	assertMaxPriorityConsistent(t, app)
 
-	// allocating the only ask must empty the histogram: a double counted key would leave the
-	// replaced ask's priority behind.
+	// same key once it is no longer pending: still tracked, so still refused
 	_, err = app.AllocateAsk(aKey)
 	assert.NilError(t, err, "ask should have been allocated")
+	err = app.AddAllocationAsk(newAllocationAskPriority(aKey, appID1, res, 3))
+	assert.ErrorContains(t, err, "already tracked", "duplicate add of an allocated ask should have been rejected")
+	assert.Assert(t, app.GetAllocationAsk(aKey) == ask, "rejected add must leave the tracked ask in place")
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "rejected add must not change the pending resource")
 	app.RLock()
-	assert.Equal(t, len(app.pendingPriorities), 0, "allocating the only ask must empty the pending histogram")
+	assert.Equal(t, len(app.pendingPriorities), 0, "rejected add must not change the pending histogram")
+	assert.Equal(t, len(app.sortedRequests), 1, "rejected add must not insert into sortedRequests")
 	app.RUnlock()
-	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "wrong priority after allocating the only ask")
+	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "rejected add must not change askMaxPriority")
 	assertMaxPriorityConsistent(t, app)
 }
 
@@ -3584,11 +3585,11 @@ func TestPredicateFailedEvents(t *testing.T) {
 		allocKey             string
 		expectedFailedEvents int
 	}{
-		{"prefilter pass", mockCommon.NewPredicatePlugin(false, false, nil), "alloc-1", 0},
-		{"prefilter passes but none of the node from iterator is available in feasible nodes", mockCommon.NewPredicatePlugin(false, false, wrongNodes), "alloc-2", 0},
-		{"prefilter fails", mockCommon.NewPredicatePlugin(true, false, nil), "alloc-2", 1},
-		{"prefilter pass with expected feasible nodes, filter fails", mockCommon.NewPredicatePlugin(false, true, rightNodes), "alloc-3", 1},
-		{"both prefilter and filter passes with correct feasible nodes", mockCommon.NewPredicatePlugin(false, false, rightNodes), "alloc-3", 0},
+		{"prefilter pass", mockCommon.NewPredicatePlugin(false, false, nil), aKey, 0},
+		{"prefilter passes but none of the node from iterator is available in feasible nodes", mockCommon.NewPredicatePlugin(false, false, wrongNodes), aKey2, 0},
+		{"prefilter fails", mockCommon.NewPredicatePlugin(true, false, nil), aKey3, 1},
+		{"prefilter pass with expected feasible nodes, filter fails", mockCommon.NewPredicatePlugin(false, true, rightNodes), aKey4, 1},
+		{"both prefilter and filter passes with correct feasible nodes", mockCommon.NewPredicatePlugin(false, false, rightNodes), aKey5, 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

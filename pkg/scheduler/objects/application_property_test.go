@@ -43,10 +43,12 @@ import (
 //
 // The point is coverage of state combinations rather than of entry points: TestMaxAskPriority pins
 // the handful of transitions that are easy to reason about by hand, while this test reaches the
-// interleavings that are not - a replaced ask whose priority differs from the one it displaces, an
-// attempted rollback of an allocation whose ask has already been dropped, an allocate that empties
-// the top priority bucket while lower buckets still hold pending asks. Those are precisely the cases
-// where incremental bookkeeping and a full rescan can disagree.
+// interleavings that are not - an attempted rollback of an allocation whose ask has already been
+// dropped, a deallocate that puts a key back at a priority no other pending ask holds, an allocate
+// that empties the top priority bucket while lower buckets still hold pending asks. Those are
+// precisely the cases where incremental bookkeeping and a full rescan can disagree. It also holds
+// AddAllocationAsk to the single adder rule the bookkeeping rests on, by feeding it keys the
+// application already tracks and requiring every one of them to be refused.
 func TestApplicationPropertyFuzzHistogram(t *testing.T) {
 	// A "ghost" rollback attempt (case 7 picking a confirmed allocation whose ask sa.requests no
 	// longer holds) first needs a specific remove-then-release interleaving, but once one exists the
@@ -138,12 +140,13 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	// ghostRollbackAttempts counts the case 7 calls that targeted an ask sa.requests no longer holds;
 	// those never succeed (the YUNIKORN-3360 guard rejects them) so attempts, not successes, are what
 	// there is to count - each one is individually asserted rejected in case 7, which is what makes
-	// the count proof that the guard was exercised. replacedAsks counts the AddAllocationAsk calls
-	// that took the replace-existing-ask branch (case 8). Both are narrow branches that a small change
-	// to the candidate filters could stop reaching entirely, so both are asserted - replacedAsks per
-	// run at the end of this function, ghostRollbackAttempts over the whole seed set by the caller.
+	// the count proof that the guard was exercised. rejectedDuplicateAdds counts the case 8 adds that
+	// AddAllocationAsk turned away under the single adder rule. Both are narrow branches that a small
+	// change to the candidate filters could stop reaching entirely, so both are asserted -
+	// rejectedDuplicateAdds per run at the end of this function, ghostRollbackAttempts over the whole
+	// seed set by the caller.
 	ghostRollbackAttempts := 0
-	replacedAsks := 0
+	rejectedDuplicateAdds := 0
 
 	const steps = 5000
 	for i := 0; i < steps; i++ {
@@ -162,8 +165,10 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 			}
 			addErr := app.AddAllocationAsk(ask)
 			if addErr == nil {
-				// unique keys every time, so this operation always takes the "brand new ask" path
-				// through AddAllocationAsk; the replace-existing-ask branch is driven by case 8.
+				// A fresh key every time, which is the only shape production can produce:
+				// PartitionContext.UpdateAllocation only reaches AddAllocationAsk once
+				// GetAllocationAsk has come back nil for the key. Case 8 covers the other side of
+				// that rule, an add under a key the application already holds.
 				keyPriority[key] = priority
 				pendingKeys[key] = true
 			}
@@ -356,27 +361,31 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 				}
 			}
 
-		case 8: // AddAllocationAsk re-using an existing key - the replace-existing-ask branch
-			// AddAllocationAsk (application.go ~line 668) handles a key that is already in
-			// sa.requests and still pending separately: it has to unwind the old ask from the
-			// pending histogram before addAllocationAskInternal counts the replacement, or the key
-			// is counted twice and its old priority never drops out again. Case 0 only ever mints
-			// fresh keys, so without this operation that branch is never executed here at all.
-			if len(pendingKeys) > 0 {
-				key := pickRandomKey(rng, pendingKeys)
+		case 8: // AddAllocationAsk under a key the application already holds
+			// The single adder invariant addAllocationAskInternal documents is what lets every write
+			// around the insert be applied blind, so the add has to be turned away and the rejection
+			// has to be a true no-op. Candidates come from keyPriority rather than pendingKeys so
+			// allocated and recovered keys are covered too - the rule is about the key being tracked
+			// at all, not about it being pending - and the duplicate keeps the placeholder shape of
+			// the ask it collides with, because addPlaceholderData is one of the blind writes.
+			if key, ok := pickRandomExistingKey(rng, keyPriority); ok {
 				existing := app.GetAllocationAsk(key)
-				assert.Assert(t, existing != nil, "seed=%d step=%d: pending key %s missing from sa.requests", seed, i, key)
+				assert.Assert(t, existing != nil, "seed=%d step=%d: tracked key %s missing from sa.requests", seed, i, key)
+				taskGroup := existing.GetTaskGroup()
 				priority := int32(rng.Intn(11) - 5) //nolint:gosec // bounded to -5..5, no overflow
 				nextCreationTime++
-				// keep the placeholder/task-group shape of the ask being replaced: production
-				// re-sends the same pod's ask, it never turns a placeholder into a regular ask.
-				replacement := newFuzzAsk(key, appID, existing.GetTaskGroup(), res, existing.IsPlaceholder(), priority, "", nextCreationTime)
-				if replaceErr := app.AddAllocationAsk(replacement); replaceErr == nil {
-					// the replacement carries its OWN priority: the key stays pending but the model
-					// must account for it at the new priority from here on.
-					keyPriority[key] = priority
-					replacedAsks++
-				}
+				duplicate := newFuzzAsk(key, appID, taskGroup, res, existing.IsPlaceholder(), priority, "", nextCreationTime)
+
+				pendingBefore, sortedBefore, phBefore := snapshotAddState(app, taskGroup)
+				addErr := app.AddAllocationAsk(duplicate)
+				assert.Assert(t, addErr != nil, "seed=%d step=%d: duplicate add of %s was not rejected", seed, i, key)
+				pendingAfter, sortedAfter, phAfter := snapshotAddState(app, taskGroup)
+
+				assert.Assert(t, app.GetAllocationAsk(key) == existing, "seed=%d step=%d: rejected duplicate add of %s replaced the tracked ask", seed, i, key)
+				assert.Assert(t, resources.Equals(pendingAfter, pendingBefore), "seed=%d step=%d: rejected duplicate add of %s changed pending from %s to %s", seed, i, key, pendingBefore, pendingAfter)
+				assert.Equal(t, sortedAfter, sortedBefore, "seed=%d step=%d: rejected duplicate add of %s changed len(sortedRequests)", seed, i, key)
+				assert.Equal(t, phAfter, phBefore, "seed=%d step=%d: rejected duplicate add of %s changed the placeholder count for %s", seed, i, key, taskGroup)
+				rejectedDuplicateAdds++
 			}
 		}
 
@@ -397,7 +406,7 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	// operation to be rejected/no-op'd): confirm it actually drove the application through
 	// non-trivial pending/allocated/multi-priority states, so a real regression in the product's
 	// bookkeeping (e.g. removeFromPriorities) has states to be caught in.
-	t.Logf("seed=%d coverage: maxPending=%d maxAllocated=%d maxDistinctPendingPriorities=%d successfulRollbacks=%d ghostRollbackAttempts=%d replacedAsks=%d", seed, maxPending, maxAllocated, maxDistinctPendingPriorities, successfulRollbacks, ghostRollbackAttempts, replacedAsks)
+	t.Logf("seed=%d coverage: maxPending=%d maxAllocated=%d maxDistinctPendingPriorities=%d successfulRollbacks=%d ghostRollbackAttempts=%d rejectedDuplicateAdds=%d", seed, maxPending, maxAllocated, maxDistinctPendingPriorities, successfulRollbacks, ghostRollbackAttempts, rejectedDuplicateAdds)
 	assert.Assert(t, maxPending > 0, "seed=%d: fuzz run never observed any pending asks", seed)
 	assert.Assert(t, maxAllocated > 0, "seed=%d: fuzz run never observed any allocated asks", seed)
 	assert.Assert(t, maxDistinctPendingPriorities > 1, "seed=%d: fuzz run never observed a multi-priority pending histogram", seed)
@@ -406,13 +415,12 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	// allocations) would silently turn case 7 into a no-op and stop covering deallocateAsk's new
 	// caller entirely, while every assertion above kept passing.
 	assert.Assert(t, successfulRollbacks > 0, "seed=%d: fuzz run never completed a RollbackAllocation", seed)
-	// The replace-existing-ask branch (case 8) must not double count the key in the histogram. It is
-	// only reached while pendingKeys is non-empty, so assert it really happened rather than trusting
-	// that condition to keep holding. The ghost-rollback-attempt count is returned instead of asserted
-	// here: whether a run reaches that state at all depends on the interleaving it happens to produce,
-	// so the coverage floor for it is asserted over the whole seed set by
+	// Case 8 only fires while the application still tracks a key, so assert it really happened rather
+	// than trusting that condition to keep holding. The ghost-rollback-attempt count is returned
+	// instead of asserted here: whether a run reaches that state at all depends on the interleaving
+	// it happens to produce, so the coverage floor for it is asserted over the whole seed set by
 	// TestApplicationPropertyFuzzHistogram.
-	assert.Assert(t, replacedAsks > 0, "seed=%d: fuzz run never took the replace-existing-ask branch", seed)
+	assert.Assert(t, rejectedDuplicateAdds > 0, "seed=%d: fuzz run never attempted a duplicate add", seed)
 
 	return ghostRollbackAttempts
 }
@@ -488,6 +496,20 @@ func pickRandomExistingKey(rng *rand.Rand, keyPriority map[string]int32) (string
 	// - this was the residual nondeterminism source alongside pickRandomKey above.
 	sort.Strings(list)
 	return list[rng.Intn(len(list))], true
+}
+
+// snapshotAddState returns the three things AddAllocationAsk writes that the fuzzer's reference
+// model does not carry - the pending resource, the length of sortedRequests and taskGroup's
+// placeholder count - so that a rejected add can be held to being the no-op it has to be.
+// assertFuzzInvariants covers the histogram and askMaxPriority.
+func snapshotAddState(app *Application, taskGroup string) (*resources.Resource, int, int64) {
+	app.RLock()
+	defer app.RUnlock()
+	var placeholders int64
+	if pd := app.placeholderData[taskGroup]; pd != nil {
+		placeholders = pd.Count
+	}
+	return app.pending.Clone(), len(app.sortedRequests), placeholders
 }
 
 // assertFuzzInvariants rebuilds the expected pending-ask histogram and max from the reference model

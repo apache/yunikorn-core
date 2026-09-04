@@ -955,6 +955,46 @@ func TestAllocations(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), nil)
 }
 
+func TestRemoveAllAllocationsWithPendingAsks(t *testing.T) {
+	setupUGM()
+	app := newApplication(appID1, "default", "root.a")
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	resMap := map[string]string{"memory": "100", "vcores": "10"}
+	res, err := resources.NewResourceFromConf(resMap)
+	assert.NilError(t, err, "failed to create resource with error")
+
+	// 1. Add an allocation: UGM tracks 100m/10v
+	alloc := newAllocation(appID1, nodeID1, res)
+	app.AddAllocation(alloc)
+	assertUserGroupResource(t, getTestUserGroup(), res)
+
+	// 2. Add a pending ask so that app.pending is non-zero
+	ask := newAllocationAsk("ask-1", appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err)
+	assert.Assert(t, !resources.IsZero(app.GetPendingResource()), "app should have pending resources")
+
+	// 3. Remove all allocations while pending ask is still present
+	allocs := app.RemoveAllAllocations()
+	assert.Equal(t, len(allocs), 1)
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "app allocated resources should be zero")
+
+	// 4. Invariant check: UGM usage must have decremented the released allocation!
+	// In the unpatched code, this assertion will fail because decUserResourceUsage was skipped!
+	assertUserGroupResource(t, getTestUserGroup(), nil)
+
+	// 5. App should still have its pending ask and remain in Accepted state (not Completing)
+	assert.Assert(t, resources.Equals(app.GetPendingResource(), res), "pending resources should remain intact")
+	assert.Equal(t, app.CurrentState(), Accepted.String(), "app should remain in Accepted state while asks are pending")
+
+	// 6. Now remove the pending ask and verify pending resources are cleared
+	app.RemoveAllocationAsk(ask.GetAllocationKey())
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "pending resources should be zero after ask removal")
+}
+
 func TestGangAllocChange(t *testing.T) {
 	resMap := map[string]string{"first": "4"}
 	totalPH, err := resources.NewResourceFromConf(resMap)

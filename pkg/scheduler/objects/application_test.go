@@ -2369,6 +2369,47 @@ func TestTryAllocateFit(t *testing.T) {
 	assert.Equal(t, "node1", result.NodeID, "wrong node")
 }
 
+// TestTryAllocateAllocatedAskInSortedRequests pins the scream-then-repair guard that backs the
+// pending-only invariant of sortedRequests: an allocated ask can only still be in the slice if the
+// remove-on-allocate pairing has been broken. The guard uses DPanic, which panics under the
+// development logger the tests run with, so a broken pairing fails hard here while production only
+// logs and self-heals.
+func TestTryAllocateAllocatedAskInSortedRequests(t *testing.T) {
+	setupUGM()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	queue, err := createRootQueue(map[string]string{"first": "5"})
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root")
+	app.queue = queue
+	ask := newAllocationAsk(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	// build the ghost white-box: allocateAsk marks the ask allocated and drops it from the
+	// pending-only slice, putting it straight back is exactly the broken pairing under test
+	_, err = app.allocateAsk(ask)
+	assert.NilError(t, err, "ask should have been allocated")
+	app.sortedRequests.insert(ask)
+	assert.Assert(t, ask.IsAllocated(), "ask should be allocated")
+	assert.Equal(t, len(app.sortedRequests), 1, "ghost ask should be in sortedRequests")
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("tryAllocate should have panicked on an allocated ask in sortedRequests")
+		}
+		assert.Assert(t, strings.Contains(fmt.Sprint(r), "allocated ask found in pending-only sortedRequests"), "unexpected panic: %v", r)
+	}()
+	preemptionAttemptsRemaining := 0
+	app.tryAllocate(node.GetAvailableResource(), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+}
+
 func TestTryAllocatePreemptQueue(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 20})
 	nodeMap := map[string]*Node{"node1": node}
@@ -2696,17 +2737,33 @@ func assertMaxPriorityConsistent(t *testing.T, app *Application) {
 	defer app.RUnlock()
 	wantMax := configs.MinPriority
 	wantHistogram := make(map[int32]int)
+	wantSorted := make(map[string]bool)
 	for _, req := range app.requests {
 		if req.IsAllocated() {
 			continue
 		}
 		wantMax = max(wantMax, req.GetPriority())
 		wantHistogram[req.GetPriority()]++
+		wantSorted[req.GetAllocationKey()] = true
 	}
 	assert.Equal(t, app.askMaxPriority, wantMax, "askMaxPriority inconsistent with full scan over requests")
 	assert.Equal(t, len(app.pendingPriorities), len(wantHistogram), "pendingPriorities histogram size mismatch")
 	for p, count := range wantHistogram {
 		assert.Equal(t, app.pendingPriorities[p], count, "pendingPriorities count mismatch for priority %d", p)
+	}
+	// every non-allocated ask in app.requests must appear exactly once in app.sortedRequests: no extras, no duplicates.
+	assert.Equal(t, len(app.sortedRequests), len(wantSorted), "sortedRequests size mismatch against non-allocated requests")
+	seen := make(map[string]bool)
+	for i, req := range app.sortedRequests {
+		key := req.GetAllocationKey()
+		assert.Assert(t, !seen[key], "duplicate allocationKey %s found in sortedRequests", key)
+		seen[key] = true
+		assert.Assert(t, wantSorted[key], "sortedRequests contains allocationKey %s not present in non-allocated requests", key)
+		if i > 0 {
+			// comparator-validity only: adjacent entries must be tie-or-after, no assertion on
+			// tie-break order (mirrors the check in assertFuzzInvariants)
+			assert.Assert(t, app.sortedRequests[i].LessThan(app.sortedRequests[i-1]), "sortedRequests out of order at index %d", i)
+		}
 	}
 }
 
@@ -2793,10 +2850,12 @@ func TestMaxAskPriority(t *testing.T) {
 
 // TestAddAllocationAskReplaceExistingPendingAsk covers the replace-existing-ask branch of
 // AddAllocationAsk: re-submitting an ask under a key that is already tracked and still pending.
-// The displaced ask has to leave the pending histogram before addAllocationAskInternal counts the
-// replacement, or a single allocation key is counted twice and the priority it was originally
-// submitted at never drops out again. The full rescan this replaced could not get that wrong: it
-// derived the maximum from sa.requests, which only ever holds one ask per key.
+// That branch has to drop the old ask from BOTH the pending histogram and sortedRequests before the
+// new ask is inserted at the end of the function. Dropping it from the histogram only leaves two
+// sortedRequests entries for one allocation key while sa.requests holds just the replacement, which
+// breaks the pending-only invariant in a way that outlives the add: nothing ever removes the
+// replaced twin again, so it stays in the pending-only list forever as an ask the application does
+// not track.
 func TestAddAllocationAskReplaceExistingPendingAsk(t *testing.T) {
 	app := newApplication(appID1, "default", "root.default")
 	queue, err := createRootQueue(nil)
@@ -2814,18 +2873,20 @@ func TestAddAllocationAskReplaceExistingPendingAsk(t *testing.T) {
 	assert.NilError(t, err, "ask should have been updated on app")
 
 	app.RLock()
+	assert.Equal(t, len(app.sortedRequests), 1, "replacing a pending ask must leave exactly one sortedRequests entry")
+	assert.Assert(t, app.sortedRequests[0] == replacement, "sortedRequests must hold the replacement ask, not the replaced one")
 	assert.Equal(t, len(app.pendingPriorities), 1, "pending histogram must only hold the replacement's priority")
 	assert.Equal(t, app.pendingPriorities[3], 1, "wrong pending count for the replacement priority")
 	app.RUnlock()
 	assert.Equal(t, app.GetAskMaxPriority(), int32(3), "wrong priority after replacing p=5 with p=3")
 	assertMaxPriorityConsistent(t, app)
 
-	// allocating the only ask must empty the histogram: a double counted key would leave the
-	// replaced ask's priority behind.
+	// allocating the only ask must empty the pending-only list: with a duplicate present the replaced
+	// twin would still be sitting there afterwards.
 	_, err = app.AllocateAsk(aKey)
 	assert.NilError(t, err, "ask should have been allocated")
 	app.RLock()
-	assert.Equal(t, len(app.pendingPriorities), 0, "allocating the only ask must empty the pending histogram")
+	assert.Equal(t, len(app.sortedRequests), 0, "allocating the only ask must empty sortedRequests")
 	app.RUnlock()
 	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "wrong priority after allocating the only ask")
 	assertMaxPriorityConsistent(t, app)
@@ -2833,12 +2894,12 @@ func TestAddAllocationAskReplaceExistingPendingAsk(t *testing.T) {
 
 // TestRollbackAllocationAskNotTracked covers RollbackAllocation being handed a "ghost": an ask that
 // sa.requests no longer holds while sa.allocations still does. That state is reachable in
-// production: removeAsksInternal("") wipes sa.requests and the pending histogram but deliberately
-// leaves sa.allocations alone until the shim confirms the releases, so a SCHEDULING_FAILED_ON_RM
-// release arriving in that window reaches RollbackAllocation. Since YUNIKORN-3360 the rollback is
-// rejected outright when the ask is not in sa.requests, and this test pins that guard: the call must
-// return an error and leave the allocation, the allocated resource and the pending histogram
-// untouched.
+// production: removeAsksInternal("") wipes sa.requests, sortedRequests and the pending histogram but
+// deliberately leaves sa.allocations alone until the shim confirms the releases, so a
+// SCHEDULING_FAILED_ON_RM release arriving in that window reaches RollbackAllocation. Since
+// YUNIKORN-3360 the rollback is rejected outright when the ask is not in sa.requests, and this test
+// pins that guard: the call must return an error and leave the allocation, the allocated resource,
+// sortedRequests, the pending histogram and the app/queue pending resource untouched.
 func TestRollbackAllocationAskNotTracked(t *testing.T) {
 	setupUGM()
 	defer setupUGM()
@@ -2866,10 +2927,13 @@ func TestRollbackAllocationAskNotTracked(t *testing.T) {
 
 	app.RLock()
 	assert.Assert(t, app.allocations[aKey] == ask, "rejected rollback must leave the confirmed allocation in place")
+	assert.Equal(t, len(app.sortedRequests), 0, "rejected rollback must not insert into sortedRequests")
 	assert.Equal(t, len(app.pendingPriorities), 0, "rejected rollback must not change the pending histogram")
 	app.RUnlock()
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "rejected rollback must not change the allocated resource")
 	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "rejected rollback must not change askMaxPriority")
+	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "rejected rollback must not re-add pending resource, got %v", app.GetPendingResource())
+	assert.Assert(t, resources.IsZero(queue.GetPendingResource()), "rejected rollback must not re-add queue pending resource, got %v", queue.GetPendingResource())
 	assertMaxPriorityConsistent(t, app)
 }
 
@@ -3447,6 +3511,46 @@ func TestGetOutstandingRequests_AskReplaceable(t *testing.T) {
 	assert.Assert(t, resources.Equals(resTotal, expectedTotal), "expected resource %v, but got %v", expectedTotal, resTotal)
 	assert.Equal(t, 1, len(total))
 	assert.Equal(t, "alloc-3", total[0].allocationKey)
+}
+
+// TestGetOutstandingRequests_PartialHeadroom pins that selection follows the sortedRequests order,
+// front to back. getOutstandingRequests consumes the headrooms as it walks the slice, so as soon as
+// the headroom admits only part of the pending asks the slice order alone decides which asks are
+// selected. That set is not cosmetic: it is reported back to the shim as unschedulable and is what
+// drives cluster autoscaling, so the asks at the front, the ones that arrived first, must be the
+// ones that trigger the scale up.
+// The asks tie on priority and createTime, the normal case for a submitted burst, which leaves the
+// arrival order of sortedRequests as the only thing separating them.
+func TestGetOutstandingRequests_PartialHeadroom(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+
+	allocationAsk1 := newFuzzAsk("alloc-1", "app-1", "", res, false, 0, "", 100)
+	allocationAsk2 := newFuzzAsk("alloc-2", "app-1", "", res, false, 0, "", 100)
+	allocationAsk3 := newFuzzAsk("alloc-3", "app-1", "", res, false, 0, "", 100)
+	allocationAsk1.SetSchedulingAttempted(true)
+	allocationAsk2.SetSchedulingAttempted(true)
+	allocationAsk3.SetSchedulingAttempted(true)
+
+	app := &Application{
+		ApplicationID: "app-1",
+		queuePath:     "default",
+	}
+	sr := sortedRequests{}
+	sr.insert(allocationAsk1)
+	sr.insert(allocationAsk2)
+	sr.insert(allocationAsk3)
+	app.sortedRequests = sr
+
+	// headroom for two of the three asks: the third one runs into an exhausted headroom
+	var total []*Allocation
+	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2})
+	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2})
+	resTotal := app.getOutstandingRequests(headroom, userHeadroom, &total)
+	expectedTotal := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2})
+	assert.Assert(t, resources.Equals(resTotal, expectedTotal), "expected resource %v, but got %v", expectedTotal, resTotal)
+	assert.Equal(t, 2, len(total))
+	assert.Equal(t, "alloc-1", total[0].allocationKey, "the first ask in the slice must be selected first")
+	assert.Equal(t, "alloc-2", total[1].allocationKey, "the second ask in the slice must be selected second")
 }
 
 func TestGetRateLimitedAppLog(t *testing.T) {

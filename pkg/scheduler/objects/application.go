@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,7 +93,7 @@ type Application struct {
 	pending           *resources.Resource     // pending resources from asks for the app
 	reservations      map[string]*reservation // a map of reservations
 	requests          map[string]*Allocation  // a map of allocations, pending or satisfied
-	sortedRequests    sortedRequests          // list of requests pre-sorted
+	sortedRequests    sortedRequests          // pending asks only, sorted by priority then age
 	user              security.UserGroup      // owner of the application
 	allocatedResource *resources.Resource     // total allocated resources
 	submissionTime    time.Time               // time application was submitted (based on the first ask)
@@ -615,11 +616,13 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 				deltaPendingResource = ask.GetAllocatedResource()
 				sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 				sa.pending.Prune()
-				// the removed ask was pending: drop it from the priority histogram
+				// the removed ask was pending: drop it from the priority histogram and from
+				// sortedRequests. An allocated ask needs neither: it left the slice at allocateAsk
+				// time, so scanning for it here would only ever be a guaranteed full-slice miss.
 				sa.removeFromPriorities(ask.GetPriority())
+				sa.sortedRequests.remove(ask)
 			}
 			delete(sa.requests, allocKey)
-			sa.sortedRequests.remove(ask)
 			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.GetAllocatedResource(), detail)
 		}
 	}
@@ -666,9 +669,11 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	var oldAskResource *resources.Resource = nil
 	if oldAsk := sa.requests[ask.GetAllocationKey()]; oldAsk != nil && !oldAsk.IsAllocated() {
 		oldAskResource = oldAsk.GetAllocatedResource().Clone()
-		// the old ask was pending and is being replaced: drop it from the priority histogram so the
-		// new ask's addAllocationAskInternal (via addToPriorities) nets correctly.
+		// the old ask was pending and is being replaced: remove it from the pending histogram so the
+		// new ask's addAllocationAskInternal (via addToPriorities) nets correctly, and drop it from
+		// sortedRequests so the unconditional insert below cannot leave two entries for one key.
 		sa.removeFromPriorities(oldAsk.GetPriority())
+		sa.sortedRequests.remove(oldAsk)
 	}
 
 	// Check if we need to change state based on the ask added, there are two cases:
@@ -922,6 +927,11 @@ func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error)
 
 	// the ask just left the pending set
 	sa.removeFromPriorities(ask.GetPriority())
+	// keep sortedRequests limited to pending asks only: remove on allocate, re-insert on
+	// deallocate. This is safe here because every caller that iterates sa.sortedRequests while
+	// calling allocateAsk either uses an index loop that tolerates the removal (tryAllocate) or
+	// ranges over a snapshot (tryPlaceholderAllocate) - see the comments at those call sites.
+	sa.sortedRequests.remove(ask)
 
 	delta := ask.GetAllocatedResource()
 	sa.pending = resources.Sub(sa.pending, delta)
@@ -938,25 +948,33 @@ func (sa *Application) deallocateAsk(ask *Allocation) (*resources.Resource, erro
 	}
 
 	// The ask returns to the pending set, but only if it still IS this application's ask: an ask that
-	// has already been dropped from sa.requests must not be counted again. That is reachable today:
-	// removeAsksInternal("") wipes sa.requests while leaving sa.allocations intact until the shim
-	// confirms the releases, and a release arriving in that window reaches RollbackAllocation, which
-	// finds the entry in sa.allocations and deallocates it. The identity comparison (not just a
-	// presence check) also covers a stale ask object that has since been replaced by a new ask under
-	// the same key.
+	// has already been dropped from sa.requests must not be resurrected as a ghost that tryAllocate
+	// would then try to schedule. Since YUNIKORN-3360 no production caller can present one -
+	// RollbackAllocation rejects an untracked ask before it reaches here, the public DeallocateAsk
+	// resolves its ask out of sa.requests, and the tryPlaceholderAllocate reverts pass back the ask
+	// they just allocated - so this is defence-in-depth.
 	// This matches the converged behaviour of the full rescan this change replaced:
 	// updateAskMaxPriority derived the max by scanning sa.requests, so an ask absent from sa.requests
-	// never influenced it. Without the guard that pre-existing accounting drift would turn into a
-	// permanent leak in the incremental histogram instead.
+	// never influenced it.
+	delta := ask.GetAllocatedResource()
 	if sa.requests[ask.GetAllocationKey()] == ask {
 		sa.addToPriorities(ask.GetPriority())
+		// the ask is pending again: re-insert it at the head of its (priority, createTime)
+		// tie-group so the next cycle retries it before the peers it was already tried ahead of
+		sa.sortedRequests.reinsert(ask)
+		// The pending resource follows the same rule as the histogram and sortedRequests: it only
+		// counts asks the application still tracks. Guarding it here (rather than in the caller)
+		// keeps all four pending-side structures - histogram, sortedRequests, sa.pending, queue
+		// pending - behind one decision instead of three guarded and one not.
+		sa.pending = resources.Add(sa.pending, delta)
+		// update the pending of the queue with the same delta
+		sa.queue.incPendingResource(delta)
 	}
 
-	delta := ask.GetAllocatedResource()
-	sa.pending = resources.Add(sa.pending, delta)
-	// update the pending of the queue with the same delta
-	sa.queue.incPendingResource(delta)
-
+	// The returned delta stays the ask's resource even when the guard above rejects the ask: the
+	// allocation being rolled back genuinely occupied its node and its queue's ALLOCATED tracking,
+	// and callers (partition rollbackAllocation, tryPlaceholderAllocate's revert) use the return to
+	// unwind that side. Only the PENDING re-add is conditional on the ask still being tracked.
 	return delta, nil
 }
 
@@ -1162,7 +1180,14 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	// because the len check above guarantees at least one iteration would occur.
 	backoffThreshold := sa.queue.GetMaxAppUnschedAskBackoff()
 	// get all the requests from the app sorted in order
-	for _, request := range sa.sortedRequests {
+	// allocateAsk drops the ask from sa.sortedRequests and every path that allocates returns, so the
+	// only removal this loop ever observes is the ghost repair below. The index based loop re-reads
+	// len() and re-indexes the current slice on every iteration, which is what makes that
+	// remove-and-continue safe. Iterating a slices.Clone snapshot instead (as tryPlaceholderAllocate
+	// has to) measured -11% pods/s and 2x bytes/op on BenchmarkScheduling: it is O(pending) per call
+	// for a loop that normally exits at index 0.
+	for i := 0; i < len(sa.sortedRequests); i++ {
+		request := sa.sortedRequests[i]
 		if backoffThreshold > 0 && unschedulable >= backoffThreshold {
 			log.Log(log.SchedApplication).Info("too many unschedulable asks in the application, waiting",
 				zap.String("application ID", sa.ApplicationID),
@@ -1172,6 +1197,20 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			return nil
 		}
 		if request.IsAllocated() {
+			// sortedRequests holds pending asks only, so reaching an allocated one means the
+			// remove-on-allocate pairing has been broken and this entry is a ghost that nothing
+			// else will clean up: every other removal path skips allocated asks precisely because
+			// they cannot be in the slice. Scream, then repair - drop the ghost and carry on with
+			// the next ask, so a broken pairing is a hard failure in tests and a single logged
+			// self-heal in production, rather than the same entry being re-detected every cycle
+			// forever.
+			log.Log(log.SchedApplication).DPanic("allocated ask found in pending-only sortedRequests",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("allocationKey", request.GetAllocationKey()))
+			sa.sortedRequests.remove(request)
+			// the remove shifted the tail down one slot: step back so the next iteration lands on
+			// the ask that took this index
+			i--
 			continue
 		}
 		// check if there is a replacement possible
@@ -1358,7 +1397,11 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	var phFit *Allocation
 	var reqFit *Allocation
 	// get all the requests from the app sorted in order
-	for _, request := range sa.sortedRequests {
+	// NOTE: iterate over a snapshot, not sa.sortedRequests directly. The revert path below calls
+	// sa.deallocateAsk(request), which re-inserts the ask into sa.sortedRequests mid-range - mutating
+	// the live slice while ranging over it would skip/revisit entries. allocateAsk/deallocateAsk keep
+	// only pending asks in sortedRequests.
+	for _, request := range slices.Clone(sa.sortedRequests) {
 		// skip placeholders they follow standard allocation
 		// this should also be part of a task group just make sure it is
 		if request.IsPlaceholder() || request.GetTaskGroup() == "" || request.IsAllocated() {

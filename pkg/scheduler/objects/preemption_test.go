@@ -32,6 +32,7 @@ import (
 	evtMock "github.com/apache/yunikorn-core/pkg/events/mock"
 	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/plugins"
+	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -458,6 +459,67 @@ func TestTryPreemption_SendEvent(t *testing.T) {
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
 	assert.Equal(t, fmt.Sprintf("Preempted by %s from application %s in %s", "alloc3", appID2, "root.parent.child2"), event.Message)
 	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
+}
+
+func TestTryAllocateUnlocksBeforePreemptionRMReply(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "pods": 2})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "20", "pods": "4"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20", "pods": "4"}, map[string]string{"first": "10", "pods": "2"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, map[string]string{"first": "10", "pods": "2"}, map[string]string{"first": "5", "pods": "1"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10", "pods": "2"}, map[string]string{"first": "5", "pods": "1"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	_, _, err = creatApp1(childQ1, node, nil, map[string]resources.Quantity{"first": 5, "pods": 1}, appQueueMapping)
+	assert.NilError(t, err)
+	app, ask, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3", appQueueMapping)
+	assert.NilError(t, err)
+	ask.allowPreemptOther = true
+
+	plugin := mock.NewPreemptionPredicatePlugin([]mock.Preemption{
+		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
+	}, nil, false, false)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
+			releaseReceived <- releaseEvent
+		}
+	}}
+
+	resultReceived := make(chan *AllocationResult, 1)
+	remaining := 1
+	go func() {
+		resultReceived <- app.tryAllocate(
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 2}),
+			true, 0, &remaining, iterator, iterator, func(string) *Node { return node })
+	}()
+	releaseEvent := waitForRMReleaseEvent(t, releaseReceived)
+
+	lockAcquired := make(chan struct{})
+	go func() {
+		app.Lock()
+		app.Unlock()
+		close(lockAcquired)
+	}()
+	select {
+	case <-lockAcquired:
+		releaseEvent.Channel <- &rmevent.Result{Succeeded: true}
+	case <-time.After(time.Second):
+		releaseEvent.Channel <- &rmevent.Result{Succeeded: true}
+		<-lockAcquired
+		t.Fatal("application lock held while waiting for preemption release response")
+	}
+	result := <-resultReceived
+	assert.Assert(t, result != nil)
+	assert.Equal(t, result.ResultType, Reserved)
+	assert.Equal(t, len(releaseEvent.ReleasedAllocations), 1)
 }
 
 // TestTryPreemptionOnNode Test try preemption on node with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.

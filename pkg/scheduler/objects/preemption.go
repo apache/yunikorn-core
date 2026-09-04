@@ -653,15 +653,38 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		if !fitIn && victim.GetNodeID() != nodeID {
 			continue
 		}
-		// stop collecting the victims once ask resource requirement met
-		if p.ask.GetAllocatedResource().StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
-			finalVictims = append(finalVictims, victim)
+		// check if victim contributes to any resource dimension that is still needed
+		allocRes := victim.GetAllocatedResource()
+		for k, needVal := range p.ask.GetAllocatedResource().Resources {
+			currentVal := resources.Quantity(0)
+			if v, ok := victimsTotalResource.Resources[k]; ok {
+				currentVal = v
+			}
+			if currentVal < needVal {
+				if v, ok := allocRes.Resources[k]; ok && v > 0 {
+					finalVictims = append(finalVictims, victim)
+					victimsTotalResource.AddTo(allocRes)
+					break
+				}
+			}
 		}
-		// add the victim resources to the total
-		victimsTotalResource.AddTo(victim.GetAllocatedResource())
 	}
 
-	if p.ask.GetAllocatedResource().StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
+	hasShortfall := false
+	if victimsTotalResource.IsEmpty() {
+		hasShortfall = true
+	} else {
+		for k, victimVal := range victimsTotalResource.Resources {
+			if needVal, ok := p.ask.GetAllocatedResource().Resources[k]; ok {
+				if victimVal < needVal {
+					hasShortfall = true
+					break
+				}
+			}
+		}
+	}
+
+	if hasShortfall {
 		// there is shortfall, so preemption doesn't help
 		p.ask.LogAllocationFailure(common.PreemptionShortfall, true)
 		return nil, false

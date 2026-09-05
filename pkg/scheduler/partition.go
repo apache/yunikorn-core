@@ -300,7 +300,9 @@ func (pc *PartitionContext) isStopped() bool {
 func (pc *PartitionContext) handlePartitionEvent(event objects.ObjectEvent) error {
 	err := pc.stateMachine.Event(context.Background(), event.String(), pc.Name)
 	if err == nil {
+		pc.Lock()
 		pc.stateTime = time.Now()
+		pc.Unlock()
 		return nil
 	}
 	// handle the same state transition not nil error (limit of fsm).

@@ -1598,6 +1598,15 @@ func (pc *PartitionContext) removeAllocation(release *si.AllocationRelease) ([]*
 // real allocation.
 func (pc *PartitionContext) replacePlaceholderOnNode(alloc *objects.Allocation, node *objects.Node, total *resources.Resource) *objects.Allocation {
 	confirmed := alloc.GetRelease()
+	if confirmed == nil {
+		log.Log(log.SchedPartition).Warn("unexpected placeholder replacement without replacement allocation, removing placeholder from node",
+			zap.String("nodeID", alloc.GetNodeID()),
+			zap.String("allocationKey", alloc.GetAllocationKey()))
+		if node.RemoveAllocation(alloc.GetAllocationKey()) != nil {
+			total.AddTo(alloc.GetAllocatedResource())
+		}
+		return nil
+	}
 	// we need to check the resources equality
 	delta := resources.Sub(confirmed.GetAllocatedResource(), alloc.GetAllocatedResource())
 	// Any negative value in the delta means that at least one of the requested resource in the

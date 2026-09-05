@@ -5718,3 +5718,43 @@ func TestRemoveAppWithReservations(t *testing.T) {
 	partition.removeApplication(appID1)
 	assert.Equal(t, 0, partition.getReservationCount())
 }
+
+func TestRemoveAllocationPlaceholderReplacedWithoutReplacement(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	// add a new app
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application to partition should not have failed")
+
+	// add a node with placeholder allocation
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	node1 := newNodeMaxResource(nodeID1, nodeRes)
+	appRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	ph := newAllocationTG("placeholder", appID1, nodeID1, taskGroup, appRes, true)
+	err = partition.AddNode(node1)
+	assert.NilError(t, err)
+	_, allocCreated, err := partition.UpdateAllocation(ph)
+	assert.NilError(t, err)
+	assert.Check(t, allocCreated)
+	assert.Equal(t, 1, partition.GetTotalAllocationCount())
+	assert.Assert(t, resources.Equals(partition.GetQueue(defQueue).GetAllocatedResource(), appRes))
+
+	// Release with PLACEHOLDER_REPLACED when no replacement was ever linked (ph.GetRelease() == nil)
+	release := &si.AllocationRelease{
+		PartitionName:   partition.Name,
+		ApplicationID:   appID1,
+		AllocationKey:   "placeholder",
+		TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+	}
+
+	released, confirmed := partition.removeAllocation(release)
+	assert.Assert(t, confirmed == nil, "confirmed allocation should be nil when no replacement exists")
+	assert.Equal(t, 1, len(released), "placeholder should be in released list")
+	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "allocation count should be 0 after placeholder removed")
+	assert.Assert(t, node1.GetAllocation("placeholder") == nil, "placeholder should be removed from node")
+	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue resource should be zero after placeholder removed")
+}

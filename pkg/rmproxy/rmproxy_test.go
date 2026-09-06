@@ -28,6 +28,27 @@ import (
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
+func TestRMProxy_StopUnblocksWaitingCaller(t *testing.T) {
+	rmp := NewRMProxy(nil)
+	rmp.StartService()
+
+	c := make(chan *rmevent.Result, 1)
+	rmp.HandleEvent(&rmevent.RMReleaseAllocationEvent{
+		ReleasedAllocations: []*si.AllocationRelease{},
+		RmID:                "rm-test",
+		Channel:             c,
+	})
+
+	rmp.Stop() // exercises the case <-rmp.stop: drainPendingEvents() wiring
+
+	select {
+	case res := <-c:
+		assert.Assert(t, res != nil) // normal reply or drained — either is fine, point is no leak
+	case <-time.After(time.Second):
+		t.Fatal("caller leaked: no reply after Stop")
+	}
+}
+
 func TestRMProxy_DrainPendingEvents(t *testing.T) {
 	rmp := NewRMProxy(nil)
 

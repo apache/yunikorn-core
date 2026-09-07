@@ -26,7 +26,7 @@ go 1.25.0
 // annotations in this repository either panic the tool or are silently dropped, plus the
 // additional analyses this repository runs. The module is a temporary home until a permanent one
 // is sorted out.
-require github.com/tigerquoll/vet-lock v0.8.0
+require github.com/tigerquoll/vet-lock v0.9.0
 
 require (
 	golang.org/x/mod v0.34.0 // indirect

@@ -647,8 +647,9 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 	return toRelease
 }
 
-// Add an allocation ask to this application
-// If the ask already exist update the existing info
+// Add an allocation ask to this application.
+// An ask under a key the application already holds is rejected: see addAllocationAskInternal for
+// the single adder invariant that requires it.
 func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	sa.Lock()
 	defer sa.Unlock()
@@ -658,18 +659,13 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	if ask.IsAllocated() || resources.IsZero(ask.GetAllocatedResource()) {
 		return fmt.Errorf("invalid ask added to app %s: %v", sa.ApplicationID, ask)
 	}
+	if _, tracked := sa.requests[ask.GetAllocationKey()]; tracked {
+		return fmt.Errorf("ask %s is already tracked on app %s", ask.GetAllocationKey(), sa.ApplicationID)
+	}
 	if ask.createTime.Before(sa.submissionTime) {
 		sa.submissionTime = ask.createTime
 	}
 	delta := ask.GetAllocatedResource().Clone()
-
-	var oldAskResource *resources.Resource = nil
-	if oldAsk := sa.requests[ask.GetAllocationKey()]; oldAsk != nil && !oldAsk.IsAllocated() {
-		oldAskResource = oldAsk.GetAllocatedResource().Clone()
-		// the old ask was pending and is being replaced: drop it from the priority histogram so the
-		// new ask's addAllocationAskInternal (via addToPriorities) nets correctly.
-		sa.removeFromPriorities(oldAsk.GetPriority())
-	}
 
 	// Check if we need to change state based on the ask added, there are two cases:
 	// 1) first ask added on a new app: state is New
@@ -685,7 +681,6 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	sa.addAllocationAskInternal(ask)
 
 	// Update total pending resource
-	delta.SubFrom(oldAskResource)
 	sa.pending = resources.Add(sa.pending, delta)
 	sa.pending.Prune()
 	sa.queue.incPendingResource(delta)
@@ -839,6 +834,18 @@ func (sa *Application) setAskMaxPriority(v int32) {
 	sa.queue.UpdateApplicationPriority(sa.ApplicationID, v)
 }
 
+// addAllocationAskInternal is the only place an ask enters sa.requests. Call with sa.Lock() held.
+//
+// Single adder invariant: the key must not be tracked yet. Every write around the map write below
+// is applied blind - the priority histogram and the placeholder count here, sa.pending and the
+// sortedRequests insert in AddAllocationAsk - so a second add for a live key would count it twice
+// in each of them and strand the ask it displaced in sortedRequests, which only ever drops the
+// first entry matching a key. Both entry points (AddAllocationAsk and RecoverAllocationAsk) are
+// reached from PartitionContext.UpdateAllocation only after it has found GetAllocationAsk nil for
+// the key, and those calls all run on the single goroutine draining pendingAllocEvents
+// (Scheduler.handleAllocEvent), so nothing can insert the key between that check and this call.
+// AddAllocationAsk rejects a tracked key rather than resting on that argument; RecoverAllocationAsk
+// returns nothing and so has no way to refuse.
 func (sa *Application) addAllocationAskInternal(ask *Allocation) {
 	sa.requests[ask.GetAllocationKey()] = ask
 

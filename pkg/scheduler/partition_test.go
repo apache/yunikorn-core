@@ -597,7 +597,7 @@ func TestPlaceholderDataWithNodeRemoval(t *testing.T) {
 
 	for i := 1; i <= 6; i++ {
 		// add an ask for a placeholder and allocate
-		ask := newAllocationAskTG(phID+strconv.Itoa(i+1), appID2, taskGroup, res, true)
+		ask := newAllocationAskTG(phID+strconv.Itoa(i), appID2, taskGroup, res, true)
 		err = gangApp.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add placeholder ask ph-1 to app1")
 		// try to allocate a placeholder via normal allocate
@@ -686,7 +686,7 @@ func TestPlaceholderDataWithRemoval(t *testing.T) {
 	var lastPhAllocationKey string
 	for i := 1; i <= 6; i++ {
 		// add an ask for a placeholder and allocate
-		ask := newAllocationAskTG(phID+strconv.Itoa(i+1), appID2, taskGroup, res, true)
+		ask := newAllocationAskTG(phID+strconv.Itoa(i), appID2, taskGroup, res, true)
 		err = gangApp.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add placeholder ask ph-1 to app1")
 		// try to allocate a placeholder via normal allocate

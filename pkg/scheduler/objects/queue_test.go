@@ -1678,7 +1678,7 @@ func TestOutStandingRequestMultipleChildrenWithMax(t *testing.T) {
 	ask1Leaf2.SetSchedulingAttempted(true)
 	err = leaf2App.AddAllocationAsk(ask1Leaf2)
 	assert.NilError(t, err, "could not add ask")
-	ask2Leaf2 := newAllocationAsk("ask1-leaf2", "app-leaf2", askRes)
+	ask2Leaf2 := newAllocationAsk("ask2-leaf2", "app-leaf2", askRes)
 	ask2Leaf2.SetSchedulingAttempted(true)
 	err = leaf2App.AddAllocationAsk(ask2Leaf2)
 	assert.NilError(t, err, "could not add ask")

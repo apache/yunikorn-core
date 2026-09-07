@@ -45,6 +45,8 @@ const (
 	aKey          = "alloc-1"
 	aKey2         = "alloc-2"
 	aKey3         = "alloc-3"
+	aKey4         = "alloc-4"
+	aKey5         = "alloc-5"
 	nodeID1       = "node-1"
 	nodeID2       = "node-2"
 	nodeID3       = "node-3"

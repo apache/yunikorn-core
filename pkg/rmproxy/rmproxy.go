@@ -203,7 +203,36 @@ func (rmp *RMProxy) handleRMEvents() {
 				panic(fmt.Sprintf("%s is not an acceptable type for RM event.", reflect.TypeOf(v).String()))
 			}
 		case <-rmp.stop:
+			rmp.drainPendingEvents()
 			return
+		}
+	}
+}
+
+func (rmp *RMProxy) drainPendingEvents() {
+	for {
+		select {
+		case ev := <-rmp.pendingRMEvents:
+			switch v := ev.(type) {
+			case *rmevent.RMNewAllocationsEvent:
+				drainReplyChannel(v.Channel)
+			case *rmevent.RMReleaseAllocationEvent:
+				drainReplyChannel(v.Channel)
+			}
+		default:
+			return
+		}
+	}
+}
+
+func drainReplyChannel(ch chan *rmevent.Result) {
+	if ch != nil {
+		select {
+		case ch <- &rmevent.Result{
+			Succeeded: false,
+			Reason:    "RMProxy is stopping",
+		}:
+		default:
 		}
 	}
 }

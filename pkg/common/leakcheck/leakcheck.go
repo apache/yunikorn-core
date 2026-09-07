@@ -48,7 +48,7 @@ import (
 // the list stops new KINDS of leak from being added, it is not a proof that the
 // exempted counts stay put.
 //
-// Two matching caveats: the three ".func1" entries key on positional,
+// Two matching caveats: the two ".func1" entries key on positional,
 // compiler-assigned closure names, so inserting an earlier closure in the same
 // method silently breaks the match (goleak v1.3.0 cannot match the creator
 // frame); and a test that catches one of these goroutines mid-body, rather than
@@ -65,12 +65,6 @@ func options() []goleak.Option {
 		// Event publisher (eventPublisher.start). See YUNIKORN-3370.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/events.(*eventPublisher).start.func1"),
 
-		// Event stream forwarder (EventStreaming.CreateEventStream). Two bare
-		// sends: the history replay (YUNIKORN-3364, fix in #1133) and the in-loop
-		// consumer send hit by slow-consumer eviction (YUNIKORN-3436). The
-		// test-hygiene half landed as YUNIKORN-3372.
-		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/events.(*EventStreaming).CreateEventStream.func1"),
-
 		// Partition queue cleaner (partitionManager.Run). See YUNIKORN-3370.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/scheduler.(*partitionManager).cleanRoot"),
 
@@ -79,11 +73,6 @@ func options() []goleak.Option {
 
 		// User/group cache cleaner (UserGroupCache.run). See YUNIKORN-3370.
 		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/common/security.(*UserGroupCache).run"),
-
-		// Scheduler allocation notify parked on an RM reply the proxy never
-		// drains at shutdown. Maintainers consider it benign at process exit; no
-		// fix scheduled. See YUNIKORN-3365.
-		goleak.IgnoreTopFunction("github.com/apache/yunikorn-core/pkg/scheduler.(*ClusterContext).notifyRMNewAllocation"),
 	}
 }
 

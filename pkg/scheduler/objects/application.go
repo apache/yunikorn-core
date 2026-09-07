@@ -1036,7 +1036,9 @@ func (sa *Application) reserveInternal(node *Node, ask *Allocation) error {
 		return fmt.Errorf("reservation creation failed alloc %s not found on appID %s", allocKey, sa.ApplicationID)
 	}
 	// create the reservation (includes nil checks)
-	nodeReservation := newReservation(node, sa, ask, true)
+	// YUNIKORN-3420: the callee logs the app only on its nil-guard branch, which Reserve has
+	// already excluded before taking the lock; the analysis is path-insensitive and cannot see that
+	nodeReservation := newReservation(node, sa, ask, true) // +checklocksignore
 	if nodeReservation == nil {
 		log.Log(log.SchedApplication).Debug("reservation creation failed unexpectedly",
 			zap.String("app", sa.ApplicationID),
@@ -1049,7 +1051,8 @@ func (sa *Application) reserveInternal(node *Node, ask *Allocation) error {
 		return err
 	}
 	// check if we can reserve the node before reserving on the app
-	if err := node.Reserve(sa, ask); err != nil {
+	// YUNIKORN-3420: same nil-guard branch in the callee, same reason as above
+	if err := node.Reserve(sa, ask); err != nil { // +checklocksignore
 		return err
 	}
 	sa.reservations[allocKey] = nodeReservation

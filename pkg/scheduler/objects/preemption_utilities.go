@@ -26,8 +26,8 @@ import (
 )
 
 var (
-	scoreNonOriginator uint64 = 1 << 33
-	scoreAllowPreempt  uint64 = 1 << 34
+	scoreNonOriginator uint64 = 1 << 34
+	scoreAllowPreempt  uint64 = 1 << 33
 )
 
 // SortAllocations Sort allocations based on the following criteria in the specified order:
@@ -129,8 +129,8 @@ func SortAllocationsBasedOnAsk(allocations []*Allocation, total, ask *resources.
 }
 
 // scoreAllocationBasedOnAsk generates a relative score for an allocation based on ask. Higher-scored allocations are considered more likely
-// preemption candidates. Tasks which have opted into preemption are considered first, then tasks which are not
-// application originators.
+// preemption candidates. Tasks which are not application originators are considered first, then tasks which have
+// opted into preemption.
 func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) uint64 {
 	var score uint64 = 0
 	if !allocation.IsOriginator() {

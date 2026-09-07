@@ -316,7 +316,7 @@ func TestSortAllocationsBasedOnAsk_PreemptionOrdering(t *testing.T) {
 	SortAllocationsBasedOnAsk(allocations, total, ask)
 
 	assert.Equal(t, allocations[0].GetAllocationKey(), "regularPod")
-	assert.Equal(t, allocations[1].GetAllocationKey(), "originatorPod")
-	assert.Equal(t, allocations[2].GetAllocationKey(), "optedOutPod")
+	assert.Equal(t, allocations[1].GetAllocationKey(), "optedOutPod")
+	assert.Equal(t, allocations[2].GetAllocationKey(), "originatorPod")
 	assert.Equal(t, allocations[3].GetAllocationKey(), "optedOutOriginatorPod")
 }

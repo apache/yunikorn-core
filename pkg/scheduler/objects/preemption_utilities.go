@@ -129,8 +129,7 @@ func SortAllocationsBasedOnAsk(allocations []*Allocation, total, ask *resources.
 }
 
 // scoreAllocationBasedOnAsk generates a relative score for an allocation based on ask. Higher-scored allocations are considered more likely
-// preemption candidates. Tasks which are not application originators are considered first, then tasks which have
-// opted into preemption.
+// preemption candidates. Opted out pods are considered before originator pods.
 func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) uint64 {
 	var score uint64 = 0
 	if !allocation.IsOriginator() {

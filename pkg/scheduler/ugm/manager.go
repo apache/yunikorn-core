@@ -240,16 +240,7 @@ func (m *Manager) ensureGroupTrackerForApp(queuePath, applicationID string, user
 
 	// something matched, get the tracker or create if it does not exist
 	if appGroup != common.Empty {
-		groupTracker = m.GetGroupTracker(appGroup)
-		if groupTracker == nil {
-			log.Log(log.SchedUGM).Info("Group tracker doesn't exists. Creating appGroup tracker",
-				zap.String("queue path", queuePath),
-				zap.String("group", appGroup))
-			groupTracker = newGroupTracker(appGroup, m.events)
-			m.Lock()
-			m.groupTrackers[appGroup] = groupTracker
-			m.Unlock()
-		}
+		groupTracker = m.getGroupTracker(appGroup)
 	}
 	log.Log(log.SchedUGM).Info("Group tracker set for user application",
 		zap.String("group", appGroup),
@@ -636,6 +627,20 @@ func (m *Manager) getUserTracker(user string) *UserTracker {
 	userTracker := newUserTracker(user, m.events)
 	m.userTrackers[user] = userTracker
 	return userTracker
+}
+
+// getGroupTracker returns the requested group tracker and creates one if it does not exist.
+func (m *Manager) getGroupTracker(group string) *GroupTracker {
+	m.Lock()
+	defer m.Unlock()
+	if gt, ok := m.groupTrackers[group]; ok {
+		return gt
+	}
+	log.Log(log.SchedUGM).Info("Group tracker doesn't exists. Creating group tracker.",
+		zap.String("group", group))
+	groupTracker := newGroupTracker(group, m.events)
+	m.groupTrackers[group] = groupTracker
+	return groupTracker
 }
 
 func (m *Manager) getUserWildCardLimitsConfig(queuePath string) *LimitConfig {

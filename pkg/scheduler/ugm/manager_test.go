@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -2026,4 +2027,69 @@ func assertWildCardLimits(t *testing.T, limitsConfig map[string]*LimitConfig, ex
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, configuredResource)
 	}
 	assert.Equal(t, resources.Equals(expResource, configuredResource), true)
+}
+
+func TestEnsureGroupTrackerForAppConcurrentRace(t *testing.T) {
+	groupName := "devs"
+	queuePath := queuePathLeaf
+	user := security.UserGroup{
+		User:   "alice",
+		Groups: []string{groupName},
+	}
+	usage := resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 100})
+
+	// Run multiple rounds to consistently trigger the check-then-act race window
+	for round := 1; round <= 10; round++ {
+		setupUGM()
+		manager := GetUserManager()
+
+		manager.Lock()
+		manager.configuredGroups = map[string][]string{
+			queuePath: {groupName},
+		}
+		manager.Unlock()
+
+		numApps := 50
+		var wg sync.WaitGroup
+		start := make(chan struct{})
+
+		for i := 0; i < numApps; i++ {
+			wg.Add(1)
+			go func(appIndex int) {
+				defer wg.Done()
+				<-start
+				appID := fmt.Sprintf("app-r%d-%d", round, appIndex)
+				manager.IncreaseTrackedResource(queuePath, appID, usage, user)
+			}(i)
+		}
+
+		close(start)
+		wg.Wait()
+
+		canonicalGroupTracker := manager.GetGroupTracker(groupName)
+		assert.Assert(t, canonicalGroupTracker != nil, "canonical group tracker should exist in manager")
+
+		userTracker := manager.GetUserTracker("alice")
+		assert.Assert(t, userTracker != nil, "user tracker should exist")
+
+		userTracker.RLock()
+		uniqueTrackers := make(map[*GroupTracker]int)
+		mismatchedApps := make([]string, 0)
+		for appID, gt := range userTracker.appGroupTrackers {
+			uniqueTrackers[gt]++
+			if gt != canonicalGroupTracker {
+				mismatchedApps = append(mismatchedApps, appID)
+			}
+		}
+		userTracker.RUnlock()
+
+		if len(uniqueTrackers) > 1 || len(mismatchedApps) > 0 {
+			t.Logf("=== CHAOS HARNESS TRIGGERED IN ROUND %d ===", round)
+			t.Logf("Total applications launched: %d", numApps)
+			t.Logf("Distinct GroupTracker instances created in memory: %d", len(uniqueTrackers))
+			t.Logf("Applications linked to non-canonical orphaned GroupTrackers: %d", len(mismatchedApps))
+			t.Fatalf("CRITICAL BUG DETECTED: Multiple GroupTracker instances created for group '%s'! Expected 1, found %d instances (Round %d)",
+				groupName, len(uniqueTrackers), round)
+		}
+	}
 }

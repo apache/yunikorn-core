@@ -164,8 +164,6 @@ func (manager *partitionManager) remove() {
 	}
 	log.Log(log.SchedPartition).Info("removing partition",
 		zap.String("partitionName", manager.pc.Name))
-	// remove the scheduler object
-	manager.cc.removePartition(manager.pc.Name)
 }
 
 func (manager *partitionManager) cleanExpiredApps() {

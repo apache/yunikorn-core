@@ -636,11 +636,7 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	// Holds total victims resources
 	victimsTotalResource := resources.NewResource()
 
-	fitIn := false
-	nodeCurrentAvailable := p.nodeAvailableMap
-	if nodeCurrentAvailable[nodeID].FitIn(p.ask.GetAllocatedResource()) {
-		fitIn = true
-	}
+	fitIn := p.nodeAvailableMap[nodeID].FitIn(p.ask.GetAllocatedResource())
 
 	// Since there could be more victims than the actual need, ensure only required victims are filtered finally
 	// to do: There is room for improvements especially when there are more victims. victims could be chosen based
@@ -653,15 +649,28 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		if !fitIn && victim.GetNodeID() != nodeID {
 			continue
 		}
-		// stop collecting the victims once ask resource requirement met
-		if p.ask.GetAllocatedResource().StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
-			finalVictims = append(finalVictims, victim)
+		// check if victim contributes to any resource dimension that is still needed
+		allocRes := victim.GetAllocatedResource()
+		for k, needVal := range p.ask.GetAllocatedResource().Resources {
+			if victimsTotalResource.Resources[k] < needVal && allocRes.Resources[k] > 0 {
+				finalVictims = append(finalVictims, victim)
+				victimsTotalResource.AddTo(allocRes)
+				break
+			}
 		}
-		// add the victim resources to the total
-		victimsTotalResource.AddTo(victim.GetAllocatedResource())
 	}
 
-	if p.ask.GetAllocatedResource().StrictlyGreaterThanOnlyExisting(victimsTotalResource) {
+	hasShortfall := victimsTotalResource.IsEmpty()
+	if !hasShortfall {
+		for k, victimVal := range victimsTotalResource.Resources {
+			if needVal, ok := p.ask.GetAllocatedResource().Resources[k]; ok && victimVal < needVal {
+				hasShortfall = true
+				break
+			}
+		}
+	}
+
+	if hasShortfall {
 		// there is shortfall, so preemption doesn't help
 		p.ask.LogAllocationFailure(common.PreemptionShortfall, true)
 		return nil, false

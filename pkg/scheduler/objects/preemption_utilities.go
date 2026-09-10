@@ -25,6 +25,11 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 )
 
+var (
+	scoreNonOriginator uint64 = 1 << 34
+	scoreAllowPreempt  uint64 = 1 << 33
+)
+
 // SortAllocations Sort allocations based on the following criteria in the specified order:
 // 1. By type (regular pods, opted out pods, driver/owner pods),
 // 2. By priority (least priority ask placed first),
@@ -123,16 +128,15 @@ func SortAllocationsBasedOnAsk(allocations []*Allocation, total, ask *resources.
 	})
 }
 
-// scoreAllocation generates a relative score for an allocation. Lower-scored allocations are considered more likely
-// preemption candidates. Tasks which have opted into preemption are considered first, then tasks which are not
-// application originators.
+// scoreAllocationBasedOnAsk generates a relative score for an allocation based on ask. Higher-scored allocations are considered more likely
+// preemption candidates. Opted out pods are considered before originator pods.
 func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) uint64 {
 	var score uint64 = 0
-	if allocation.IsOriginator() {
-		score |= scoreOriginator
+	if !allocation.IsOriginator() {
+		score |= scoreNonOriginator
 	}
-	if !allocation.IsAllowPreemptSelf() {
-		score |= scoreNoPreempt
+	if allocation.IsAllowPreemptSelf() {
+		score |= scoreAllowPreempt
 	}
 	score += allocation.GetAllocatedResource().TypeMatching(ask)
 	return score

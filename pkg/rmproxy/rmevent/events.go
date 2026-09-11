@@ -89,7 +89,6 @@ type RMRejectedAllocationEvent struct {
 type RMReleaseAllocationEvent struct {
 	RmID                string
 	ReleasedAllocations []*si.AllocationRelease
-	Channel             chan *Result `json:"-"`
 }
 
 type RMNodeUpdateEvent struct {

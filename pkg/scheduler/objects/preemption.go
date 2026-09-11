@@ -732,10 +732,12 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		zap.String("nodeID", nodeID),
 		zap.Int("collected victim count", len(victims)),
 		zap.Int("preempted victim count", len(finalVictims)))
-	result := newReservedAllocationResult(nodeID, p.ask)
-	result.releaseNotification = newReleaseNotification(finalVictims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
-		"preempting allocations to free up resources to run ask: "+p.ask.GetAllocationKey())
-	return result, true
+	p.application.notifyRMAllocationReleased(
+		finalVictims,
+		si.TerminationType_PREEMPTED_BY_SCHEDULER,
+		"preempting allocations to free up resources to run ask: "+p.ask.GetAllocationKey(),
+	)
+	return newReservedAllocationResult(nodeID, p.ask), true
 }
 
 // Duplicate creates a copy of this snapshot into the given map by queue path

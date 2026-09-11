@@ -815,11 +815,9 @@ func (cc *ClusterContext) notifyRMNewAllocation(rmID string, alloc *objects.Allo
 // Create a RM update event to notify RM of released allocations
 // Lock free call, all updates occur via events.
 func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, partitionName string, released []*objects.Allocation, terminationType si.TerminationType, message string) {
-	c := make(chan *rmevent.Result, 1)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                rmID,
-		Channel:             c,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
@@ -832,13 +830,6 @@ func (cc *ClusterContext) notifyRMAllocationReleased(rmID string, partitionName 
 	}
 
 	cc.rmEventHandler.HandleEvent(releaseEvent)
-	// Wait from channel
-	result := <-c
-	if result.Succeeded {
-		log.Log(log.SchedContext).Debug("Successfully synced shim on released allocations. response: " + result.Reason)
-	} else {
-		log.Log(log.SchedContext).Info("failed to sync shim on released allocations")
-	}
 }
 
 // Get a scheduling node based on its name from the partition.

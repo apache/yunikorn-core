@@ -62,7 +62,7 @@ func NewRequiredNodePreemptor(node *Node, requiredAsk *Allocation, application *
 	return preemptor
 }
 
-func (p *PreemptionContext) tryPreemption() *releaseNotification {
+func (p *PreemptionContext) tryPreemption() {
 	result := p.filterAllocations()
 	p.sortAllocations()
 
@@ -92,8 +92,11 @@ func (p *PreemptionContext) tryPreemption() *releaseNotification {
 			victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
 		}
 		p.requiredAsk.MarkTriggeredPreemption()
-		return newReleaseNotification(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
-			"preempting allocations to free up resources to run daemon set ask: "+p.requiredAsk.GetAllocationKey())
+		p.application.notifyRMAllocationReleased(
+			victims,
+			si.TerminationType_PREEMPTED_BY_SCHEDULER,
+			"preempting allocations to free up resources to run daemon set ask: "+p.requiredAsk.GetAllocationKey(),
+		)
 	} else {
 		p.requiredAsk.LogAllocationFailure(common.NoVictimForRequiredNode, true)
 		p.requiredAsk.SendRequiredNodePreemptionFailedEvent(p.node.NodeID)
@@ -107,7 +110,6 @@ func (p *PreemptionContext) tryPreemption() *releaseNotification {
 			zap.Int("higher priority allocations", result.higherPriorityAllocations),
 			zap.Int("allocations with non-matching resources", result.atLeastOneResNotMatched))
 	}
-	return nil
 }
 
 func (p *PreemptionContext) filterAllocations() filteringResult {

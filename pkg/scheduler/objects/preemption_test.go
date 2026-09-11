@@ -461,7 +461,7 @@ func TestTryPreemption_SendEvent(t *testing.T) {
 	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
-func TestTryAllocateUnlocksBeforePreemptionRMReply(t *testing.T) {
+func TestTryAllocateDoesNotWaitForPreemptionRMReply(t *testing.T) {
 	appQueueMapping := NewAppQueueMapping()
 	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "pods": 2})
 	iterator := getNodeIteratorFn(node)
@@ -501,25 +501,22 @@ func TestTryAllocateUnlocksBeforePreemptionRMReply(t *testing.T) {
 			true, 0, &remaining, iterator, iterator, func(string) *Node { return node })
 	}()
 	releaseEvent := waitForRMReleaseEvent(t, releaseReceived)
-
-	lockAcquired := make(chan struct{})
-	go func() {
-		app.Lock()
-		close(lockAcquired)
-		app.Unlock()
-	}()
+	var result *AllocationResult
 	select {
-	case <-lockAcquired:
-		releaseEvent.Channel <- &rmevent.Result{Succeeded: true}
+	case result = <-resultReceived:
 	case <-time.After(time.Second):
-		releaseEvent.Channel <- &rmevent.Result{Succeeded: true}
-		<-lockAcquired
-		t.Fatal("application lock held while waiting for preemption release response")
+		t.Fatal("allocation waited for a preemption RM reply")
 	}
-	result := <-resultReceived
+
 	assert.Assert(t, result != nil)
 	assert.Equal(t, result.ResultType, Reserved)
+	assert.Assert(t, ask.HasTriggeredPreemption())
 	assert.Equal(t, len(releaseEvent.ReleasedAllocations), 1)
+	assert.Equal(
+		t,
+		releaseEvent.ReleasedAllocations[0].TerminationType,
+		si.TerminationType_PREEMPTED_BY_SCHEDULER,
+	)
 }
 
 // TestTryPreemptionOnNode Test try preemption on node with simple queue hierarchy. Since Node doesn't have enough resources to accomodate, preemption happens because of node resource constraint.

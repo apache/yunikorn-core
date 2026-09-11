@@ -48,8 +48,6 @@ func (rmp *MockedRMProxy) HandleEvent(ev interface{}) {
 		rmp.handled = true
 	case *rmevent.RMNewAllocationsEvent:
 		c = v.Channel
-	case *rmevent.RMReleaseAllocationEvent:
-		c = v.Channel
 	}
 	if c != nil {
 		go func(rc chan *rmevent.Result) {

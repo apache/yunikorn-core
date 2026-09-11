@@ -2467,3 +2467,67 @@ func Test_PreemptReleasesReservationsOnSuccess(t *testing.T) {
 	case <-time.After(100 * time.Millisecond):
 	}
 }
+
+// TestTryPreemption_PredicateVictimsNotTruncated verifies that when predicate evaluation (e.g. anti-affinity)
+// requires multiple victims on a node, Core does not drop victims that exceed the raw resource requirement of the ask.
+func TestTryPreemption_PredicateVictimsNotTruncated(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "20"}, map[string]string{"first": "15"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+	// alloc1: created earlier, usage first: 5
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask1.createTime = time.Now().Add(-1 * time.Minute)
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	alloc1.createTime = ask1.createTime
+	app1.AddAllocation(alloc1)
+	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
+	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
+
+	// alloc2: created newer, usage first: 5
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask2.createTime = time.Now()
+	assert.NilError(t, app1.AddAllocationAsk(ask2))
+	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	alloc2.createTime = ask2.createTime
+	app1.AddAllocation(alloc2)
+	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
+	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
+
+	// Preemptor ask in childQ2 needs first: 5
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	// Shim indicates that BOTH alloc2 (index 0) and alloc1 (index 1) must be preempted
+	preemptions := []mock.Preemption{
+		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2", "alloc1"}, 0, 1),
+	}
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, result != nil, "no result")
+	assert.Assert(t, ok, "no victims found")
+	assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
+	assert.Equal(t, nodeID1, result.NodeID, "wrong node")
+	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
+	assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
+}

@@ -136,11 +136,9 @@ func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllo
 		metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 	}
 
-	// Done, notify channel
-	event.Channel <- &rmevent.Result{
-		Succeeded: true,
-		Reason:    "no. of allocations: " + strconv.Itoa(allocationsCount),
-	}
+	log.Log(log.RMProxy).Debug("Processed allocation release notification",
+		zap.String("rmID", event.RmID),
+		zap.Int("releasedAllocations", allocationsCount))
 }
 
 func (rmp *RMProxy) triggerUpdateAllocation(rmID string, response *si.AllocationResponse) {
@@ -213,11 +211,8 @@ func (rmp *RMProxy) drainPendingEvents() {
 	for {
 		select {
 		case ev := <-rmp.pendingRMEvents:
-			switch v := ev.(type) {
-			case *rmevent.RMNewAllocationsEvent:
-				drainReplyChannel(v.Channel)
-			case *rmevent.RMReleaseAllocationEvent:
-				drainReplyChannel(v.Channel)
+			if event, ok := ev.(*rmevent.RMNewAllocationsEvent); ok {
+				drainReplyChannel(event.Channel)
 			}
 		default:
 			return

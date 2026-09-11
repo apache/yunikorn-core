@@ -1699,6 +1699,83 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 }
 
+func TestTimeoutPlaceholderProcessingDoesNotWaitForRMReply(t *testing.T) {
+	setupUGM()
+	app := newApplication(appID1, "default", "root.a")
+	app.SetState(Accepted.String())
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcores": 10})
+	ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+	app.AddAllocation(ph)
+	app.addPlaceholderDataWithLocking(ph)
+	app.SetState(Running.String())
+	app.clearPlaceholderTimer()
+
+	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
+	app.rmEventHandler = &mockAppEventHandler{
+		callback: func(ev interface{}) {
+			if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
+				releaseReceived <- releaseEvent
+			}
+		},
+	}
+
+	timeoutDone := make(chan struct{})
+	go func() {
+		app.timeoutPlaceholderProcessing()
+		close(timeoutDone)
+	}()
+	releaseEvent := waitForRMReleaseEvent(t, releaseReceived)
+	select {
+	case <-timeoutDone:
+	case <-time.After(time.Second):
+		t.Fatal("placeholder timeout processing waited for an RM reply")
+	}
+
+	assert.Equal(t, len(releaseEvent.ReleasedAllocations), 1)
+	release := releaseEvent.ReleasedAllocations[0]
+	assert.Equal(t, release.AllocationKey, ph.GetAllocationKey())
+	assert.Equal(t, release.TerminationType, si.TerminationType_TIMEOUT)
+	assert.Assert(t, ph.IsReleased())
+}
+
+func TestTimeoutStateTimerDoesNotWaitForRMReply(t *testing.T) {
+	setupUGM()
+	app := newApplication(appID1, "default", "root.a")
+	app.SetState(Accepted.String())
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100})
+	ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+	app.AddAllocation(ph)
+	app.addPlaceholderDataWithLocking(ph)
+	app.clearPlaceholderTimer()
+	app.SetState(Completing.String())
+
+	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
+			releaseReceived <- releaseEvent
+		}
+	}}
+
+	timerDone := make(chan struct{})
+	go func() {
+		app.timeoutStateTimer(Completing.String(), CompleteApplication)()
+		close(timerDone)
+	}()
+	releaseEvent := waitForRMReleaseEvent(t, releaseReceived)
+	select {
+	case <-timerDone:
+	case <-time.After(time.Second):
+		t.Fatal("state timeout processing waited for an RM reply")
+	}
+
+	assert.Equal(t, len(releaseEvent.ReleasedAllocations), 1)
+	release := releaseEvent.ReleasedAllocations[0]
+	assert.Equal(t, release.AllocationKey, ph.GetAllocationKey())
+	assert.Equal(t, release.TerminationType, si.TerminationType_TIMEOUT)
+	assert.Assert(t, ph.IsReleased())
+}
+
 func TestTimeoutPlaceholderAllocPreempted(t *testing.T) {
 	setupUGM()
 
@@ -3670,15 +3747,12 @@ func TestRequiredNodePreemption(t *testing.T) {
 	// tests successful RequiredNode (DaemonSet) preemption
 	app := newApplication(appID0, "default", "root.default")
 	var releaseEvents []*rmevent.RMReleaseAllocationEvent
+	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
 	app.rmEventHandler = &mockAppEventHandler{
 		callback: func(ev interface{}) {
 			if rmEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				releaseEvents = append(releaseEvents, rmEvent)
-				go func() {
-					rmEvent.Channel <- &rmevent.Result{
-						Succeeded: true,
-					}
-				}()
+				releaseReceived <- rmEvent
 			}
 		},
 	}
@@ -3727,8 +3801,26 @@ func TestRequiredNodePreemption(t *testing.T) {
 	err = app.Reserve(node, ask2)
 	assert.NilError(t, err, "reservation failed")
 
-	// preemption
-	assert.Assert(t, app.tryReservedAllocate(headRoom, iterator) == nil, "unexpected result from reserved allocation")
+	// Preemption must return without an RM reply, even with a nil result.
+	preemptionDone := make(chan *AllocationResult, 1)
+	go func() {
+		preemptionDone <- app.tryReservedAllocate(headRoom, iterator)
+	}()
+	releaseEvent := waitForRMReleaseEvent(t, releaseReceived)
+
+	select {
+	case result := <-preemptionDone:
+		assert.Assert(t, result == nil, "unexpected result from reserved allocation")
+	case <-time.After(time.Second):
+		t.Fatal("required-node preemption waited for an RM reply")
+	}
+
+	assert.Equal(t, len(releaseEvent.ReleasedAllocations), 1)
+	assert.Equal(
+		t,
+		releaseEvent.ReleasedAllocations[0].TerminationType,
+		si.TerminationType_PREEMPTED_BY_SCHEDULER,
+	)
 	assert.Assert(t, ask1.IsPreempted(), "ask1 has not been preempted")
 	assert.Assert(t, ask2.HasTriggeredPreemption(), "ask2 has not triggered preemption")
 	assert.Equal(t, 1, len(releaseEvents), "unexpected number of release events")
@@ -3754,11 +3846,6 @@ func TestRequiredNodePreemptionFailed(t *testing.T) {
 		callback: func(ev interface{}) {
 			if rmEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				releaseEvents = append(releaseEvents, rmEvent)
-				go func() {
-					rmEvent.Channel <- &rmevent.Result{
-						Succeeded: true,
-					}
-				}()
 			}
 		},
 	}
@@ -3953,6 +4040,61 @@ func (m mockAppEventHandler) HandleEvent(ev interface{}) {
 	m.callback(ev)
 }
 
+func waitForRMReleaseEvent(t *testing.T, events <-chan *rmevent.RMReleaseAllocationEvent) *rmevent.RMReleaseAllocationEvent {
+	t.Helper()
+	select {
+	case event := <-events:
+		return event
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for RM release event")
+		return nil
+	}
+}
+
+func TestNotifyRMAllocationReleasedDoesNotWaitForReply(t *testing.T) {
+	app := newApplication(appID1, "default", "root.a")
+	res := resources.NewResourceFromMap(
+		map[string]resources.Quantity{"memory": 100},
+	)
+	alloc := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+
+	received := make(chan *rmevent.RMReleaseAllocationEvent, 1)
+	app.rmEventHandler = &mockAppEventHandler{
+		callback: func(ev interface{}) {
+			if event, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
+				received <- event
+			}
+		},
+	}
+
+	done := make(chan struct{})
+	go func() {
+		app.notifyRMAllocationReleased(
+			[]*Allocation{alloc},
+			si.TerminationType_TIMEOUT,
+			"test release",
+		)
+		close(done)
+	}()
+
+	event := waitForRMReleaseEvent(t, received)
+
+	select {
+	case <-done:
+	// Notification must return without an RM reply.
+	case <-time.After(time.Second):
+		t.Fatal("release notification waited for an RM reply")
+	}
+
+	assert.Equal(t, len(event.ReleasedAllocations), 1)
+	release := event.ReleasedAllocations[0]
+	assert.Equal(t, release.ApplicationID, alloc.GetApplicationID())
+	assert.Equal(t, release.AllocationKey, alloc.GetAllocationKey())
+	assert.Equal(t, release.PartitionName, app.Partition)
+	assert.Equal(t, release.TerminationType, si.TerminationType_TIMEOUT)
+	assert.Equal(t, release.Message, "test release")
+}
+
 func TestApplication_canAllocationReserve(t *testing.T) {
 	res := resources.NewResource()
 	tests := []struct {
@@ -4049,6 +4191,12 @@ func TestTryPlaceHolderAllocateLargerRequest(t *testing.T) {
 	}
 
 	app := newApplication(appID0, "default", "root.default")
+	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
+			releaseReceived <- releaseEvent
+		}
+	}}
 
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
@@ -4067,7 +4215,22 @@ func TestTryPlaceHolderAllocateLargerRequest(t *testing.T) {
 	err = app.AddAllocationAsk(ask)
 	assert.NilError(t, err, "ask should have been added to app")
 
-	result := app.tryPlaceholderAllocate(iterator, getNode)
+	resultReceived := make(chan *AllocationResult, 1)
+	go func() {
+		resultReceived <- app.tryPlaceholderAllocate(iterator, getNode)
+	}()
+	releaseEvent := waitForRMReleaseEvent(t, releaseReceived)
+	var result *AllocationResult
+	select {
+	case result = <-resultReceived:
+	case <-time.After(time.Second):
+		t.Fatal("placeholder allocation waited for an RM release reply")
+	}
+
+	assert.Equal(t, len(releaseEvent.ReleasedAllocations), 1)
+	release := releaseEvent.ReleasedAllocations[0]
+	assert.Equal(t, release.AllocationKey, ph.GetAllocationKey())
+	assert.Equal(t, release.TerminationType, si.TerminationType_TIMEOUT)
 	assert.Assert(t, result == nil, "result should be nil since the ask is larger than the placeholder")
 	assert.Assert(t, ph.IsReleased(), "placeholder should have been released")
 	// placeholder data remains unchanged until RM confirms the release

@@ -358,8 +358,12 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 					zap.Int("replaced", replacing),
 					zap.Int("preempted", preempted),
 					zap.Int("releasing", len(toRelease)))
-				sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing placeholders on app complete")
 				sa.clearStateTimer()
+				sa.notifyRMAllocationReleased(
+					toRelease,
+					si.TerminationType_TIMEOUT,
+					"releasing placeholders on app complete",
+				)
 			} else {
 				// nolint: errcheck
 				_ = sa.HandleApplicationEvent(event)
@@ -437,7 +441,11 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			zap.Int("preempted", preempted),
 			zap.Int("releasing", len(toRelease)))
 		// trigger the release of the placeholders: accounting updates when the release is done
-		sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
+		sa.notifyRMAllocationReleased(
+			toRelease,
+			si.TerminationType_TIMEOUT,
+			"releasing allocated placeholders on placeholder timeout",
+		)
 	} else {
 		// Case 2: in every other case progress the application, and notify the context about the expired placeholders
 		// change the status of the app based on gang style: soft resume normal allocations, hard fail the app
@@ -489,9 +497,17 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 		released := sa.removeAsksInternal("", si.EventRecord_REQUEST_TIMEOUT)
 		sa.executeReservationReleasedCallback(released)
 		// trigger the release of the allocated placeholders: accounting updates when the release is done
-		sa.notifyRMAllocationReleased(toRelease, si.TerminationType_TIMEOUT, "releasing allocated placeholders on placeholder timeout")
+		sa.notifyRMAllocationReleased(
+			toRelease,
+			si.TerminationType_TIMEOUT,
+			"releasing allocated placeholders on placeholder timeout",
+		)
 		// trigger the release of the pending placeholders: accounting has been done
-		sa.notifyRMAllocationReleased(pendingRelease, si.TerminationType_TIMEOUT, "releasing pending placeholders on placeholder timeout")
+		sa.notifyRMAllocationReleased(
+			pendingRelease,
+			si.TerminationType_TIMEOUT,
+			"releasing pending placeholders on placeholder timeout",
+		)
 	}
 	sa.clearPlaceholderTimer()
 }
@@ -1159,6 +1175,7 @@ func (sa *Application) canReplace(request *Allocation) bool {
 func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption bool, preemptionDelay time.Duration, preemptAttemptsRemaining *int, nodeIterator func() NodeIterator, fullNodeIterator func() NodeIterator, getNodeFn func(string) *Node) *AllocationResult {
 	sa.Lock()
 	defer sa.Unlock()
+
 	if len(sa.sortedRequests) == 0 {
 		return nil
 	}
@@ -1357,6 +1374,7 @@ func (sa *Application) cancelReservations(reservations []*reservation) int {
 func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, getNodeFn func(string) *Node) *AllocationResult {
 	sa.Lock()
 	defer sa.Unlock()
+
 	// nothing to do if we have no placeholders allocated
 	if resources.IsZero(sa.allocatedPlaceholder) || sa.sortedRequests == nil {
 		return nil
@@ -1397,7 +1415,11 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 						zap.String("applicationID", sa.ApplicationID),
 						zap.String("allocationKey", ph.GetAllocationKey()))
 				} else {
-					sa.notifyRMAllocationReleased([]*Allocation{ph}, si.TerminationType_TIMEOUT, "cancel placeholder: resource incompatible")
+					sa.notifyRMAllocationReleased(
+						[]*Allocation{ph},
+						si.TerminationType_TIMEOUT,
+						"cancel placeholder: resource incompatible",
+					)
 					sa.appEvents.SendPlaceholderLargerEvent(ph.taskGroupName, sa.ApplicationID, ph.allocationKey, request.GetAllocatedResource(), ph.GetAllocatedResource())
 				}
 				continue
@@ -1569,6 +1591,7 @@ func (sa *Application) checkHeadRooms(ask *Allocation, userHeadroom *resources.R
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *AllocationResult {
 	sa.Lock()
 	defer sa.Unlock()
+
 	// calculate the users' headroom, includes group check which requires the applicationID
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
 
@@ -2334,19 +2357,17 @@ func (sa *Application) executeReservationReleasedCallback(released int) {
 	}
 }
 
-// notifyRMAllocationReleased send an allocation release event to the RM to if the event handler is configured
-// and at least one allocation has been released.
-// No locking must be called while holding the lock
+// notifyRMAllocationReleased enqueues allocation releases when an event handler
+// is configured and the release list is non-empty. It does not wait for an RM reply.
+// The event handler must enqueue without waiting for RM processing.
 func (sa *Application) notifyRMAllocationReleased(released []*Allocation, terminationType si.TerminationType, message string) {
 	// only generate event if needed
 	if len(released) == 0 || sa.rmEventHandler == nil {
 		return
 	}
-	c := make(chan *rmevent.Result, 1)
 	releaseEvent := &rmevent.RMReleaseAllocationEvent{
 		ReleasedAllocations: make([]*si.AllocationRelease, 0),
 		RmID:                sa.rmID,
-		Channel:             c,
 	}
 	for _, alloc := range released {
 		releaseEvent.ReleasedAllocations = append(releaseEvent.ReleasedAllocations, &si.AllocationRelease{
@@ -2358,13 +2379,6 @@ func (sa *Application) notifyRMAllocationReleased(released []*Allocation, termin
 		})
 	}
 	sa.rmEventHandler.HandleEvent(releaseEvent)
-	// Wait from channel
-	result := <-c
-	if result.Succeeded {
-		log.Log(log.SchedApplication).Debug("Successfully synced shim on released allocations. response: " + result.Reason)
-	} else {
-		log.Log(log.SchedApplication).Info("failed to sync shim on released allocations")
-	}
 }
 
 func (sa *Application) IsAllocationAssignedToApp(alloc *Allocation) bool {

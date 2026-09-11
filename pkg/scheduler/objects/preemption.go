@@ -726,16 +726,17 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	// mark ask as having triggered preemption so that we don't preempt again
 	p.ask.MarkTriggeredPreemption()
 
-	// notify RM that victims should be released
-	p.application.notifyRMAllocationReleased(finalVictims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
-		"preempting allocations to free up resources to run ask: "+p.ask.GetAllocationKey())
-
 	// reserve the selected node for the new allocation if it will fit
 	log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
 		zap.String("allocationKey", p.ask.GetAllocationKey()),
 		zap.String("nodeID", nodeID),
 		zap.Int("collected victim count", len(victims)),
 		zap.Int("preempted victim count", len(finalVictims)))
+	p.application.notifyRMAllocationReleased(
+		finalVictims,
+		si.TerminationType_PREEMPTED_BY_SCHEDULER,
+		"preempting allocations to free up resources to run ask: "+p.ask.GetAllocationKey(),
+	)
 	return newReservedAllocationResult(nodeID, p.ask), true
 }
 

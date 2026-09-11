@@ -613,20 +613,19 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	p.application.executeReservationReleasedCallback(released)
 
 	// try to find a node to schedule on and victims to preempt
-	nodeID, victims, ok := p.tryNodes()
+	nodeID, nodeVictims, ok := p.tryNodes()
 	if !ok {
 		// no preemption possible
 		return nil, false
 	}
 
 	// look for additional victims in case we have not yet made enough capacity in the queue
-	extraVictims, ok := p.calculateAdditionalVictims(victims)
+	extraVictims, ok := p.calculateAdditionalVictims(nodeVictims)
 	if !ok {
 		// not enough resources were preempted
 		return nil, false
 	}
-	victims = append(victims, extraVictims...)
-	if len(victims) == 0 {
+	if len(nodeVictims)+len(extraVictims) == 0 {
 		return nil, false
 	}
 
@@ -638,12 +637,20 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 
 	fitIn := p.nodeAvailableMap[nodeID].FitIn(p.ask.GetAllocatedResource())
 
-	// Since there could be more victims than the actual need, ensure only required victims are filtered finally
+	// Victims selected for the chosen node by tryNodes() are required for node capacity
+	// and predicate constraints (e.g. PodAntiAffinity) evaluated by the ResourceManager plugin.
+	// They must not be truncated based on raw ask resource demand.
+	var finalVictims []*Allocation
+	for _, victim := range nodeVictims {
+		finalVictims = append(finalVictims, victim)
+		victimsTotalResource.AddTo(victim.GetAllocatedResource())
+	}
+
+	// Since there could be more extra victims than the actual need, ensure only required victims are filtered finally
 	// to do: There is room for improvements especially when there are more victims. victims could be chosen based
 	// on different criteria. for example, victims could be picked up either from specific node (bin packing) or
 	// from multiple nodes (fair) given the choices.
-	var finalVictims []*Allocation
-	for _, victim := range victims {
+	for _, victim := range extraVictims {
 		// Victims from any node is acceptable as long as chosen node has enough space to accommodate the ask
 		// Otherwise, preempting victims from 'n' different nodes doesn't help to achieve the goal.
 		if !fitIn && victim.GetNodeID() != nodeID {
@@ -734,7 +741,7 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	log.Log(log.SchedPreemption).Info("Reserving node for ask after preemption",
 		zap.String("allocationKey", p.ask.GetAllocationKey()),
 		zap.String("nodeID", nodeID),
-		zap.Int("collected victim count", len(victims)),
+		zap.Int("collected victim count", len(nodeVictims)+len(extraVictims)),
 		zap.Int("preempted victim count", len(finalVictims)))
 	return newReservedAllocationResult(nodeID, p.ask), true
 }

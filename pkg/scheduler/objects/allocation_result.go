@@ -41,8 +41,6 @@ type AllocationResult struct {
 	NodeID                string
 	ReservedNodeID        string
 	CancelledReservations int
-	// consumed by Application.tryAllocate after it releases the application lock
-	releaseNotification *releaseNotification
 }
 
 func (ar *AllocationResult) String() string {

@@ -29,11 +29,11 @@ type NodeEvents struct {
 	eventSystem events.EventSystem
 }
 
-func (n *NodeEvents) SendNodeAddedEvent(nodeID string, capacity *resources.Resource) {
+func (n *NodeEvents) SendNodeAddedEvent(nodeID string, capacity *resources.Resource, instanceType string) {
 	if !n.eventSystem.IsEventTrackingEnabled() {
 		return
 	}
-	event := events.CreateNodeEventRecord(nodeID, "Node added to the scheduler", common.Empty, si.EventRecord_ADD,
+	event := events.CreateNodeEventRecord(nodeID, "Node added to the scheduler, instanceType: "+instanceType, common.Empty, si.EventRecord_ADD,
 		si.EventRecord_DETAILS_NONE, capacity)
 	n.eventSystem.AddEvent(event)
 }

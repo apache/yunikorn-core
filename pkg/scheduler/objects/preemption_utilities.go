@@ -124,7 +124,10 @@ func SortAllocationsBasedOnAsk(allocations []*Allocation, total, ask *resources.
 		if comp == 1 {
 			return false
 		}
-		return true
+		if !l.GetCreateTime().Equal(r.GetCreateTime()) {
+			return l.GetCreateTime().After(r.GetCreateTime())
+		}
+		return l.GetAllocationKey() < r.GetAllocationKey()
 	})
 }
 

@@ -485,9 +485,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 			potentialVictims = append(potentialVictims, victim)
 		}
 	}
-	sort.SliceStable(potentialVictims, func(i, j int) bool {
-		return compareAllocationLess(potentialVictims[i], potentialVictims[j])
-	})
+	SortAllocationsBasedOnAsk(potentialVictims, askQueue.GetMaxResource(), p.ask.GetAllocatedResource())
 
 	// evaluate each potential victim in turn, stopping once sufficient resources have been freed
 	victims := make([]*Allocation, 0)
@@ -876,33 +874,6 @@ func (qps *QueuePreemptionSnapshot) RemoveAllocation(alloc *resources.Resource) 
 	}
 	qps.Parent.RemoveAllocation(alloc)
 	qps.AllocatedResource.SubFrom(alloc)
-}
-
-// compareAllocationLess compares two allocations for preemption. Allocations which have opted into preemption are
-// considered first, then allocations which are not the originator of their associated application. Ties are broken
-// by creation time, with
-// then
-func compareAllocationLess(left *Allocation, right *Allocation) bool {
-	scoreLeft := scoreAllocation(left)
-	scoreRight := scoreAllocation(right)
-	if scoreLeft != scoreRight {
-		return scoreLeft < scoreRight
-	}
-	return left.createTime.After(right.createTime)
-}
-
-// scoreAllocation generates a relative score for an allocation. Lower-scored allocations are considered more likely
-// preemption candidates. Tasks which have opted into preemption are considered first, then tasks which are not
-// application originators.
-func scoreAllocation(allocation *Allocation) uint64 {
-	var score uint64 = 0
-	if allocation.IsOriginator() {
-		score |= scoreOriginator
-	}
-	if !allocation.IsAllowPreemptSelf() {
-		score |= scoreNoPreempt
-	}
-	return score
 }
 
 // sortVictimsForPreemption sorts allocations on each node, preferring those that have opted-in to preemption,

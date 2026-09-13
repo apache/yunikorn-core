@@ -643,11 +643,15 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	// on different criteria. for example, victims could be picked up either from specific node (bin packing) or
 	// from multiple nodes (fair) given the choices.
 	var finalVictims []*Allocation
+	hasVictimsOnOtherNodes := false
 	for _, victim := range victims {
 		// Victims from any node is acceptable as long as chosen node has enough space to accommodate the ask
 		// Otherwise, preempting victims from 'n' different nodes doesn't help to achieve the goal.
-		if !fitIn && victim.GetNodeID() != nodeID {
-			continue
+		if victim.GetNodeID() != nodeID {
+			hasVictimsOnOtherNodes = true
+			if !fitIn {
+				continue
+			}
 		}
 		// check if victim contributes to any resource dimension that is still needed
 		allocRes := victim.GetAllocatedResource()
@@ -663,9 +667,15 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	hasShortfall := victimsTotalResource.IsEmpty()
 	if !hasShortfall {
 		for k, victimVal := range victimsTotalResource.Resources {
-			if needVal, ok := p.ask.GetAllocatedResource().Resources[k]; ok && victimVal < needVal {
-				hasShortfall = true
-				break
+			if needVal, ok := p.ask.GetAllocatedResource().Resources[k]; ok {
+				var avail resources.Quantity
+				if !fitIn && !hasVictimsOnOtherNodes {
+					avail = p.nodeAvailableMap[nodeID].Resources[k]
+				}
+				if avail+victimVal < needVal {
+					hasShortfall = true
+					break
+				}
 			}
 		}
 	}

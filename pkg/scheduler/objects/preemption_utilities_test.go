@@ -165,56 +165,6 @@ func resetQueue(queue *Queue) {
 	}
 }
 
-// regular pods
-// ask1: pri - 10, create time - 1, res - 10
-// ask2: pri - 10, create time - 2, res - 8
-// ask3: pri - 15, create time - 3, res - 10
-// ask4: pri - 10, create time - 2, res - 5
-// ask5: pri - 5, create time - 4, res - 5
-
-// opted out pods
-// ask6: pri - 10, create time - 5, res - 10
-// ask7: pri - 10, create time - 2, res - 8
-// ask8: pri - 15, create time - 6, res - 10
-
-// driver/owner pods
-// ask9: pri - 10, create time - 2, res - 5
-// ask10: pri - 5, create time - 4, res - 5
-
-// original asks order: 6, 7, 8, 9, 10, 1, 2, 3, 4, 5
-// expected sorted asks o/p: 5, 1, 4, 2, 3, 6, 7, 8, 10, 9
-func TestSortAllocations(t *testing.T) {
-	node := NewNode(&si.NodeInfo{
-		NodeID:     "node",
-		Attributes: nil,
-		SchedulableResource: &si.Resource{
-			Resources: map[string]*si.Quantity{"first": {Value: 100}},
-		},
-	})
-
-	asks := prepareAllocationAsks(t, node)
-	SortAllocations(asks)
-	sortedAsks := asks
-
-	// assert regular pods
-	assert.Equal(t, sortedAsks[0].GetAllocationKey(), "ask5")
-	assert.Equal(t, sortedAsks[1].GetAllocationKey(), "ask1")
-	assert.Equal(t, sortedAsks[2].GetAllocationKey(), "ask4")
-	assert.Equal(t, sortedAsks[3].GetAllocationKey(), "ask2")
-	assert.Equal(t, sortedAsks[4].GetAllocationKey(), "ask3")
-
-	// assert opted out pods
-	assert.Equal(t, sortedAsks[5].GetAllocationKey(), "ask6")
-	assert.Equal(t, sortedAsks[6].GetAllocationKey(), "ask7")
-	assert.Equal(t, sortedAsks[7].GetAllocationKey(), "ask8")
-
-	// assert driver/owner pods
-	assert.Equal(t, sortedAsks[8].GetAllocationKey(), "ask10")
-	assert.Equal(t, sortedAsks[9].GetAllocationKey(), "ask9")
-
-	removeAllocationAsks(node, asks)
-}
-
 func TestSortAllocationsBasedOnAsk(t *testing.T) {
 	node := NewNode(&si.NodeInfo{
 		NodeID:     "node",

@@ -724,7 +724,7 @@ func TestTryPreemption_VictimsAvailable_InsufficientResource(t *testing.T) {
 	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3", appQueueMapping)
 	assert.NilError(t, err)
 
-	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0, "pods": 1})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
 	result, ok := preemptor.TryPreemption()
@@ -764,7 +764,7 @@ func TestTryPreemption_VictimsOnDifferentNodes_InsufficientResource(t *testing.T
 	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "alloc3", appQueueMapping)
 	assert.NilError(t, err)
 
-	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "pods": 1})
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
 	// register predicate handler
@@ -918,11 +918,12 @@ func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 	defer plugins.UnregisterSchedulerPlugins()
 
 	result, ok := preemptor.TryPreemption()
-	assert.Assert(t, result == nil, "unexpected result")
-	assert.Equal(t, ok, false, "no victims found")
-	assert.Check(t, !alloc1.IsPreempted(), "alloc1 preempted")
-	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
-	assertAllocationLog(t, ask3, []string{common.PreemptionShortfall})
+	assert.Assert(t, result != nil, "expected non-nil result")
+	assert.Equal(t, ok, true, "preemption should succeed: node-1 available (1) + alloc1 (4) = 5 >= 5")
+	assert.Equal(t, "alloc3", result.Request.GetAllocationKey())
+	assert.Equal(t, nodeID1, result.NodeID)
+	assert.Check(t, alloc1.IsPreempted(), "alloc1 should be preempted")
+	assert.Check(t, !alloc2.IsPreempted(), "alloc2 should not be preempted")
 }
 
 // TestTryPreemption_OnQueue_VictimsOnDifferentNodes Test try preemption on queue with simple queue hierarchy. Since Node has enough resources to accomodate, preemption happens because of queue resource constraint.xw
@@ -2511,6 +2512,152 @@ func TestTryPreemption_NodeAvailableDeficit(t *testing.T) {
 	assert.Check(t, alloc1.IsPreempted(), "alloc1 should be preempted")
 }
 
+// TestTryPreemption_QueueResidualShortfallDeficit verifies that preemption on a queue with residual headroom
+// succeeds when victims satisfy the queue's remaining deficit, even if the victim resources are smaller
+// than the entire ask size.
+func TestTryPreemption_QueueResidualShortfallDeficit(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 30})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 30})
+	iterator := getNodeIteratorFn(node1, node2)
+	rootQ, err := createRootQueue(map[string]string{"first": "60"})
+	assert.NilError(t, err)
+
+	// Parent Max = 10
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "20"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ3, err := createManagedQueueGuaranteed(parentQ, "child3", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+
+	// Victim alloc4 uses 5 on node2. Parent allocated = 5. Headroom = 10 - 5 = 5.
+	app3 := newApplication(appID3, "default", "root.parent.child3")
+	app3.SetQueue(childQ3)
+	childQ3.AddApplication(app3)
+	appQueueMapping.AddAppQueueMapping(app3.ApplicationID, childQ3)
+	ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	assert.NilError(t, app3.AddAllocationAsk(ask4))
+	alloc4 := newAllocationWithKey("alloc4", appID3, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	app3.AddAllocation(alloc4)
+	assert.Check(t, node2.TryAddAllocation(alloc4), "node2 alloc4 failed")
+	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
+
+	// Preemptor ask needs 10. Deficit is 5. Preempting alloc4 (5) satisfies queue quota completely (0 + 10 <= 10).
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 10}, "alloc3", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	feasibleNodes := map[string]int{nodeID2: 1}
+	plugin := mock.NewPreemptionPredicatePlugin(nil, feasibleNodes, false, false)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, ok, "preemption should succeed: queue deficit is 5, victim is 5")
+	assert.Assert(t, result != nil, "expected non-nil result")
+	assert.Equal(t, "alloc3", result.Request.GetAllocationKey())
+	assert.Equal(t, nodeID2, result.NodeID)
+	assert.Check(t, alloc4.IsPreempted(), "alloc4 should be preempted")
+}
+
+// TestTryPreemption_QueueResidualShortfall_Insufficient verifies that queue preemption correctly aborts
+// with PreemptionShortfall when the queue headroom + victim resources are insufficient to meet the ask.
+func TestTryPreemption_QueueResidualShortfall_Insufficient(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 30})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 30})
+	iterator := getNodeIteratorFn(node1, node2)
+	rootQ, err := createRootQueue(map[string]string{"first": "60"})
+	assert.NilError(t, err)
+
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "20"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ3, err := createManagedQueueGuaranteed(parentQ, "child3", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+
+	// Victim alloc4 uses 5 on node2.
+	app3 := newApplication(appID3, "default", "root.parent.child3")
+	app3.SetQueue(childQ3)
+	childQ3.AddApplication(app3)
+	appQueueMapping.AddAppQueueMapping(app3.ApplicationID, childQ3)
+	ask4 := newAllocationAsk("alloc4", appID3, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	assert.NilError(t, app3.AddAllocationAsk(ask4))
+	alloc4 := newAllocationWithKey("alloc4", appID3, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	app3.AddAllocation(alloc4)
+	assert.Check(t, node2.TryAddAllocation(alloc4), "node2 alloc4 failed")
+	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
+
+	// Preemptor ask needs 10. Queue headroom is only 3.
+	// Headroom (3) + Victim (5) = 8 < Ask (10). Preemption cannot satisfy the ask and must abort.
+	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 10}, "alloc3", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
+
+	feasibleNodes := map[string]int{nodeID2: 1}
+	plugin := mock.NewPreemptionPredicatePlugin(nil, feasibleNodes, false, false)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.Equal(t, ok, false, "preemption should fail: headroom (3) + victim (5) < ask (10)")
+	assert.Assert(t, result == nil, "expected nil result")
+	assert.Check(t, !alloc4.IsPreempted(), "alloc4 should not be preempted")
+	assertAllocationLog(t, ask3, []string{common.PreemptionShortfall})
+}
+
+// TestTryPreemption_NodeConstrained_InsufficientQueueHeadroom verifies that even when a candidate node
+// can accommodate an ask after preempting node victims (!fitIn), preemption must abort with PreemptionShortfall
+// if the queue headroom is still insufficient to satisfy the ask (headRoom + victims < needVal).
+func TestTryPreemption_NodeConstrained_InsufficientQueueHeadroom(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 4})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "20"}, map[string]string{"first": "15"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+	// alloc1 on node-1 uses first: 2. (Node capacity: 4, so nodeAvailable = 2 free)
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	app1.AddAllocation(alloc1)
+	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
+	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
+
+	// Preemptor ask in childQ2 needs first: 4. Node available (2) < 4, so fitIn is false.
+	// Node deficit: nodeAvailable (2) + victim (2) = 4 >= 4 (node fits after preemption).
+	// Queue deficit: headroom is only 1. headroom (1) + victim (2) = 3 < 4.
+	// Preemption must abort because the queue headroom is insufficient.
+	app2, ask2, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 4}, "alloc2", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask2, iterator(), false)
+
+	result, ok := preemptor.TryPreemption()
+	assert.Equal(t, ok, false, "preemption should fail: headroom (1) + victim (2) < ask (4)")
+	assert.Assert(t, result == nil, "expected nil allocation result")
+	assert.Check(t, !alloc1.IsPreempted(), "alloc1 should not be preempted")
+	assertAllocationLog(t, ask2, []string{common.PreemptionShortfall})
+}
+
 // TestTryPreemption_PredicateVictimsNotTruncated verifies that when predicate evaluation (e.g. anti-affinity)
 // requires multiple victims on a node, Core does not drop victims that exceed the raw resource requirement of the ask.
 func TestTryPreemption_PredicateVictimsNotTruncated(t *testing.T) {
@@ -2637,4 +2784,80 @@ func TestTryPreemption_PrematureVictimLoopTermination(t *testing.T) {
 	assert.Equal(t, nodeID1, result.NodeID)
 	assert.Check(t, alloc2.IsPreempted())
 	assert.Check(t, !alloc1.IsPreempted())
+}
+
+func TestPreemptor_hasPreemptionShortfall(t *testing.T) {
+	ask := newAllocationAsk("ask1", "app1", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}))
+	nodeID := nodeID1
+
+	tests := []struct {
+		name                 string
+		nodeAvail            *resources.Resource
+		nodeVictimsResource  *resources.Resource
+		totalVictimsResource *resources.Resource
+		headRoom             *resources.Resource
+		expectedShortfall    bool
+	}{
+		{
+			name:                 "empty victims",
+			nodeAvail:            resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			nodeVictimsResource:  resources.NewResource(),
+			totalVictimsResource: resources.NewResource(),
+			headRoom:             resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			expectedShortfall:    true,
+		},
+		{
+			name:                 "node capacity shortfall",
+			nodeAvail:            resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}),
+			nodeVictimsResource:  resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3}),
+			totalVictimsResource: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}),
+			headRoom:             resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}),
+			expectedShortfall:    true,
+		},
+		{
+			name:                 "queue headroom shortfall",
+			nodeAvail:            resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			nodeVictimsResource:  resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			totalVictimsResource: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			headRoom:             resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}),
+			expectedShortfall:    true,
+		},
+		{
+			name:                 "both satisfied",
+			nodeAvail:            resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4}),
+			nodeVictimsResource:  resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			totalVictimsResource: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			headRoom:             resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			expectedShortfall:    false,
+		},
+		{
+			name:                 "queue unconstrained (nil headroom)",
+			nodeAvail:            resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4}),
+			nodeVictimsResource:  resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			totalVictimsResource: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			headRoom:             nil,
+			expectedShortfall:    false,
+		},
+		{
+			name:                 "queue unconstrained (resource type absent in headroom)",
+			nodeAvail:            resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4}),
+			nodeVictimsResource:  resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			totalVictimsResource: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			headRoom:             resources.NewResourceFromMap(map[string]resources.Quantity{"unrelated_resource_type": 10}),
+			expectedShortfall:    false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := &Preemptor{
+				ask:      ask,
+				headRoom: tc.headRoom,
+				nodeAvailableMap: map[string]*resources.Resource{
+					nodeID: tc.nodeAvail,
+				},
+			}
+			assert.Equal(t, p.hasPreemptionShortfall(nodeID, tc.nodeVictimsResource, tc.totalVictimsResource), tc.expectedShortfall)
+		})
+	}
 }

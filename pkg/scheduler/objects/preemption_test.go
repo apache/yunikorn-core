@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -380,6 +381,8 @@ func TestTryPreemption(t *testing.T) {
 			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3", appQueueMapping)
 			assert.NilError(t, err)
 			childQ2.incPendingResource(ask3.GetAllocatedResource())
+			eventSystem := evtMock.NewEventSystem()
+			ask3.askEvents = schedEvt.NewAskEvents(eventSystem)
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 			plugins.RegisterSchedulerPlugin(tt.mockPlugin)
@@ -397,6 +400,9 @@ func TestTryPreemption(t *testing.T) {
 			}
 			if tt.mockPluginError != nil {
 				assert.ErrorContains(t, tt.mockPlugin.GetPredicateError(), tt.mockPluginError.Error())
+				assert.Equal(t, 1, len(eventSystem.Events))
+				event := eventSystem.Events[0]
+				assert.Assert(t, strings.Contains(event.Message, "plugin failed"))
 			}
 			// reset
 			resetNode(node)
@@ -663,6 +669,8 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 			assert.NilError(t, err)
 			app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3", appQueueMapping)
 			assert.NilError(t, err)
+			eventSystem := evtMock.NewEventSystem()
+			ask3.askEvents = schedEvt.NewAskEvents(eventSystem)
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 3})
 			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 			plugins.RegisterSchedulerPlugin(tt.mockPlugin)
@@ -684,6 +692,9 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 			}
 			if tt.mockPluginError != nil {
 				assert.ErrorContains(t, tt.mockPlugin.GetPredicateError(), tt.mockPluginError.Error())
+				assert.Equal(t, 1, len(eventSystem.Events))
+				event := eventSystem.Events[0]
+				assert.Assert(t, strings.Contains(event.Message, "plugin failed"))
 			}
 			// reset
 			resetNode(node1)

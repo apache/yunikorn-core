@@ -60,6 +60,7 @@ func (m *PreemptionPredicatePlugin) PreFilterPredicates(args *si.PreFilterPredic
 
 	if m.mustPreFilterFail {
 		m.errHolder.err = fmt.Errorf("fake preemption predicate prefilter plugin failed")
+		result.ErrorMessage = m.errHolder.err.Error()
 		return result
 	}
 	for k, v := range m.nodes {
@@ -86,11 +87,13 @@ func (m *PreemptionPredicatePlugin) PreemptionPredicates(args *si.PreemptionPred
 	m.Lock()
 	defer m.Unlock()
 	result := &si.PreemptionPredicatesResponse{
-		Success: false,
-		Index:   -1,
+		Success:      false,
+		Index:        -1,
+		ErrorMessage: make(map[string]int32),
 	}
 	if m.mustFilterFail {
 		m.errHolder.err = fmt.Errorf("fake preemption predicate filter plugin failed")
+		result.ErrorMessage[m.errHolder.err.Error()]++
 		return result
 	}
 	for _, preemption := range m.preemptions {

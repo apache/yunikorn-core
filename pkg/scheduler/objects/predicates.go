@@ -31,11 +31,12 @@ import (
 )
 
 type predicateCheckResult struct {
-	allocationKey string
-	nodeID        string
-	success       bool
-	index         int
-	victims       []*Allocation
+	allocationKey   string
+	nodeID          string
+	success         bool
+	index           int
+	victims         []*Allocation
+	predicateErrors map[string]int32
 }
 
 func (pcr *predicateCheckResult) betterThan(other *predicateCheckResult, allocationsByNode map[string][]*Allocation) bool {
@@ -117,10 +118,11 @@ func (pcr *predicateCheckResult) populateVictims(victimsByNode map[string][]*All
 func preemptPredicateCheck(plugin api.ResourceManagerCallback, ch chan<- *predicateCheckResult, wg *sync.WaitGroup, args *si.PreemptionPredicatesArgs) {
 	defer wg.Done()
 	result := &predicateCheckResult{
-		allocationKey: args.AllocationKey,
-		nodeID:        args.NodeID,
-		success:       false,
-		index:         -1,
+		allocationKey:   args.AllocationKey,
+		nodeID:          args.NodeID,
+		success:         false,
+		index:           -1,
+		predicateErrors: make(map[string]int32),
 	}
 	if len(args.PreemptAllocationKeys) == 0 {
 		// normal check; there are sufficient resources to run on this node
@@ -136,12 +138,15 @@ func preemptPredicateCheck(plugin api.ResourceManagerCallback, ch chan<- *predic
 				zap.String("AllocationKey", args.AllocationKey),
 				zap.String("NodeID", args.NodeID),
 				zap.Error(err))
+			result.predicateErrors[err.Error()]++
 		}
 	} else if response := plugin.PreemptionPredicates(args); response != nil {
 		// preemption check; at least one allocation will need preemption
 		result.success = response.GetSuccess()
 		if result.success {
 			result.index = int(response.GetIndex())
+		} else {
+			result.predicateErrors = response.GetErrorMessage()
 		}
 	}
 	ch <- result

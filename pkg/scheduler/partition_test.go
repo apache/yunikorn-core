@@ -5129,7 +5129,7 @@ func TestCalculateOutstandingRequests(t *testing.T) {
 	defer partition.userGroupCache.Stop()
 
 	// no application&asks
-	requests := partition.calculateOutstandingRequests()
+	requests, _ := partition.calculateOutstandingRequests()
 	assert.Equal(t, 0, len(requests))
 
 	// two applications with no asks
@@ -5139,7 +5139,7 @@ func TestCalculateOutstandingRequests(t *testing.T) {
 	assert.NilError(t, err)
 	err = partition.AddApplication(app2)
 	assert.NilError(t, err)
-	requests = partition.calculateOutstandingRequests()
+	requests, _ = partition.calculateOutstandingRequests()
 	assert.Equal(t, 0, len(requests))
 
 	// new asks for the two apps, but the scheduler hasn't processed them
@@ -5171,14 +5171,14 @@ func TestCalculateOutstandingRequests(t *testing.T) {
 	addedAsk, _, err = partition.UpdateAllocation(objects.NewAllocationFromSI(siAsk3))
 	assert.NilError(t, err)
 	assert.Check(t, addedAsk)
-	requests = partition.calculateOutstandingRequests()
+	requests, _ = partition.calculateOutstandingRequests()
 	assert.Equal(t, 0, len(requests))
 
 	// mark asks as attempted
 	app1.GetAllocationAsk("ask-uuid-1").SetSchedulingAttempted(true)
 	app1.GetAllocationAsk("ask-uuid-2").SetSchedulingAttempted(true)
 	app2.GetAllocationAsk("ask-uuid-3").SetSchedulingAttempted(true)
-	requests = partition.calculateOutstandingRequests()
+	requests, _ = partition.calculateOutstandingRequests()
 	total := resources.NewResource()
 	expectedTotal := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"memory": 3,

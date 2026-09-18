@@ -1803,21 +1803,33 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 	return nil
 }
 
-// GetOutstandingRequests builds a slice of pending allocation asks that fits into the queue's headroom.
+// GetOutstandingRequests returns newly outstanding autoscaling-demand asks, excluding withdrawals.
 // This method can only be called for the root of the queue hierarchy. Otherwise it returns nil.
 func (sq *Queue) GetOutstandingRequests() []*Allocation {
+	requests, _ := sq.GetOutstandingRequestsWithWithdrawals()
+	return requests
+}
+
+// GetOutstandingRequestsWithWithdrawals collects autoscaling demand for scheduler inspection using policy headroom.
+// The first slice contains new demand; the second contains advertisements to withdraw.
+// This method is exported for the scheduler package. Callers needing only newly
+// outstanding demand should use GetOutstandingRequests.
+// Root cluster capacity is excluded. Only new demand contributes to outstanding resource accounting.
+// This method can only be called for the root of the queue hierarchy. Otherwise it returns nil slices.
+func (sq *Queue) GetOutstandingRequestsWithWithdrawals() ([]*Allocation, []*Allocation) {
 	total := make([]*Allocation, 0)
+	withdrawals := make([]*Allocation, 0)
 	if sq.parent != nil {
-		return nil
+		return nil, nil
 	}
 
 	for _, child := range sq.sortQueues() {
-		_ = child.getOutStandingRequestsInternal(resources.NewResource(), &total)
+		_ = child.getOutStandingRequestsInternal(resources.NewResource(), &total, &withdrawals)
 	}
-	return total
+	return total, withdrawals
 }
 
-func (sq *Queue) getOutStandingRequestsInternal(parentHeadroom *resources.Resource, total *[]*Allocation) *resources.Resource {
+func (sq *Queue) getOutStandingRequestsInternal(parentHeadroom *resources.Resource, total, withdrawals *[]*Allocation) *resources.Resource {
 	headRoom := sq.internalHeadRoom(parentHeadroom)
 	outstandingTotal := resources.NewResource() // accumulated resource usage of all collected asks on this level
 
@@ -1827,13 +1839,13 @@ func (sq *Queue) getOutStandingRequestsInternal(parentHeadroom *resources.Resour
 		for _, app := range sq.sortApplications(false) {
 			// calculate the users' headroom
 			userHeadroom := ugm.GetUserManager().Headroom(app.queuePath, app.ApplicationID, app.user)
-			appTotal := app.getOutstandingRequests(headRoom, userHeadroom, total)
+			appTotal := app.getOutstandingRequests(headRoom, userHeadroom, total, withdrawals)
 			outstandingTotal.AddTo(appTotal)
 			headRoom = resources.SubOnlyExisting(headRoom, appTotal)
 		}
 	} else {
 		for _, child := range sq.sortQueues() {
-			queueTotal := child.getOutStandingRequestsInternal(headRoom, total)
+			queueTotal := child.getOutStandingRequestsInternal(headRoom, total, withdrawals)
 			outstandingTotal.AddTo(queueTotal)
 			headRoom = resources.SubOnlyExisting(headRoom, queueTotal)
 		}

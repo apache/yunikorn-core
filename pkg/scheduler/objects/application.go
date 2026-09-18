@@ -1196,13 +1196,17 @@ func (sa *Application) canAllocationReserve(alloc *Allocation) error {
 	return nil
 }
 
-func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total *[]*Allocation) *resources.Resource {
+func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total, withdrawals *[]*Allocation) *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
 	resTotal := resources.NewResource()
 	if sa.sortedRequests == nil {
 		return resTotal
 	}
+	// Policy eligibility must not depend on the sequential budgets used to select new demand.
+	var policyHeadRoom *resources.Resource
+	policyHeadRoomComputed := false
+	policyUserHeadRoom := userHeadRoom
 	for _, request := range sa.sortedRequests {
 		if request.IsAllocated() || !request.IsSchedulingAttempted() {
 			continue
@@ -1215,8 +1219,18 @@ func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, user
 				*total = append(*total, request)
 				resTotal.AddTo(request.GetAllocatedResource())
 			}
+			// Eligible advertised asks still consume the local headroom budgets.
 			headRoom = resources.SubOnlyExisting(headRoom, request.GetAllocatedResource())
 			userHeadRoom = resources.SubOnlyExisting(userHeadRoom, request.GetAllocatedResource())
+		} else if request.HasTriggeredScaleUp() && withdrawals != nil {
+			if !policyHeadRoomComputed {
+				policyHeadRoom = sa.queue.getMaxHeadRoom()
+				policyHeadRoomComputed = true
+			}
+			if !policyHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) || !policyUserHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
+				// Withdraw policy-ineligible demand separately from newly outstanding resources.
+				*withdrawals = append(*withdrawals, request)
+			}
 		}
 	}
 	return resTotal

@@ -3429,7 +3429,7 @@ func TestGetOutstandingRequests(t *testing.T) {
 	userHeadroom, err := resources.NewResourceFromConf(map[string]string{"memory": "50", "vcores": "5"})
 	assert.NilError(t, err, "failed to create user headroom resource with error")
 	var total0 []*Allocation
-	resTotal := app.getOutstandingRequests(queueHeadroom, userHeadroom, &total0)
+	resTotal := app.getOutstandingRequests(queueHeadroom, userHeadroom, &total0, nil)
 	assert.Assert(t, resources.Equals(resTotal, resources.Zero), "unexpected amount of collected resources %v", resTotal)
 
 	// Set up the Application's sortedRequests with AllocationAsks
@@ -3440,7 +3440,7 @@ func TestGetOutstandingRequests(t *testing.T) {
 
 	// Test Case 2: queueHeadroom meets, but userHeadroom does not
 	var total1 []*Allocation
-	resTotal = app.getOutstandingRequests(queueHeadroom, userHeadroom, &total1)
+	resTotal = app.getOutstandingRequests(queueHeadroom, userHeadroom, &total1, nil)
 	assert.Equal(t, 0, len(total1), "expected one outstanding request for TestCase 1")
 	assert.Assert(t, resources.Equals(resTotal, resources.Zero), "unexpected amount of collected resources %v", resTotal)
 
@@ -3450,7 +3450,7 @@ func TestGetOutstandingRequests(t *testing.T) {
 	userHeadroom2, err := resources.NewResourceFromConf(map[string]string{"memory": "250", "vcores": "25"})
 	assert.NilError(t, err, "failed to create user headroom resource with error")
 	var total2 []*Allocation
-	resTotal = app.getOutstandingRequests(queueHeadroom2, userHeadroom2, &total2)
+	resTotal = app.getOutstandingRequests(queueHeadroom2, userHeadroom2, &total2, nil)
 	assert.Equal(t, 2, len(total2), "expected two outstanding requests for TestCase 2")
 	expectedResTotal, err := resources.NewResourceFromConf(map[string]string{"memory": "200", "vcores": "20"})
 	assert.NilError(t, err)
@@ -3462,7 +3462,7 @@ func TestGetOutstandingRequests(t *testing.T) {
 	userHeadroom3, err := resources.NewResourceFromConf(map[string]string{"memory": "250", "vcores": "25"})
 	assert.NilError(t, err, "failed to create user headroom resource with error")
 	var total3 []*Allocation
-	resTotal = app.getOutstandingRequests(queueHeadroom3, userHeadroom3, &total3)
+	resTotal = app.getOutstandingRequests(queueHeadroom3, userHeadroom3, &total3, nil)
 	assert.Equal(t, 0, len(total3), "expected one outstanding request for TestCase 3")
 	assert.Assert(t, resources.Equals(resTotal, resources.Zero), "unexpected amount of collected resources %v", resTotal)
 
@@ -3472,9 +3472,51 @@ func TestGetOutstandingRequests(t *testing.T) {
 	userHeadroom4, err := resources.NewResourceFromConf(map[string]string{"memory": "80", "vcores": "8"})
 	assert.NilError(t, err, "failed to create user headroom resource with error")
 	var total4 []*Allocation
-	resTotal = app.getOutstandingRequests(queueHeadroom4, userHeadroom4, &total4)
+	resTotal = app.getOutstandingRequests(queueHeadroom4, userHeadroom4, &total4, nil)
 	assert.Equal(t, 0, len(total4), "expected no outstanding requests for TestCase 4")
 	assert.Assert(t, resources.Equals(resTotal, resources.Zero), "unexpected amount of collected resources %v", resTotal)
+}
+
+// A triggered ask still consumes the local outstanding-request budget when it fits.
+// Once it does not fit, later asks can use that budget without subtracting A first.
+func TestGetOutstandingRequests_TriggeredAskHeadroomAccounting(t *testing.T) {
+	resource := func(amount resources.Quantity) *resources.Resource {
+		return resources.NewResourceFromMap(map[string]resources.Quantity{"memory": amount})
+	}
+	for _, tc := range []struct {
+		name          string
+		queueHeadroom resources.Quantity
+		userHeadroom  resources.Quantity
+		wantRequests  int
+		wantResource  resources.Quantity
+	}{
+		{"triggered A budgets headroom", 20, 20, 0, 0},
+		{"A loses queue headroom", 11, 20, 1, 9},
+		{"A loses user headroom", 20, 11, 1, 9},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			askA := newAllocationAsk("ask-A", "app-1", resource(12))
+			askA.SetSchedulingAttempted(true)
+			askA.SetScaleUpTriggered(true)
+			askC := newAllocationAsk("ask-C", "app-1", resource(9))
+			askC.SetSchedulingAttempted(true)
+			app := &Application{ApplicationID: "app-1", queuePath: "root.default"}
+			app.sortedRequests.insert(askA)
+			app.sortedRequests.insert(askC)
+			queueHeadroom := resource(tc.queueHeadroom)
+			userHeadroom := resource(tc.userHeadroom)
+			var requests []*Allocation
+			total := app.getOutstandingRequests(queueHeadroom, userHeadroom, &requests, nil)
+			assert.Equal(t, len(requests), tc.wantRequests)
+			assert.Assert(t, resources.Equals(total, resource(tc.wantResource)))
+			if tc.wantRequests != 0 {
+				assert.Assert(t, requests[0] == askC)
+			}
+			// Collector budgeting is local; it must not mutate its caller's headroom.
+			assert.Assert(t, resources.Equals(queueHeadroom, resource(tc.queueHeadroom)))
+			assert.Assert(t, resources.Equals(userHeadroom, resource(tc.userHeadroom)))
+		})
+	}
 }
 
 func TestGetOutstandingRequests_NoSchedulingAttempt(t *testing.T) {
@@ -3500,7 +3542,7 @@ func TestGetOutstandingRequests_NoSchedulingAttempt(t *testing.T) {
 	var total []*Allocation
 	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
 	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
-	resTotal := app.getOutstandingRequests(headroom, userHeadroom, &total)
+	resTotal := app.getOutstandingRequests(headroom, userHeadroom, &total, nil)
 	expectedTotal := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2})
 	assert.Assert(t, resources.Equals(resTotal, expectedTotal), "expected resource %v, but got %v", expectedTotal, resTotal)
 	assert.Equal(t, 2, len(total))
@@ -3540,7 +3582,7 @@ func TestGetOutstandingRequests_RequestTriggeredPreemptionHasRequiredNode(t *tes
 	var total []*Allocation
 	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
 	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
-	resTotal := app.getOutstandingRequests(headroom, userHeadroom, &total)
+	resTotal := app.getOutstandingRequests(headroom, userHeadroom, &total, nil)
 	expectedTotal := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
 	assert.Assert(t, resources.Equals(resTotal, expectedTotal), "expected resource %v, but got %v", expectedTotal, resTotal)
 	assert.Equal(t, 1, len(total))
@@ -3574,7 +3616,7 @@ func TestGetOutstandingRequests_AskReplaceable(t *testing.T) {
 	var total []*Allocation
 	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
 	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 8})
-	resTotal := app.getOutstandingRequests(headroom, userHeadroom, &total)
+	resTotal := app.getOutstandingRequests(headroom, userHeadroom, &total, nil)
 	expectedTotal := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
 	assert.Assert(t, resources.Equals(resTotal, expectedTotal), "expected resource %v, but got %v", expectedTotal, resTotal)
 	assert.Equal(t, 1, len(total))

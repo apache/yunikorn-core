@@ -26,8 +26,11 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/mock"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -95,6 +98,296 @@ func TestInspectOutstandingRequests(t *testing.T) {
 	noRequests, totalResources = scheduler.inspectOutstandingRequests()
 	assert.Equal(t, 0, noRequests)
 	assert.Assert(t, resources.IsZero(totalResources), "total resource is not zero: %v", totalResources)
+}
+
+type outstandingRequestStateUpdate struct {
+	applicationID string
+	allocationKey string
+	state         si.UpdateContainerSchedulingStateRequest_SchedulingState
+	reason        string
+}
+
+type outstandingRequestStateRecorder struct {
+	mock.ResourceManagerCallback
+	updates []outstandingRequestStateUpdate
+}
+
+func (r *outstandingRequestStateRecorder) UpdateContainerSchedulingState(request *si.UpdateContainerSchedulingStateRequest) {
+	// Copy the observable fields; slice order records callback order.
+	r.updates = append(r.updates, outstandingRequestStateUpdate{
+		applicationID: request.ApplicationID,
+		allocationKey: request.AllocationKey,
+		state:         request.State,
+		reason:        request.Reason,
+	})
+}
+
+func setupOutstandingRequestTest(t *testing.T) *outstandingRequestStateRecorder {
+	t.Helper()
+	setupUGM()
+	t.Cleanup(setupUGM)
+	plugins.UnregisterSchedulerPlugins()
+	t.Cleanup(plugins.UnregisterSchedulerPlugins)
+	callback := &outstandingRequestStateRecorder{}
+	plugins.RegisterSchedulerPlugin(callback)
+	return callback
+}
+
+func outstandingRequestResource(amount resources.Quantity) *resources.Resource {
+	return resources.NewResourceFromMap(map[string]resources.Quantity{"memory": amount})
+}
+
+func submitOutstandingRequest(t *testing.T, partition *PartitionContext, app *objects.Application, key string, amount resources.Quantity) *objects.Allocation {
+	t.Helper()
+	created, allocated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&si.Allocation{
+		ApplicationID:    appID1,
+		AllocationKey:    key,
+		ResourcePerAlloc: outstandingRequestResource(amount).ToProto(),
+	}))
+	assert.NilError(t, err)
+	assert.Assert(t, created && !allocated)
+	ask := app.GetAllocationAsk(key)
+	assert.Assert(t, ask != nil)
+	return ask
+}
+
+func checkOutstandingRequestUpdate(t *testing.T, callback *outstandingRequestStateRecorder, phase string, before int, state si.UpdateContainerSchedulingStateRequest_SchedulingState) {
+	t.Helper()
+	// Keep lifecycle failures nonfatal so withdrawal and re-arm are independently observed.
+	if len(callback.updates) != before+1 {
+		t.Errorf("%s: expected exactly one new %s callback for ask A; got %d new callbacks: %+v",
+			phase, state, len(callback.updates)-before, callback.updates)
+		return
+	}
+	update := callback.updates[before]
+	assert.Check(t, update.applicationID == appID1 && update.allocationKey == "ask-A" && update.state == state,
+		"%s: unexpected callback: %+v", phase, update)
+}
+
+func checkOutstandingRequestUpdates(t *testing.T, callback *outstandingRequestStateRecorder, states ...si.UpdateContainerSchedulingStateRequest_SchedulingState) {
+	t.Helper()
+	assert.Equal(t, len(callback.updates), len(states))
+	for i, state := range states {
+		assert.Equal(t, callback.updates[i].applicationID, appID1)
+		assert.Equal(t, callback.updates[i].allocationKey, "ask-A")
+		assert.Equal(t, callback.updates[i].state, state)
+	}
+}
+
+func TestInspectOutstandingRequestsAutoscalingDemandLifecycle(t *testing.T) {
+	callback := setupOutstandingRequestTest(t)
+
+	disabled := false
+	partition, err := newPartitionContext(configs.PartitionConfig{
+		Name: "test",
+		Preemption: configs.PartitionPreemptionConfig{
+			Enabled:                &disabled,
+			QuotaPreemptionEnabled: &disabled,
+		},
+		Queues: []configs.QueueConfig{{
+			Name:      "root",
+			Parent:    true,
+			SubmitACL: "*",
+			Queues: []configs.QueueConfig{{
+				Name:      "default",
+				Resources: configs.Resources{Max: map[string]string{"memory": "20"}},
+			}},
+		}},
+	}, rmID, nil, false)
+	assert.NilError(t, err)
+	t.Cleanup(partition.userGroupCache.Stop)
+	assert.Assert(t, !partition.IsPreemptionEnabled())
+	scheduler := NewScheduler()
+	scheduler.clusterContext.partitions["test"] = partition
+
+	node1 := setupNode(t, "node-1", partition, outstandingRequestResource(10))
+	node2 := setupNode(t, "node-2", partition, outstandingRequestResource(10))
+	assert.Assert(t, node1.IsSchedulable() && node2.IsSchedulable())
+	app := newApplication(appID1, "test", "root.default")
+	assert.NilError(t, partition.AddApplication(app))
+	queue := app.GetQueue()
+	headroom := func() *resources.Resource {
+		return resources.Sub(queue.GetMaxResource(), queue.GetAllocatedResource())
+	}
+
+	// A fits quota but cannot fit either node. A real allocation attempt establishes eligibility.
+	askA := submitOutstandingRequest(t, partition, app, "ask-A", 12)
+	assert.Assert(t, !askA.HasTriggeredScaleUp())
+	assert.Assert(t, headroom().FitInMaxUndef(outstandingRequestResource(12)))
+	assert.Assert(t, ugm.GetUserManager().Headroom(app.GetQueuePath(), appID1, app.GetUser()).FitInMaxUndef(outstandingRequestResource(12)))
+	assert.Assert(t, !node1.FitInNode(outstandingRequestResource(12)) && !node2.FitInNode(outstandingRequestResource(12)))
+	assert.Assert(t, partition.tryAllocate() == nil)
+	assert.Assert(t, !askA.IsAllocated() && askA.IsSchedulingAttempted())
+	count, total := scheduler.inspectOutstandingRequests()
+	assert.Equal(t, count, 1)
+	assert.Assert(t, resources.Equals(total, outstandingRequestResource(12)))
+	assert.Equal(t, len(callback.updates), 1)
+	checkOutstandingRequestUpdate(t, callback, "initial advertisement", 0, si.UpdateContainerSchedulingStateRequest_FAILED)
+	assert.Assert(t, askA.HasTriggeredScaleUp())
+
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Equal(t, count, 0)
+	assert.Assert(t, resources.IsZero(total))
+	assert.Equal(t, len(callback.updates), 1, "stable eligibility must not advertise twice")
+
+	// Allocate B through production accounting, reducing A's leaf quota headroom to 11.
+	askB := submitOutstandingRequest(t, partition, app, "ask-B", 9)
+	allocation := partition.tryAllocate()
+	assert.Assert(t, allocation != nil)
+	assert.Equal(t, allocation.ResultType, objects.Allocated)
+	assert.Assert(t, allocation.Request == askB && askB.IsAllocated())
+	assert.Assert(t, resources.Equals(queue.GetAllocatedResource(), outstandingRequestResource(9)))
+	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), outstandingRequestResource(9)))
+	assert.Assert(t, resources.Equals(headroom(), outstandingRequestResource(11)))
+	assert.Assert(t, !headroom().FitInMaxUndef(outstandingRequestResource(12)))
+	assert.Assert(t, app.GetAllocationAsk("ask-A") == askA && !askA.IsAllocated())
+
+	beforeWithdrawal := len(callback.updates)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Check(t, count == 0 && resources.IsZero(total), "withdrawal must not count as new capacity demand")
+	checkOutstandingRequestUpdate(t, callback, "withdrawal after headroom loss", beforeWithdrawal, si.UpdateContainerSchedulingStateRequest_SKIPPED)
+	blockedCount := len(callback.updates)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Check(t, count == 0 && resources.IsZero(total))
+	assert.Check(t, len(callback.updates) == blockedCount, "stable ineligibility must not withdraw twice")
+
+	// Release B normally. The original pending A and both node capacities survive unchanged.
+	released, confirmed := partition.removeAllocation(&si.AllocationRelease{
+		ApplicationID:   appID1,
+		AllocationKey:   "ask-B",
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	})
+	assert.Equal(t, len(released), 1)
+	assert.Assert(t, released[0] == askB && confirmed == nil)
+	assert.Assert(t, app.GetAllocationAsk("ask-B") == nil)
+	assert.Assert(t, resources.IsZero(queue.GetAllocatedResource()))
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()))
+	assert.Assert(t, resources.IsZero(node1.GetAllocatedResource()) && resources.IsZero(node2.GetAllocatedResource()))
+	assert.Assert(t, resources.Equals(headroom(), outstandingRequestResource(20)))
+	assert.Assert(t, resources.Equals(queue.GetPendingResource(), outstandingRequestResource(12)))
+	assert.Assert(t, app.GetAllocationAsk("ask-A") == askA && !askA.IsAllocated() && askA.IsSchedulingAttempted())
+	assert.Assert(t, !node1.FitInNode(outstandingRequestResource(12)) && !node2.FitInNode(outstandingRequestResource(12)))
+
+	beforeRearm := len(callback.updates)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Check(t, count == 1 && resources.Equals(total, outstandingRequestResource(12)), "re-arm must count A's renewed demand exactly once")
+	checkOutstandingRequestUpdate(t, callback, "re-arm after headroom restoration", beforeRearm, si.UpdateContainerSchedulingStateRequest_FAILED)
+	rearmedCount := len(callback.updates)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Check(t, count == 0 && resources.IsZero(total))
+	assert.Check(t, len(callback.updates) == rearmedCount, "stable restored eligibility must not advertise twice")
+
+	states := make([]si.UpdateContainerSchedulingStateRequest_SchedulingState, 0, len(callback.updates))
+	for _, update := range callback.updates {
+		states = append(states, update.state)
+	}
+	assert.Check(t, app.GetAllocationAsk("ask-A") == askA && !askA.IsAllocated(), "A must remain the original pending object")
+	t.Logf("observed container-state callback sequence: %v", states)
+	assert.Check(t, len(states) == 3, "expected FAILED -> SKIPPED -> FAILED, got %v", states)
+}
+
+func TestInspectOutstandingRequestsPolicyHeadroom(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		parentMax    map[string]string
+		limits       []configs.Limit
+		wantWithdraw bool
+	}{
+		{"parent quota", map[string]string{"memory": "20"}, nil, true},
+		{"user quota", nil, []configs.Limit{{
+			Limit: "user quota", Users: []string{"testuser"},
+			MaxResources: map[string]string{"memory": "20"},
+		}}, true},
+		{"group quota", nil, []configs.Limit{{
+			Limit: "group quota", Groups: []string{"testgroup"},
+			MaxResources: map[string]string{"memory": "20"},
+		}}, true},
+		{"root capacity only", nil, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			callback := setupOutstandingRequestTest(t)
+
+			disabled := false
+			partition, err := newPartitionContext(configs.PartitionConfig{
+				Name: "test",
+				Preemption: configs.PartitionPreemptionConfig{
+					Enabled: &disabled, QuotaPreemptionEnabled: &disabled,
+				},
+				Queues: []configs.QueueConfig{{
+					Name: "root", Parent: true, SubmitACL: "*",
+					Queues: []configs.QueueConfig{{
+						Name: "parent", Parent: true,
+						Resources: configs.Resources{Max: tc.parentMax},
+						Limits:    tc.limits,
+						Queues:    []configs.QueueConfig{{Name: "default"}},
+					}},
+				}},
+			}, rmID, nil, false)
+			assert.NilError(t, err)
+			t.Cleanup(partition.userGroupCache.Stop)
+			scheduler := NewScheduler()
+			scheduler.clusterContext.partitions["test"] = partition
+			setupNode(t, "node-1", partition, outstandingRequestResource(10))
+			setupNode(t, "node-2", partition, outstandingRequestResource(10))
+			app := newApplication(appID1, "test", "root.parent.default")
+			assert.NilError(t, partition.AddApplication(app))
+
+			askA := submitOutstandingRequest(t, partition, app, "ask-A", 12)
+			assert.Assert(t, partition.tryAllocate() == nil)
+			count, total := scheduler.inspectOutstandingRequests()
+			assert.Equal(t, count, 1)
+			assert.Assert(t, resources.Equals(total, outstandingRequestResource(12)))
+			assert.Assert(t, askA.HasTriggeredScaleUp())
+			checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED)
+
+			askB := submitOutstandingRequest(t, partition, app, "ask-B", 9)
+			result := partition.tryAllocate()
+			assert.Assert(t, result != nil && result.Request == askB && askB.IsAllocated())
+			// Every case now lacks root capacity for A. Only policy quota loss may withdraw it.
+			rootHeadroom := resources.Sub(partition.root.GetMaxResource(), partition.root.GetAllocatedResource())
+			assert.Assert(t, resources.Equals(rootHeadroom, outstandingRequestResource(11)))
+			assert.Assert(t, !rootHeadroom.FitInMaxUndef(outstandingRequestResource(12)))
+			userHeadroom := ugm.GetUserManager().Headroom(app.GetQueuePath(), appID1, app.GetUser())
+			assert.Equal(t, userHeadroom.FitInMaxUndef(outstandingRequestResource(12)), len(tc.limits) == 0)
+
+			for i := 0; i < 2; i++ {
+				count, total = scheduler.inspectOutstandingRequests()
+				assert.Equal(t, count, 0)
+				assert.Assert(t, resources.IsZero(total))
+				assert.Equal(t, askA.HasTriggeredScaleUp(), !tc.wantWithdraw)
+				if tc.wantWithdraw {
+					checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED, si.UpdateContainerSchedulingStateRequest_SKIPPED)
+				} else {
+					checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED)
+				}
+			}
+
+			released, confirmed := partition.removeAllocation(&si.AllocationRelease{
+				ApplicationID: appID1, AllocationKey: "ask-B",
+				TerminationType: si.TerminationType_STOPPED_BY_RM,
+			})
+			assert.Assert(t, len(released) == 1 && released[0] == askB && confirmed == nil)
+			count, total = scheduler.inspectOutstandingRequests()
+			if tc.wantWithdraw {
+				assert.Equal(t, count, 1)
+				assert.Assert(t, resources.Equals(total, outstandingRequestResource(12)))
+				checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED, si.UpdateContainerSchedulingStateRequest_SKIPPED, si.UpdateContainerSchedulingStateRequest_FAILED)
+			} else {
+				assert.Equal(t, count, 0)
+				assert.Assert(t, resources.IsZero(total))
+				checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED)
+			}
+			assert.Assert(t, app.GetAllocationAsk("ask-A") == askA && !askA.IsAllocated() && askA.HasTriggeredScaleUp())
+			count, total = scheduler.inspectOutstandingRequests()
+			assert.Equal(t, count, 0)
+			assert.Assert(t, resources.IsZero(total))
+			wantUpdates := 1
+			if tc.wantWithdraw {
+				wantUpdates = 3
+			}
+			assert.Equal(t, len(callback.updates), wantUpdates)
+		})
+	}
 }
 
 // TestTriggerQuotaPreemption verifies the behavior of triggerQuotaPreemption in two scenarios:

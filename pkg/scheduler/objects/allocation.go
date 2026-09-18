@@ -629,12 +629,14 @@ func (a *Allocation) preAllocateConditions(allocate bool) (map[string]*si.Empty,
 			AllocationKey: a.allocationKey,
 			Allocate:      allocate,
 		}); prefilterResult != nil && !prefilterResult.Success {
+			predicateErr := prefilterResult.GetErrorMessage()
 			log.Log(log.SchedNode).Debug("running prefilter predicates failed",
 				zap.String("allocationKey", a.allocationKey),
-				zap.Bool("allocate", allocate))
-			a.LogAllocationFailure(common.ErrorPreFilterPredicate.Error(), allocate)
+				zap.Bool("allocate", allocate),
+				zap.String("predicate error", predicateErr))
+			a.LogAllocationFailure(predicateErr, allocate)
 			podPredicateErrors := make(map[string]int, 1)
-			podPredicateErrors[common.ErrorPreFilterPredicate.Error()]++
+			podPredicateErrors[predicateErr]++
 			a.SendPredicatesFailedEvent(podPredicateErrors)
 			return prefilterResult.GetFeasibleNodes(), false
 		}

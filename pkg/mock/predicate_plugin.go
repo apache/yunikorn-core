@@ -42,6 +42,11 @@ func (f *PredicatePlugin) PreFilterPredicates(args *si.PreFilterPredicatesArgs) 
 	}
 	if f.mustPreFilterFail {
 		log.Log(log.Test).Info("fake predicate prefilter plugin fail: must fail set")
+		result = &si.PreFilterPredicatesResponse{
+			Success:       false,
+			FeasibleNodes: map[string]*si.Empty{},
+			ErrorMessage:  "fake predicate prefilter plugin failed",
+		}
 		return result
 	}
 	for k, v := range f.nodes {

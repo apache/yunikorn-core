@@ -285,7 +285,7 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 						askQueue.AddAllocation(victim.GetAllocatedResource())
 					} else {
 						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
-						break
+						continue
 					}
 
 					// check to see if the shortfall on the node has changed

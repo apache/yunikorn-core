@@ -2093,3 +2093,89 @@ func TestEnsureGroupTrackerForAppConcurrentRace(t *testing.T) {
 		}
 	}
 }
+
+// A user can disappear before DecreaseTrackedResource removes its group usage.
+func TestUpdateConfigRemoveGroupLimitMissingUser(t *testing.T) {
+	setupUGM()
+	manager := GetUserManager()
+	conf := createConfigWithGroupOnly("group1", 50, 5)
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+	user := security.UserGroup{User: "user1", Groups: []string{"group1"}}
+	usage := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+	manager.IncreaseTrackedResource(queuePathLeaf, TestApp1, usage, user)
+	manager.ClearUserTrackers()
+	conf = createConfigWithoutLimits()
+	assert.NilError(t, manager.UpdateConfig(conf.Queues[0], "root"))
+	assert.Assert(t, manager.GetGroupTracker("group1") == nil)
+}
+
+func TestResetGroupEarlierUsageConcurrent(t *testing.T) {
+	setupUGM()
+	manager := GetUserManager()
+	ut := manager.getUserTracker("user1")
+	gt := manager.getGroupTracker("group1")
+	usage := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+	stop := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				ut.hasGroupForApp(TestApp1)
+				ut.getGroupForApp(TestApp1)
+			}
+		}
+	}()
+	for i := 0; i < 100; i++ {
+		ut.setGroupForApp(TestApp1, gt)
+		gt.increaseTrackedResource(queuePathLeaf, TestApp1, usage, "user1")
+		manager.Lock()
+		manager.resetGroupEarlierUsage(gt, queuePathLeaf)
+		manager.Unlock()
+	}
+	close(stop)
+	wg.Wait()
+	assert.Assert(t, !ut.hasGroupForApp(TestApp1))
+}
+
+func TestManagerResourceSnapshotsConcurrent(t *testing.T) {
+	setupUGM()
+	manager := GetUserManager()
+	ut := manager.getUserTracker("user1")
+	gt := manager.getGroupTracker("group1")
+	usage := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+	assert.Assert(t, manager.GetUserResources("missing") == nil)
+	assert.Assert(t, manager.GetGroupResources("missing") == nil)
+	assert.Assert(t, manager.GetUserResources("user1") == nil)
+	assert.Assert(t, manager.GetGroupResources("group1") == nil)
+	ut.increaseTrackedResource(queuePathLeaf, TestApp1, usage)
+	gt.increaseTrackedResource(queuePathLeaf, TestApp1, usage, "user1")
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 1000; i++ {
+			ut.increaseTrackedResource(queuePathLeaf, TestApp1, usage)
+			ut.decreaseTrackedResource(queuePathLeaf, TestApp1, usage, false)
+			gt.increaseTrackedResource(queuePathLeaf, TestApp1, usage, "user1")
+			gt.decreaseTrackedResource(queuePathLeaf, TestApp1, usage, false)
+		}
+	}()
+	close(start)
+	for i := 0; i < 1000; i++ {
+		for _, snapshot := range []*resources.Resource{manager.GetUserResources("user1"), manager.GetGroupResources("group1")} {
+			memory := snapshot.Resources["memory"]
+			assert.Check(t, memory == 1 || memory == 2)
+			snapshot.Resources["memory"] = 100
+		}
+	}
+	wg.Wait()
+	assert.Assert(t, resources.Equals(manager.GetUserResources("user1"), usage))
+	assert.Assert(t, resources.Equals(manager.GetGroupResources("group1"), usage))
+}

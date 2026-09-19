@@ -190,3 +190,10 @@ func (gt *GroupTracker) getUsedResources() map[string]*resources.Resource {
 	defer gt.RUnlock()
 	return gt.queueTracker.getUsedResources()
 }
+
+// getResourceUsage returns an independent snapshot of the root queue usage.
+func (gt *GroupTracker) getResourceUsage() *resources.Resource {
+	gt.RLock()
+	defer gt.RUnlock()
+	return gt.queueTracker.resourceUsage.Clone()
+}

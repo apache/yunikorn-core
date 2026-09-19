@@ -671,21 +671,9 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		}
 	}
 
-	if victimsTotalResource.IsEmpty() {
+	if p.hasPreemptionShortfall(nodeID, victimsTotalResource, fitIn, hasVictimsOnOtherNodes) {
 		p.ask.LogAllocationFailure(common.PreemptionShortfall, true)
 		return nil, false
-	}
-	for k, victimVal := range victimsTotalResource.Resources {
-		if needVal, ok := p.ask.GetAllocatedResource().Resources[k]; ok {
-			var avail resources.Quantity
-			if !fitIn && !hasVictimsOnOtherNodes {
-				avail = p.nodeAvailableMap[nodeID].Resources[k]
-			}
-			if avail+victimVal < needVal {
-				p.ask.LogAllocationFailure(common.PreemptionShortfall, true)
-				return nil, false
-			}
-		}
 	}
 
 	// Has any victim released?
@@ -749,6 +737,33 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		zap.Int("collected victim count", len(nodeVictims)+len(extraVictims)),
 		zap.Int("preempted victim count", len(finalVictims)))
 	return newReservedAllocationResult(nodeID, p.ask), true
+}
+
+func (p *Preemptor) hasPreemptionShortfall(nodeID string, victimsTotalResource *resources.Resource, fitIn bool, hasVictimsOnOtherNodes bool) bool {
+	if victimsTotalResource.IsEmpty() {
+		return true
+	}
+	for k, victimVal := range victimsTotalResource.Resources {
+		if needVal, ok := p.ask.GetAllocatedResource().Resources[k]; ok {
+			var avail resources.Quantity
+			if !fitIn {
+				if !hasVictimsOnOtherNodes {
+					avail = p.nodeAvailableMap[nodeID].Resources[k]
+				}
+				if avail+victimVal < needVal {
+					return true
+				}
+			} else {
+				if p.headRoom != nil {
+					avail = p.headRoom.Resources[k]
+				}
+				if avail+victimVal < needVal {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // Duplicate creates a copy of this snapshot into the given map by queue path

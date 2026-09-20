@@ -60,19 +60,19 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
 	eventSystem := mock.NewEventSystem()
-	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem))
+	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem), nil)
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
+	userTracker.increaseTrackedResource(path1, TestApp1, usage1, nil)
 	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
 	userTracker.setGroupForApp(TestApp1, groupTracker)
 	usage2, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	userTracker.increaseTrackedResource(path2, TestApp2, usage2)
+	userTracker.increaseTrackedResource(path2, TestApp2, usage2, nil)
 	assert.Equal(t, 3, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_UG_USER_RESOURCE, eventSystem.Events[0].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_ADD, eventSystem.Events[0].EventChangeType)
@@ -89,14 +89,14 @@ func TestIncreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	userTracker.increaseTrackedResource(path3, TestApp3, usage3)
+	userTracker.increaseTrackedResource(path3, TestApp3, usage3, nil)
 	userTracker.setGroupForApp(TestApp3, groupTracker)
 
 	usage4, err := resources.NewResourceFromConf(map[string]string{"mem": "20M", "vcore": "20"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage3)
 	}
-	userTracker.increaseTrackedResource(path4, TestApp4, usage4)
+	userTracker.increaseTrackedResource(path4, TestApp4, usage4, nil)
 	userTracker.setGroupForApp(TestApp4, groupTracker)
 
 	actualResources := userTracker.getUsedResources()
@@ -117,13 +117,13 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
 	eventSystem := mock.NewEventSystem()
-	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem))
+	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem), nil)
 
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "70M", "vcore": "70"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
+	userTracker.increaseTrackedResource(path1, TestApp1, usage1, nil)
 	groupTracker := newGroupTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
 	userTracker.setGroupForApp(TestApp1, groupTracker)
 	assert.Equal(t, 1, len(userTracker.getTrackedApplications()))
@@ -132,7 +132,7 @@ func TestDecreaseTrackedResource(t *testing.T) {
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage2)
 	}
-	userTracker.increaseTrackedResource(path2, TestApp2, usage2)
+	userTracker.increaseTrackedResource(path2, TestApp2, usage2, nil)
 	userTracker.setGroupForApp(TestApp2, groupTracker)
 
 	actualResources := userTracker.getUsedResources()
@@ -192,16 +192,16 @@ func TestSetAndClearMaxLimits(t *testing.T) {
 	GetUserManager()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
 	eventSystem := mock.NewEventSystem()
-	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem))
+	userTracker := newUserTracker(user.User, newUGMEvents(eventSystem), nil)
 	usage1, err := resources.NewResourceFromConf(map[string]string{"mem": "10M", "vcore": "10"})
 	if err != nil {
 		t.Errorf("new resource create returned error or wrong resource: error %t, res %v", err, usage1)
 	}
-	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
+	userTracker.increaseTrackedResource(path1, TestApp1, usage1, nil)
 
 	eventSystem.Reset()
-	userTracker.setLimits(path1, resources.Multiply(usage1, 5), 5, false, false)
-	userTracker.setLimits(path5, resources.Multiply(usage1, 10), 10, false, false)
+	userTracker.setLimits(path1, resources.Multiply(usage1, 5), 5, false, false, nil)
+	userTracker.setLimits(path5, resources.Multiply(usage1, 10), 10, false, false, nil)
 	assert.Equal(t, 2, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_UG_USER_LIMIT, eventSystem.Events[0].EventChangeDetail)
 	assert.Equal(t, si.EventRecord_SET, eventSystem.Events[0].EventChangeType)
@@ -210,50 +210,50 @@ func TestSetAndClearMaxLimits(t *testing.T) {
 	assert.Equal(t, si.EventRecord_SET, eventSystem.Events[1].EventChangeType)
 	assert.Equal(t, path5, eventSystem.Events[1].ReferenceID)
 
-	userTracker.increaseTrackedResource(path1, TestApp1, usage1)
-	userTracker.increaseTrackedResource(path1, TestApp2, usage1)
+	userTracker.increaseTrackedResource(path1, TestApp1, usage1, nil)
+	userTracker.increaseTrackedResource(path1, TestApp2, usage1, nil)
 	path1expectedHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"mem":   20000000,
 		"vcore": 20000,
 	})
 	hierarchy1 := strings.Split(path1, configs.DOT)
-	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1), path1expectedHeadroom))
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1, nil), path1expectedHeadroom))
 	path5expectedHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"mem":   70000000,
 		"vcore": 70000,
 	})
 	hierarchy5 := strings.Split(path5, configs.DOT)
-	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), path5expectedHeadroom))
-	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4))
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5, nil), path5expectedHeadroom))
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4, nil))
 
 	// lower limits
-	userTracker.setLimits(path1, usage1, 1, false, false)
-	userTracker.setLimits(path5, resources.Multiply(usage1, 2), 1, false, false)
+	userTracker.setLimits(path1, usage1, 1, false, false, nil)
+	userTracker.setLimits(path5, resources.Multiply(usage1, 2), 1, false, false, nil)
 	lowerChildHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"mem":   -20000000,
 		"vcore": -20000,
 	})
-	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1), lowerChildHeadroom))
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1, nil), lowerChildHeadroom))
 	lowerParentHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"mem":   -10000000,
 		"vcore": -10000,
 	})
-	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), lowerParentHeadroom))
-	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4))
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5, nil), lowerParentHeadroom))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4, nil))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4, nil))
 
 	// clear limits
 	eventSystem.Reset()
-	userTracker.clearLimits(path1, false)
-	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1), lowerParentHeadroom))
-	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5), lowerParentHeadroom))
-	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4))
-	userTracker.clearLimits(path5, false)
-	assert.Assert(t, userTracker.headroom(hierarchy1) == nil)
-	assert.Assert(t, userTracker.headroom(hierarchy5) == nil)
-	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4))
-	assert.Assert(t, userTracker.canRunApp(hierarchy5, TestApp4))
+	userTracker.clearLimits(path1, false, nil)
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy1, nil), lowerParentHeadroom))
+	assert.Assert(t, resources.Equals(userTracker.headroom(hierarchy5, nil), lowerParentHeadroom))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp4, nil))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy5, TestApp4, nil))
+	userTracker.clearLimits(path5, false, nil)
+	assert.Assert(t, userTracker.headroom(hierarchy1, nil) == nil)
+	assert.Assert(t, userTracker.headroom(hierarchy5, nil) == nil)
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp4, nil))
+	assert.Assert(t, userTracker.canRunApp(hierarchy5, TestApp4, nil))
 	assert.Equal(t, 2, len(eventSystem.Events))
 	assert.Equal(t, si.EventRecord_REMOVE, eventSystem.Events[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_UG_USER_LIMIT, eventSystem.Events[0].EventChangeDetail)
@@ -265,7 +265,7 @@ func TestUTCanRunApp(t *testing.T) {
 	manager := GetUserManager()
 	defer manager.ClearConfigLimits()
 	user := security.UserGroup{User: "test", Groups: []string{"test"}}
-	userTracker := newUserTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()))
+	userTracker := newUserTracker(user.User, newUGMEvents(mock.NewEventSystemDisabled()), nil)
 	maxRes := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"cpu": 1000,
 	})
@@ -275,17 +275,17 @@ func TestUTCanRunApp(t *testing.T) {
 	} // manipulate map directly to avoid hierarchy creation
 
 	hierarchy1 := strings.Split(path1, configs.DOT)
-	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp1))
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp1, manager.userWildCardLimitsConfig))
 	// make sure wildcard limits are applied
 	assert.Equal(t, uint64(3), userTracker.queueTracker.childQueueTrackers["parent"].maxRunningApps)
 	assert.Assert(t, resources.Equals(maxRes, userTracker.queueTracker.childQueueTrackers["parent"].maxResources))
 	assert.Assert(t, userTracker.queueTracker.childQueueTrackers["parent"].useWildCard)
 
 	// maxApps limit hit
-	userTracker.setLimits(path1, nil, 1, false, false)
+	userTracker.setLimits(path1, nil, 1, false, false, manager.userWildCardLimitsConfig)
 	userTracker.increaseTrackedResource(path1, TestApp1, resources.NewResourceFromMap(map[string]resources.Quantity{
 		"cpu": 1000,
-	}))
-	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp1))
-	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp2))
+	}), manager.userWildCardLimitsConfig)
+	assert.Assert(t, userTracker.canRunApp(hierarchy1, TestApp1, manager.userWildCardLimitsConfig))
+	assert.Assert(t, !userTracker.canRunApp(hierarchy1, TestApp2, manager.userWildCardLimitsConfig))
 }

@@ -165,7 +165,7 @@ func TestDecreaseAllTrackedResourceUsage(t *testing.T) {
 	assert.NilError(t, err)
 	groupTracker.increaseTrackedResource(path1, TestApp1, usage1, testUser.User)
 	groupTracker.increaseTrackedResource(path1, TestApp2, usage1, testUser.User)
-	groupTracker.queueTracker.increaseTrackedResource(strings.Split(path1, configs.DOT), TestApp3, user, usage1)
+	groupTracker.queueTracker.increaseTrackedResource(strings.Split(path1, configs.DOT), TestApp3, user, usage1, nil)
 
 	apps := groupTracker.decreaseAllTrackedResourceUsage(strings.Split(path1, configs.DOT))
 	assert.Equal(t, 2, len(apps))

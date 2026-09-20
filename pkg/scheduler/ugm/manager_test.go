@@ -809,9 +809,9 @@ func TestUserGroupLimitWithMultipleApps(t *testing.T) {
 	manager.IncreaseTrackedResource(queuePath2, TestApp2, usage, userGroup)
 
 	// ensure different groups are linked and resource usage is correct
-	assert.Equal(t, len(manager.getUserTracker("user").appGroupTrackers), 2)
-	gt1 := manager.getUserTracker("user").appGroupTrackers[TestApp1]
-	gt2 := manager.getUserTracker("user").appGroupTrackers[TestApp2]
+	assert.Equal(t, len(manager.getUserTracker("user", nil).appGroupTrackers), 2)
+	gt1 := manager.getUserTracker("user", nil).appGroupTrackers[TestApp1]
+	gt2 := manager.getUserTracker("user", nil).appGroupTrackers[TestApp2]
 	assert.Equal(t, gt1.groupName, "group2")
 	assert.Equal(t, resources.Equals(gt1.queueTracker.resourceUsage, usage), true)
 	assert.Equal(t, gt2.groupName, "group1")
@@ -828,7 +828,7 @@ func TestUserGroupLimitWithMultipleApps(t *testing.T) {
 	manager.DecreaseTrackedResource(queuePath2, TestApp2, usage, userGroup, true)
 
 	// assert group linkage has been removed
-	assert.Equal(t, len(manager.getUserTracker("user").appGroupTrackers), 0)
+	assert.Equal(t, len(manager.getUserTracker("user", nil).appGroupTrackers), 0)
 }
 
 //nolint:funlen

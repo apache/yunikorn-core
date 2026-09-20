@@ -42,12 +42,16 @@ type QueueTracker struct {
 	useWildCard         bool
 }
 
-func newRootQueueTracker(trackType trackingType) *QueueTracker {
-	qt := newQueueTracker(common.Empty, configs.RootQueue, trackType)
+func newRootQueueTracker(trackType trackingType, wildCardLimits map[string]*LimitConfig) *QueueTracker {
+	qt := newQueueTracker(common.Empty, configs.RootQueue, trackType, wildCardLimits)
 	return qt
 }
 
-func newQueueTracker(queuePath string, queueName string, trackType trackingType) *QueueTracker {
+// newQueueTracker creates a tracker for a queue. The wild card limits are the limits configured for
+// user '*'. They are passed in rather than read from the manager: this runs on the scheduling hot
+// path with only the tracker lock held, and the manager replaces that map on every config update.
+// The caller resolves the map once and the whole walk of the hierarchy works from that one version.
+func newQueueTracker(queuePath string, queueName string, trackType trackingType, wildCardLimits map[string]*LimitConfig) *QueueTracker {
 	fullPath := queueName
 	if queuePath != common.Empty {
 		fullPath = queuePath + "." + queueName
@@ -64,7 +68,7 @@ func newQueueTracker(queuePath string, queueName string, trackType trackingType)
 
 	// Override user/group specific limits with wild card limit settings
 	if trackType == user {
-		if config := m.getUserWildCardLimitsConfig(fullPath); config != nil {
+		if config := wildCardLimits[fullPath]; config != nil {
 			log.Log(log.SchedUGM).Debug("Use wild card limit settings as there is no limit set explicitly",
 				zap.String("queue name", queueName),
 				zap.String("queue path", queuePath),
@@ -93,7 +97,7 @@ func (tt trackingType) String() string {
 }
 
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
-func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource) {
+func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationID string, trackType trackingType, usage *resources.Resource, wildCardLimits map[string]*LimitConfig) {
 	log.Log(log.SchedUGM).Debug("Increasing resource usage",
 		zap.Stringer("tracking type", trackType),
 		zap.String("queue path", qt.queuePath),
@@ -106,9 +110,9 @@ func (qt *QueueTracker) increaseTrackedResource(hierarchy []string, applicationI
 	if len(hierarchy) > 1 {
 		childName := hierarchy[1]
 		if qt.childQueueTrackers[childName] == nil {
-			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType)
+			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType, wildCardLimits)
 		}
-		qt.childQueueTrackers[childName].increaseTrackedResource(hierarchy[1:], applicationID, trackType, usage)
+		qt.childQueueTrackers[childName].increaseTrackedResource(hierarchy[1:], applicationID, trackType, usage, wildCardLimits)
 	}
 	if qt.resourceUsage == nil {
 		qt.resourceUsage = resources.NewResource()
@@ -180,7 +184,7 @@ func (qt *QueueTracker) decreaseTrackedResource(hierarchy []string, applicationI
 }
 
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
-func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Resource, maxApps uint64, useWildCard bool, trackType trackingType, doWildCardCheck bool) {
+func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Resource, maxApps uint64, useWildCard bool, trackType trackingType, doWildCardCheck bool, wildCardLimits map[string]*LimitConfig) {
 	log.Log(log.SchedUGM).Debug("Setting limits",
 		zap.String("queue path", qt.queuePath),
 		zap.Strings("hierarchy", hierarchy),
@@ -192,9 +196,9 @@ func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Reso
 	if len(hierarchy) > 1 {
 		childName := hierarchy[1]
 		if qt.childQueueTrackers[childName] == nil {
-			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType)
+			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType, wildCardLimits)
 		}
-		qt.childQueueTrackers[childName].setLimit(hierarchy[1:], maxResource, maxApps, useWildCard, trackType, doWildCardCheck)
+		qt.childQueueTrackers[childName].setLimit(hierarchy[1:], maxResource, maxApps, useWildCard, trackType, doWildCardCheck, wildCardLimits)
 	} else if len(hierarchy) == 1 {
 		// don't override named user/group specific limits with wild card limits
 		if doWildCardCheck && !qt.useWildCard {
@@ -208,16 +212,16 @@ func (qt *QueueTracker) setLimit(hierarchy []string, maxResource *resources.Reso
 
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 // Note: headroom is not read-only, it also traverses the queue hierarchy and creates childQueueTracker if it does not exist.
-func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType) *resources.Resource {
+func (qt *QueueTracker) headroom(hierarchy []string, trackType trackingType, wildCardLimits map[string]*LimitConfig) *resources.Resource {
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
 	var headroom, childHeadroom *resources.Resource
 	if len(hierarchy) > 1 {
 		childName := hierarchy[1]
 		if qt.childQueueTrackers[childName] == nil {
-			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType)
+			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType, wildCardLimits)
 		}
-		childHeadroom = qt.childQueueTrackers[childName].headroom(hierarchy[1:], trackType)
+		childHeadroom = qt.childQueueTrackers[childName].headroom(hierarchy[1:], trackType, wildCardLimits)
 	}
 
 	// arrived at the leaf or on the way out: check against current max if set
@@ -418,16 +422,16 @@ func (qt *QueueTracker) decreaseTrackedResourceUsageDownwards(hierarchy []string
 
 // Note: Lock free call. The Lock of the linked tracker (UserTracker and GroupTracker) should be held before calling this function.
 // Note: canRunApp is not read-only, it also traverses the queue hierarchy and creates a childQueueTracker if it does not exist.
-func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trackType trackingType) bool {
+func (qt *QueueTracker) canRunApp(hierarchy []string, applicationID string, trackType trackingType, wildCardLimits map[string]*LimitConfig) bool {
 	// depth first: all the way to the leaf, create if not exists
 	// more than 1 in the slice means we need to recurse down
 	childCanRunApp := true
 	if len(hierarchy) > 1 {
 		childName := hierarchy[1]
 		if qt.childQueueTrackers[childName] == nil {
-			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType)
+			qt.childQueueTrackers[childName] = newQueueTracker(qt.queuePath, childName, trackType, wildCardLimits)
 		}
-		childCanRunApp = qt.childQueueTrackers[childName].canRunApp(hierarchy[1:], applicationID, trackType)
+		childCanRunApp = qt.childQueueTrackers[childName].canRunApp(hierarchy[1:], applicationID, trackType, wildCardLimits)
 	}
 
 	if !childCanRunApp {

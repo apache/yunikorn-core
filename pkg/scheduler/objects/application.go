@@ -358,12 +358,12 @@ func (sa *Application) timeoutStateTimer(expectedState string, event application
 					zap.Int("replaced", replacing),
 					zap.Int("preempted", preempted),
 					zap.Int("releasing", len(toRelease)))
-				sa.clearStateTimer()
 				sa.notifyRMAllocationReleased(
 					toRelease,
 					si.TerminationType_TIMEOUT,
 					"releasing placeholders on app complete",
 				)
+				sa.clearStateTimer()
 			} else {
 				// nolint: errcheck
 				_ = sa.HandleApplicationEvent(event)

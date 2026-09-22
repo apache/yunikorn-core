@@ -546,7 +546,7 @@ func (m *Manager) resetGroupEarlierUsage(gt *GroupTracker, queuePath string) {
 		appUsersMap := gt.decreaseAllTrackedResourceUsage(hierarchy)
 		for app, u := range appUsersMap {
 			ut := m.userTrackers[u]
-			delete(ut.appGroupTrackers, app)
+			ut.removeGroupForApp(app)
 		}
 		gt.clearLimits(queuePath)
 		// Is there any running applications in end queue of this queue path? If not, then remove the linkage between end queue and its immediate parent
@@ -719,7 +719,7 @@ func (m *Manager) ClearConfigLimits() {
 	m.groupLimits = make(map[string]map[string]*LimitConfig)
 }
 
-// GetUserResources returns the root queue maxResources for the user
+// GetUserResources returns a snapshot of the root queue resource usage for the user
 // Should only be used in tests
 func (m *Manager) GetUserResources(user string) *resources.Resource {
 	m.RLock()
@@ -728,10 +728,10 @@ func (m *Manager) GetUserResources(user string) *resources.Resource {
 	if ut == nil {
 		return nil
 	}
-	return ut.queueTracker.resourceUsage.Clone()
+	return ut.getResourceUsage()
 }
 
-// GetGroupResources returns the root queue maxResources
+// GetGroupResources returns a snapshot of the root queue resource usage
 // Should only be used in tests
 func (m *Manager) GetGroupResources(group string) *resources.Resource {
 	m.RLock()
@@ -740,5 +740,5 @@ func (m *Manager) GetGroupResources(group string) *resources.Resource {
 	if gt == nil {
 		return nil
 	}
-	return gt.queueTracker.resourceUsage.Clone()
+	return gt.getResourceUsage()
 }

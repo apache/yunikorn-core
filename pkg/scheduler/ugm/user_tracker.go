@@ -92,6 +92,17 @@ func (ut *UserTracker) setGroupForApp(applicationID string, groupTrack *GroupTra
 	ut.appGroupTrackers[applicationID] = groupTrack
 }
 
+// removeGroupForApp removes an application's group association. The user tracker
+// may already have been removed while the group still tracks the application.
+func (ut *UserTracker) removeGroupForApp(applicationID string) {
+	if ut == nil {
+		return
+	}
+	ut.Lock()
+	defer ut.Unlock()
+	delete(ut.appGroupTrackers, applicationID)
+}
+
 func (ut *UserTracker) getGroupForApp(applicationID string) string {
 	ut.RLock()
 	defer ut.RUnlock()
@@ -206,4 +217,11 @@ func (ut *UserTracker) getUsedResources() map[string]*resources.Resource {
 	ut.RLock()
 	defer ut.RUnlock()
 	return ut.queueTracker.getUsedResources()
+}
+
+// getResourceUsage returns an independent snapshot of the root queue usage.
+func (ut *UserTracker) getResourceUsage() *resources.Resource {
+	ut.RLock()
+	defer ut.RUnlock()
+	return ut.queueTracker.resourceUsage.Clone()
 }

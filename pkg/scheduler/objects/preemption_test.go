@@ -2574,3 +2574,67 @@ func TestTryPreemption_PredicateVictimsNotTruncated(t *testing.T) {
 	assert.Check(t, alloc2.IsPreempted(), "alloc2 not preempted")
 	assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
 }
+
+// TestTryPreemption_PrematureVictimLoopTermination proves that if an early victim candidate
+// on a node exceeds the ask queue's remaining guaranteed resource, calculateVictimsByNode does not
+// prematurely abort evaluating subsequent viable victims on that same node.
+func TestTryPreemption_PrematureVictimLoopTermination(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "20"}, map[string]string{"first": "10"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	ask2.createTime = time.Now().Add(-10 * time.Second)
+	assert.NilError(t, app1.AddAllocationAsk(ask2))
+	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	alloc2.createTime = ask2.createTime
+	app1.AddAllocation(alloc2)
+	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
+	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
+
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
+	ask1.createTime = time.Now().Add(-5 * time.Second)
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
+	alloc1.createTime = ask1.createTime
+	app1.AddAllocation(alloc1)
+	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
+	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
+
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.AddApplication(app2)
+	appQueueMapping.AddAppQueueMapping(app2.ApplicationID, childQ2)
+
+	existingAsk := newAllocationAsk("existing", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
+	assert.NilError(t, app2.AddAllocationAsk(existingAsk))
+	assert.NilError(t, childQ2.TryIncAllocatedResource(existingAsk.GetAllocatedResource()))
+
+	preemptorAsk := newAllocationAsk("preemptor", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	assert.NilError(t, app2.AddAllocationAsk(preemptorAsk))
+	childQ2.incPendingResource(preemptorAsk.GetAllocatedResource())
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, preemptorAsk, iterator(), false)
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, ok)
+	assert.Assert(t, result != nil)
+	assert.Equal(t, "preemptor", result.Request.GetAllocationKey())
+	assert.Equal(t, nodeID1, result.NodeID)
+	assert.Check(t, alloc2.IsPreempted())
+	assert.Check(t, !alloc1.IsPreempted())
+}

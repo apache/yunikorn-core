@@ -2523,12 +2523,13 @@ func TestTryPreemption_QueueResidualShortfallDeficit(t *testing.T) {
 	rootQ, err := createRootQueue(map[string]string{"first": "60"})
 	assert.NilError(t, err)
 
-	// Parent Max = 10
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, nil, appQueueMapping)
+	// Parent Max = 10, Guaranteed = 10
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, map[string]string{"first": "10"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "20"}, appQueueMapping)
+	// childQ2 Max = 10, Guaranteed = 10 (valid under parent max 10 & guar 10)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, map[string]string{"first": "10"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ3, err := createManagedQueueGuaranteed(parentQ, "child3", false, nil, nil, appQueueMapping)
+	childQ3, err := createManagedQueueGuaranteed(parentQ, "child3", false, map[string]string{"first": "10"}, nil, appQueueMapping)
 	assert.NilError(t, err)
 
 	// Victim alloc4 uses 5 on node2. Parent allocated = 5. Headroom = 10 - 5 = 5.
@@ -2573,11 +2574,13 @@ func TestTryPreemption_QueueResidualShortfall_Insufficient(t *testing.T) {
 	rootQ, err := createRootQueue(map[string]string{"first": "60"})
 	assert.NilError(t, err)
 
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, nil, appQueueMapping)
+	// Parent Max = 10, Guaranteed = 10
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, map[string]string{"first": "10"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "20"}, appQueueMapping)
+	// childQ2 Max = 10, Guaranteed = 10 (valid under parent max 10 & guar 10)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "10"}, map[string]string{"first": "10"}, appQueueMapping)
 	assert.NilError(t, err)
-	childQ3, err := createManagedQueueGuaranteed(parentQ, "child3", false, nil, nil, appQueueMapping)
+	childQ3, err := createManagedQueueGuaranteed(parentQ, "child3", false, map[string]string{"first": "10"}, nil, appQueueMapping)
 	assert.NilError(t, err)
 
 	// Victim alloc4 uses 5 on node2.
@@ -2621,10 +2624,12 @@ func TestTryPreemption_NodeConstrained_InsufficientQueueHeadroom(t *testing.T) {
 	iterator := getNodeIteratorFn(node)
 	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "10"}, appQueueMapping)
+	// Parent Max = 20, Guaranteed = 15
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "20"}, map[string]string{"first": "15"}, appQueueMapping)
 	assert.NilError(t, err)
 	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
 	assert.NilError(t, err)
+	// childQ2 Max = 20, Guaranteed = 15 (child guaranteed 15 <= parent guaranteed 15 <= parent max 20)
 	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "20"}, map[string]string{"first": "15"}, appQueueMapping)
 	assert.NilError(t, err)
 

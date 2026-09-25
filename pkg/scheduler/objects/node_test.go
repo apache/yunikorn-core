@@ -34,6 +34,7 @@ import (
 )
 
 const testNode = "testnode"
+const instType = "test-instance-type"
 
 func TestNewNode(t *testing.T) {
 	// simple nil check
@@ -889,6 +890,32 @@ func TestNodeEvents(t *testing.T) {
 	assert.Equal(t, si.EventRecord_NODE, event.Type)
 	assert.Equal(t, si.EventRecord_REMOVE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_NODE_RESERVATION, event.EventChangeDetail)
+}
+
+func TestNodeAddedEventInstanceType(t *testing.T) {
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 100, "memory": 100})
+	tests := []struct {
+		name       string
+		attributes map[string]string
+		want       string
+	}{
+		{"instance type set", map[string]string{common.InstanceType: instType}, instType},
+		{"instance type not set", map[string]string{"ready": "true"}, UnknownInstanceType},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockEvents := evtMock.NewEventSystem()
+			node := NewNode(newProto(testNode, total, tt.attributes))
+			node.nodeEvents = schedEvt.NewNodeEvents(mockEvents)
+
+			node.SendNodeAddedEvent()
+			assert.Equal(t, 1, len(mockEvents.Events))
+			event := mockEvents.Events[0]
+			assert.Equal(t, si.EventRecord_NODE, event.Type)
+			assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
+			assert.Equal(t, "Node added to the scheduler, instanceType: "+tt.want, event.Message)
+		})
+	}
 }
 
 func TestNode_FitInNode(t *testing.T) {

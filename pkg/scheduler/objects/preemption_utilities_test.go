@@ -320,3 +320,39 @@ func TestSortAllocationsBasedOnAsk_PreemptionOrdering(t *testing.T) {
 	assert.Equal(t, allocations[2].GetAllocationKey(), "originatorPod")
 	assert.Equal(t, allocations[3].GetAllocationKey(), "optedOutOriginatorPod")
 }
+
+func TestSortAllocationsBasedOnAsk_TieBreaking(t *testing.T) {
+	node := NewNode(&si.NodeInfo{
+		NodeID: "node1",
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 100}},
+		},
+	})
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+	ask := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+
+	baseTime := time.Date(2026, 1, 1, 12, 30, 0, 0, time.UTC)
+
+	// Test 1: Tie-breaking by creation time (younger first) within the same hour bucket
+	allocOld := createAllocation("alloc-old", "app1", node.NodeID, true, false, 10, false, res)
+	allocOld.createTime = baseTime.Add(-10 * time.Minute)
+	allocYoung := createAllocation("alloc-young", "app1", node.NodeID, true, false, 10, false, res)
+	allocYoung.createTime = baseTime
+
+	allocations := []*Allocation{allocOld, allocYoung}
+	SortAllocationsBasedOnAsk(allocations, total, ask)
+	assert.Equal(t, allocations[0].GetAllocationKey(), "alloc-young")
+	assert.Equal(t, allocations[1].GetAllocationKey(), "alloc-old")
+
+	// Test 2: Tie-breaking by allocationKey when creation times are identical
+	allocB := createAllocation("alloc-b", "app1", node.NodeID, true, false, 10, false, res)
+	allocB.createTime = baseTime
+	allocA := createAllocation("alloc-a", "app1", node.NodeID, true, false, 10, false, res)
+	allocA.createTime = baseTime
+
+	allocations = []*Allocation{allocB, allocA}
+	SortAllocationsBasedOnAsk(allocations, total, ask)
+	assert.Equal(t, allocations[0].GetAllocationKey(), "alloc-a")
+	assert.Equal(t, allocations[1].GetAllocationKey(), "alloc-b")
+}

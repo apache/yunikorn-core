@@ -19,11 +19,15 @@
 package scheduler
 
 import (
+	"fmt"
+	"os"
 	"strings"
 	"testing"
+	"testing/synctest"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
+	godeadlock "github.com/sasha-s/go-deadlock"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -41,6 +45,12 @@ type mockEventHandler struct {
 	rejectedNodes   []*si.RejectedNode
 	acceptedNodes   []*si.AcceptedNode
 	newAllocHandler func(*rmevent.RMNewAllocationsEvent)
+}
+
+func TestMain(m *testing.M) {
+	// Pooled deadlock timers cannot be reused across synctest bubbles.
+	godeadlock.Opts.TimerPool = godeadlock.TimerPoolDisabled
+	os.Exit(m.Run())
 }
 
 func newMockEventHandler() *mockEventHandler {
@@ -444,4 +454,104 @@ outer:
 	}
 
 	assert.Assert(t, checked, "Failed to find metric")
+}
+
+// An abandoned reply must not keep the cluster lock held. synctest.Wait
+// ensures the handler has reached its blocking send before probing the lock.
+func TestRMEventReplyReleasesClusterLock(t *testing.T) {
+	const registrationSuccess = "registration-success"
+	for _, name := range []string{"registration-invalid", "registration-duplicate", registrationSuccess, "config-unregistered", "config-invalid", "config-unchanged", "remove"} {
+		for _, capacity := range []int{0, 1} {
+			t.Run(fmt.Sprintf("%s/buffer-%d", name, capacity), func(t *testing.T) {
+				oldConfigMap := configs.GetConfigMap()
+				defer configs.SetConfigMap(oldConfigMap)
+				synctest.Test(t, func(t *testing.T) {
+					cc := &ClusterContext{partitions: make(map[string]*PartitionContext), policyGroup: t.Name()}
+					defer configs.ConfigContext.Set(cc.policyGroup, nil)
+					ch := make(chan *rmevent.Result, capacity)
+					var handle func()
+					succeeded := false
+					switch name {
+					case "registration-invalid", "registration-duplicate", registrationSuccess:
+						config := "invalid: ["
+						if name == "registration-duplicate" {
+							cc.partitions["existing"] = nil
+						}
+						if name == registrationSuccess {
+							config = "partitions: []"
+							succeeded = true
+						}
+						handle = func() {
+							cc.processRMRegistrationEvent(&rmevent.RMRegistrationEvent{
+								Registration: &si.RegisterResourceManagerRequest{RmID: "test", PolicyGroup: cc.policyGroup, Config: config}, Channel: ch,
+							})
+						}
+					case "config-unregistered", "config-invalid", "config-unchanged":
+						config := "invalid: ["
+						if name != "config-unregistered" {
+							cc.partitions["existing"] = nil
+						}
+						if name == "config-unchanged" {
+							config = configs.DefaultSchedulerConfig
+							conf, err := configs.LoadSchedulerConfigFromByteArray([]byte(config))
+							assert.NilError(t, err)
+							configs.ConfigContext.Set(cc.policyGroup, conf)
+							succeeded = true
+						}
+						handle = func() {
+							cc.processRMConfigUpdateEvent(&rmevent.RMConfigUpdateEvent{RmID: "test", Config: config, Channel: ch})
+						}
+					case "remove":
+						succeeded = true
+						handle = func() { cc.removePartitionsByRMID(&rmevent.RMPartitionsRemoveEvent{RmID: "test", Channel: ch}) }
+					}
+					done := make(chan struct{})
+					go func() { handle(); close(done) }()
+					synctest.Wait()
+					if cc.TryRLock() {
+						cc.RUnlock()
+					} else {
+						t.Error("reply without a receiver holds the cluster lock")
+					}
+					if capacity == 1 {
+						select {
+						case <-done:
+						default:
+							t.Error("buffered reply did not let the handler finish without a receiver")
+						}
+					}
+					// Drain even on failure so the handler does not leak.
+					result := <-ch
+					<-done
+					assert.Equal(t, result.Succeeded, succeeded)
+					if name == registrationSuccess {
+						assert.Assert(t, configs.ConfigContext.Get(cc.policyGroup) != nil)
+						assert.Equal(t, cc.GetRMInfoMapClone()["test"].RMBuildInformation["rmId"], "test")
+					}
+				})
+			})
+		}
+	}
+}
+
+func TestRMConfigPublishedBeforeReply(t *testing.T) {
+	cc := createTestContext(t, "[test]default")
+	defer cc.Stop()
+	cc.policyGroup = t.Name()
+	oldConfigMap := configs.GetConfigMap()
+	defer configs.SetConfigMap(oldConfigMap)
+	defer configs.ConfigContext.Set(cc.policyGroup, nil)
+	synctest.Test(t, func(t *testing.T) {
+		ch := make(chan *rmevent.Result)
+		done := make(chan struct{})
+		go func() {
+			cc.processRMConfigUpdateEvent(&rmevent.RMConfigUpdateEvent{RmID: "test", Config: configs.DefaultSchedulerConfig, Channel: ch})
+			close(done)
+		}()
+		synctest.Wait()
+		assert.Check(t, configs.ConfigContext.Get(cc.policyGroup) != nil, "configuration must be published before waiting for the reply receiver")
+		result := <-ch
+		<-done
+		assert.Assert(t, result.Succeeded, result.Reason)
+	})
 }

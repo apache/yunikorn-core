@@ -632,8 +632,9 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	// Did victims collected so far fulfill the ask need? In case of any shortfall between the ask resource requirement
 	// and total victims resources, preemption won't help even though victims has been collected.
 
-	// Holds total victims resources
-	victimsTotalResource := resources.NewResource()
+	// Holds total victims resources and node-specific victims resources
+	totalVictimsResource := resources.NewResource()
+	nodeVictimsResource := resources.NewResource()
 
 	fitIn := p.nodeAvailableMap[nodeID].FitIn(p.ask.GetAllocatedResource())
 
@@ -643,19 +644,19 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	var finalVictims []*Allocation
 	for _, victim := range nodeVictims {
 		finalVictims = append(finalVictims, victim)
-		victimsTotalResource.AddTo(victim.GetAllocatedResource())
+		allocRes := victim.GetAllocatedResource()
+		totalVictimsResource.AddTo(allocRes)
+		nodeVictimsResource.AddTo(allocRes)
 	}
 
 	// Since there could be more extra victims than the actual need, ensure only required victims are filtered finally
 	// to do: There is room for improvements especially when there are more victims. victims could be chosen based
 	// on different criteria. for example, victims could be picked up either from specific node (bin packing) or
 	// from multiple nodes (fair) given the choices.
-	hasVictimsOnOtherNodes := false
 	for _, victim := range extraVictims {
 		// Victims from any node is acceptable as long as chosen node has enough space to accommodate the ask
 		// Otherwise, preempting victims from 'n' different nodes doesn't help to achieve the goal.
 		if victim.GetNodeID() != nodeID {
-			hasVictimsOnOtherNodes = true
 			if !fitIn {
 				continue
 			}
@@ -663,29 +664,20 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		// check if victim contributes to any resource dimension that is still needed
 		allocRes := victim.GetAllocatedResource()
 		for k, needVal := range p.ask.GetAllocatedResource().Resources {
-			if victimsTotalResource.Resources[k] < needVal && allocRes.Resources[k] > 0 {
+			if totalVictimsResource.Resources[k] < needVal && allocRes.Resources[k] > 0 {
 				finalVictims = append(finalVictims, victim)
-				victimsTotalResource.AddTo(allocRes)
+				totalVictimsResource.AddTo(allocRes)
+				if victim.GetNodeID() == nodeID {
+					nodeVictimsResource.AddTo(allocRes)
+				}
 				break
 			}
 		}
 	}
 
-	if victimsTotalResource.IsEmpty() {
+	if p.hasPreemptionShortfall(nodeID, nodeVictimsResource, totalVictimsResource) {
 		p.ask.LogAllocationFailure(common.PreemptionShortfall, true)
 		return nil, false
-	}
-	for k, victimVal := range victimsTotalResource.Resources {
-		if needVal, ok := p.ask.GetAllocatedResource().Resources[k]; ok {
-			var avail resources.Quantity
-			if !fitIn && !hasVictimsOnOtherNodes {
-				avail = p.nodeAvailableMap[nodeID].Resources[k]
-			}
-			if avail+victimVal < needVal {
-				p.ask.LogAllocationFailure(common.PreemptionShortfall, true)
-				return nil, false
-			}
-		}
 	}
 
 	// Has any victim released?
@@ -749,6 +741,31 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		zap.Int("collected victim count", len(nodeVictims)+len(extraVictims)),
 		zap.Int("preempted victim count", len(finalVictims)))
 	return newReservedAllocationResult(nodeID, p.ask), true
+}
+
+func (p *Preemptor) hasPreemptionShortfall(nodeID string, nodeVictimsResource *resources.Resource, totalVictimsResource *resources.Resource) bool {
+	if totalVictimsResource.IsEmpty() {
+		return true
+	}
+	for k, needVal := range p.ask.GetAllocatedResource().Resources {
+		// Node physical capacity check:
+		// Target node available capacity plus victims on this node must satisfy ask demand
+		nodeAvail := p.nodeAvailableMap[nodeID].Resources[k]
+		if nodeAvail+nodeVictimsResource.Resources[k] < needVal {
+			return true
+		}
+
+		// Queue quota headroom check:
+		// Queue headroom plus total victims preempted across the cluster must satisfy ask demand
+		if p.headRoom != nil {
+			if queueAvail, ok := p.headRoom.Resources[k]; ok {
+				if queueAvail+totalVictimsResource.Resources[k] < needVal {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // Duplicate creates a copy of this snapshot into the given map by queue path

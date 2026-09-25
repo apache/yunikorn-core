@@ -31,6 +31,7 @@ import (
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -282,7 +283,7 @@ func verifyNodeAddedAndQueueMaxSetEvents(t *testing.T, events []*si.EventRecord)
 	assert.Equal(t, si.EventRecord_QUEUE_MAX, events[1].EventChangeDetail)
 
 	assert.Equal(t, "node-1:1234", events[2].ObjectID)
-	assert.Equal(t, "Node added to the scheduler", events[2].Message)
+	assert.Equal(t, "Node added to the scheduler, instanceType: "+objects.UnknownInstanceType, events[2].Message)
 	assert.Equal(t, "", events[2].ReferenceID)
 	assert.Equal(t, si.EventRecord_NODE, events[2].Type)
 	assert.Equal(t, si.EventRecord_ADD, events[2].EventChangeType)

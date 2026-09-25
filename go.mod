@@ -19,7 +19,7 @@
 
 module github.com/apache/yunikorn-core
 
-go 1.26.0
+go 1.26.8
 
 require (
 	github.com/apache/yunikorn-scheduler-interface v0.0.0-20260917064053-bd4e35e972a4

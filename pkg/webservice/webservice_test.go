@@ -81,7 +81,9 @@ func Test_RedirectDebugHandler(t *testing.T) {
 			}
 			resp, err := client.Get(base + tt.reqURL)
 			assert.NilError(t, err, "unexpected error returned")
+			_, err = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close() // not interested in the error
+			assert.NilError(t, err, "unexpected error reading body")
 			assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK after redirect")
 		})
 	}
@@ -117,12 +119,16 @@ func Test_RouterHandling(t *testing.T) {
 	// get with trailing slash
 	resp, err = client.Get(base + "/ws/v1/clusters/")
 	assert.NilError(t, err, "unexpected error returned")
+	_, err = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
+	assert.NilError(t, err, "unexpected error reading body")
 	assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")
 	// get with case difference
 	resp, err = client.Get(base + "/ws/v1/CLUSTERS")
 	assert.NilError(t, err, "unexpected error returned")
+	_, err = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
+	assert.NilError(t, err, "unexpected error reading body")
 	assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")
 }
 

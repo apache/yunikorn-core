@@ -511,7 +511,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 						askQueue.AddAllocation(victim.GetAllocatedResource())
 					} else {
 						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
-						break
+						continue
 					}
 					askQueueNewRemaining := askQueue.GetRemainingGuaranteedResource()
 

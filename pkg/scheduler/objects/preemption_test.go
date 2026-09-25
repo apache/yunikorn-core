@@ -2582,8 +2582,10 @@ func TestTryPreemption_QueueResidualShortfall_Insufficient(t *testing.T) {
 	assert.NilError(t, err)
 	childQ3, err := createManagedQueueGuaranteed(parentQ, "child3", false, map[string]string{"first": "10"}, nil, appQueueMapping)
 	assert.NilError(t, err)
+	childQ4, err := createManagedQueueGuaranteed(parentQ, "child4", false, map[string]string{"first": "10"}, nil, appQueueMapping)
+	assert.NilError(t, err)
 
-	// Victim alloc4 uses 5 on node2.
+	// Victim alloc4 in child3 uses 5 on node2 with default priority 0.
 	app3 := newApplication(appID3, "default", "root.parent.child3")
 	app3.SetQueue(childQ3)
 	childQ3.AddApplication(app3)
@@ -2595,12 +2597,28 @@ func TestTryPreemption_QueueResidualShortfall_Insufficient(t *testing.T) {
 	assert.Check(t, node2.TryAddAllocation(alloc4), "node2 alloc4 failed")
 	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
 
-	// Preemptor ask needs 10. Queue headroom is only 3.
-	// Headroom (3) + Victim (5) = 8 < Ask (10). Preemption cannot satisfy the ask and must abort.
+	// allocProtected in child4 uses 2 on node1 with high priority 100.
+	// This accounts for the remaining 2 units of parent usage (5 + 2 = 7 allocated, headroom = 10 - 7 = 3).
+	// Because its priority (100) is higher than the preemptor ask's priority (0), it cannot be preempted.
+	app4 := newApplication("app-4", "default", "root.parent.child4")
+	app4.SetQueue(childQ4)
+	childQ4.AddApplication(app4)
+	appQueueMapping.AddAppQueueMapping(app4.ApplicationID, childQ4)
+	askProtected := newAllocationAskPriority("allocProtected", "app-4", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}), 100)
+	assert.NilError(t, app4.AddAllocationAsk(askProtected))
+	allocProtected := newAllocationAll("allocProtected", "app-4", nodeID1, "", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}), false, 100)
+	app4.AddAllocation(allocProtected)
+	assert.Check(t, node1.TryAddAllocation(allocProtected), "node1 allocProtected failed")
+	assert.NilError(t, childQ4.TryIncAllocatedResource(askProtected.GetAllocatedResource()))
+
+	// Preemptor ask needs 10 (priority 0). Queue headroom is 3 (10 - 7).
+	// allocProtected (2) is non-preemptable due to higher priority (100 > 0).
+	// Only alloc4 (5) can be preempted: Headroom (3) + Victim (5) = 8 < Ask (10).
+	// Preemption cannot satisfy the ask and must abort with PreemptionShortfall.
 	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 10}, "alloc3", appQueueMapping)
 	assert.NilError(t, err)
 
-	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3})
+	headRoom := childQ2.getHeadRoom()
 	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask3, iterator(), false)
 
 	feasibleNodes := map[string]int{nodeID2: 1}
@@ -2612,6 +2630,7 @@ func TestTryPreemption_QueueResidualShortfall_Insufficient(t *testing.T) {
 	assert.Equal(t, ok, false, "preemption should fail: headroom (3) + victim (5) < ask (10)")
 	assert.Assert(t, result == nil, "expected nil result")
 	assert.Check(t, !alloc4.IsPreempted(), "alloc4 should not be preempted")
+	assert.Check(t, !allocProtected.IsPreempted(), "allocProtected should not be preempted")
 	assertAllocationLog(t, ask3, []string{common.PreemptionShortfall})
 }
 

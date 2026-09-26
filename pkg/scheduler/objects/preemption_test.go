@@ -2706,6 +2706,66 @@ func TestTryPreemption_PrematureAdditionalVictimsLoopTermination(t *testing.T) {
 	assert.Assert(t, result != nil, "preemption result is nil")
 	assert.Equal(t, "preemptor", result.Request.GetAllocationKey())
 	assert.Equal(t, nodeID1, result.NodeID)
-	assert.Check(t, alloc2.IsPreempted(), "alloc2 should have been preempted")
-	assert.Check(t, !alloc1.IsPreempted(), "alloc1 should not be preempted")
+	assert.Check(t, alloc1.IsPreempted(), "alloc1 should have been preempted")
+	assert.Check(t, !alloc2.IsPreempted(), "alloc2 should not be preempted")
+}
+
+// TestTryPreemption_DecoupleAskQueueQuotaFromVictimSize_AdditionalVictims proves that a large candidate victim
+// (e.g. 8 cores) in an over-allocated sibling queue can be preempted to satisfy a small ask (e.g. 2 cores)
+// whose queue has sufficient remaining guaranteed quota (e.g. 2 cores), without being rejected in
+// calculateAdditionalVictims simply because the victim's resource size exceeds the ask queue's remaining guaranteed headroom.
+func TestTryPreemption_DecoupleAskQueueQuotaFromVictimSize_AdditionalVictims(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 30})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "30"})
+	assert.NilError(t, err)
+	// Parent Max = 16, Guaranteed = 10
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "16"}, map[string]string{"first": "10"}, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "20"}, map[string]string{"first": "10"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+	// alloc1 in child1 uses 8 on node1 (the only victim in child1)
+	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
+	assert.NilError(t, app1.AddAllocationAsk(ask1))
+	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
+	app1.AddAllocation(alloc1)
+	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
+	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
+
+	// Preemptor app in childQ2. Guaranteed is 10, existing usage is 8, remaining guaranteed is 2.
+	app2 := newApplication(appID2, "default", "root.parent.child2")
+	app2.SetQueue(childQ2)
+	childQ2.AddApplication(app2)
+	appQueueMapping.AddAppQueueMapping(app2.ApplicationID, childQ2)
+
+	existingAsk := newAllocationAsk("existing", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
+	assert.NilError(t, app2.AddAllocationAsk(existingAsk))
+	assert.NilError(t, childQ2.TryIncAllocatedResource(existingAsk.GetAllocatedResource()))
+
+	// Preemptor ask needs 2 cores.
+	preemptorAsk := newAllocationAsk("preemptor", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	assert.NilError(t, app2.AddAllocationAsk(preemptorAsk))
+	childQ2.incPendingResource(preemptorAsk.GetAllocatedResource())
+
+	// Parent has allocated = 8 (child1) + 8 (child2) = 16 == parent Max (16).
+	// Queue headroom is 0. Node has 30 - 8 = 22 available.
+	headRoom := childQ2.getHeadRoom()
+	assert.Assert(t, resources.IsZero(headRoom), "expected 0 headroom")
+
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, preemptorAsk, iterator(), false)
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, ok, "preemption should succeed by preempting oversized victim from sibling queue")
+	assert.Assert(t, result != nil)
+	assert.Equal(t, "preemptor", result.Request.GetAllocationKey())
+	assert.Check(t, alloc1.IsPreempted(), "alloc1 should be preempted")
 }

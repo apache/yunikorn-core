@@ -505,25 +505,7 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 				preemptableResource := queueSnapshot.GetPreemptableResource()
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
 					(remaining == nil || isVictimQueueOverGuaranteed(p.ask.GetAllocatedResource(), remaining)) {
-					// Does victimQueue have space equivalent to the resource used by the victim?
-					askQueueRemaining := askQueue.GetRemainingGuaranteedResource()
-					if askQueueRemaining != nil && askQueueRemaining.FitInActual(victim.GetAllocatedResource()) {
-						askQueue.AddAllocation(victim.GetAllocatedResource())
-					} else {
-						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
-						continue
-					}
-					askQueueNewRemaining := askQueue.GetRemainingGuaranteedResource()
-
-					// check to see if the shortfall on the queue has changed
-					if !resources.EqualsOrEmpty(askQueueRemaining, askQueueNewRemaining) {
-						// remaining capacity changed, so we should keep this task
-						victims = append(victims, victim)
-					} else {
-						// remaining guaranteed amount in ask queue did not change, so preempting task won't help
-						askQueue.RemoveAllocation(victim.GetAllocatedResource())
-						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
-					}
+					victims = append(victims, victim)
 				} else {
 					// removing this allocation would have reduced queue below guaranteed limits, put it back
 					queueSnapshot.AddAllocation(victim.GetAllocatedResource())

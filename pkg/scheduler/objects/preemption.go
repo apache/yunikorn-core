@@ -380,10 +380,10 @@ func (p *Preemptor) duplicateQueueSnapshots() map[string]*QueuePreemptionSnapsho
 }
 
 // checkPreemptionPredicates calls the shim via the SI to evaluate nodes for preemption
-func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPredicatesArgs, victimsByNode map[string][]*Allocation) *predicateCheckResult {
+func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPredicatesArgs, victimsByNode map[string][]*Allocation) (*predicateCheckResult, map[string]int) {
 	// don't process empty list
 	if len(predicateChecks) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// sort predicate checks by number of expected preempted tasks
@@ -411,12 +411,13 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 			index:         int(check.StartIndex),
 		}
 		result.populateVictims(victimsByNode)
-		return result
+		return result, nil
 	}
 
 	// process each batch of checks by sending to the RM
 	batches := batchPreemptionChecks(predicateChecks, preemptCheckConcurrency)
 	var bestResult *predicateCheckResult = nil
+	predicateErrors := make(map[string]int)
 	for _, batch := range batches {
 		var wg sync.WaitGroup
 		ch := make(chan *predicateCheckResult, len(batch))
@@ -440,6 +441,10 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 				} else if result.betterThan(bestResult, p.allocationsByNode) {
 					bestResult = result
 				}
+			} else {
+				for e := range result.predicateErrors {
+					predicateErrors[e]++
+				}
 			}
 		}
 		// if the best resultType we have from this batch meets all our criteria, don't run another batch
@@ -448,7 +453,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 		}
 	}
 	bestResult.populateVictims(victimsByNode)
-	return bestResult
+	return bestResult, predicateErrors
 }
 
 // calculateAdditionalVictims finds additional preemption victims necessary to ensure
@@ -591,9 +596,12 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 		}
 	}
 	// call predicates to evaluate each node
-	result := p.checkPreemptionPredicates(predicateChecks, victimsByNode)
+	result, predicateErrors := p.checkPreemptionPredicates(predicateChecks, victimsByNode)
 	if result != nil && result.success {
 		return result.nodeID, result.victims, true
+	}
+	if predicateErrors != nil && len(predicateErrors) > 0 {
+		p.ask.SendPredicatesFailedEvent(predicateErrors)
 	}
 	return "", nil, false
 }

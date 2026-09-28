@@ -332,27 +332,16 @@ func TestSortAllocationsBasedOnAsk_TieBreaking(t *testing.T) {
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
 	ask := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 
-	baseTime := time.Date(2026, 1, 1, 12, 30, 0, 0, time.UTC)
-
-	// Test 1: Tie-breaking by creation time (younger first) within the same hour bucket
-	allocOld := createAllocation("alloc-old", "app1", node.NodeID, true, false, 10, false, res)
-	allocOld.createTime = baseTime.Add(-10 * time.Minute)
-	allocYoung := createAllocation("alloc-young", "app1", node.NodeID, true, false, 10, false, res)
-	allocYoung.createTime = baseTime
-
-	allocations := []*Allocation{allocOld, allocYoung}
-	SortAllocationsBasedOnAsk(allocations, total, ask)
-	assert.Equal(t, allocations[0].GetAllocationKey(), "alloc-young")
-	assert.Equal(t, allocations[1].GetAllocationKey(), "alloc-old")
-
-	// Test 2: Tie-breaking by allocationKey when creation times are identical
+	// Tie-breaking by allocationKey when resource ratios are identical, regardless of creation
+	// time within the same hour bucket and of the input order.
 	allocB := createAllocation("alloc-b", "app1", node.NodeID, true, false, 10, false, res)
-	allocB.createTime = baseTime
+	allocB.createTime = testBaseTime
 	allocA := createAllocation("alloc-a", "app1", node.NodeID, true, false, 10, false, res)
-	allocA.createTime = baseTime
+	allocA.createTime = testBaseTime.Add(-10 * time.Minute)
 
-	allocations = []*Allocation{allocB, allocA}
-	SortAllocationsBasedOnAsk(allocations, total, ask)
-	assert.Equal(t, allocations[0].GetAllocationKey(), "alloc-a")
-	assert.Equal(t, allocations[1].GetAllocationKey(), "alloc-b")
+	for _, allocations := range [][]*Allocation{{allocA, allocB}, {allocB, allocA}} {
+		SortAllocationsBasedOnAsk(allocations, total, ask)
+		assert.Equal(t, allocations[0].GetAllocationKey(), "alloc-a")
+		assert.Equal(t, allocations[1].GetAllocationKey(), "alloc-b")
+	}
 }

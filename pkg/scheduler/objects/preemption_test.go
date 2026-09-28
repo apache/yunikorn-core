@@ -63,7 +63,7 @@ func creatApp1WithTwoDifferentAllocations(
 	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
 
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(app1Rec))
-	ask1.createTime = time.Now().Add(-1 * time.Minute)
+	ask1.createTime = time.Now().Add(-1 * time.Hour)
 	if err := app1.AddAllocationAsk(ask1); err != nil {
 		return nil, nil, err
 	}
@@ -1120,7 +1120,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *test
 	childQ2.AddApplication(app1)
 	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ2)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 200}))
-	ask1.createTime = time.Now().Add(-1 * time.Minute)
+	ask1.createTime = time.Now().Add(-1 * time.Hour)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 200}))
 	ask2.createTime = time.Now()
@@ -1269,7 +1269,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSid
 	app1, app2, app3 := createVictimApplications(childQ2, appQueueMapping)
 	for i := 5; i < 8; i++ {
 		askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"mem": 100}))
-		askN.createTime = testBaseTime.Add(-2 * time.Minute)
+		askN.createTime = testBaseTime.Add(-2 * time.Hour)
 		assert.NilError(t, app1.AddAllocationAsk(askN))
 		allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"mem": 100}))
 		allocN.createTime = askN.createTime
@@ -1278,7 +1278,7 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSid
 	}
 
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 100}))
-	ask1.createTime = testBaseTime.Add(-1 * time.Minute)
+	ask1.createTime = testBaseTime.Add(-1 * time.Hour)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	ask2 := newAllocationAsk("alloc2", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 100}))
 	ask2.createTime = testBaseTime
@@ -1493,7 +1493,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T
 			app1, app2, app3 := createVictimApplications(childQ2, appQueueMapping)
 			for i := 5; i < 8; i++ {
 				askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
-				askN.createTime = testBaseTime.Add(-2 * time.Minute)
+				askN.createTime = testBaseTime.Add(-2 * time.Hour)
 				assert.NilError(t, app1.AddAllocationAsk(askN))
 				allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 				allocN.createTime = askN.createTime
@@ -1502,7 +1502,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T
 			}
 
 			ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "pods": 1}))
-			ask1.createTime = testBaseTime.Add(-1 * time.Minute)
+			ask1.createTime = testBaseTime.Add(-1 * time.Hour)
 			assert.NilError(t, app1.AddAllocationAsk(ask1))
 			ask2 := newAllocationAsk("alloc2", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "pods": 1}))
 			ask2.createTime = testBaseTime
@@ -1695,7 +1695,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t 
 	app1, app2, app3 := createVictimApplications(childQ2, appQueueMapping)
 	for i := 5; i < 8; i++ {
 		askN := newAllocationAsk(alloc+strconv.Itoa(i), appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
-		askN.createTime = testBaseTime.Add(-2 * time.Minute)
+		askN.createTime = testBaseTime.Add(-2 * time.Hour)
 		assert.NilError(t, app1.AddAllocationAsk(askN))
 		allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 		allocN.createTime = askN.createTime
@@ -1704,7 +1704,7 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t 
 	}
 
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
-	ask1.createTime = testBaseTime.Add(-1 * time.Minute)
+	ask1.createTime = testBaseTime.Add(-1 * time.Hour)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	ask2 := newAllocationAsk("alloc2", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	ask2.createTime = testBaseTime

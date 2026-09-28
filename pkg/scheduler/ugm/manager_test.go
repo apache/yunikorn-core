@@ -2112,7 +2112,7 @@ func TestUpdateConfigRemoveGroupLimitMissingUser(t *testing.T) {
 func TestResetGroupEarlierUsageConcurrent(t *testing.T) {
 	setupUGM()
 	manager := GetUserManager()
-	ut := manager.getUserTracker("user1")
+	ut := manager.getUserTracker("user1", nil)
 	gt := manager.getGroupTracker("group1")
 	usage := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
 	stop := make(chan struct{})
@@ -2145,14 +2145,14 @@ func TestResetGroupEarlierUsageConcurrent(t *testing.T) {
 func TestManagerResourceSnapshotsConcurrent(t *testing.T) {
 	setupUGM()
 	manager := GetUserManager()
-	ut := manager.getUserTracker("user1")
+	ut := manager.getUserTracker("user1", nil)
 	gt := manager.getGroupTracker("group1")
 	usage := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
 	assert.Assert(t, manager.GetUserResources("missing") == nil)
 	assert.Assert(t, manager.GetGroupResources("missing") == nil)
 	assert.Assert(t, manager.GetUserResources("user1") == nil)
 	assert.Assert(t, manager.GetGroupResources("group1") == nil)
-	ut.increaseTrackedResource(queuePathLeaf, TestApp1, usage)
+	ut.increaseTrackedResource(queuePathLeaf, TestApp1, usage, nil)
 	gt.increaseTrackedResource(queuePathLeaf, TestApp1, usage, "user1")
 	var wg sync.WaitGroup
 	start := make(chan struct{})
@@ -2161,7 +2161,7 @@ func TestManagerResourceSnapshotsConcurrent(t *testing.T) {
 		defer wg.Done()
 		<-start
 		for i := 0; i < 1000; i++ {
-			ut.increaseTrackedResource(queuePathLeaf, TestApp1, usage)
+			ut.increaseTrackedResource(queuePathLeaf, TestApp1, usage, nil)
 			ut.decreaseTrackedResource(queuePathLeaf, TestApp1, usage, false)
 			gt.increaseTrackedResource(queuePathLeaf, TestApp1, usage, "user1")
 			gt.decreaseTrackedResource(queuePathLeaf, TestApp1, usage, false)

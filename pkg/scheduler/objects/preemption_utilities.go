@@ -124,7 +124,7 @@ func SortAllocationsBasedOnAsk(allocations []*Allocation, total, ask *resources.
 		if comp == 1 {
 			return false
 		}
-		return true
+		return l.GetAllocationKey() < r.GetAllocationKey()
 	})
 }
 

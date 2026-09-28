@@ -2392,6 +2392,7 @@ func TestTryAllocatePreemptQueue(t *testing.T) {
 	childQ1.AddApplication(app1)
 	appQueueMapping.AddAppQueueMapping(appID1, childQ1)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	ask1.createTime = time.Now().Add(-1 * time.Hour)
 	err = app1.AddAllocationAsk(ask1)
 	assert.NilError(t, err)
 	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))

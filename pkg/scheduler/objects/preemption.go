@@ -598,7 +598,7 @@ func (p *Preemptor) tryNodes() (string, []*Allocation, bool) {
 	if result != nil && result.success {
 		return result.nodeID, result.victims, true
 	}
-	if predicateErrors != nil && len(predicateErrors) > 0 {
+	if len(predicateErrors) > 0 {
 		p.ask.SendPredicatesFailedEvent(predicateErrors)
 	}
 	return "", nil, false

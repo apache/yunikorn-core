@@ -41,6 +41,7 @@ const (
 	AppCompleting = "completing"
 	AppCompleted  = "completed"
 	AppExpired    = "expired"
+	AppRevived    = "revived"
 
 	ContainerReleased  = "released"
 	ContainerAllocated = "allocated"
@@ -75,7 +76,7 @@ func InitQueueMetrics(name string) *QueueMetrics {
 			Namespace:   Namespace,
 			Name:        "queue_app",
 			ConstLabels: prometheus.Labels{"queue": name},
-			Help:        "Queue application metrics. State of the application includes `new`, `accepted`, `rejected`, `running`, `failing`, `failed`, `resuming`, `completing`, `completed`.",
+			Help:        "Queue application metrics. State of the application includes `new`, `accepted`, `rejected`, `running`, `failing`, `failed`, `resuming`, `completing`, `completed`, `revived`.",
 		}, []string{"state"})
 
 	q.containerMetrics = prometheus.NewCounterVec(
@@ -306,9 +307,34 @@ func (m *QueueMetrics) IncQueueApplicationsCompleted() {
 	m.incQueueApplications(AppCompleted)
 }
 
+// DecQueueApplicationsCompleted reverses IncQueueApplicationsCompleted when a completed application
+// is revived.
+func (m *QueueMetrics) DecQueueApplicationsCompleted() {
+	m.decQueueApplications(AppCompleted)
+}
+
 func (m *QueueMetrics) GetQueueApplicationsCompleted() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.appMetrics.WithLabelValues(AppCompleted).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
+// IncQueueApplicationsRevived counts an application brought back out of the Completed state.
+func (m *QueueMetrics) IncQueueApplicationsRevived() {
+	m.incQueueApplications(AppRevived)
+}
+
+// DecQueueApplicationsRevived is called when a revived application completes again.
+func (m *QueueMetrics) DecQueueApplicationsRevived() {
+	m.decQueueApplications(AppRevived)
+}
+
+func (m *QueueMetrics) GetQueueApplicationsRevived() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.appMetrics.WithLabelValues(AppRevived).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}

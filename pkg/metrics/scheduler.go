@@ -371,9 +371,34 @@ func (m *SchedulerMetrics) IncTotalApplicationsCompleted() {
 	m.application.WithLabelValues(AppCompleted).Inc()
 }
 
+// DecTotalApplicationsCompleted reverses IncTotalApplicationsCompleted when a completed
+// application is revived.
+func (m *SchedulerMetrics) DecTotalApplicationsCompleted() {
+	m.application.WithLabelValues(AppCompleted).Dec()
+}
+
 func (m *SchedulerMetrics) GetTotalApplicationsCompleted() (int, error) {
 	metricDto := &dto.Metric{}
 	err := m.application.WithLabelValues(AppCompleted).Write(metricDto)
+	if err == nil {
+		return int(*metricDto.Gauge.Value), nil
+	}
+	return -1, err
+}
+
+// IncTotalApplicationsRevived counts an application brought back out of the Completed state.
+func (m *SchedulerMetrics) IncTotalApplicationsRevived() {
+	m.application.WithLabelValues(AppRevived).Inc()
+}
+
+// DecTotalApplicationsRevived is called when a revived application completes again.
+func (m *SchedulerMetrics) DecTotalApplicationsRevived() {
+	m.application.WithLabelValues(AppRevived).Dec()
+}
+
+func (m *SchedulerMetrics) GetTotalApplicationsRevived() (int, error) {
+	metricDto := &dto.Metric{}
+	err := m.application.WithLabelValues(AppRevived).Write(metricDto)
 	if err == nil {
 		return int(*metricDto.Gauge.Value), nil
 	}

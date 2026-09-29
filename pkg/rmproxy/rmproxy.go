@@ -240,7 +240,8 @@ func drainReplyChannel(ch chan *rmevent.Result) {
 func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback api.ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error) {
 	rmp.Lock()
 	defer rmp.Unlock()
-	c := make(chan *rmevent.Result)
+	// Each event replies once; buffering lets the scheduler finish without a receiver.
+	c := make(chan *rmevent.Result, 1)
 
 	// If this is a re-register we need to clean up first
 	if rmp.rmIDToCallback[request.RmID] != nil {
@@ -259,7 +260,7 @@ func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerR
 		}
 	}
 
-	c = make(chan *rmevent.Result)
+	c = make(chan *rmevent.Result, 1)
 
 	// Add new RM.
 	go func() {
@@ -348,7 +349,8 @@ func (rmp *RMProxy) UpdateNode(request *si.NodeRequest) error {
 
 // Triggers scheduler to reload configuration and apply the changes on-the-fly to the scheduler itself.
 func (rmp *RMProxy) UpdateConfiguration(request *si.UpdateConfigurationRequest) error {
-	c := make(chan *rmevent.Result)
+	// Each event replies once; buffering lets the scheduler finish without a receiver.
+	c := make(chan *rmevent.Result, 1)
 	go func() {
 		rmp.schedulerEventHandler.HandleEvent(&rmevent.RMConfigUpdateEvent{
 			RmID:        request.RmID,

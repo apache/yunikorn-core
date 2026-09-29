@@ -19,14 +19,24 @@
 package rmproxy
 
 import (
+	"os"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	godeadlock "github.com/sasha-s/go-deadlock"
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/mock"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
+
+func TestMain(m *testing.M) {
+	// Pooled deadlock timers cannot be reused across synctest bubbles.
+	godeadlock.Opts.TimerPool = godeadlock.TimerPoolDisabled
+	os.Exit(m.Run())
+}
 
 func TestRMProxy_StopUnblocksWaitingCaller(t *testing.T) {
 	rmp := NewRMProxy(nil)
@@ -81,5 +91,55 @@ func assertDrainFailedResult(t *testing.T, ch <-chan *rmevent.Result, name strin
 		assert.Equal(t, res.Reason, "RMProxy is stopping")
 	case <-time.After(1 * time.Second):
 		t.Fatalf("timed out waiting for response on %s", name)
+	}
+}
+
+type infraReplyHandler struct {
+	events chan interface{}
+}
+
+func (h *infraReplyHandler) HandleEvent(event interface{}) { h.events <- event }
+
+func TestRMProxyInfraRepliesBuffered(t *testing.T) {
+	for _, name := range []string{"registration", "reregistration", "config"} {
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				handler := &infraReplyHandler{events: make(chan interface{})}
+				rmp := NewRMProxy(handler)
+				if name == "reregistration" {
+					rmp.rmIDToCallback["test"] = &mock.ResourceManagerCallback{}
+				}
+				done := make(chan error, 1)
+				go func() {
+					if name == "config" {
+						done <- rmp.UpdateConfiguration(&si.UpdateConfigurationRequest{RmID: "test"})
+					} else {
+						_, err := rmp.RegisterResourceManager(&si.RegisterResourceManagerRequest{RmID: "test"}, nil)
+						done <- err
+					}
+				}()
+				replies := 1
+				if name == "reregistration" {
+					replies = 2
+				}
+				for i := 0; i < replies; i++ {
+					event := <-handler.events
+					var ch chan *rmevent.Result
+					switch ev := event.(type) {
+					case *rmevent.RMRegistrationEvent:
+						ch = ev.Channel
+					case *rmevent.RMPartitionsRemoveEvent:
+						ch = ev.Channel
+					case *rmevent.RMConfigUpdateEvent:
+						ch = ev.Channel
+					default:
+						t.Fatalf("unexpected event %T", event)
+					}
+					assert.Check(t, cap(ch) == 1, "reply channel must hold one result without a receiver")
+					ch <- &rmevent.Result{Succeeded: true}
+				}
+				assert.NilError(t, <-done)
+			})
+		})
 	}
 }

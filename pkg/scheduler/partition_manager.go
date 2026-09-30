@@ -142,6 +142,8 @@ func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 func (manager *partitionManager) remove() {
 	log.Log(log.SchedPartition).Info("marking all queues for removal",
 		zap.String("partitionName", manager.pc.Name))
+	// mark partition for removal
+	manager.pc.markPartitionForRemoval()
 	// mark all queues for removal
 	manager.pc.root.MarkQueueForRemoval()
 	// remove applications: we do not care about return values or issues

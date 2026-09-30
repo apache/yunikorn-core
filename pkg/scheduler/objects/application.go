@@ -1860,6 +1860,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 }
 
 // tryNode tries allocating on one specific node
+// Must only be called while holding the application lock.
 func (sa *Application) tryNode(node *Node, ask *Allocation, doPredicateChecks bool) (*AllocationResult, error) {
 	toAllocate := ask.GetAllocatedResource()
 	allocationKey := ask.GetAllocationKey()
@@ -1890,8 +1891,8 @@ func (sa *Application) tryNode(node *Node, ask *Allocation, doPredicateChecks bo
 				zap.Error(err))
 		}
 		// all is OK, last update for the app
-		// the node must be set here, under the application lock, so that a release processed before
-		// the allocation is finalised still finds the node the allocation was placed on
+		// set the node before the lock is released: a removal processed before the allocation is
+		// finalised in PartitionContext.allocate() must still find the node it was placed on
 		ask.SetNodeID(node.NodeID)
 		result := newAllocatedAllocationResult(node.NodeID, ask)
 		sa.addAllocationInternal(result.ResultType, ask)

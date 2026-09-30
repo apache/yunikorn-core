@@ -1890,6 +1890,9 @@ func (sa *Application) tryNode(node *Node, ask *Allocation, doPredicateChecks bo
 				zap.Error(err))
 		}
 		// all is OK, last update for the app
+		// the node must be set here, under the application lock, so that a release processed before
+		// the allocation is finalised still finds the node the allocation was placed on
+		ask.SetNodeID(node.NodeID)
 		result := newAllocatedAllocationResult(node.NodeID, ask)
 		sa.addAllocationInternal(result.ResultType, ask)
 		return result, nil

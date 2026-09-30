@@ -5779,3 +5779,46 @@ func TestPartitionStates(t *testing.T) {
 		t.Errorf("partition is not marked running: %v", err)
 	}
 }
+
+// TestRemoveAllocationRaceWithAllocate verifies that a release processed between the two steps of a
+// scheduling cycle still cleans up the node and the queue. TryAllocate() places the allocation on the
+// node and the application, allocate() only finalises it afterwards.
+func TestRemoveAllocationRaceWithAllocate(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+	node := setupNode(t, nodeID1, partition, nodeRes)
+
+	app := newApplication(appID1, "default", defQueue)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application failed")
+
+	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+	err = app.AddAllocationAsk(newAllocationAsk(allocKey, appID1, askRes))
+	assert.NilError(t, err, "add ask failed")
+
+	// step 1 of tryAllocate(): the allocation is added to the node and the application
+	result := partition.root.TryAllocate(partition.GetNodeIterator, partition.GetFullNodeIterator, partition.GetNode, false)
+	assert.Assert(t, result != nil, "allocation should have been made")
+	assert.Assert(t, node.GetAllocation(allocKey) != nil, "node should have the allocation")
+
+	// the RM releases the allocation before step 2 runs
+	release := &si.AllocationRelease{
+		PartitionName:   "test",
+		ApplicationID:   appID1,
+		AllocationKey:   allocKey,
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	}
+	partition.removeAllocation(release)
+
+	// step 2 of tryAllocate()
+	partition.allocate(result)
+
+	assert.Assert(t, node.GetAllocation(allocKey) == nil, "allocation left on the node after release")
+	assert.Equal(t, 0, len(checkNodeAllocations(node, partition)), "orphan allocation reported on the node")
+	assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "node allocated resource should be zero after release")
+	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero after release")
+}

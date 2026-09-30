@@ -898,24 +898,7 @@ func TestAddApp(t *testing.T) {
 		t.Errorf("add same application to partition should have failed but did not")
 	}
 
-	// mark partition stopped, no new application can be added
-	err = partition.handlePartitionEvent(objects.Stop)
-	assert.NilError(t, err, "partition state change failed unexpectedly")
-
-	app = newApplication(appID2, "default", defQueue)
-	err = partition.AddApplication(app)
-	if err == nil || partition.getApplication(appID2) != nil {
-		t.Errorf("add application on stopped partition should have failed but did not")
-	}
-	queueApplicationsNew, err = metrics.GetQueueMetrics(defQueue).GetQueueApplicationsNew()
-	assert.NilError(t, err, "get queue metrics failed")
-	assert.Equal(t, queueApplicationsNew, 1)
-	scheduleApplicationsNew, err = metrics.GetSchedulerMetrics().GetTotalApplicationsNew()
-	assert.NilError(t, err, "get scheduler metrics failed")
-	assert.Equal(t, scheduleApplicationsNew, 1)
-
 	// mark partition for deletion, no new application can be added
-	partition.stateMachine.SetState(objects.Active.String())
 	err = partition.handlePartitionEvent(objects.Remove)
 	assert.NilError(t, err, "partition state change failed unexpectedly")
 	app = newApplication(appID3, "default", defQueue)
@@ -2764,7 +2747,9 @@ func TestUpdateRootQueue(t *testing.T) {
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
+	partition.stateMachine.SetState(objects.Draining.String())
 	err = partition.updatePartitionDetails(conf)
+	assert.Assert(t, partition.IsRunning() == true, "update partition had failed to change the state to running")
 	assert.NilError(t, err, "partition update failed")
 	// resources should not have changed
 	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
@@ -3885,6 +3870,18 @@ func TestUpdateAllocation(t *testing.T) {
 		NodeID:           nodeID1,
 		ResourcePerAlloc: res.ToProto(),
 	}
+
+	// mark partition for deletion, update allocation should not be allowed
+	err = partition.handlePartitionEvent(objects.Remove)
+	assert.NilError(t, err, "partition state change failed unexpectedly")
+
+	_, _, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
+	assert.ErrorContains(t, err, "partition test is draining; cannot process allocation ask-key-1")
+
+	// mark partition as active, update allocation is allowed
+	err = partition.handlePartitionEvent(objects.Start)
+	assert.NilError(t, err, "partition state change failed unexpectedly")
+
 	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
 	assert.NilError(t, err, "failed to add alloc to app")
 	assert.Check(t, allocCreated, "alloc should have been created")
@@ -5757,4 +5754,16 @@ func TestRemoveAllocationPlaceholderReplacedWithoutReplacement(t *testing.T) {
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "allocation count should be 0 after placeholder removed")
 	assert.Assert(t, node1.GetAllocation("placeholder") == nil, "placeholder should be removed from node")
 	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue resource should be zero after placeholder removed")
+}
+
+func TestPartitionStates(t *testing.T) {
+	p := createPartitionContext(t)
+	err := p.handlePartitionEvent(objects.Remove)
+	if err != nil || !p.isDraining() {
+		t.Errorf("partition is not marked draining: %v", err)
+	}
+	err = p.handlePartitionEvent(objects.Start)
+	if err != nil || p.stateMachine.Current() != objects.Active.String() {
+		t.Errorf("partition is not marked running: %v", err)
+	}
 }

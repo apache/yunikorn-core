@@ -5758,3 +5758,61 @@ func TestRemoveAllocationPlaceholderReplacedWithoutReplacement(t *testing.T) {
 	assert.Assert(t, node1.GetAllocation("placeholder") == nil, "placeholder should be removed from node")
 	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue resource should be zero after placeholder removed")
 }
+
+// TestRemoveAllocationRaceWithAllocate verifies that a removal processed between the two steps of a
+// scheduling cycle still cleans up the node and the queue. Queue.TryAllocate() places the allocation
+// on the node and the application, PartitionContext.allocate() only finalises it afterwards.
+func TestRemoveAllocationRaceWithAllocate(t *testing.T) {
+	tests := []struct {
+		name   string
+		remove func(partition *PartitionContext)
+	}{
+		{"release", func(partition *PartitionContext) {
+			partition.removeAllocation(&si.AllocationRelease{
+				PartitionName:   "test",
+				ApplicationID:   appID1,
+				AllocationKey:   allocKey,
+				TerminationType: si.TerminationType_STOPPED_BY_RM,
+			})
+		}},
+		{"application removal", func(partition *PartitionContext) {
+			partition.removeApplication(appID1)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+
+			nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+			node := setupNode(t, nodeID1, partition, nodeRes)
+
+			app := newApplication(appID1, "default", defQueue)
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, "add application failed")
+
+			askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+			err = app.AddAllocationAsk(newAllocationAsk(allocKey, appID1, askRes))
+			assert.NilError(t, err, "add ask failed")
+
+			// the allocation is added to the node and the application here
+			result := partition.root.TryAllocate(partition.GetNodeIterator, partition.GetFullNodeIterator, partition.GetNode, partition.IsPreemptionEnabled())
+			assert.Assert(t, result != nil, "allocation should have been made")
+			assert.Assert(t, node.GetAllocation(allocKey) != nil, "node should have the allocation")
+
+			// the RM removal is processed before the allocation is finalised
+			tt.remove(partition)
+			partition.allocate(result)
+
+			assert.Assert(t, node.GetAllocation(allocKey) == nil, "allocation left on the node")
+			assert.Equal(t, 0, len(checkNodeAllocations(node, partition)), "orphan allocation reported on the node")
+			assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "node allocated resource should be zero")
+			assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+			used := app.GetTrackedDAOMap("usedResource")
+			assert.Assert(t, used[""] == nil, "resource usage tracked without an instance type")
+			assert.Assert(t, used[objects.UnknownInstanceType] != nil, "resource usage not tracked against the node instance type")
+		})
+	}
+}

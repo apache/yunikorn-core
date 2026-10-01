@@ -2319,6 +2319,38 @@ func TestGetEvents(t *testing.T) {
 	checkSingleEvent(t, appEvent, "count=3")
 }
 
+func TestGetEventsNoRecords(t *testing.T) {
+	prepareSchedulerContext(t)
+	// prepareSchedulerContext hides creating a new context so make sure we clean up after use
+	defer schedulerContext.Load().Stop()
+
+	tests := []struct {
+		name       string
+		withEvents bool
+		query      string
+	}{
+		{"empty buffer", false, ""},
+		{"start after highest id", true, "start=3"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if tc.withEvents {
+				addEvents(t)
+			} else {
+				events.Init()
+			}
+			defer events.GetEventSystem().Stop()
+			req, err := http.NewRequest("GET", "/ws/v1/events/batch?"+tc.query, strings.NewReader(""))
+			assert.NilError(t, err)
+			rr := httptest.NewRecorder()
+			http.HandlerFunc(getEvents).ServeHTTP(rr, req)
+			assert.Equal(t, http.StatusOK, rr.Code)
+			// clients must get an empty list, not null
+			assert.Assert(t, strings.Contains(rr.Body.String(), `"EventRecords":[]`), "unexpected response: %s", rr.Body.String())
+		})
+	}
+}
+
 func TestGetEventsWhenTrackingDisabled(t *testing.T) {
 	original := configs.GetConfigMap()
 	defer func() {

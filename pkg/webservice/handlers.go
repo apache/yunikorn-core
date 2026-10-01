@@ -50,6 +50,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 const (
@@ -1248,6 +1249,10 @@ func getEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	records, lowestID, highestID := eventSystem.GetEventsFromID(start, count)
+	// return an empty list instead of null when there are no records
+	if records == nil {
+		records = []*si.EventRecord{}
+	}
 	eventDao := dao.EventRecordDAO{
 		InstanceUUID: schedulerContext.Load().GetUUID(),
 		LowestID:     lowestID,

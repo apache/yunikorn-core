@@ -2705,21 +2705,18 @@ func TestTryPreemption_DecoupleAskQueueQuotaFromVictimSize(t *testing.T) {
 func TestTryPreemption_PredicateTailVictimsNotTruncated(t *testing.T) {
 	tests := []struct {
 		name                string
-		alloc2AntiAffinity  bool
 		predicatePassIndex  int32
 		expectAlloc1Preempt bool
 		expectAlloc2Preempt bool
 	}{
 		{
 			name:                "tail victim preempted when required by anti-affinity",
-			alloc2AntiAffinity:  true,
 			predicatePassIndex:  1,
 			expectAlloc1Preempt: true,
 			expectAlloc2Preempt: true,
 		},
 		{
 			name:                "tail victim spared when no anti-affinity (no overkill)",
-			alloc2AntiAffinity:  false,
 			predicatePassIndex:  0,
 			expectAlloc1Preempt: true,
 			expectAlloc2Preempt: false,

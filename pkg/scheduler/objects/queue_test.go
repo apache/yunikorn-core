@@ -760,7 +760,8 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	alloc := newAllocation(appID1, "node-0", res)
 	alloc.placeholder = true
 	// adding a placeholder allocation & pending request to "app1"
-	app1.AddAllocation(alloc)
+	err = app1.AddAllocation(alloc)
+	assert.NilError(t, err)
 	err = app1.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
 	assert.NilError(t, err, "could not add ask")
 	phApps := leaf.sortApplications(true)
@@ -769,7 +770,8 @@ func TestSortAppsWithPlaceholderAllocations(t *testing.T) {
 	// adding a placeholder allocation & pending request to "app2"
 	alloc2 := newAllocation(appID2, "node-1", res)
 	alloc2.placeholder = true
-	app2.AddAllocation(alloc2)
+	err = app2.AddAllocation(alloc2)
+	assert.NilError(t, err)
 	err = app2.AddAllocationAsk(newAllocationAsk("ask-0", appID1, res))
 	assert.NilError(t, err, "could not add ask")
 	phApps = leaf.sortApplications(true)
@@ -2256,8 +2258,10 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	assert.NilError(t, err, "failed to add ask")
 	err = app2.AddAllocationAsk(ask3)
 	assert.NilError(t, err, "failed to add ask")
-	app2.AddAllocation(alloc2)
-	app2.AddAllocation(alloc3)
+	err = app2.AddAllocation(alloc2)
+	assert.NilError(t, err)
+	err = app2.AddAllocation(alloc3)
+	assert.NilError(t, err)
 	err = leaf2.TryIncAllocatedResource(alloc2.GetAllocatedResource())
 	assert.NilError(t, err, "failed to inc allocated resources")
 	err = leaf2.TryIncAllocatedResource(alloc3.GetAllocatedResource())
@@ -2364,7 +2368,8 @@ func TestFindEligiblePreemptionVictims(t *testing.T) {
 	// recreate alloc2 to restore non-prempted state
 	app2.RemoveAllocation(alloc2.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
 	alloc2 = createAllocation("ask2", appID2, nodeID1, true, true, -1000, false, res)
-	app2.AddAllocation(alloc2)
+	err = app2.AddAllocation(alloc2)
+	assert.NilError(t, err)
 
 	// setting priority offset on parent2 queue should remove leaf2 victims
 	parent2.priorityOffset = 1001
@@ -3362,7 +3367,8 @@ func TestQueueRunningAppsForSingleAllocationApp(t *testing.T) {
 	assert.NilError(t, err, "failed to add ask")
 
 	alloc := newAllocationWithKey("ask-1", appID1, nodeID1, res)
-	app.AddAllocation(alloc)
+	err = app.AddAllocation(alloc)
+	assert.NilError(t, err)
 	assert.Equal(t, app.CurrentState(), Running.String(), "app state should be running")
 	assert.Equal(t, leaf.runningApps, uint64(1), "leaf should have 1 app running")
 

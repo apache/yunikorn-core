@@ -5446,7 +5446,8 @@ func TestAppSchedulingOrderFIFO(t *testing.T) {
 		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), 0, false, map[string]string{
 			siCommon.CreationTime: "30", // older than app2Ask2 (alloc-3)
 		})
-	app1.AddAllocation(allocExisting)
+	err = app1.AddAllocation(allocExisting)
+	assert.NilError(t, err)
 
 	// should schedule from app-1
 	alloc = partition.tryAllocate()

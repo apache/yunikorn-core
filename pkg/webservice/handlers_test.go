@@ -2790,7 +2790,8 @@ func prepareUserAndGroupContext(t *testing.T, config string) {
 
 	// add an alloc
 	allocInfo := newAlloc(ask.GetAllocationKey(), ask.GetApplicationID(), "node-1", ask.GetAllocatedResource())
-	app.AddAllocation(allocInfo)
+	err = app.AddAllocation(allocInfo)
+	assert.NilError(t, err)
 	assert.Assert(t, app.IsRunning(), "Application did not return running state after alloc: %s", app.CurrentState())
 
 	NewWebApp(schedulerContext.Load(), nil)

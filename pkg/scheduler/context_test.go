@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
@@ -45,6 +46,7 @@ type mockEventHandler struct {
 	rejectedNodes   []*si.RejectedNode
 	acceptedNodes   []*si.AcceptedNode
 	newAllocHandler func(*rmevent.RMNewAllocationsEvent)
+	releaseHandler  func(event *rmevent.RMReleaseAllocationEvent)
 }
 
 func TestMain(m *testing.M) {
@@ -70,6 +72,10 @@ func (m *mockEventHandler) HandleEvent(ev interface{}) {
 
 	if allocEvent, ok := ev.(*rmevent.RMNewAllocationsEvent); ok && m.newAllocHandler != nil {
 		m.newAllocHandler(allocEvent)
+	}
+
+	if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok && m.releaseHandler != nil {
+		m.releaseHandler(releaseEvent)
 	}
 }
 
@@ -454,6 +460,39 @@ outer:
 	}
 
 	assert.Assert(t, checked, "Failed to find metric")
+}
+
+func TestContextReleaseDoesNotWaitForRMReply(t *testing.T) {
+	received := make(chan *rmevent.RMReleaseAllocationEvent, 1)
+	handler := newMockEventHandler()
+	handler.releaseHandler = func(event *rmevent.RMReleaseAllocationEvent) {
+		received <- event
+	}
+	cc := &ClusterContext{rmEventHandler: handler}
+
+	done := make(chan struct{})
+	go func() {
+		cc.notifyRMAllocationReleased(
+			"rm-test", "default", nil,
+			si.TerminationType_TIMEOUT, "test release",
+		)
+		close(done)
+	}()
+
+	var event *rmevent.RMReleaseAllocationEvent
+	select {
+	case event = <-received:
+	case <-time.After(time.Second):
+		t.Fatal("RM release event was not sent")
+	}
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("context release notification waited for an RM reply")
+	}
+
+	assert.Equal(t, event.RmID, "rm-test")
 }
 
 // An abandoned reply must not keep the cluster lock held. synctest.Wait

@@ -77,7 +77,9 @@ func creatApp1WithTwoDifferentAllocations(
 
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(app1Rec))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	if err := app1.AddAllocation(alloc1); err != nil {
+		return nil, nil, err
+	}
 	if !node1.TryAddAllocation(alloc1) {
 		return nil, nil, fmt.Errorf("node alloc1 failed")
 	}
@@ -85,7 +87,9 @@ func creatApp1WithTwoDifferentAllocations(
 	if node2 != nil {
 		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID2, resources.NewResourceFromMap(app2Rec))
 		alloc2.createTime = ask2.createTime
-		app1.AddAllocation(alloc2)
+		if err := app1.AddAllocation(alloc2); err != nil {
+			return nil, nil, err
+		}
 		if !node2.TryAddAllocation(alloc2) {
 			return nil, nil, fmt.Errorf("node alloc2 failed")
 		}
@@ -650,13 +654,15 @@ func TestTryPreemptionOnNodeWithOGParentAndUGPreemptor(t *testing.T) {
 		if i%2 == 0 {
 			alloc1 := newAllocationWithKey(ask1.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
 			alloc1.createTime = ask1.createTime
-			app1.AddAllocation(alloc1)
+			err1 := app1.AddAllocation(alloc1)
+			assert.NilError(t, err1)
 			assert.Check(t, node1.TryAddAllocation(alloc1), "node alloc1 failed")
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 		} else {
 			alloc1 := newAllocationWithKey(ask1.allocationKey, appID1, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
 			alloc1.createTime = ask1.createTime
-			app1.AddAllocation(alloc1)
+			err2 := app1.AddAllocation(alloc1)
+			assert.NilError(t, err2)
 			assert.Check(t, node2.TryAddAllocation(alloc1), "node alloc1 failed")
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 		}
@@ -899,7 +905,8 @@ func TestTryPreemption_VictimReleased_InsufficientResource(t *testing.T) {
 
 	alloc4 := newAllocationWithKey("alloc4", appID3, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc4.createTime = ask4.createTime
-	app3.AddAllocation(alloc4)
+	err1 := app3.AddAllocation(alloc4)
+	assert.NilError(t, err1)
 	assert.Check(t, node2.TryAddAllocation(alloc4), "node alloc2 failed")
 	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
 
@@ -963,12 +970,14 @@ func TestTryPreemption_VictimsAvailableOnDifferentNodes(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4, "pods": 1}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
 	assert.Check(t, node1.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "pods": 1}))
 	alloc2.createTime = ask2.createTime
-	app1.AddAllocation(alloc2)
+	err2 := app1.AddAllocation(alloc2)
+	assert.NilError(t, err2)
 	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
 	assert.Check(t, node2.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
@@ -1040,7 +1049,8 @@ func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 
 	alloc4 := newAllocationWithKey("alloc4", appID3, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc4.createTime = ask4.createTime
-	app3.AddAllocation(alloc4)
+	err1 := app3.AddAllocation(alloc4)
+	assert.NilError(t, err1)
 	assert.Check(t, node2.TryAddAllocation(alloc4), "node alloc2 failed")
 	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
 
@@ -1108,11 +1118,13 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	assert.Check(t, node1.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc2.createTime = ask2.createTime
-	app1.AddAllocation(alloc2)
+	err2 := app1.AddAllocation(alloc2)
+	assert.NilError(t, err2)
 	assert.Check(t, node1.TryAddAllocation(alloc2), "node alloc2 failed")
 
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
@@ -1129,7 +1141,8 @@ func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 
 	alloc4 := newAllocationAll("alloc4", appID3, nodeID2, "", resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), false, 1000)
 	alloc4.createTime = ask4.createTime
-	app3.AddAllocation(alloc4)
+	err3 := app3.AddAllocation(alloc4)
+	assert.NilError(t, err3)
 	assert.Check(t, node2.TryAddAllocation(alloc4), "node alloc2 failed")
 	assert.NilError(t, childQ3.TryIncAllocatedResource(ask4.GetAllocatedResource()))
 
@@ -1198,11 +1211,13 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(t *test
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 200}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 200}))
 	alloc2.createTime = ask2.createTime
-	app1.AddAllocation(alloc2)
+	err2 := app1.AddAllocation(alloc2)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ2.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 	assert.NilError(t, childQ2.TryIncAllocatedResource(ask2.GetAllocatedResource()))
@@ -1271,11 +1286,13 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnPreemptorSide(
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 200}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 200}))
 	alloc2.createTime = ask2.createTime
-	app1.AddAllocation(alloc2)
+	err2 := app1.AddAllocation(alloc2)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ2.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 	assert.NilError(t, childQ2.TryIncAllocatedResource(ask2.GetAllocatedResource()))
@@ -1344,7 +1361,8 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSid
 		assert.NilError(t, app1.AddAllocationAsk(askN))
 		allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"mem": 100}))
 		allocN.createTime = askN.createTime
-		app1.AddAllocation(allocN)
+		err1 := app1.AddAllocation(allocN)
+		assert.NilError(t, err1)
 		assert.Check(t, node.TryAddAllocation(allocN), "node alloc1 failed")
 	}
 
@@ -1359,15 +1377,18 @@ func TestTryPreemption_AskResTypesDifferent_GuaranteedSetOnVictimAndPreemptorSid
 	assert.NilError(t, app1.AddAllocationAsk(ask3))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 100}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err2 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 100}))
 	alloc2.createTime = ask2.createTime
-	app2.AddAllocation(alloc2)
+	err3 := app2.AddAllocation(alloc2)
+	assert.NilError(t, err3)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	alloc3 := newAllocationWithKey("alloc3", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 100}))
 	alloc3.createTime = ask3.createTime
-	app3.AddAllocation(alloc3)
+	err4 := app3.AddAllocation(alloc3)
+	assert.NilError(t, err4)
 	assert.Check(t, node.TryAddAllocation(alloc3), "node alloc3 failed")
 
 	for i := 5; i < 8; i++ {
@@ -1440,7 +1461,8 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreem
 		assert.NilError(t, app1.AddAllocationAsk(askN))
 		allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"mem": 100}))
 		allocN.createTime = askN.createTime
-		app1.AddAllocation(allocN)
+		err1 := app1.AddAllocation(allocN)
+		assert.NilError(t, err1)
 		assert.Check(t, node.TryAddAllocation(allocN), "node alloc1 failed")
 	}
 
@@ -1455,15 +1477,18 @@ func TestTryPreemption_OnNode_AskResTypesDifferent_GuaranteedSetOnVictimAndPreem
 	assert.NilError(t, app1.AddAllocationAsk(ask3))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 100}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err2 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 100}))
 	alloc2.createTime = ask2.createTime
-	app2.AddAllocation(alloc2)
+	err3 := app2.AddAllocation(alloc2)
+	assert.NilError(t, err3)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	alloc3 := newAllocationWithKey("alloc3", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "mem": 100}))
 	alloc3.createTime = ask3.createTime
-	app3.AddAllocation(alloc3)
+	err4 := app3.AddAllocation(alloc3)
+	assert.NilError(t, err4)
 	assert.Check(t, node.TryAddAllocation(alloc3), "node alloc3 failed")
 
 	for i := 5; i < 8; i++ {
@@ -1568,7 +1593,8 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T
 				assert.NilError(t, app1.AddAllocationAsk(askN))
 				allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 				allocN.createTime = askN.createTime
-				app1.AddAllocation(allocN)
+				err1 := app1.AddAllocation(allocN)
+				assert.NilError(t, err1)
 				assert.Check(t, node.TryAddAllocation(allocN), "node alloc1 failed")
 			}
 
@@ -1583,15 +1609,18 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *testing.T
 			assert.NilError(t, app1.AddAllocationAsk(ask3))
 			alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "pods": 1}))
 			alloc1.createTime = ask1.createTime
-			app1.AddAllocation(alloc1)
+			err2 := app1.AddAllocation(alloc1)
+			assert.NilError(t, err2)
 			assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 			alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "pods": 1}))
 			alloc2.createTime = ask2.createTime
-			app2.AddAllocation(alloc2)
+			err3 := app2.AddAllocation(alloc2)
+			assert.NilError(t, err3)
 			assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 			alloc3 := newAllocationWithKey("alloc3", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1, "pods": 1}))
 			alloc3.createTime = ask3.createTime
-			app3.AddAllocation(alloc3)
+			err4 := app3.AddAllocation(alloc3)
+			assert.NilError(t, err4)
 			assert.Check(t, node.TryAddAllocation(alloc3), "node alloc3 failed")
 
 			for i := 5; i < 8; i++ {
@@ -1671,7 +1700,8 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *te
 		assert.NilError(t, app1.AddAllocationAsk(askN))
 		allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 		allocN.createTime = askN.createTime
-		app1.AddAllocation(allocN)
+		err1 := app1.AddAllocation(allocN)
+		assert.NilError(t, err1)
 		assert.Check(t, node.TryAddAllocation(allocN), "node alloc1 failed")
 	}
 
@@ -1686,15 +1716,18 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnPreemptorSide(t *te
 	assert.NilError(t, app1.AddAllocationAsk(ask3))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err2 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc2.createTime = ask2.createTime
-	app2.AddAllocation(alloc2)
+	err3 := app2.AddAllocation(alloc2)
+	assert.NilError(t, err3)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	alloc3 := newAllocationWithKey("alloc3", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc3.createTime = ask3.createTime
-	app3.AddAllocation(alloc3)
+	err4 := app3.AddAllocation(alloc3)
+	assert.NilError(t, err4)
 	assert.Check(t, node.TryAddAllocation(alloc3), "node alloc3 failed")
 
 	for i := 5; i < 8; i++ {
@@ -1770,7 +1803,8 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t 
 		assert.NilError(t, app1.AddAllocationAsk(askN))
 		allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 		allocN.createTime = askN.createTime
-		app1.AddAllocation(allocN)
+		err1 := app1.AddAllocation(allocN)
+		assert.NilError(t, err1)
 		assert.Check(t, node.TryAddAllocation(allocN), "node alloc1 failed")
 	}
 
@@ -1785,15 +1819,18 @@ func TestTryPreemption_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorSides(t 
 	assert.NilError(t, app1.AddAllocationAsk(ask3))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err2 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc2.createTime = ask2.createTime
-	app2.AddAllocation(alloc2)
+	err3 := app2.AddAllocation(alloc2)
+	assert.NilError(t, err3)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	alloc3 := newAllocationWithKey("alloc3", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc3.createTime = ask3.createTime
-	app3.AddAllocation(alloc3)
+	err4 := app3.AddAllocation(alloc3)
+	assert.NilError(t, err4)
 	assert.Check(t, node.TryAddAllocation(alloc3), "node alloc3 failed")
 
 	for i := 5; i < 8; i++ {
@@ -1867,7 +1904,8 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorS
 		assert.NilError(t, app1.AddAllocationAsk(askN))
 		allocN := newAllocationWithKey(askN.allocationKey, appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": 100}))
 		allocN.createTime = askN.createTime
-		app1.AddAllocation(allocN)
+		err1 := app1.AddAllocation(allocN)
+		assert.NilError(t, err1)
 		assert.Check(t, node.TryAddAllocation(allocN), "node alloc1 failed")
 	}
 
@@ -1882,15 +1920,18 @@ func TestTryPreemption_OnNode_AskResTypesSame_GuaranteedSetOnVictimAndPreemptorS
 	assert.NilError(t, app1.AddAllocationAsk(ask3))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err2 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc2.createTime = ask2.createTime
-	app2.AddAllocation(alloc2)
+	err3 := app2.AddAllocation(alloc2)
+	assert.NilError(t, err3)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	alloc3 := newAllocationWithKey("alloc3", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc3.createTime = ask3.createTime
-	app3.AddAllocation(alloc3)
+	err4 := app3.AddAllocation(alloc3)
+	assert.NilError(t, err4)
 	assert.Check(t, node.TryAddAllocation(alloc3), "node alloc3 failed")
 
 	for i := 5; i < 8; i++ {
@@ -1966,7 +2007,8 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChil
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 
@@ -1979,7 +2021,8 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_GNotSetOnVictimChil
 	assert.NilError(t, app2.AddAllocationAsk(ask2))
 	alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc2.createTime = ask2.createTime
-	app2.AddAllocation(alloc2)
+	err2 := app2.AddAllocation(alloc2)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 
@@ -2047,7 +2090,8 @@ func TestTryPreemption_OnNode_UGParent_With_GNotSetOnBothChilds(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 
@@ -2060,7 +2104,8 @@ func TestTryPreemption_OnNode_UGParent_With_GNotSetOnBothChilds(t *testing.T) {
 	assert.NilError(t, app2.AddAllocationAsk(ask2))
 	alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc2.createTime = ask2.createTime
-	app2.AddAllocation(alloc2)
+	err2 := app2.AddAllocation(alloc2)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 
@@ -2122,7 +2167,8 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Si
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 
@@ -2135,7 +2181,8 @@ func TestTryPreemption_OnNode_UGParent_With_UGPreemptorChild_OGVictimChild_As_Si
 	assert.NilError(t, app2.AddAllocationAsk(ask2))
 	alloc2 := newAllocationWithKey("alloc2", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"vcores": 1}))
 	alloc2.createTime = ask2.createTime
-	app2.AddAllocation(alloc2)
+	err2 := app2.AddAllocation(alloc2)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 
@@ -2296,7 +2343,8 @@ func TestTryPreemption_AskQueue_With_OG_And_UG_ResTypes(t *testing.T) {
 
 	alloc3 := newAllocationWithKey("alloc3", appID2, nodeID2, alloc3Res)
 	alloc3.createTime = ask3.createTime
-	app2.AddAllocation(alloc3)
+	err1 := app2.AddAllocation(alloc3)
+	assert.NilError(t, err1)
 	if !node2.TryAddAllocation(alloc3) {
 		t.Fatal("node alloc3 failed")
 	}
@@ -2369,7 +2417,8 @@ func TestTryPreemption_AskQueue_Under_DiffParent_With_OG_And_UG_ResTypes(t *test
 
 			alloc3 := newAllocationWithKey("alloc3", appID2, nodeID2, alloc3Res)
 			alloc3.createTime = ask3.createTime
-			app2.AddAllocation(alloc3)
+			err1 := app2.AddAllocation(alloc3)
+			assert.NilError(t, err1)
 			if !node2.TryAddAllocation(alloc3) {
 				t.Fatal("node alloc3 failed")
 			}
@@ -2565,7 +2614,8 @@ func TestTryPreemption_NodeAvailableDeficit(t *testing.T) {
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 
@@ -2779,7 +2829,8 @@ func TestTryPreemption_PredicateVictimsNotTruncated(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err1 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 
@@ -2789,7 +2840,8 @@ func TestTryPreemption_PredicateVictimsNotTruncated(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
 	alloc2.createTime = ask2.createTime
-	app1.AddAllocation(alloc2)
+	err2 := app1.AddAllocation(alloc2)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 
@@ -2843,7 +2895,8 @@ func TestTryPreemption_PrematureVictimLoopTermination(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
 	alloc2.createTime = ask2.createTime
-	app1.AddAllocation(alloc2)
+	err1 := app1.AddAllocation(alloc2)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 
@@ -2852,7 +2905,8 @@ func TestTryPreemption_PrematureVictimLoopTermination(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err2 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 
@@ -2908,7 +2962,8 @@ func TestTryPreemption_PrematureAdditionalVictimsLoopTermination(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
 	alloc2.createTime = ask2.createTime
-	app1.AddAllocation(alloc2)
+	err1 := app1.AddAllocation(alloc2)
+	assert.NilError(t, err1)
 	assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 
@@ -2918,7 +2973,8 @@ func TestTryPreemption_PrematureAdditionalVictimsLoopTermination(t *testing.T) {
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	alloc1.createTime = ask1.createTime
-	app1.AddAllocation(alloc1)
+	err2 := app1.AddAllocation(alloc1)
+	assert.NilError(t, err2)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 

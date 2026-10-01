@@ -121,6 +121,7 @@ type Application struct {
 	runnableInQueue      bool                        // whether the application is runnable/schedulable in the queue. Default is true.
 	runnableByUserLimit  bool                        // whether the application is runnable/schedulable based on user/group quota. Default is true.
 	backoffDeadline      time.Time                   // no scheduling from this application until this deadline
+	revived              bool                        // brought back out of Completed and not completed again since
 
 	rmEventHandler              handler.EventHandler
 	rmID                        string
@@ -257,6 +258,64 @@ func (sa *Application) IsFailed() bool {
 
 func (sa *Application) IsResuming() bool {
 	return sa.stateMachine.Is(Resuming.String())
+}
+
+// IsRevived returns true if the application was brought back out of Completed and has not completed
+// again since.
+func (sa *Application) IsRevived() bool {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.revived
+}
+
+// IsTerminated returns true if the application is in a state it can only leave by being revived.
+func (sa *Application) IsTerminated() bool {
+	return sa.IsCompleted() || sa.IsFailed() || sa.IsRejected() || sa.IsExpired()
+}
+
+// ensureRunnable puts the application back into the running lifecycle so an ask or allocation can be
+// added to it. The application can finish between the partition looking it up and the add landing
+// here, so the check and the state change have to happen together under the application lock.
+// Progressing a New application is left to the callers that already do it.
+// Call with sa.Lock() held.
+func (sa *Application) ensureRunnable() error {
+	switch {
+	case sa.IsCompleting(), sa.IsCompleted():
+		// leave_state cancels the pending completion or expiry timer on the way out
+		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
+			return fmt.Errorf("failed to revive application %s from state %s: %w", sa.ApplicationID, sa.CurrentState(), err)
+		}
+	case sa.IsFailing(), sa.IsFailed(), sa.IsRejected(), sa.IsExpired():
+		return fmt.Errorf("application %s is in terminal state %s and cannot accept new work", sa.ApplicationID, sa.CurrentState())
+	}
+	return nil
+}
+
+// restoreAfterCompletion rebuilds the state that enter_Completed and LogAppSummary tore down, so a
+// revived application can track asks and resources again. Call with sa.Lock() held.
+func (sa *Application) restoreAfterCompletion() {
+	// AggregateTrackedResource does not guard a nil receiver, and cleanupTrackedResource nils these
+	if sa.usedResource == nil {
+		sa.usedResource = resources.NewTrackedResource()
+	}
+	if sa.preemptedResource == nil {
+		sa.preemptedResource = resources.NewTrackedResource()
+	}
+	if sa.placeholderResource == nil {
+		sa.placeholderResource = resources.NewTrackedResource()
+	}
+	if sa.requests == nil {
+		sa.requests = make(map[string]*Allocation)
+	}
+	if sa.pendingPriorities == nil {
+		sa.pendingPriorities = make(map[int32]int)
+	}
+	if sa.allocations == nil {
+		sa.allocations = make(map[string]*Allocation)
+	}
+	// cleanupAsks nils the slice; the requests map it mirrors is empty at this point
+	sa.sortedRequests = sortedRequests{}
+	sa.finishedTime = time.Time{}
 }
 
 // HandleApplicationEvent handles the state event for the application.
@@ -678,16 +737,17 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	if _, tracked := sa.requests[ask.GetAllocationKey()]; tracked {
 		return fmt.Errorf("ask %s is already tracked on app %s", ask.GetAllocationKey(), sa.ApplicationID)
 	}
+	// must run before any accounting: a terminated app has no queue to charge the ask to
+	if err := sa.ensureRunnable(); err != nil {
+		return err
+	}
 	if ask.createTime.Before(sa.submissionTime) {
 		sa.submissionTime = ask.createTime
 	}
 	delta := ask.GetAllocatedResource().Clone()
 
-	// Check if we need to change state based on the ask added, there are two cases:
-	// 1) first ask added on a new app: state is New
-	// 2) all asks and allocation have been removed: state is Completing
-	// Move the state and get it scheduling (again)
-	if sa.stateMachine.Is(New.String()) || sa.stateMachine.Is(Completing.String()) {
+	// first ask added on a new app: state is New. Move the state and get it scheduling.
+	if sa.IsNew() {
 		if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 			log.Log(log.SchedApplication).Debug("Application state change failed while adding new ask",
 				zap.String("currentState", sa.CurrentState()),
@@ -776,11 +836,16 @@ func (sa *Application) UpdateAllocationResources(alloc *Allocation, isQuotaPreem
 
 // Add the ask when a node allocation is recovered.
 // Safeguarded against a nil but the recovery generates the ask and should never be nil.
-func (sa *Application) RecoverAllocationAsk(alloc *Allocation) {
+// An application in a terminal state refuses the ask and returns an error.
+func (sa *Application) RecoverAllocationAsk(alloc *Allocation) error {
 	sa.Lock()
 	defer sa.Unlock()
 	if alloc == nil {
-		return
+		return nil
+	}
+
+	if err := sa.ensureRunnable(); err != nil {
+		return err
 	}
 
 	sa.addAllocationAskInternal(alloc)
@@ -792,6 +857,7 @@ func (sa *Application) RecoverAllocationAsk(alloc *Allocation) {
 				zap.Error(err))
 		}
 	}
+	return nil
 }
 
 // addToPriorities records that an ask at priority p just became pending (added, or
@@ -1962,6 +2028,16 @@ func (sa *Application) UnSetQueue() {
 	sa.finishedTime = time.Now()
 }
 
+// RestoreQueue re-attaches a queue to an application being revived out of Completed. Unlike SetQueue
+// it does not count the application as newly submitted.
+func (sa *Application) RestoreQueue(queue *Queue) {
+	sa.Lock()
+	defer sa.Unlock()
+	sa.queuePath = queue.QueuePath
+	sa.queue = queue
+	sa.finishedTime = time.Time{}
+}
+
 func (sa *Application) StartTime() time.Time {
 	sa.RLock()
 	defer sa.RUnlock()
@@ -2017,10 +2093,15 @@ func (sa *Application) getAllRequestsInternal() []*Allocation {
 }
 
 // Add a new Allocation to the application
-func (sa *Application) AddAllocation(alloc *Allocation) {
+// An application in a terminal state refuses the allocation and returns an error.
+func (sa *Application) AddAllocation(alloc *Allocation) error {
 	sa.Lock()
 	defer sa.Unlock()
+	if err := sa.ensureRunnable(); err != nil {
+		return err
+	}
 	sa.addAllocationInternal(Allocated, alloc)
+	return nil
 }
 
 // Add the Allocation to the application

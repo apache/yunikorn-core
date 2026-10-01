@@ -41,7 +41,7 @@ partitions:
         queues:
           - name: default
             resources:
-              guaranteed: 
+              guaranteed:
                 memory: 100000
                 vcore: 10000
               max:
@@ -214,7 +214,8 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	// add the allocation to the app as well
 	part := schedulerContext.partitions[partName]
 	app := newApplication("appID", partName, "root.default")
-	app.AddAllocation(alloc)
+	err = app.AddAllocation(alloc)
+	assert.NilError(t, err)
 	err = part.AddApplication(app)
 	assert.NilError(t, err, "Could not add application")
 	healthInfo = GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)

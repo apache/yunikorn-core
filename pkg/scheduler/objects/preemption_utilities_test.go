@@ -137,7 +137,7 @@ func removeAllocationAsks(node *Node, asks []*Allocation) {
 	}
 }
 
-func assignAllocationsToQueue(allocations []*Allocation, queue *Queue) {
+func assignAllocationsToQueue(t *testing.T, allocations []*Allocation, queue *Queue) {
 	for _, allocation := range allocations {
 		var app *Application
 		var ok bool
@@ -148,7 +148,8 @@ func assignAllocationsToQueue(allocations []*Allocation, queue *Queue) {
 		} else {
 			app = queue.applications[allocation.applicationID]
 		}
-		app.AddAllocation(allocation)
+		err := app.AddAllocation(allocation)
+		assert.NilError(t, err)
 		queue.IncAllocatedResource(allocation.GetAllocatedResource(), false)
 	}
 }

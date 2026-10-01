@@ -894,8 +894,7 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 		return nil
 	}
 	// find the node make sure it still exists
-	// if the node was passed in use that ID instead of the one from the allocation
-	// the node ID is set when a reservation is allocated on a non-reserved node
+	// use the ID from the result: a reservation result has no node set on the allocation
 	alloc := result.Request
 	targetNodeID := result.NodeID
 	targetNode := pc.GetNode(targetNodeID)
@@ -954,10 +953,6 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 		// remove the link to the reserved node
 		result.ReservedNodeID = ""
 	}
-
-	alloc.SetBindTime(time.Now())
-	alloc.SetNodeID(targetNodeID)
-	alloc.SetInstanceType(targetNode.GetInstanceType())
 
 	// track the number of allocations
 	pc.updateAllocationCount(1)

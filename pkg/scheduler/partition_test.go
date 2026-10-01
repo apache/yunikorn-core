@@ -5810,6 +5810,9 @@ func TestRemoveAllocationRaceWithAllocate(t *testing.T) {
 			assert.Equal(t, 0, len(checkNodeAllocations(node, partition)), "orphan allocation reported on the node")
 			assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "node allocated resource should be zero")
 			assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+			used := app.GetTrackedDAOMap("usedResource")
+			assert.Assert(t, used[""] == nil, "resource usage tracked without an instance type")
+			assert.Assert(t, used[objects.UnknownInstanceType] != nil, "resource usage not tracked against the node instance type")
 		})
 	}
 }

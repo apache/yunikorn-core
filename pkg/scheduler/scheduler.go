@@ -234,19 +234,26 @@ func (s *Scheduler) triggerQuotaPreemption() {
 	}
 }
 
-// inspect on the outstanding requests for each of the queues,
-// update request state accordingly to shim if needed.
-// this function filters out all outstanding requests that being
-// skipped due to insufficient cluster resources and update the
-// state through the ContainerSchedulingStateUpdaterPlugin in order
-// to trigger the auto-scaling.
+// inspectOutstandingRequests advertises new autoscaling demand and withdraws advertisements
+// that no longer fit policy headroom. Callbacks run after collection releases its locks.
 func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
 	log.Log(log.Scheduler).Debug("inspect outstanding requests")
 	// schedule each partition defined in the cluster
 	total := resources.NewResource()
 	noRequests := 0
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
-		requests := psc.calculateOutstandingRequests()
+		requests, withdrawals := psc.calculateOutstandingRequests()
+		for _, ask := range withdrawals {
+			if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
+				updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
+					ApplicationID: ask.GetApplicationID(),
+					AllocationKey: ask.GetAllocationKey(),
+					State:         si.UpdateContainerSchedulingStateRequest_SKIPPED,
+					Reason:        "request no longer fits queue or user/group policy headroom",
+				})
+			}
+			ask.SetScaleUpTriggered(false)
+		}
 		noRequests = len(requests)
 		if noRequests > 0 {
 			for _, ask := range requests {

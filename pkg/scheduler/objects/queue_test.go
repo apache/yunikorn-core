@@ -680,14 +680,6 @@ func TestQueueStates(t *testing.T) {
 	var leaf *Queue
 	leaf, err = createManagedQueue(root, "leaf", false, nil)
 	assert.NilError(t, err, "failed to create leaf queue")
-	err = leaf.handleQueueEvent(Stop)
-	if err != nil || !leaf.IsStopped() {
-		t.Errorf("leaf queue is not marked stopped: %v", err)
-	}
-	err = leaf.handleQueueEvent(Start)
-	if err != nil || !leaf.IsRunning() {
-		t.Errorf("leaf queue is not marked running: %v", err)
-	}
 	err = leaf.handleQueueEvent(Remove)
 	if err != nil || !leaf.IsDraining() {
 		t.Errorf("leaf queue is not marked draining: %v", err)
@@ -807,7 +799,7 @@ func TestSortQueue(t *testing.T) {
 	if queues := parent.sortQueues(); len(queues) != 1 {
 		t.Errorf("parent queue did not return expected queues: %v", queues)
 	}
-	err = leaf.handleQueueEvent(Stop)
+	err = leaf.handleQueueEvent(Remove)
 	assert.NilError(t, err, "failed to stop queue")
 	if queues := parent.sortQueues(); len(queues) != 0 {
 		t.Errorf("parent queue returned stopped queue: %v", queues)

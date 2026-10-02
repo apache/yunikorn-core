@@ -797,12 +797,6 @@ func (sq *Queue) IsRunning() bool {
 	return sq.stateMachine.Is(Active.String())
 }
 
-// IsStopped returns true if the queue in Stopped state.
-// The queue is skipped for scheduling in this state.
-func (sq *Queue) IsStopped() bool {
-	return sq.stateMachine.Is(Stopped.String())
-}
-
 // CurrentState returns the current state of the queue in string form.
 func (sq *Queue) CurrentState() string {
 	return sq.stateMachine.Current()
@@ -1483,8 +1477,8 @@ func (sq *Queue) sortQueues() []*Queue {
 	sortedQueues := make([]*Queue, 0)
 	sortedMaxFairResources := make([]*resources.Resource, 0)
 	for _, child := range sq.GetCopyOfChildren() {
-		// a stopped queue cannot be scheduled
-		if child.IsStopped() {
+		// a draining queue cannot be scheduled
+		if child.IsDraining() {
 			continue
 		}
 		// queue must have pending resources to be considered for scheduling

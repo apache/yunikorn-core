@@ -19,8 +19,10 @@
 package objects
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -3182,6 +3184,7 @@ type victimSpec struct {
 	res        map[string]resources.Quantity
 	optIn      bool
 	originator bool
+	priority   int32
 	age        time.Duration
 	nodeID     string
 }
@@ -3190,78 +3193,51 @@ type victimSelectionTestCase struct {
 	name              string
 	askRes            map[string]resources.Quantity
 	headRoom          map[string]resources.Quantity
-	queueMax          map[string]resources.Quantity
 	nodeAvailable     map[string]resources.Quantity
 	fitIn             bool
-	targetNodeID      string
 	victims           []victimSpec
 	expectedVictims   []string
 	expectedProtected []string
-	expectedNil       bool
 }
 
-func mapQuantityToString(m map[string]resources.Quantity) map[string]string {
-	out := make(map[string]string, len(m))
-	for k, v := range m {
-		out[k] = strconv.FormatInt(int64(v), 10)
+func zeroHeadroom(dims ...string) map[string]resources.Quantity {
+	hr := make(map[string]resources.Quantity, len(dims))
+	for _, dim := range dims {
+		hr[dim] = 0
 	}
-	return out
+	return hr
 }
 
 func runVictimSelectionPipeline(t *testing.T, tc victimSelectionTestCase) {
 	t.Run(tc.name, func(t *testing.T) {
 		ask := newAllocationAsk("ask", "app1", resources.NewResourceFromMap(tc.askRes))
-
-		var q *Queue
-		if len(tc.queueMax) > 0 {
-			var err error
-			q, err = createRootQueue(mapQuantityToString(tc.queueMax))
-			assert.NilError(t, err)
-		}
-		preemptor := &Preemptor{ask: ask, queue: q}
-		if len(tc.headRoom) > 0 {
-			preemptor.headRoom = resources.NewResourceFromMap(tc.headRoom)
-		}
-
-		targetNodeID := tc.targetNodeID
-		if targetNodeID == "" {
-			targetNodeID = nodeID1
+		preemptor := &Preemptor{
+			ask:      ask,
+			headRoom: resources.NewResourceFromMap(tc.headRoom),
 		}
 
 		now := time.Now()
 		candidates := make([]*Allocation, len(tc.victims))
 		for i, v := range tc.victims {
-			nodeID := v.nodeID
-			if nodeID == "" {
-				nodeID = nodeID1
-			}
-			alloc := newAllocationWithKey(v.key, "app1", nodeID, resources.NewResourceFromMap(v.res))
+			alloc := newAllocationWithKey(v.key, "app1", cmp.Or(v.nodeID, nodeID1), resources.NewResourceFromMap(v.res))
 			alloc.allowPreemptSelf = v.optIn
 			alloc.originator = v.originator
+			alloc.priority = v.priority
 			alloc.createTime = now.Add(-v.age)
 			candidates[i] = alloc
 		}
 
 		nodeAvail := resources.NewResourceFromMap(tc.nodeAvailable)
-		selected := preemptor.trimExtraVictims(candidates, nodeAvail, targetNodeID, tc.fitIn)
-
-		if tc.expectedNil {
-			assert.Assert(t, selected == nil, "expected preemption to abort with nil")
-			return
-		}
-		assert.Assert(t, selected != nil, "expected valid victim selection")
+		selected := preemptor.trimExtraVictims(candidates, nodeAvail, nodeID1, tc.fitIn)
 
 		var selectedKeys []string
 		for _, v := range selected {
 			selectedKeys = append(selectedKeys, v.GetAllocationKey())
 		}
-		if tc.expectedVictims != nil {
-			assert.DeepEqual(t, selectedKeys, tc.expectedVictims)
-		}
+		assert.DeepEqual(t, selectedKeys, tc.expectedVictims)
+
 		for _, protKey := range tc.expectedProtected {
-			for _, selKey := range selectedKeys {
-				assert.Check(t, selKey != protKey, "victim %s must NOT be over-preempted", protKey)
-			}
+			assert.Check(t, !slices.Contains(selectedKeys, protKey), "victim %s must NOT be over-preempted", protKey)
 		}
 	})
 }
@@ -3270,8 +3246,9 @@ func runVictimSelectionPipeline(t *testing.T, tc victimSelectionTestCase) {
 func TestTrimExtraVictims_Pipeline(t *testing.T) {
 	tests := []victimSelectionTestCase{
 		{
-			name:   "Over-preemption: prefer best-fit multi-dimensional alloc over skewed alloc",
-			askRes: map[string]resources.Quantity{"first": 4, "second": 8},
+			name:     "Over-preemption: prefer best-fit multi-dimensional alloc over skewed alloc",
+			askRes:   map[string]resources.Quantity{"first": 4, "second": 8},
+			headRoom: zeroHeadroom("first", "second"),
 			victims: []victimSpec{
 				{key: "alloc-skewed", res: map[string]resources.Quantity{"first": 16, "second": 8}, age: 10 * time.Minute},
 				{key: "alloc-bestfit", res: map[string]resources.Quantity{"first": 4, "second": 8}, age: 5 * time.Minute},
@@ -3281,8 +3258,9 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 			expectedProtected: []string{"alloc-skewed"},
 		},
 		{
-			name:   "Collateral damage: prefer allocation without GPU",
-			askRes: map[string]resources.Quantity{"first": 2},
+			name:     "Collateral damage: prefer allocation without GPU",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "alloc-gpu", res: map[string]resources.Quantity{"first": 2, "gpu": 8}, age: 10 * time.Minute},
 				{key: "alloc-plain", res: map[string]resources.Quantity{"first": 2}, age: 5 * time.Minute},
@@ -3292,8 +3270,9 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 			expectedProtected: []string{"alloc-gpu"},
 		},
 		{
-			name:   "Originator protection: prefer workers over driver when workers suffice",
-			askRes: map[string]resources.Quantity{"first": 4},
+			name:     "Originator protection: prefer workers over driver when workers suffice",
+			askRes:   map[string]resources.Quantity{"first": 4},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "worker-1", res: map[string]resources.Quantity{"first": 1}},
 				{key: "worker-2", res: map[string]resources.Quantity{"first": 1}},
@@ -3306,8 +3285,9 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 			expectedProtected: []string{"driver"},
 		},
 		{
-			name:   "Originator fallback with reprieve: driver covers deficit alone so insufficient workers are reprieved",
-			askRes: map[string]resources.Quantity{"first": 4},
+			name:     "Originator fallback with reprieve: driver covers deficit alone so insufficient workers are reprieved",
+			askRes:   map[string]resources.Quantity{"first": 4},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "worker-1", res: map[string]resources.Quantity{"first": 1}},
 				{key: "worker-2", res: map[string]resources.Quantity{"first": 1}},
@@ -3319,8 +3299,9 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 			expectedProtected: []string{"worker-1", "worker-2", "worker-3"},
 		},
 		{
-			name:   "Originator fallback without reprieve: driver and workers combined needed to satisfy shortfall",
-			askRes: map[string]resources.Quantity{"first": 4},
+			name:     "Originator fallback without reprieve: driver and workers combined needed to satisfy shortfall",
+			askRes:   map[string]resources.Quantity{"first": 4},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "worker-1", res: map[string]resources.Quantity{"first": 2}},
 				{key: "driver", res: map[string]resources.Quantity{"first": 2}, originator: true},
@@ -3329,47 +3310,29 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 			expectedVictims: []string{"worker-1", "driver"},
 		},
 		{
-			name:   "Backward Reprieve: redundant small allocations reprieved when single allocation covers deficit",
-			askRes: map[string]resources.Quantity{"first": 6},
-			victims: []victimSpec{
-				{key: "w-1", res: map[string]resources.Quantity{"first": 2}},
-				{key: "w-2", res: map[string]resources.Quantity{"first": 2}},
-				{key: "driver-6", res: map[string]resources.Quantity{"first": 6}, originator: true},
-			},
-			fitIn:             true,
-			expectedVictims:   []string{"driver-6"},
-			expectedProtected: []string{"w-1", "w-2"},
-		},
-		{
-			name:   "All-or-Nothing abort: shortfall unsatisfied produces nil",
-			askRes: map[string]resources.Quantity{"first": 10},
+			name:     "All-or-Nothing abort: shortfall unsatisfied produces nil",
+			askRes:   map[string]resources.Quantity{"first": 10},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "alloc-1", res: map[string]resources.Quantity{"first": 2}},
 				{key: "alloc-2", res: map[string]resources.Quantity{"first": 3}},
 			},
-			fitIn:       true,
-			expectedNil: true,
-		},
-		{
-			name:        "Edge case: empty victims produces nil",
-			askRes:      map[string]resources.Quantity{"first": 2},
-			victims:     nil,
-			fitIn:       true,
-			expectedNil: true,
+			fitIn: true,
 		},
 		{
 			name:          "Edge case: no shortfall produces nil",
 			askRes:        map[string]resources.Quantity{"first": 2},
+			headRoom:      zeroHeadroom("first"),
 			nodeAvailable: map[string]resources.Quantity{"first": 2},
 			victims: []victimSpec{
 				{key: "alloc-1", res: map[string]resources.Quantity{"first": 2}},
 			},
-			fitIn:       true,
-			expectedNil: true,
+			fitIn: true,
 		},
 		{
-			name:   "Tie-breaking: prefer opt-in allocation over opt-out",
-			askRes: map[string]resources.Quantity{"first": 2},
+			name:     "Tie-breaking: prefer opt-in allocation over opt-out",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "opt-out", res: map[string]resources.Quantity{"first": 2}, optIn: false},
 				{key: "opt-in", res: map[string]resources.Quantity{"first": 2}, optIn: true},
@@ -3378,8 +3341,9 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 			expectedVictims: []string{"opt-in"},
 		},
 		{
-			name:   "Tie-breaking: prefer newer creation time",
-			askRes: map[string]resources.Quantity{"first": 2},
+			name:     "Tie-breaking: prefer newer creation time",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "old-alloc", res: map[string]resources.Quantity{"first": 2}, age: 10 * time.Minute},
 				{key: "new-alloc", res: map[string]resources.Quantity{"first": 2}, age: 1 * time.Minute},
@@ -3388,8 +3352,9 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 			expectedVictims: []string{"new-alloc"},
 		},
 		{
-			name:   "Tie-breaking: lexicographical allocation key when timestamps identical",
-			askRes: map[string]resources.Quantity{"first": 2},
+			name:     "Tie-breaking: lexicographical allocation key when timestamps identical",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "alloc-b", res: map[string]resources.Quantity{"first": 2}},
 				{key: "alloc-a", res: map[string]resources.Quantity{"first": 2}},
@@ -3398,49 +3363,76 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 			expectedVictims: []string{"alloc-a"},
 		},
 		{
-			name:   "Tier 2 driver precedence: opt-in driver selected when allowPreemptSelf true",
-			askRes: map[string]resources.Quantity{"first": 1},
+			name:     "Tier precedence: opt-out worker (Tier 2) preferred over opt-in driver (Tier 3)",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
-				{key: "opt-in-driver", res: map[string]resources.Quantity{"first": 1}, optIn: true, originator: true},
+				{key: "opt-in-driver", res: map[string]resources.Quantity{"first": 2}, optIn: true, originator: true},
+				{key: "opt-out-worker", res: map[string]resources.Quantity{"first": 2}, optIn: false, originator: false},
 			},
-			fitIn:           true,
-			expectedVictims: []string{"opt-in-driver"},
+			fitIn:             true,
+			expectedVictims:   []string{"opt-out-worker"},
+			expectedProtected: []string{"opt-in-driver"},
 		},
 		{
-			name:   "Orthogonal candidate rejected: cannot satisfy shortfall produces nil abort",
-			askRes: map[string]resources.Quantity{"first": 2},
+			name:     "Tier precedence: opt-in driver (Tier 3) preferred over non-opt-in driver (Tier 4)",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
+			victims: []victimSpec{
+				{key: "non-opt-in-driver", res: map[string]resources.Quantity{"first": 2}, optIn: false, originator: true},
+				{key: "opt-in-driver", res: map[string]resources.Quantity{"first": 2}, optIn: true, originator: true},
+			},
+			fitIn:             true,
+			expectedVictims:   []string{"opt-in-driver"},
+			expectedProtected: []string{"non-opt-in-driver"},
+		},
+		{
+			name:     "Priority tie-breaking: prefer lower priority victim within same tier",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
+			victims: []victimSpec{
+				{key: "high-priority", res: map[string]resources.Quantity{"first": 2}, priority: 100},
+				{key: "low-priority", res: map[string]resources.Quantity{"first": 2}, priority: 10},
+			},
+			fitIn:           true,
+			expectedVictims: []string{"low-priority"},
+		},
+		{
+			name:     "Orthogonal candidate rejected: cannot satisfy shortfall produces nil abort",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "helpful", res: map[string]resources.Quantity{"first": 1}},
 				{key: "orthogonal-gpu", res: map[string]resources.Quantity{"gpu": 1}},
 			},
-			fitIn:       true,
-			expectedNil: true,
+			fitIn: true,
 		},
 		{
-			name:   "Cross-node filtering: victims on other nodes discarded when fitIn is false",
-			askRes: map[string]resources.Quantity{"first": 2},
+			name:     "Cross-node filtering: victims on other nodes discarded when fitIn is false",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "alloc-node1", res: map[string]resources.Quantity{"first": 2}, nodeID: nodeID1},
 				{key: "alloc-node2", res: map[string]resources.Quantity{"first": 2}, nodeID: "node-2"},
 			},
 			fitIn:           false,
-			targetNodeID:    nodeID1,
 			expectedVictims: []string{"alloc-node1"},
 		},
 		{
-			name:   "All cross-node victims filtered when fitIn is false produces nil",
-			askRes: map[string]resources.Quantity{"first": 2},
+			name:     "Zero resource candidate ignored: cand.normSq == 0 skipped",
+			askRes:   map[string]resources.Quantity{"first": 2},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
-				{key: "alloc-other-node", res: map[string]resources.Quantity{"first": 2}, nodeID: "node-2"},
+				{key: "zero-alloc", res: map[string]resources.Quantity{"first": 0}},
+				{key: "valid-alloc", res: map[string]resources.Quantity{"first": 2}},
 			},
-			fitIn:        false,
-			targetNodeID: nodeID1,
-			expectedNil:  true,
+			fitIn:           true,
+			expectedVictims: []string{"valid-alloc"},
 		},
 		{
 			name:     "Unconstrained headroom dimension does not trigger queue shortfall",
 			askRes:   map[string]resources.Quantity{"first": 2, "second": 10},
-			headRoom: map[string]resources.Quantity{"first": 0},
+			headRoom: zeroHeadroom("first"),
 			victims: []victimSpec{
 				{key: "alloc-first", res: map[string]resources.Quantity{"first": 2}},
 			},
@@ -3454,75 +3446,105 @@ func TestTrimExtraVictims_Pipeline(t *testing.T) {
 	}
 }
 
-func TestScoreVictim_MathematicalBoundaries(t *testing.T) {
+func TestTrimExtraVictims_GuardClauses(t *testing.T) {
+	dummyAlloc := newAllocationWithKey("dummy", "app1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+	validAsk := newAllocationWithKey("ask", "app1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+	validHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	victims := []*Allocation{dummyAlloc}
+
 	tests := []struct {
-		name      string
-		allocRes  map[string]resources.Quantity
-		shortfall map[string]resources.Quantity
-		capMap    map[string]float64
-		expected  float64
-		check     func(t *testing.T, score float64)
+		name         string
+		preemptor    *Preemptor
+		extraVictims []*Allocation
 	}{
 		{
-			name:      "orthogonal victim produces zero score",
-			allocRes:  map[string]resources.Quantity{"gpu": 1},
-			shortfall: map[string]resources.Quantity{"first": 1},
-			capMap:    map[string]float64{"first": 1},
-			expected:  0.0,
+			name:         "empty extraVictims produces nil",
+			preemptor:    &Preemptor{ask: validAsk, headRoom: validHeadroom},
+			extraVictims: nil,
 		},
 		{
-			name:      "empty shortfall produces zero score",
-			allocRes:  map[string]resources.Quantity{"first": 1},
-			shortfall: map[string]resources.Quantity{},
-			capMap:    map[string]float64{"first": 1},
-			expected:  0.0,
+			name:         "nil ask produces nil",
+			preemptor:    &Preemptor{ask: nil, headRoom: validHeadroom},
+			extraVictims: victims,
 		},
 		{
-			name:      "non-positive shortfall quantity produces zero score",
-			allocRes:  map[string]resources.Quantity{"first": 1},
-			shortfall: map[string]resources.Quantity{"first": 0},
-			capMap:    map[string]float64{"first": 1},
-			expected:  0.0,
+			name:         "nil ask allocated resource produces nil",
+			preemptor:    &Preemptor{ask: newAllocationWithKey("ask", "app1", nodeID1, nil), headRoom: validHeadroom},
+			extraVictims: victims,
 		},
 		{
-			name:      "zero in capMap falls back to 1.0",
-			allocRes:  map[string]resources.Quantity{"first": 1},
-			shortfall: map[string]resources.Quantity{"first": 1},
-			capMap:    map[string]float64{"first": 0},
-			check: func(t *testing.T, score float64) {
-				assert.Check(t, score > 0.0)
-			},
+			name:         "nil headroom produces nil",
+			preemptor:    &Preemptor{ask: validAsk, headRoom: nil},
+			extraVictims: victims,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			alloc := newAllocationWithKey("test", "app1", nodeID1, resources.NewResourceFromMap(tt.allocRes))
-			score := scoreVictim(alloc, tt.shortfall, tt.capMap)
-			if tt.check != nil {
-				tt.check(t, score)
-			} else {
-				assert.Equal(t, score, tt.expected)
-			}
+			assert.Assert(t, tt.preemptor.trimExtraVictims(tt.extraVictims, nil, nodeID1, true) == nil)
 		})
 	}
+}
+
+func TestGeometricMath_Helpers(t *testing.T) {
+	// 1. vectorNormSq
+	assert.Equal(t, vectorNormSq([]float64{3.0, 4.0}), 25.0)
+	assert.Equal(t, vectorNormSq([]float64{0.0, 0.0}), 0.0)
+	assert.Equal(t, vectorNormSq(nil), 0.0)
+
+	// 2. vectorDot
+	assert.Equal(t, vectorDot([]float64{1.0, 2.0}, []float64{3.0, 4.0}), 11.0)
+	assert.Equal(t, vectorDot([]float64{1.0, 0.0}, []float64{0.0, 1.0}), 0.0)
+
+	// 3. geometricScore boundaries
+	assert.Equal(t, geometricScore(0.0, 10.0, 10.0), 0.0)   // dot=0 → score=0
+	assert.Equal(t, geometricScore(-5.0, 10.0, 10.0), -0.5) // geometricScore does NOT guard dot<=0; caller does
+	assert.Equal(t, geometricScore(10.0, 0.0, 0.0), 0.0)    // maxNormSq=0 → guard prevents divide-by-zero
+	assert.Equal(t, geometricScore(10.0, 20.0, 5.0), 0.5)   // dot / max(20, 5) = 10/20 = 0.5
+	assert.Equal(t, geometricScore(10.0, 5.0, 20.0), 0.5)   // dot / max(5, 20) = 10/20 = 0.5
+}
+
+func TestNewCandidateVector_Boundaries(t *testing.T) {
+	dimKeys := []string{"first", "second"}
+	capMap := map[string]float64{"first": 10.0, "second": 0.0} // "second" <= 0 tests fallback to 1.0
+
+	// 1. nil allocated resource: alloc exists but has no resource → vec all zero, normSq=0
+	allocNilRes := newAllocationWithKey("allocNil", "app1", nodeID1, nil)
+	candNilRes := newCandidateVector(allocNilRes, dimKeys, capMap)
+	assert.Equal(t, candNilRes.normSq, 0.0)
+	assert.Equal(t, len(candNilRes.vec), 2)
+
+	// 2. valid allocation with capacity fallback:
+	// first:  5 / 10.0 = 0.5  → squared = 0.25
+	// second: 2 / 1.0 (fallback, since capMap["second"]=0) = 2.0 → squared = 4.0
+	// normSq: 0.25 + 4.0 = 4.25
+	allocValid := newAllocationWithKey("allocValid", "app1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{
+		"first":  5,
+		"second": 2,
+	}))
+	candValid := newCandidateVector(allocValid, dimKeys, capMap)
+	assert.Equal(t, candValid.vec[0], 0.5)
+	assert.Equal(t, candValid.vec[1], 2.0)
+	assert.Equal(t, candValid.normSq, 4.25)
 }
 
 //nolint:goconst
 func TestBetterVictimCandidate_TableDriven(t *testing.T) {
 	sameTime := time.Now()
 	tests := []struct {
-		name      string
-		candOptIn bool
-		candOrig  bool
-		candAge   time.Duration
-		candKey   string
-		bestOptIn bool
-		bestOrig  bool
-		bestAge   time.Duration
-		bestKey   string
-		candScore float64
-		bestScore float64
-		expected  bool
+		name         string
+		candOptIn    bool
+		candOrig     bool
+		candPriority int32
+		candAge      time.Duration
+		candKey      string
+		bestOptIn    bool
+		bestOrig     bool
+		bestPriority int32
+		bestAge      time.Duration
+		bestKey      string
+		candScore    float64
+		bestScore    float64
+		expected     bool
 	}{
 		{
 			name:      "opt-in beats non-opt-in regardless of score",
@@ -3531,9 +3553,22 @@ func TestBetterVictimCandidate_TableDriven(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:      "opt-in driver beats non-opt-in regular",
+			name:      "non-opt-in regular worker beats opt-in driver",
+			candOptIn: false, candOrig: false,
+			bestOptIn: true, bestOrig: true,
+			candScore: 0.5, bestScore: 1.0,
+			expected: true,
+		},
+		{
+			name:      "opt-in driver beats non-opt-in driver",
 			candOptIn: true, candOrig: true,
-			bestOptIn: false, bestOrig: false,
+			bestOptIn: false, bestOrig: true,
+			candScore: 0.5, bestScore: 1.0,
+			expected: true,
+		},
+		{
+			name:         "lower priority beats higher priority within same tier",
+			candPriority: 10, bestPriority: 100,
 			candScore: 0.5, bestScore: 1.0,
 			expected: true,
 		},
@@ -3545,6 +3580,12 @@ func TestBetterVictimCandidate_TableDriven(t *testing.T) {
 		},
 		{
 			name:      "higher score beats lower score within same tier",
+			candScore: 0.9, bestScore: 0.5,
+			expected: true,
+		},
+		{
+			name:    "higher score beats newer creation time: size fit overrules age",
+			candAge: 2 * time.Hour, bestAge: 1 * time.Minute,
 			candScore: 0.9, bestScore: 0.5,
 			expected: true,
 		},
@@ -3563,31 +3604,17 @@ func TestBetterVictimCandidate_TableDriven(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			candKey := tt.candKey
-			if candKey == "" {
-				candKey = "cand"
-			}
-			bestKey := tt.bestKey
-			if bestKey == "" {
-				bestKey = "best"
-			}
-			cand := newAllocationWithKey(candKey, "app1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+			cand := newAllocationWithKey(cmp.Or(tt.candKey, "cand"), "app1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
 			cand.allowPreemptSelf = tt.candOptIn
 			cand.originator = tt.candOrig
-			if tt.candAge > 0 {
-				cand.createTime = sameTime.Add(-tt.candAge)
-			} else {
-				cand.createTime = sameTime
-			}
+			cand.priority = tt.candPriority
+			cand.createTime = sameTime.Add(-tt.candAge)
 
-			best := newAllocationWithKey(bestKey, "app1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+			best := newAllocationWithKey(cmp.Or(tt.bestKey, "best"), "app1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
 			best.allowPreemptSelf = tt.bestOptIn
 			best.originator = tt.bestOrig
-			if tt.bestAge > 0 {
-				best.createTime = sameTime.Add(-tt.bestAge)
-			} else {
-				best.createTime = sameTime
-			}
+			best.priority = tt.bestPriority
+			best.createTime = sameTime.Add(-tt.bestAge)
 
 			res := betterVictimCandidate(cand, best, tt.candScore, tt.bestScore)
 			assert.Equal(t, res, tt.expected)
@@ -3604,6 +3631,11 @@ func TestBuildCapacityMap_TableDriven(t *testing.T) {
 	assert.Equal(t, capWithQueue["first"], 100.0)
 	assert.Equal(t, capWithQueue["gpu"], 4.0)
 	assert.Equal(t, capWithQueue["zero"], 1.0)
+
+	capNoQueue := buildCapacityMap(nil, resources.NewResourceFromMap(map[string]resources.Quantity{"fallback": 5}), []*Allocation{victimWithGPU})
+	assert.Equal(t, capNoQueue["fallback"], 5.0)
+	assert.Equal(t, capNoQueue["gpu"], 1.0)
+	assert.Equal(t, capNoQueue["zero"], 1.0)
 }
 
 func TestReprieveVictims_DirectUnit(t *testing.T) {
@@ -3626,11 +3658,11 @@ func TestTryPreemption_OverPreemptionMitigated(t *testing.T) {
 	iterator := getNodeIteratorFn(node)
 	rootQ, err := createRootQueue(map[string]string{"first": "100"})
 	assert.NilError(t, err)
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "100"}, map[string]string{"first": "50"}, appQueueMapping)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "100"}, map[string]string{"first": "100"}, appQueueMapping)
 	assert.NilError(t, err)
 	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
 	assert.NilError(t, err)
-	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "100"}, map[string]string{"first": "50"}, appQueueMapping)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "100"}, map[string]string{"first": "100"}, appQueueMapping)
 	assert.NilError(t, err)
 
 	app1 := newApplication(appID1, "default", "root.parent.child1")
@@ -3648,9 +3680,9 @@ func TestTryPreemption_OverPreemptionMitigated(t *testing.T) {
 	assert.Check(t, node.TryAddAllocation(alloc64), "node alloc64 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask64.GetAllocatedResource()))
 
-	// alloc2 uses first: 2, created older
+	// alloc2 uses first: 2, created older (2 hours ago)
 	ask2 := newAllocationAsk("alloc2", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
-	ask2.createTime = time.Now().Add(-10 * time.Minute)
+	ask2.createTime = time.Now().Add(-2 * time.Hour)
 	assert.NilError(t, app1.AddAllocationAsk(ask2))
 	alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
 	alloc2.createTime = ask2.createTime

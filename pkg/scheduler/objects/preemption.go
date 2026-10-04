@@ -627,9 +627,6 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 		finalVictims = append(finalVictims, victim)
 		allocRes := victim.GetAllocatedResource()
 		totalVictimsResource.AddTo(allocRes)
-		if victim.GetNodeID() == nodeID {
-			nodeVictimsResource.AddTo(allocRes)
-		}
 	}
 
 	if p.hasPreemptionShortfall(nodeID, nodeVictimsResource, totalVictimsResource) {
@@ -937,7 +934,7 @@ func isVictimQueueOverGuaranteed(askResource *resources.Resource, victimQueue *r
 // trimExtraVictims selects a minimal, best-fitting subset of extra victims that satisfies
 // the preemption ask's shortfall, mitigating over-preemption and collateral resource waste.
 func (p *Preemptor) trimExtraVictims(extraVictims []*Allocation, victimsTotalResource *resources.Resource, nodeID string, fitIn bool) []*Allocation {
-	if len(extraVictims) == 0 || p.ask == nil || p.ask.GetAllocatedResource() == nil {
+	if len(extraVictims) == 0 || p.ask == nil || p.ask.GetAllocatedResource() == nil || p.headRoom == nil {
 		return nil
 	}
 
@@ -947,15 +944,11 @@ func (p *Preemptor) trimExtraVictims(extraVictims []*Allocation, victimsTotalRes
 	shortfall := make(map[string]resources.Quantity)
 	initialDeficit := make(map[string]resources.Quantity)
 	for resType, needQuantity := range p.ask.GetAllocatedResource().Resources {
-		var queueHeadroom resources.Quantity
-		if p.headRoom != nil {
-			remainingHeadroom, ok := p.headRoom.Resources[resType]
-			if !ok {
-				// In YuniKorn, an undefined resource dimension in queue headroom indicates
-				// no max quota constraint (unconstrained). It will not cause queue shortfall.
-				continue
-			}
-			queueHeadroom = remainingHeadroom
+		remainingHeadroom, ok := p.headRoom.Resources[resType]
+		if !ok {
+			// In YuniKorn, an undefined resource dimension in queue headroom indicates
+			// no max quota constraint (unconstrained). It will not cause queue shortfall.
+			continue
 		}
 
 		var nodeVictimsAvail resources.Quantity
@@ -963,7 +956,7 @@ func (p *Preemptor) trimExtraVictims(extraVictims []*Allocation, victimsTotalRes
 			nodeVictimsAvail = victimsTotalResource.Resources[resType]
 		}
 
-		totalAvailableQuota := nodeVictimsAvail + queueHeadroom
+		totalAvailableQuota := nodeVictimsAvail + remainingHeadroom
 		if needQuantity > totalAvailableQuota {
 			shortfallAmount := needQuantity - totalAvailableQuota
 			shortfall[resType] = shortfallAmount
@@ -974,47 +967,54 @@ func (p *Preemptor) trimExtraVictims(extraVictims []*Allocation, victimsTotalRes
 		return nil
 	}
 
-	// 2. Partition extra victims directly into 4 tiers strictly following upstream preemption contract:
-	// Tier 1 (score 0): Opt-in regular tasks (allowPreemptSelf == true, !originator)
-	// Tier 2 (score 2^33): Opt-in driver tasks (allowPreemptSelf == true, originator)
-	// Tier 3 (score 2^34): Non-opt-in regular tasks (allowPreemptSelf == false, !originator)
-	// Tier 4 (score 2^34 + 2^33): Non-opt-in driver tasks (allowPreemptSelf == false, originator)
+	// 2. Partition extra victims directly into 4 tiers strictly following upstream preemption contract (YUNIKORN-3236):
+	// Tier 1 (score 2^34 + 2^33): Opt-in regular tasks (!originator && allowPreemptSelf)
+	// Tier 2 (score 2^34): Non-opt-in regular tasks (!originator && !allowPreemptSelf)
+	// Tier 3 (score 2^33): Opt-in driver tasks (originator && allowPreemptSelf)
+	// Tier 4 (score 0): Non-opt-in driver tasks (originator && !allowPreemptSelf)
 	var tier1OptInRegular []*Allocation
-	var tier2OptInDriver []*Allocation
-	var tier3NonOptInRegular []*Allocation
+	var tier2NonOptInRegular []*Allocation
+	var tier3OptInDriver []*Allocation
 	var tier4NonOptInDriver []*Allocation
 	for _, victim := range extraVictims {
 		if !fitIn && victim.GetNodeID() != nodeID {
 			continue
 		}
-		switch {
-		case victim.IsAllowPreemptSelf() && !victim.IsOriginator():
+		switch scoreAllocationType(victim) {
+		case scoreNonOriginator | scoreAllowPreempt:
 			tier1OptInRegular = append(tier1OptInRegular, victim)
-		case victim.IsAllowPreemptSelf() && victim.IsOriginator():
-			tier2OptInDriver = append(tier2OptInDriver, victim)
-		case !victim.IsAllowPreemptSelf() && !victim.IsOriginator():
-			tier3NonOptInRegular = append(tier3NonOptInRegular, victim)
+		case scoreNonOriginator:
+			tier2NonOptInRegular = append(tier2NonOptInRegular, victim)
+		case scoreAllowPreempt:
+			tier3OptInDriver = append(tier3OptInDriver, victim)
 		default:
 			tier4NonOptInDriver = append(tier4NonOptInDriver, victim)
 		}
 	}
-	if len(tier1OptInRegular)+len(tier2OptInDriver)+len(tier3NonOptInRegular)+len(tier4NonOptInDriver) == 0 {
+	if len(tier1OptInRegular)+len(tier2NonOptInRegular)+len(tier3OptInDriver)+len(tier4NonOptInDriver) == 0 {
 		return nil
 	}
 
 	capMap := buildCapacityMap(p.queue, p.ask.GetAllocatedResource(), extraVictims)
+	dimKeys := make([]string, 0, len(capMap))
+	for k := range capMap {
+		dimKeys = append(dimKeys, k)
+	}
+	sort.Strings(dimKeys)
 
 	// 3. Greedily select victims tier by tier
+	tiers := [][]*Allocation{
+		tier1OptInRegular,
+		tier2NonOptInRegular,
+		tier3OptInDriver,
+		tier4NonOptInDriver,
+	}
 	var selected []*Allocation
-	selected = append(selected, greedySelectVictims(tier1OptInRegular, shortfall, capMap)...)
-	if len(shortfall) > 0 {
-		selected = append(selected, greedySelectVictims(tier2OptInDriver, shortfall, capMap)...)
-	}
-	if len(shortfall) > 0 {
-		selected = append(selected, greedySelectVictims(tier3NonOptInRegular, shortfall, capMap)...)
-	}
-	if len(shortfall) > 0 {
-		selected = append(selected, greedySelectVictims(tier4NonOptInDriver, shortfall, capMap)...)
+	for _, tier := range tiers {
+		if len(shortfall) == 0 {
+			break
+		}
+		selected = append(selected, greedySelectVictims(tier, shortfall, capMap, dimKeys)...)
 	}
 
 	// Phase 4: All-or-Nothing check: if candidate pool is exhausted but shortfall remains unsatisfied,
@@ -1027,26 +1027,78 @@ func (p *Preemptor) trimExtraVictims(extraVictims []*Allocation, victimsTotalRes
 	return reprieveVictims(selected, initialDeficit)
 }
 
+type candidateVector struct {
+	alloc  *Allocation
+	vec    []float64
+	normSq float64
+}
+
+func newCandidateVector(alloc *Allocation, dimKeys []string, capMap map[string]float64) candidateVector {
+	vec := make([]float64, len(dimKeys))
+	if allocRes := alloc.GetAllocatedResource(); allocRes != nil {
+		for i, resType := range dimKeys {
+			if allocQuantity := allocRes.Resources[resType]; allocQuantity > 0 {
+				capacity := capMap[resType]
+				if capacity <= 0 {
+					capacity = 1.0
+				}
+				vec[i] = float64(allocQuantity) / capacity
+			}
+		}
+	}
+	return candidateVector{
+		alloc:  alloc,
+		vec:    vec,
+		normSq: vectorNormSq(vec),
+	}
+}
+
 // greedySelectVictims selects the best-fitting allocations from a pool to satisfy the shortfall.
-func greedySelectVictims(pool []*Allocation, shortfall map[string]resources.Quantity, capMap map[string]float64) []*Allocation {
+func greedySelectVictims(pool []*Allocation, shortfall map[string]resources.Quantity, capMap map[string]float64, dimKeys []string) []*Allocation {
+	if len(pool) == 0 {
+		return nil
+	}
+	candidates := make([]candidateVector, len(pool))
+	for i, alloc := range pool {
+		candidates[i] = newCandidateVector(alloc, dimKeys, capMap)
+	}
+
 	var selected []*Allocation
-	for len(shortfall) > 0 && len(pool) > 0 {
+	normR := make([]float64, len(dimKeys))
+	for len(shortfall) > 0 {
+		if len(candidates) == 0 {
+			break
+		}
+		for i, resType := range dimKeys {
+			reqQuantity := shortfall[resType]
+			if reqQuantity > 0 {
+				normR[i] = float64(reqQuantity) / capMap[resType]
+			} else {
+				normR[i] = 0
+			}
+		}
+		normRSq := vectorNormSq(normR)
+
 		bestCandidateIndex := -1
 		var bestScore float64
-		for candidateIndex, candidate := range pool {
-			score := scoreVictim(candidate, shortfall, capMap)
-			if score <= 0 {
+		for idx, cand := range candidates {
+			if cand.normSq == 0 {
 				continue
 			}
-			if bestCandidateIndex == -1 || betterVictimCandidate(candidate, pool[bestCandidateIndex], score, bestScore) {
-				bestCandidateIndex = candidateIndex
+			dot := vectorDot(normR, cand.vec)
+			if dot <= 0 {
+				continue
+			}
+			score := geometricScore(dot, normRSq, cand.normSq)
+			if bestCandidateIndex == -1 || betterVictimCandidate(cand.alloc, candidates[bestCandidateIndex].alloc, score, bestScore) {
+				bestCandidateIndex = idx
 				bestScore = score
 			}
 		}
 		if bestCandidateIndex == -1 {
 			break
 		}
-		chosenCandidate := pool[bestCandidateIndex]
+		chosenCandidate := candidates[bestCandidateIndex].alloc
 		selected = append(selected, chosenCandidate)
 		for resType, allocQuantity := range chosenCandidate.GetAllocatedResource().Resources {
 			if remainingShortfall, exists := shortfall[resType]; exists {
@@ -1057,7 +1109,7 @@ func greedySelectVictims(pool []*Allocation, shortfall map[string]resources.Quan
 				}
 			}
 		}
-		pool = append(pool[:bestCandidateIndex], pool[bestCandidateIndex+1:]...)
+		candidates = append(candidates[:bestCandidateIndex], candidates[bestCandidateIndex+1:]...)
 	}
 	return selected
 }
@@ -1099,8 +1151,8 @@ func buildCapacityMap(queue *Queue, askResource *resources.Resource, victims []*
 	return capMap
 }
 
-// vectorNormSq computes the squared L2-norm of a normalized vector: Σ val^2
-func vectorNormSq(vec map[string]float64) float64 {
+// vectorNormSq computes the squared L2-norm of a vector: Σ val^2
+func vectorNormSq(vec []float64) float64 {
 	var sum float64
 	for _, val := range vec {
 		sum += val * val
@@ -1108,77 +1160,34 @@ func vectorNormSq(vec map[string]float64) float64 {
 	return sum
 }
 
-// vectorDot computes the dot product between two vectors: Σ val1 * val2
-func vectorDot(firstVec, secondVec map[string]float64) float64 {
+// vectorDot computes the dot product between two fixed-order vectors: Σ a[i] * b[i]
+func vectorDot(firstVec, secondVec []float64) float64 {
 	var dot float64
-	for key, val1 := range firstVec {
-		if val2, exists := secondVec[key]; exists {
-			dot += val1 * val2
-		}
+	for i := 0; i < len(firstVec); i++ {
+		dot += firstVec[i] * secondVec[i]
 	}
 	return dot
 }
 
-// scoreVictim scores a victim candidate based on magnitude matching and cosine shape alignment.
-func scoreVictim(victim *Allocation, shortfall map[string]resources.Quantity, capMap map[string]float64) float64 {
-	if len(shortfall) == 0 {
+// geometricScore computes the cosine/L2 shape matching score: dot / max(norm1Sq, norm2Sq)
+func geometricScore(dot, normRSq, normVSq float64) float64 {
+	maxNormSq := max(normRSq, normVSq)
+	if maxNormSq <= 0 {
 		return 0
 	}
-	allocRes := victim.GetAllocatedResource()
-
-	normR := make(map[string]float64, len(shortfall))
-	for resType, reqQuantity := range shortfall {
-		if reqQuantity > 0 {
-			capacity := capMap[resType]
-			if capacity <= 0 {
-				capacity = 1.0
-			}
-			normR[resType] = float64(reqQuantity) / capacity
-		}
-	}
-
-	normV := make(map[string]float64, len(allocRes.Resources))
-	for resType, allocQuantity := range allocRes.Resources {
-		if allocQuantity > 0 {
-			capacity := capMap[resType]
-			if capacity <= 0 {
-				capacity = 1.0
-			}
-			normV[resType] = float64(allocQuantity) / capacity
-		}
-	}
-
-	normRSq := vectorNormSq(normR)
-	normVSq := vectorNormSq(normV)
-	if normRSq == 0 || normVSq == 0 {
-		return 0
-	}
-
-	return vectorDot(normR, normV) / max(normRSq, normVSq)
-}
-
-// allocationTier returns the priority tier of an allocation for preemption.
-// Lower tier numbers indicate higher preference for preemption.
-func allocationTier(alloc *Allocation) int {
-	switch {
-	case alloc.IsAllowPreemptSelf() && !alloc.IsOriginator():
-		return 1
-	case alloc.IsAllowPreemptSelf() && alloc.IsOriginator():
-		return 2
-	case !alloc.IsAllowPreemptSelf() && !alloc.IsOriginator():
-		return 3
-	default:
-		return 4
-	}
+	return dot / maxNormSq
 }
 
 // betterVictimCandidate returns true if candidate is preferred over currentBest.
-// Priority: Preemption Tier (lower) > Geometric Score (higher) > Creation Time (newer) > Allocation Key (smaller)
+// Priority: Preemption Tier (higher tier score) > Pod Priority (lower pod priority) > Geometric Score (higher) > Creation Time (newer) > Allocation Key (lexicographical)
 func betterVictimCandidate(candidate, currentBest *Allocation, candidateScore, currentBestScore float64) bool {
-	candidateTier := allocationTier(candidate)
-	currentBestTier := allocationTier(currentBest)
+	candidateTier := scoreAllocationType(candidate)
+	currentBestTier := scoreAllocationType(currentBest)
 	if candidateTier != currentBestTier {
-		return candidateTier < currentBestTier
+		return candidateTier > currentBestTier
+	}
+	if candidate.GetPriority() != currentBest.GetPriority() {
+		return candidate.GetPriority() < currentBest.GetPriority()
 	}
 	if candidateScore != currentBestScore {
 		return candidateScore > currentBestScore

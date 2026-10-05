@@ -1044,8 +1044,8 @@ func (pc *PartitionContext) allocate(result *objects.AllocationResult) *objects.
 			zap.String("nodeID", targetNodeID),
 			zap.String("appID", appID))
 
-		// attempt to deallocate
-		if alloc.IsAllocated() {
+		// attempt to deallocate, only if allocated in this cycle: an unreserve can carry an ask allocated on another node
+		if (result.ResultType == objects.Allocated || result.ResultType == objects.AllocatedReserved) && alloc.IsAllocated() {
 			allocKey := alloc.GetAllocationKey()
 			if _, err := app.DeallocateAsk(allocKey); err != nil {
 				log.Log(log.SchedPartition).Warn("Failed to unwind allocation",

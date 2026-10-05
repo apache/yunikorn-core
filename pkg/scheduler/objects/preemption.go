@@ -248,18 +248,12 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 	}
 
 	allocationsByQueueSnap := p.duplicateQueueSnapshots()
-	// get the current queue snapshot
-	askQueue, ok := allocationsByQueueSnap[p.queuePath]
-	if !ok {
-		log.Log(log.SchedPreemption).Warn("BUG: Queue not found by name", zap.String("queuePath", p.queuePath))
-		return -1, nil
-	}
 
 	// First pass: Check each task to see whether we are able to reduce our shortfall by preempting each
 	// task in turn, and filter out tasks which will cause their queue to drop below guaranteed capacity.
 	// If a task could be preempted without violating queue constraints, add it to either the 'head' list or the
 	// 'tail' list depending on whether the shortfall is reduced. If added to the 'head' list, adjust the node available
-	// capacity and the queue guaranteed headroom.
+	// capacity.
 	head := make([]*Allocation, 0)
 	tail := make([]*Allocation, 0)
 	for _, victim := range potentialVictims {
@@ -274,27 +268,14 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 				// At times, over-allocation happens because of resource types in usage but not defined as guaranteed.
 				// So, as an additional check, res types used by ask should be either -ve or zero in victim queue remaining guaranteed resource to confirm
 				// some relevant useful victim is there.
-				// In case of victims densely populated on any specific node, checking/honouring the guaranteed quota on ask or preemptor queue
-				// acts as early filtering layer to carry forward only the required victims.
-				// For other cases like victims spread over multiple nodes, this doesn't add great value.
 				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
 					(remaining == nil || isVictimQueueOverGuaranteed(p.ask.GetAllocatedResource(), remaining)) {
-					// Does victimQueue have space equivalent to the resource used by the victim?
-					askQueueRemaining := askQueue.GetRemainingGuaranteedResource()
-					if askQueueRemaining != nil && askQueueRemaining.FitInActual(victim.GetAllocatedResource()) {
-						askQueue.AddAllocation(victim.GetAllocatedResource())
-					} else {
-						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
-						continue
-					}
-
 					// check to see if the shortfall on the node has changed
 					shortfall := resources.SubEliminateNegative(p.ask.GetAllocatedResource(), nodeCurrentAvailable)
 					newAvailable := resources.Add(nodeCurrentAvailable, victim.GetAllocatedResource())
 					newShortfall := resources.SubEliminateNegative(p.ask.GetAllocatedResource(), newAvailable)
 					if resources.EqualsOrEmpty(shortfall, newShortfall) {
 						// shortfall did not change, so task should only be considered as a last resort
-						askQueue.RemoveAllocation(victim.GetAllocatedResource())
 						queueSnapshot.AddAllocation(victim.GetAllocatedResource())
 						tail = append(tail, victim)
 					} else {

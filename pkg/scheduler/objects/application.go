@@ -2010,7 +2010,6 @@ func (sa *Application) UnSetQueue() {
 func (sa *Application) RestoreQueue(queue *Queue) {
 	sa.Lock()
 	defer sa.Unlock()
-	sa.queuePath = queue.QueuePath
 	sa.queue = queue
 	sa.finishedTime = time.Time{}
 }

@@ -557,8 +557,22 @@ func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Appl
 // the queue when it was cleaned up in the meantime. Returns false when no queue can be resolved.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) restoreAppQueue(app *objects.Application) bool {
-	queueName := app.GetQueuePath()
+	queue := pc.resolveRevivedQueue(app)
+	if queue == nil {
+		return false
+	}
+	app.RestoreQueue(queue)
+	queue.AddApplication(app)
+	return true
+}
+
+// resolveRevivedQueue resolves (recreating when needed) the leaf queue for a reviving application and
+// records the app-to-queue mapping. Returns nil when no leaf queue can be resolved.
+// NOTE: this call takes the PartitionContext lock. It must NOT be called holding the lock.
+func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) *objects.Queue {
 	pc.Lock()
+	defer pc.Unlock()
+	queueName := app.GetQueuePath()
 	queue := pc.getQueueInternal(queueName)
 	if queue == nil {
 		var err error
@@ -568,29 +582,23 @@ func (pc *PartitionContext) restoreAppQueue(app *objects.Application) bool {
 			queue, err = pc.createQueue(queueName, app.GetUser())
 		}
 		if err != nil {
-			pc.Unlock()
 			log.Log(log.SchedPartition).Warn("failed to recreate queue while reviving application",
 				zap.String("partitionName", pc.Name),
 				zap.String("appID", app.ApplicationID),
 				zap.String("queue", queueName),
 				zap.Error(err))
-			return false
+			return nil
 		}
 	}
 	if !queue.IsLeafQueue() {
-		pc.Unlock()
 		log.Log(log.SchedPartition).Warn("queue is no longer a leaf while reviving application",
 			zap.String("partitionName", pc.Name),
 			zap.String("appID", app.ApplicationID),
 			zap.String("queue", queueName))
-		return false
+		return nil
 	}
 	pc.appQueueMapping.AddAppQueueMapping(app.ApplicationID, queue)
-	pc.Unlock()
-
-	app.RestoreQueue(queue)
-	queue.AddApplication(app)
-	return true
+	return queue
 }
 
 // GetQueue returns queue from the structure based on the fully qualified name.

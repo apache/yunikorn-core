@@ -271,23 +271,4 @@ var webRoutes = routes{
 		Pattern:     "/debug/pprof/trace",
 		HandlerFunc: pprof.Trace,
 	},
-
-	// Deprecated REST calls
-	//
-	// Permanently moved to the debug endpoint as part of YuniKorn 1.7
-	// Remove redirect in YuniKorn 1.10
-	route{
-		Name:        "Scheduler",
-		Method:      "GET",
-		Pattern:     "/ws/v1/stack",
-		HandlerFunc: redirectDebug,
-	},
-	// Permanently moved to the debug endpoint as part of YuniKorn 1.7
-	// Remove redirect in YuniKorn 1.10
-	route{
-		Name:        "Scheduler",
-		Method:      "GET",
-		Pattern:     "/ws/v1/fullstatedump",
-		HandlerFunc: redirectDebug,
-	},
 }

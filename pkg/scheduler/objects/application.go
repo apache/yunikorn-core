@@ -985,9 +985,6 @@ func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource,
 		return nil, fmt.Errorf("failed to deallocate ask %s during rollback on app %s: %w", allocKey, sa.ApplicationID, err)
 	}
 
-	// Clear stale node assignment on the ask so it is re-schedulable cleanly.
-	ask.SetNodeID("")
-
 	res := ask.GetAllocatedResource()
 	sa.allocatedResource = resources.Sub(sa.allocatedResource, res)
 	sa.allocatedResource.Prune()
@@ -2194,6 +2191,10 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 
 // Track used and preempted resources
 func (sa *Application) trackCompletedResource(info *Allocation) {
+	// a deallocated allocation was never handed to the RM and no longer has a bind time or instance type
+	if !info.IsAllocated() {
+		return
+	}
 	switch {
 	case info.IsPreempted():
 		sa.updatePreemptedResource(info)

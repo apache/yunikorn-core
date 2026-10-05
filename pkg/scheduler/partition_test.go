@@ -5837,3 +5837,55 @@ func TestRemoveAllocationRaceWithAllocate(t *testing.T) {
 		})
 	}
 }
+
+// TestRemoveNodeRaceWithAllocate verifies that an allocation unwound by PartitionContext.allocate() because its
+// node was removed returns to a pending ask without the node binding, in either order of the two node removal steps.
+func TestRemoveNodeRaceWithAllocate(t *testing.T) {
+	tests := []struct {
+		name     string
+		allocate func(t *testing.T, partition *PartitionContext, result *objects.AllocationResult)
+	}{
+		{"node removed before allocate", func(t *testing.T, partition *PartitionContext, result *objects.AllocationResult) {
+			partition.removeNode(nodeID1)
+			assert.Assert(t, partition.allocate(result) == nil, "allocation should have been unwound")
+		}},
+		{"node allocations removed after allocate", func(t *testing.T, partition *PartitionContext, result *objects.AllocationResult) {
+			node := partition.removeNodeFromList(nodeID1)
+			assert.Assert(t, partition.allocate(result) == nil, "allocation should have been unwound")
+			partition.removeNodeAllocations(node)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+
+			nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+			setupNode(t, nodeID1, partition, nodeRes)
+
+			app := newApplication(appID1, "default", defQueue)
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, "add application failed")
+
+			askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+			err = app.AddAllocationAsk(newAllocationAsk(allocKey, appID1, askRes))
+			assert.NilError(t, err, "add ask failed")
+
+			result := partition.root.TryAllocate(partition.GetNodeIterator, partition.GetFullNodeIterator, partition.GetNode, partition.IsPreemptionEnabled())
+			assert.Assert(t, result != nil, "allocation should have been made")
+
+			tt.allocate(t, partition, result)
+
+			ask := app.GetAllocationAsk(allocKey)
+			assert.Assert(t, !ask.IsAllocated(), "ask should be pending again")
+			assert.Assert(t, resources.Equals(app.GetPendingResource(), askRes), "ask should be counted as pending")
+			assert.Equal(t, ask.GetNodeID(), "", "pending ask should not have a node ID")
+			assert.Assert(t, ask.GetBindTime().IsZero(), "pending ask should not have a bind time")
+			assert.Equal(t, ask.GetInstanceType(), "", "pending ask should not have an instance type")
+			assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+			assert.Assert(t, app.GetTrackedDAOMap("usedResource")[""] == nil, "resource usage tracked without an instance type")
+		})
+	}
+}

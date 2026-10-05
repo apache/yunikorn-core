@@ -126,8 +126,8 @@ func (cc *ClusterContext) schedule() bool {
 		if psc.root.GetMaxResource() == nil {
 			continue
 		}
-		// a draining partition does not allocate
-		if psc.isDraining() {
+		// a stopped partition does not allocate
+		if psc.isStopped() {
 			continue
 		}
 		// try reservations first

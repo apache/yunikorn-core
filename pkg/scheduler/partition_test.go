@@ -2747,9 +2747,7 @@ func TestUpdateRootQueue(t *testing.T) {
 		NodeSortPolicy: configs.NodeSortingPolicy{},
 	}
 
-	partition.stateMachine.SetState(objects.Draining.String())
 	err = partition.updatePartitionDetails(conf)
-	assert.Assert(t, partition.IsRunning() == true, "update partition had failed to change the state to running")
 	assert.NilError(t, err, "partition update failed")
 	// resources should not have changed
 	assert.Assert(t, resources.Equals(res, partition.totalPartitionResource), "partition resource not set as expected")
@@ -3870,18 +3868,6 @@ func TestUpdateAllocation(t *testing.T) {
 		NodeID:           nodeID1,
 		ResourcePerAlloc: res.ToProto(),
 	}
-
-	// mark partition for deletion, update allocation should not be allowed
-	err = partition.handlePartitionEvent(objects.Remove)
-	assert.NilError(t, err, "partition state change failed unexpectedly")
-
-	_, _, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
-	assert.ErrorContains(t, err, "partition test is draining; cannot process allocation ask-key-1")
-
-	// mark partition as active, update allocation is allowed
-	err = partition.handlePartitionEvent(objects.Start)
-	assert.NilError(t, err, "partition state change failed unexpectedly")
-
 	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&alloc))
 	assert.NilError(t, err, "failed to add alloc to app")
 	assert.Check(t, allocCreated, "alloc should have been created")

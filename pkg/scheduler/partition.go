@@ -183,16 +183,6 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	if len(conf.Queues) == 0 || conf.Queues[0].Name != configs.RootQueue {
 		return fmt.Errorf("partition cannot be created without root queue")
 	}
-
-	// if the partition is marked for removal reverse that state
-	if !pc.IsRunning() {
-		err := pc.handlePartitionEvent(objects.Start)
-		if err != nil {
-			log.Log(log.SchedQueue).Info("partition state change failed",
-				zap.String("partition", pc.Name),
-				zap.Error(err))
-		}
-	}
 	log.Log(log.SchedPartition).Info("Updating placement manager rules on config reload")
 	err := pc.getPlacementManager().UpdateRules(conf.PlacementRules)
 	if err != nil {
@@ -297,6 +287,12 @@ func (pc *PartitionContext) markPartitionForRemoval() {
 
 // Get the state of the partition.
 // No new nodes and applications will be accepted if stopped or being removed.
+func (pc *PartitionContext) isStopped() bool {
+	return pc.stateMachine.Current() == objects.Stopped.String()
+}
+
+// Get the state of the partition.
+// No new nodes and applications will be accepted if stopped or being removed.
 func (pc *PartitionContext) isDraining() bool {
 	return pc.stateMachine.Current() == objects.Draining.String()
 }
@@ -334,8 +330,8 @@ func (pc *PartitionContext) getPlacementManager() *placement.AppPlacementManager
 // exists.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddApplication(app *objects.Application) error {
-	if pc.isDraining() {
-		return fmt.Errorf("partition %s is draining cannot add a new application %s", pc.Name, app.ApplicationID)
+	if pc.isDraining() || pc.isStopped() {
+		return fmt.Errorf("partition %s is stopped or draining, cannot add a new application %s", pc.Name, app.ApplicationID)
 	}
 
 	// Check if the app exists
@@ -603,8 +599,8 @@ func (pc *PartitionContext) AddNode(node *objects.Node) error {
 	log.Log(log.SchedPartition).Info("adding node to partition",
 		zap.String("partition", pc.Name),
 		zap.String("nodeID", node.NodeID))
-	if pc.isDraining() {
-		return fmt.Errorf("partition %s is draining cannot add a new node %s", pc.Name, node.NodeID)
+	if pc.isDraining() || pc.isStopped() {
+		return fmt.Errorf("partition %s is draining or stopped, cannot add a new node %s", pc.Name, node.NodeID)
 	}
 	if err := pc.addNodeToList(node); err != nil {
 		return err
@@ -1189,8 +1185,8 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (bool, b
 	if alloc == nil {
 		return false, false, nil
 	}
-	if pc.isDraining() {
-		return false, false, fmt.Errorf("partition %s is draining; cannot process allocation %s", pc.Name, alloc.GetAllocationKey())
+	if pc.isStopped() {
+		return false, false, fmt.Errorf("partition %s is stopped; cannot process allocation %s", pc.Name, alloc.GetAllocationKey())
 	}
 
 	allocationKey := alloc.GetAllocationKey()

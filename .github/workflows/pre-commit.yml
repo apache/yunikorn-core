@@ -16,11 +16,11 @@ jobs:
 
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 2
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: .go_version
           check-latest: true
@@ -35,7 +35,7 @@ jobs:
       - name: Unit tests
         run: make test
       - name: Code coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v7
         with:
           files: build/coverage.txt
           # After codecov/codecov-action@v4, tokenless uploading of coverage files to non-public repo is unsupported.
@@ -52,18 +52,18 @@ jobs:
         k8s: [v1.36.1]
     steps:
       - name: Checkout yunikorn-k8shim source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: apache/yunikorn-k8shim
           fetch-depth: 2
           path: k8shim
       - name: Checkout yunikorn-core source code
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 2
           path: core
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@v7
         with:
           go-version-file: k8shim/.go_version
           check-latest: true
@@ -75,7 +75,7 @@ jobs:
           sudo sysctl -a | grep vm.nr_hugepages
       - name: Cache and Restore e2e required tools
         id: cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             k8shim/tools
@@ -89,7 +89,7 @@ jobs:
         env:
           KIND_NODE_IMAGE: ${{ matrix.k8s }}
       - name: Upload artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         if: ${{ failure() }}
         with:
           name: ${{ github.job }} stdout (${{ matrix.k8s }})

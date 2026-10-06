@@ -30,22 +30,23 @@ import (
 )
 
 const nodeID1 = "node-1"
+const instanceType1 = "instance-type-1"
 
 func TestSendNodeAddedEvent(t *testing.T) {
 	resource := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	eventSystem := mock.NewEventSystemDisabled()
 	ne := NewNodeEvents(eventSystem)
-	ne.SendNodeAddedEvent(nodeID1, resource)
+	ne.SendNodeAddedEvent(nodeID1, resource, instanceType1)
 	assert.Equal(t, 0, len(eventSystem.Events), "unexpected event")
 
 	eventSystem = mock.NewEventSystem()
 	ne = NewNodeEvents(eventSystem)
-	ne.SendNodeAddedEvent(nodeID1, resource)
+	ne.SendNodeAddedEvent(nodeID1, resource, instanceType1)
 	assert.Equal(t, 1, len(eventSystem.Events), "event was not generated")
 	event := eventSystem.Events[0]
 	assert.Equal(t, nodeID1, event.ObjectID)
 	assert.Equal(t, common.Empty, event.ReferenceID)
-	assert.Equal(t, "Node added to the scheduler", event.Message)
+	assert.Equal(t, "Node added to the scheduler, instanceType: "+instanceType1, event.Message)
 	assert.Equal(t, si.EventRecord_ADD, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
 	assert.Equal(t, 1, len(event.Resource.Resources))

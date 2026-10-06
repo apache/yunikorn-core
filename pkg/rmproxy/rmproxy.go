@@ -136,11 +136,9 @@ func (rmp *RMProxy) processRMReleaseAllocationEvent(event *rmevent.RMReleaseAllo
 		metrics.GetSchedulerMetrics().AddReleasedContainers(len(event.ReleasedAllocations))
 	}
 
-	// Done, notify channel
-	event.Channel <- &rmevent.Result{
-		Succeeded: true,
-		Reason:    "no. of allocations: " + strconv.Itoa(allocationsCount),
-	}
+	log.Log(log.RMProxy).Debug("Processed allocation release notification",
+		zap.String("rmID", event.RmID),
+		zap.Int("releasedAllocations", allocationsCount))
 }
 
 func (rmp *RMProxy) triggerUpdateAllocation(rmID string, response *si.AllocationResponse) {
@@ -213,11 +211,8 @@ func (rmp *RMProxy) drainPendingEvents() {
 	for {
 		select {
 		case ev := <-rmp.pendingRMEvents:
-			switch v := ev.(type) {
-			case *rmevent.RMNewAllocationsEvent:
-				drainReplyChannel(v.Channel)
-			case *rmevent.RMReleaseAllocationEvent:
-				drainReplyChannel(v.Channel)
+			if event, ok := ev.(*rmevent.RMNewAllocationsEvent); ok {
+				drainReplyChannel(event.Channel)
 			}
 		default:
 			return
@@ -240,7 +235,8 @@ func drainReplyChannel(ch chan *rmevent.Result) {
 func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerRequest, callback api.ResourceManagerCallback) (*si.RegisterResourceManagerResponse, error) {
 	rmp.Lock()
 	defer rmp.Unlock()
-	c := make(chan *rmevent.Result)
+	// Each event replies once; buffering lets the scheduler finish without a receiver.
+	c := make(chan *rmevent.Result, 1)
 
 	// If this is a re-register we need to clean up first
 	if rmp.rmIDToCallback[request.RmID] != nil {
@@ -259,7 +255,7 @@ func (rmp *RMProxy) RegisterResourceManager(request *si.RegisterResourceManagerR
 		}
 	}
 
-	c = make(chan *rmevent.Result)
+	c = make(chan *rmevent.Result, 1)
 
 	// Add new RM.
 	go func() {
@@ -348,7 +344,8 @@ func (rmp *RMProxy) UpdateNode(request *si.NodeRequest) error {
 
 // Triggers scheduler to reload configuration and apply the changes on-the-fly to the scheduler itself.
 func (rmp *RMProxy) UpdateConfiguration(request *si.UpdateConfigurationRequest) error {
-	c := make(chan *rmevent.Result)
+	// Each event replies once; buffering lets the scheduler finish without a receiver.
+	c := make(chan *rmevent.Result, 1)
 	go func() {
 		rmp.schedulerEventHandler.HandleEvent(&rmevent.RMConfigUpdateEvent{
 			RmID:        request.RmID,

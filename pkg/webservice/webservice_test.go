@@ -21,10 +21,11 @@ package webservice
 import (
 	"bytes"
 	"compress/gzip"
-	"fmt"
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +39,40 @@ import (
 
 const base = "http://localhost:9080"
 
+func TestDebugRoutes(t *testing.T) {
+	originalContext := schedulerContext.Load()
+	originalHistory := imHistory
+	NewWebApp(&scheduler.ClusterContext{}, history.NewInternalMetricsHistory(5))
+	t.Cleanup(func() {
+		schedulerContext.Store(originalContext)
+		imHistory = originalHistory
+	})
+	router := newRouter()
+	tests := []struct {
+		path   string
+		status int
+	}{
+		{"/debug/stack", http.StatusOK},
+		{"/debug/fullstatedump", http.StatusOK},
+	}
+	for _, tt := range tests {
+		t.Run(tt.path, func(t *testing.T) {
+			resp := httptest.NewRecorder()
+			router.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, tt.path, nil))
+			assert.Equal(t, resp.Code, tt.status)
+			assert.Equal(t, resp.Header().Get("Location"), "")
+			switch tt.path {
+			case "/debug/stack":
+				assertIsStackInfo(t, resp.Body.Bytes())
+			case "/debug/fullstatedump":
+				var state AggregatedStateInfo
+				assert.NilError(t, json.Unmarshal(resp.Body.Bytes(), &state))
+				assert.Assert(t, state.Timestamp > 0)
+			}
+		})
+	}
+}
+
 func waitForServerReady(t *testing.T) {
 	err := common.WaitForCondition(10*time.Millisecond, 3*time.Second, func() bool {
 		conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", "9080"), 100*time.Millisecond)
@@ -48,43 +83,6 @@ func waitForServerReady(t *testing.T) {
 		return false
 	})
 	assert.NilError(t, err, "webapp failed to start in 3 seconds")
-}
-
-func Test_RedirectDebugHandler(t *testing.T) {
-	defer ResetIMHistory()
-	s := NewWebApp(&scheduler.ClusterContext{}, history.NewInternalMetricsHistory(5))
-	s.StartWebApp()
-	waitForServerReady(t)
-	defer func(s *WebService) {
-		err := s.StopWebApp()
-		if err != nil {
-			t.Fatal("failed to stop webapp")
-		}
-	}(s)
-	tests := []struct {
-		name     string
-		reqURL   string
-		redirect string
-	}{
-		{"statedump", "/ws/v1/fullstatedump", "/debug/fullstatedump"},
-		{"stacks", "/ws/v1/stack", "/debug/stack"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			client := &http.Client{
-				CheckRedirect: func(req *http.Request, via []*http.Request) error {
-					if req.URL.Path != tt.redirect {
-						return fmt.Errorf("expected redirect to '%s' got '%s'", tt.redirect, req.URL.Path)
-					}
-					return nil
-				},
-			}
-			resp, err := client.Get(base + tt.reqURL)
-			assert.NilError(t, err, "unexpected error returned")
-			_ = resp.Body.Close() // not interested in the error
-			assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK after redirect")
-		})
-	}
 }
 
 func Test_RouterHandling(t *testing.T) {
@@ -117,12 +115,16 @@ func Test_RouterHandling(t *testing.T) {
 	// get with trailing slash
 	resp, err = client.Get(base + "/ws/v1/clusters/")
 	assert.NilError(t, err, "unexpected error returned")
+	_, err = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
+	assert.NilError(t, err, "unexpected error reading body")
 	assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")
 	// get with case difference
 	resp, err = client.Get(base + "/ws/v1/CLUSTERS")
 	assert.NilError(t, err, "unexpected error returned")
+	_, err = io.Copy(io.Discard, resp.Body)
 	_ = resp.Body.Close()
+	assert.NilError(t, err, "unexpected error reading body")
 	assert.Equal(t, resp.StatusCode, http.StatusOK, "expected OK")
 }
 

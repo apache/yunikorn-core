@@ -5766,7 +5766,7 @@ func TestPartitionStates(t *testing.T) {
 		t.Errorf("partition is not marked stopped: %v", err)
 	}
 	err = p.handlePartitionEvent(objects.Start)
-	if err != nil || p.stateMachine.Current() != objects.Active.String() {
+	if err != nil || !p.IsRunning() {
 		t.Errorf("partition is not marked running: %v", err)
 	}
 	err = p.handlePartitionEvent(objects.Remove)
@@ -5774,7 +5774,7 @@ func TestPartitionStates(t *testing.T) {
 		t.Errorf("partition is not marked draining: %v", err)
 	}
 	err = p.handlePartitionEvent(objects.Start)
-	if err != nil || p.stateMachine.Current() != objects.Active.String() {
+	if err != nil || !p.IsRunning() {
 		t.Errorf("partition is not marked running: %v", err)
 	}
 }

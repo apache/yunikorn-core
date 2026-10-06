@@ -1935,6 +1935,46 @@ func TestGetApplicationHandler(t *testing.T) {
 	assert.Assert(t, appSummary.PlaceholderResource.EqualsDAO(appDao.ResourceHistory.PlaceholderResource))
 }
 
+func TestGetApplicationPlaceholderUsedResource(t *testing.T) {
+	part := setup(t, configDefault, 1)
+	defer schedulerContext.Load().Stop()
+	addNode(t, part, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10}))
+	addApp(t, "app-1", part, "root.default", false)
+
+	ph := objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    "ph-1",
+		ApplicationID:    "app-1",
+		PartitionName:    part.Name,
+		NodeID:           "node-1",
+		TaskGroupName:    "tg-1",
+		Placeholder:      true,
+		ResourcePerAlloc: &si.Resource{Resources: map[string]*si.Quantity{"vcore": {Value: 2}}},
+	})
+	_, _, err := part.UpdateAllocation(ph)
+	assert.NilError(t, err, "placeholder allocation should have been added")
+	alloc := objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    "alloc-1",
+		ApplicationID:    "app-1",
+		PartitionName:    part.Name,
+		NodeID:           "node-1",
+		ResourcePerAlloc: &si.Resource{Resources: map[string]*si.Quantity{"vcore": {Value: 3}}},
+	})
+	_, _, err = part.UpdateAllocation(alloc)
+	assert.NilError(t, err, "allocation should have been added")
+
+	NewWebApp(schedulerContext.Load(), nil)
+	req, err := createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": "root.default", "application": "app-1"})
+	assert.NilError(t, err)
+	resp := &MockResponseWriter{}
+	var appDao *dao.ApplicationDAOInfo
+	getApplication(resp, req)
+	err = json.Unmarshal(resp.outputBytes, &appDao)
+	assert.NilError(t, err, unmarshalError)
+	assert.DeepEqual(t, appDao.UsedResource, map[string]int64{"vcore": 3})
+	assert.DeepEqual(t, appDao.PlaceholderUsedResource, map[string]int64{"vcore": 2})
+	assert.DeepEqual(t, part.GetQueue("root.default").GetAllocatedResource().DAOMap(), map[string]int64{"vcore": 5})
+}
+
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {
 	var errInfo dao.YAPIError
 	err := json.Unmarshal(resp.outputBytes, &errInfo)

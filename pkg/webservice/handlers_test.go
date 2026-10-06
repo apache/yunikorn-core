@@ -1938,37 +1938,52 @@ func TestGetApplicationHandler(t *testing.T) {
 func TestGetApplicationPlaceholderUsedResource(t *testing.T) {
 	part := setup(t, configDefault, 1)
 	defer schedulerContext.Load().Stop()
-	addNode(t, part, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10}))
+	addNode(t, part, "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 20, "memory": 10000}))
 	addApp(t, "app-1", part, "root.default", false)
-
-	ph := objects.NewAllocationFromSI(&si.Allocation{
-		AllocationKey:    "ph-1",
-		ApplicationID:    "app-1",
-		PartitionName:    part.Name,
-		NodeID:           "node-1",
-		TaskGroupName:    "tg-1",
-		Placeholder:      true,
-		ResourcePerAlloc: &si.Resource{Resources: map[string]*si.Quantity{"vcore": {Value: 2}}},
-	})
-	_, allocCreated, err := part.UpdateAllocation(ph)
-	assert.NilError(t, err, "placeholder allocation should have been added")
-	assert.Check(t, allocCreated)
-	alloc := newAlloc("alloc-1", "app-1", "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 3}))
-	_, allocCreated, err = part.UpdateAllocation(alloc)
-	assert.NilError(t, err, "allocation should have been added")
-	assert.Check(t, allocCreated)
+	addAlloc := func(alloc *objects.Allocation) {
+		_, allocCreated, err := part.UpdateAllocation(alloc)
+		assert.NilError(t, err, "allocation %s should have been added", alloc.GetAllocationKey())
+		assert.Check(t, allocCreated)
+	}
+	newPlaceholder := func(allocationKey string, vcore, memory int64) *objects.Allocation {
+		return objects.NewAllocationFromSI(&si.Allocation{
+			AllocationKey:    allocationKey,
+			ApplicationID:    "app-1",
+			NodeID:           "node-1",
+			TaskGroupName:    "tg-1",
+			Placeholder:      true,
+			ResourcePerAlloc: &si.Resource{Resources: map[string]*si.Quantity{"vcore": {Value: vcore}, "memory": {Value: memory}}},
+		})
+	}
 
 	NewWebApp(schedulerContext.Load(), nil)
 	req, err := createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": "root.default", "application": "app-1"})
 	assert.NilError(t, err)
-	resp := &MockResponseWriter{}
-	var appDao *dao.ApplicationDAOInfo
-	getApplication(resp, req)
-	err = json.Unmarshal(resp.outputBytes, &appDao)
-	assert.NilError(t, err, unmarshalError)
-	assert.DeepEqual(t, appDao.UsedResource, map[string]int64{"vcore": 3})
-	assert.DeepEqual(t, appDao.PlaceholderUsedResource, map[string]int64{"vcore": 2})
-	assert.DeepEqual(t, part.GetQueue("root.default").GetAllocatedResource().DAOMap(), map[string]int64{"vcore": 5})
+	getAppJSON := func() map[string]json.RawMessage {
+		resp := &MockResponseWriter{}
+		getApplication(resp, req)
+		var appJSON map[string]json.RawMessage
+		assert.NilError(t, json.Unmarshal(resp.outputBytes, &appJSON), unmarshalError)
+		return appJSON
+	}
+	getResource := func(appJSON map[string]json.RawMessage, field string) map[string]int64 {
+		var res map[string]int64
+		assert.NilError(t, json.Unmarshal(appJSON[field], &res), "field %s should be a resource", field)
+		return res
+	}
+
+	addAlloc(newAlloc("alloc-1", "app-1", "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 3, "memory": 512})))
+	addAlloc(newAlloc("alloc-2", "app-1", "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 4, "memory": 512})))
+	appJSON := getAppJSON()
+	_, ok := appJSON["placeholderUsedResource"]
+	assert.Assert(t, !ok, "placeholderUsedResource should be omitted without placeholders")
+
+	addAlloc(newPlaceholder("ph-1", 2, 2048))
+	addAlloc(newPlaceholder("ph-2", 1, 1024))
+	appJSON = getAppJSON()
+	assert.DeepEqual(t, getResource(appJSON, "usedResource"), map[string]int64{"vcore": 7, "memory": 1024})
+	assert.DeepEqual(t, getResource(appJSON, "placeholderUsedResource"), map[string]int64{"vcore": 3, "memory": 3072})
+	assert.DeepEqual(t, part.GetQueue("root.default").GetAllocatedResource().DAOMap(), map[string]int64{"vcore": 10, "memory": 4096})
 }
 
 func assertParamsMissing(t *testing.T, resp *MockResponseWriter) {

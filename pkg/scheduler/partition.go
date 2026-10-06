@@ -964,7 +964,7 @@ func (pc *PartitionContext) calculateOutstandingRequests() ([]*objects.Allocatio
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
 		return nil, nil
 	}
-	return pc.root.GetOutstandingRequestsWithWithdrawals()
+	return pc.root.GetOutstandingRequests()
 }
 
 // Try regular allocation for the partition

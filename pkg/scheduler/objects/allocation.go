@@ -59,7 +59,7 @@ type Allocation struct {
 	preemptionTriggered  bool
 	preemptCheckTime     time.Time
 	schedulingAttempted  bool // whether scheduler core has tried to schedule this allocation
-	scaleUpTriggered     bool // whether a pending ask has an outstanding autoscaling advertisement
+	scaleUpTriggered     bool // whether Core has dispatched an autoscaling advertisement without a subsequent withdrawal
 	allocatedResource    *resources.Resource
 	askEvents            *schedEvt.AskEvents
 	userQuotaCheckFailed bool
@@ -560,14 +560,15 @@ func (a *Allocation) IsSchedulingAttempted() bool {
 	return a.schedulingAttempted
 }
 
-// SetScaleUpTriggered records whether a pending ask has an outstanding autoscaling advertisement.
+// SetScaleUpTriggered records whether Core has dispatched an advertisement without a subsequent withdrawal.
+// Callback dispatch does not acknowledge downstream processing.
 func (a *Allocation) SetScaleUpTriggered(triggered bool) {
 	a.Lock()
 	defer a.Unlock()
 	a.scaleUpTriggered = triggered
 }
 
-// HasTriggeredScaleUp reports whether a pending ask has an outstanding autoscaling advertisement.
+// HasTriggeredScaleUp reports whether Core has dispatched an advertisement without a subsequent withdrawal.
 func (a *Allocation) HasTriggeredScaleUp() bool {
 	a.RLock()
 	defer a.RUnlock()

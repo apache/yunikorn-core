@@ -242,16 +242,19 @@ func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
 	total := resources.NewResource()
 	noRequests := 0
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
+		updater := plugins.GetResourceManagerCallbackPlugin()
+		if updater == nil {
+			// Leave advertisement transitions pending until their callbacks can be dispatched.
+			continue
+		}
 		requests, withdrawals := psc.calculateOutstandingRequests()
 		for _, ask := range withdrawals {
-			if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
-				updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
-					ApplicationID: ask.GetApplicationID(),
-					AllocationKey: ask.GetAllocationKey(),
-					State:         si.UpdateContainerSchedulingStateRequest_SKIPPED,
-					Reason:        "request no longer fits queue or user/group policy headroom",
-				})
-			}
+			updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
+				ApplicationID: ask.GetApplicationID(),
+				AllocationKey: ask.GetAllocationKey(),
+				State:         si.UpdateContainerSchedulingStateRequest_SKIPPED,
+				Reason:        "request no longer fits queue or user/group policy headroom",
+			})
 			ask.SetScaleUpTriggered(false)
 		}
 		noRequests = len(requests)
@@ -262,14 +265,12 @@ func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
 					zap.String("allocationKey", ask.GetAllocationKey()))
 				// these asks are queue outstanding requests,
 				// they can fit into the max head room, but they are pending because lack of partition resources
-				if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
-					updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
-						ApplicationID: ask.GetApplicationID(),
-						AllocationKey: ask.GetAllocationKey(),
-						State:         si.UpdateContainerSchedulingStateRequest_FAILED,
-						Reason:        "request is waiting for cluster resources become available",
-					})
-				}
+				updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
+					ApplicationID: ask.GetApplicationID(),
+					AllocationKey: ask.GetAllocationKey(),
+					State:         si.UpdateContainerSchedulingStateRequest_FAILED,
+					Reason:        "request is waiting for cluster resources become available",
+				})
 				total.AddTo(ask.GetAllocatedResource())
 				ask.SetScaleUpTriggered(true)
 			}

@@ -1803,30 +1803,21 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 	return nil
 }
 
-// GetOutstandingRequests returns newly outstanding autoscaling-demand asks, excluding withdrawals.
-// This method can only be called for the root of the queue hierarchy. Otherwise it returns nil.
-func (sq *Queue) GetOutstandingRequests() []*Allocation {
-	requests, _ := sq.GetOutstandingRequestsWithWithdrawals()
-	return requests
-}
-
-// GetOutstandingRequestsWithWithdrawals collects autoscaling demand for scheduler inspection using policy headroom.
+// GetOutstandingRequests collects autoscaling demand for scheduler inspection using policy headroom.
 // The first slice contains new demand; the second contains advertisements to withdraw.
-// This method is exported for the scheduler package. Callers needing only newly
-// outstanding demand should use GetOutstandingRequests.
 // Root cluster capacity is excluded. Only new demand contributes to outstanding resource accounting.
 // This method can only be called for the root of the queue hierarchy. Otherwise it returns nil slices.
-func (sq *Queue) GetOutstandingRequestsWithWithdrawals() ([]*Allocation, []*Allocation) {
-	total := make([]*Allocation, 0)
-	withdrawals := make([]*Allocation, 0)
+func (sq *Queue) GetOutstandingRequests() ([]*Allocation, []*Allocation) {
 	if sq.parent != nil {
 		return nil, nil
 	}
 
+	requests := make([]*Allocation, 0)
+	withdrawals := make([]*Allocation, 0)
 	for _, child := range sq.sortQueues() {
-		_ = child.getOutStandingRequestsInternal(resources.NewResource(), &total, &withdrawals)
+		_ = child.getOutStandingRequestsInternal(resources.NewResource(), &requests, &withdrawals)
 	}
-	return total, withdrawals
+	return requests, withdrawals
 }
 
 func (sq *Queue) getOutStandingRequestsInternal(parentHeadroom *resources.Resource, total, withdrawals *[]*Allocation) *resources.Resource {

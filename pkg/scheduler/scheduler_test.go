@@ -35,6 +35,7 @@ import (
 )
 
 func TestInspectOutstandingRequests(t *testing.T) {
+	callback := setupOutstandingRequestTest(t)
 	scheduler := NewScheduler()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "unable to create partition: %v", err)
@@ -94,10 +95,16 @@ func TestInspectOutstandingRequests(t *testing.T) {
 	assert.Assert(t, resources.Equals(totalResources, expectedTotal),
 		"total resource expected: %v, got: %v", expectedTotal, totalResources)
 
+	assert.Equal(t, len(callback.updates), 3)
+	for _, update := range callback.updates {
+		assert.Equal(t, update.state, si.UpdateContainerSchedulingStateRequest_FAILED)
+	}
+
 	// Check #2: try again, pending asks are not collected
 	noRequests, totalResources = scheduler.inspectOutstandingRequests()
 	assert.Equal(t, 0, noRequests)
 	assert.Assert(t, resources.IsZero(totalResources), "total resource is not zero: %v", totalResources)
+	assert.Equal(t, len(callback.updates), 3, "repeated inspection must not dispatch duplicate advertisements")
 }
 
 type outstandingRequestStateUpdate struct {
@@ -172,6 +179,82 @@ func checkOutstandingRequestUpdates(t *testing.T, callback *outstandingRequestSt
 		assert.Equal(t, callback.updates[i].allocationKey, "ask-A")
 		assert.Equal(t, callback.updates[i].state, state)
 	}
+}
+
+func TestInspectOutstandingRequestsNilUpdaterLifecycle(t *testing.T) {
+	callback := setupOutstandingRequestTest(t)
+	disabled := false
+	partition, err := newPartitionContext(configs.PartitionConfig{
+		Name: "test",
+		Preemption: configs.PartitionPreemptionConfig{
+			Enabled: &disabled, QuotaPreemptionEnabled: &disabled,
+		},
+		Queues: []configs.QueueConfig{{
+			Name: "root", Parent: true, SubmitACL: "*",
+			Queues: []configs.QueueConfig{{
+				Name:      "default",
+				Resources: configs.Resources{Max: map[string]string{"memory": "20"}},
+			}},
+		}},
+	}, rmID, nil, false)
+	assert.NilError(t, err)
+	t.Cleanup(partition.userGroupCache.Stop)
+	scheduler := NewScheduler()
+	scheduler.clusterContext.partitions["test"] = partition
+	node1 := setupNode(t, "node-1", partition, outstandingRequestResource(10))
+	node2 := setupNode(t, "node-2", partition, outstandingRequestResource(10))
+	app := newApplication(appID1, "test", "root.default")
+	assert.NilError(t, partition.AddApplication(app))
+	askA := submitOutstandingRequest(t, partition, app, "ask-A", 12)
+	assert.Assert(t, !node1.FitInNode(askA.GetAllocatedResource()) && !node2.FitInNode(askA.GetAllocatedResource()))
+	assert.Assert(t, partition.tryAllocate() == nil)
+	assert.Assert(t, askA.IsSchedulingAttempted() && !askA.IsAllocated() && !askA.HasTriggeredScaleUp())
+
+	// Control callback availability in this test; this does not model a production outage.
+	plugins.UnregisterSchedulerPlugins()
+	assert.Assert(t, plugins.GetResourceManagerCallbackPlugin() == nil)
+	count, total := scheduler.inspectOutstandingRequests()
+	assert.Equal(t, count, 0)
+	assert.Assert(t, resources.IsZero(total))
+	assert.Assert(t, !askA.HasTriggeredScaleUp(), "an undispatched advertisement must remain pending")
+	checkOutstandingRequestUpdates(t, callback)
+
+	// Register the callback without changing A or its resource eligibility.
+	plugins.RegisterSchedulerPlugin(callback)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Equal(t, count, 1)
+	assert.Assert(t, resources.Equals(total, outstandingRequestResource(12)))
+	assert.Assert(t, askA.HasTriggeredScaleUp())
+	checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Equal(t, count, 0)
+	assert.Assert(t, resources.IsZero(total))
+	checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED)
+
+	// Actual allocation leaves A policy-ineligible, with its advertisement still outstanding.
+	askB := submitOutstandingRequest(t, partition, app, "ask-B", 9)
+	allocation := partition.tryAllocate()
+	assert.Assert(t, allocation != nil && allocation.Request == askB && askB.IsAllocated())
+	assert.Assert(t, resources.Equals(app.GetQueue().GetAllocatedResource(), outstandingRequestResource(9)))
+	plugins.UnregisterSchedulerPlugins()
+	assert.Assert(t, plugins.GetResourceManagerCallbackPlugin() == nil)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Equal(t, count, 0)
+	assert.Assert(t, resources.IsZero(total))
+	assert.Assert(t, askA.HasTriggeredScaleUp(), "an undispatched withdrawal must remain pending")
+	checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED)
+
+	plugins.RegisterSchedulerPlugin(callback)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Equal(t, count, 0)
+	assert.Assert(t, resources.IsZero(total))
+	assert.Assert(t, !askA.HasTriggeredScaleUp())
+	checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED, si.UpdateContainerSchedulingStateRequest_SKIPPED)
+	count, total = scheduler.inspectOutstandingRequests()
+	assert.Equal(t, count, 0)
+	assert.Assert(t, resources.IsZero(total))
+	checkOutstandingRequestUpdates(t, callback, si.UpdateContainerSchedulingStateRequest_FAILED, si.UpdateContainerSchedulingStateRequest_SKIPPED)
+	assert.Assert(t, app.GetAllocationAsk("ask-A") == askA && !askA.IsAllocated() && askA.IsSchedulingAttempted())
 }
 
 func TestInspectOutstandingRequestsAutoscalingDemandLifecycle(t *testing.T) {

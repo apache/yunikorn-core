@@ -258,8 +258,8 @@ func callbacks() fsm.Callbacks {
 			qm := metrics.GetQueueMetrics(app.queuePath)
 			qm.IncQueueApplicationsCompleted()
 			qm.IncQueueApplicationsCompletedTotal()
-			if app.revived {
-				app.revived = false
+			if app.revived.Load() {
+				app.revived.Store(false)
 				qm.DecQueueApplicationsRevived()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRevived()
 			}
@@ -278,7 +278,7 @@ func callbacks() fsm.Callbacks {
 			qm := metrics.GetQueueMetrics(app.queuePath)
 			qm.DecQueueApplicationsCompleted()
 			metrics.GetSchedulerMetrics().DecTotalApplicationsCompleted()
-			app.revived = true
+			app.revived.Store(true)
 			qm.IncQueueApplicationsRevived()
 			metrics.GetSchedulerMetrics().IncTotalApplicationsRevived()
 			app.restoreAfterCompletion()

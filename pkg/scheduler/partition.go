@@ -563,7 +563,26 @@ func (pc *PartitionContext) restoreAppQueue(app *objects.Application) bool {
 	}
 	app.RestoreQueue(queue)
 	queue.AddApplication(app)
+	// A moveTerminatedApp running concurrently can file this app as completed while we revive it; put
+	// it back on the active list and drop that completed generation so the maps stay consistent.
+	pc.ensureAppActive(app)
 	return true
+}
+
+// ensureAppActive makes the partition tracking consistent for a freshly revived application: it puts
+// the application back on the active list and drops any completed generation that still points at the
+// same application, covering a moveTerminatedApp that filed it as completed while the revival was in
+// flight.
+func (pc *PartitionContext) ensureAppActive(app *objects.Application) {
+	pc.Lock()
+	defer pc.Unlock()
+	appID := app.ApplicationID
+	pc.applications[appID] = app
+	for key, completed := range pc.completedApplications {
+		if completed == app {
+			delete(pc.completedApplications, key)
+		}
+	}
 }
 
 // resolveRevivedQueue resolves (recreating when needed) the leaf queue for a reviving application and
@@ -1883,14 +1902,18 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 		return
 	}
 	// enter_Completed dispatches this on its own goroutine, so the app can have been revived in the
-	// meantime: moving it now would strip the queue off a running application
-	if !app.IsTerminated() {
-		log.Log(log.SchedPartition).Info("Application left the terminal state before cleanup, not removing it",
+	// meantime: moving it now would strip the queue off a running application. Detach the queue and
+	// decide to complete in a single step under the application lock so it cannot race the revival.
+	queue, ok := app.DetachQueueForCompletion()
+	if !ok {
+		log.Log(log.SchedPartition).Info("Application was revived before cleanup, not removing it",
 			zap.String("appID", appID),
 			zap.String("app status", app.CurrentState()))
 		return
 	}
-	app.UnSetQueue()
+	if queue != nil {
+		queue.RemoveApplication(app)
+	}
 	// new ID as completedApplications map key, use negative value to get a divider
 	newID := appID + strconv.FormatInt(-(time.Now()).Unix(), 10)
 	log.Log(log.SchedPartition).Info("Removing terminated application from the application list",
@@ -1899,6 +1922,15 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	app.LogAppSummary(pc.RmID)
 	pc.Lock()
 	defer pc.Unlock()
+	// A revival can start the moment the queue is detached above (the shim sees an app with no queue)
+	// and re-attach a queue through restoreAppQueue/ensureAppActive. The revived flag is read lock
+	// free, so it is safe to check while holding the partition lock: leave a revived app active and
+	// let the revival own the active-list entry.
+	if app.IsRevived() {
+		log.Log(log.SchedPartition).Info("Application revived during cleanup, leaving it on the active list",
+			zap.String("appID", appID))
+		return
+	}
 	delete(pc.applications, appID)
 	pc.completedApplications[newID] = app
 }

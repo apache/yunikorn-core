@@ -182,3 +182,53 @@ func TestReviveTakesLatestCompletedGeneration(t *testing.T) {
 	assert.Equal(t, len(partition.GetCompletedApplications()), 1, "the older generation should be left alone")
 	assert.Assert(t, partition.getApplication(appID1) == newer, "the taken generation should be on the active list")
 }
+
+// moveTerminatedApp must not tear down an application that a revival already re-attached a queue to,
+// even while the application still shows a terminal state. RestoreQueue raises the revived flag
+// together with the queue: this is exactly the narrow window between the cleanup goroutine passing
+// its terminal-state check and actually ripping the queue off.
+func TestMoveTerminatedAppSkipsAppRevivedMidFlight(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", defQueue)
+	assert.NilError(t, partition.AddApplication(app), "add application failed")
+	queue := app.GetQueue()
+	app.SetState(objects.Completed.String())
+
+	// a revival re-attaches the queue and raises the revived flag; the app has not left Completed yet
+	app.RestoreQueue(queue)
+	assert.Assert(t, app.IsRevived(), "revived flag should be set")
+
+	// the in-flight cleanup now lands
+	partition.moveTerminatedApp(appID1)
+
+	assert.Assert(t, partition.getApplication(appID1) == app, "revived app must stay on the active list")
+	assert.Assert(t, app.GetQueue() != nil, "revived app must keep its queue")
+	assert.Equal(t, len(partition.GetCompletedApplications()), 0, "revived app must not be filed as completed")
+}
+
+// The cleanup can win the race and file the app as completed before the revival restores its queue.
+// restoreAppQueue has to reclaim it: put it back on the active list and drop the completed generation.
+func TestRestoreAppQueueReclaimsCompletedApp(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", defQueue)
+	assert.NilError(t, partition.AddApplication(app), "add application failed")
+	app.SetState(objects.Completed.String())
+
+	// cleanup wins first: the app is filed as completed and loses its queue
+	partition.moveTerminatedApp(appID1)
+	assert.Assert(t, partition.getApplication(appID1) == nil, "app should be off the active list")
+	assert.Assert(t, app.GetQueue() == nil, "app should have lost its queue")
+	assert.Equal(t, len(partition.GetCompletedApplications()), 1)
+
+	// the revival that still holds the app pointer now restores its queue
+	assert.Assert(t, partition.restoreAppQueue(app), "queue should be restored")
+
+	assert.Assert(t, partition.getApplication(appID1) == app, "app must be back on the active list")
+	assert.Assert(t, app.GetQueue() != nil, "queue must be re-attached")
+	assert.Assert(t, app.IsRevived(), "revived flag should be set")
+	assert.Equal(t, len(partition.GetCompletedApplications()), 0, "the completed generation must be dropped")
+}

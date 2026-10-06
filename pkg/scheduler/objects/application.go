@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -121,7 +122,7 @@ type Application struct {
 	runnableInQueue      bool                        // whether the application is runnable/schedulable in the queue. Default is true.
 	runnableByUserLimit  bool                        // whether the application is runnable/schedulable based on user/group quota. Default is true.
 	backoffDeadline      time.Time                   // no scheduling from this application until this deadline
-	revived              bool                        // brought back out of Completed and not completed again since
+	revived              atomic.Bool                 // brought back out of Completed and not completed again since (read lock free)
 
 	rmEventHandler              handler.EventHandler
 	rmID                        string
@@ -261,11 +262,9 @@ func (sa *Application) IsResuming() bool {
 }
 
 // IsRevived returns true if the application was brought back out of Completed and has not completed
-// again since.
+// again since. The flag is read lock free so it can be consulted while the partition lock is held.
 func (sa *Application) IsRevived() bool {
-	sa.RLock()
-	defer sa.RUnlock()
-	return sa.revived
+	return sa.revived.Load()
 }
 
 // IsTerminated returns true if the application is in a state it can only leave by being revived.
@@ -2006,12 +2005,32 @@ func (sa *Application) UnSetQueue() {
 }
 
 // RestoreQueue re-attaches a queue to an application being revived out of Completed. Unlike SetQueue
-// it does not count the application as newly submitted.
+// it does not count the application as newly submitted. The revived flag is raised here, together
+// with the queue, so a concurrent moveTerminatedApp cannot tear the application down in the window
+// between restoring the queue and the state machine leaving Completed.
 func (sa *Application) RestoreQueue(queue *Queue) {
 	sa.Lock()
 	defer sa.Unlock()
 	sa.queue = queue
 	sa.finishedTime = time.Time{}
+	sa.revived.Store(true)
+}
+
+// DetachQueueForCompletion clears the queue link for an application that is being moved to the
+// completed list. It returns the detached queue and true only while the application is still
+// terminated and has not been revived; otherwise it leaves the application untouched and returns
+// nil, false. The caller removes the application from the returned queue outside the application
+// lock to keep the queue-before-application lock order.
+func (sa *Application) DetachQueueForCompletion() (*Queue, bool) {
+	sa.Lock()
+	defer sa.Unlock()
+	if sa.revived.Load() || !sa.IsTerminated() {
+		return nil, false
+	}
+	queue := sa.queue
+	sa.queue = nil
+	sa.finishedTime = time.Now()
+	return queue, true
 }
 
 func (sa *Application) StartTime() time.Time {

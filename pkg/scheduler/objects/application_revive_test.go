@@ -235,3 +235,50 @@ func TestExpireDoesNotCountAsRevival(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, revived, 0, "expiry is not a revival")
 }
+
+// A genuinely completed application that has not been revived hands back its queue so the partition
+// can file it on the completed list.
+func TestDetachQueueForCompletion(t *testing.T) {
+	setupUGM()
+	app := completedApp(t, "rm-detach")
+	assert.Assert(t, app.GetQueue() != nil, "completed app should still hold its queue")
+
+	queue, ok := app.DetachQueueForCompletion()
+	assert.Assert(t, ok, "a completed, non-revived app must be detachable")
+	assert.Assert(t, queue != nil, "the detached queue should be returned")
+	assert.Assert(t, app.GetQueue() == nil, "the queue link should be cleared")
+	assert.Assert(t, !app.FinishedTime().IsZero(), "the finished time should be stamped")
+}
+
+// RestoreQueue raises the revived flag together with the queue, so DetachQueueForCompletion must
+// refuse to tear the application down even while it still shows a terminal state.
+func TestDetachQueueForCompletionSkipsRevived(t *testing.T) {
+	setupUGM()
+	app := completedApp(t, "rm-detach")
+	queue := app.GetQueue()
+	app.RestoreQueue(queue)
+	assert.Assert(t, app.IsRevived(), "RestoreQueue must raise the revived flag")
+
+	detached, ok := app.DetachQueueForCompletion()
+	assert.Assert(t, !ok, "a revived app must not be detached")
+	assert.Assert(t, detached == nil, "no queue should be returned for a revived app")
+	assert.Assert(t, app.GetQueue() != nil, "the revived app must keep its queue")
+}
+
+// A non-terminated (still running) application must never be detached by the completion cleanup.
+func TestDetachQueueForCompletionSkipsRunning(t *testing.T) {
+	setupUGM()
+	app := newApplication(appID1, "default", "root.a")
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5})
+	assert.NilError(t, app.AddAllocationAsk(newAllocationAsk("ask", appID1, res)))
+	assert.Assert(t, !app.IsTerminated(), "app must be in a non-terminal state")
+
+	detached, ok := app.DetachQueueForCompletion()
+	assert.Assert(t, !ok, "a non-terminated app must not be detached")
+	assert.Assert(t, detached == nil, "no queue should be returned for an active app")
+	assert.Assert(t, app.GetQueue() != nil, "the active app must keep its queue")
+}

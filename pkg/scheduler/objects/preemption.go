@@ -480,19 +480,16 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
 				remaining := queueSnapshot.GetRemainingGuaranteedResource()
-				queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
+				preemptableResource := queueSnapshot.GetPreemptableResource()
 
 				// Did removing this allocation still keep the victim queue over-allocated?
 				// At times, over-allocation happens because of resource types in usage but not defined as guaranteed.
 				// So, as an additional check, res types used by ask should be either -ve or zero in victim queue remaining guaranteed resource to confirm
 				// some relevant useful victim is there.
-				preemptableResource := queueSnapshot.GetPreemptableResource()
-				if resources.StrictlyGreaterThanOrEquals(preemptableResource, resources.Zero) &&
+				if preemptableResource.FitIn(victim.GetAllocatedResource()) &&
 					(remaining == nil || isVictimQueueOverGuaranteed(p.ask.GetAllocatedResource(), remaining)) {
+					queueSnapshot.RemoveAllocation(victim.GetAllocatedResource())
 					victims = append(victims, victim)
-				} else {
-					// removing this allocation would have reduced queue below guaranteed limits, put it back
-					queueSnapshot.AddAllocation(victim.GetAllocatedResource())
 				}
 			}
 		}

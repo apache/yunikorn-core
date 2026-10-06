@@ -898,7 +898,24 @@ func TestAddApp(t *testing.T) {
 		t.Errorf("add same application to partition should have failed but did not")
 	}
 
+	// mark partition stopped, no new application can be added
+	err = partition.handlePartitionEvent(objects.Stop)
+	assert.NilError(t, err, "partition state change failed unexpectedly")
+
+	app = newApplication(appID2, "default", defQueue)
+	err = partition.AddApplication(app)
+	if err == nil || partition.getApplication(appID2) != nil {
+		t.Errorf("add application on stopped partition should have failed but did not")
+	}
+	queueApplicationsNew, err = metrics.GetQueueMetrics(defQueue).GetQueueApplicationsNew()
+	assert.NilError(t, err, "get queue metrics failed")
+	assert.Equal(t, queueApplicationsNew, 1)
+	scheduleApplicationsNew, err = metrics.GetSchedulerMetrics().GetTotalApplicationsNew()
+	assert.NilError(t, err, "get scheduler metrics failed")
+	assert.Equal(t, scheduleApplicationsNew, 1)
+
 	// mark partition for deletion, no new application can be added
+	partition.stateMachine.SetState(objects.Active.String())
 	err = partition.handlePartitionEvent(objects.Remove)
 	assert.NilError(t, err, "partition state change failed unexpectedly")
 	app = newApplication(appID3, "default", defQueue)
@@ -5744,7 +5761,15 @@ func TestRemoveAllocationPlaceholderReplacedWithoutReplacement(t *testing.T) {
 
 func TestPartitionStates(t *testing.T) {
 	p := createPartitionContext(t)
-	err := p.handlePartitionEvent(objects.Remove)
+	err := p.handlePartitionEvent(objects.Stop)
+	if err != nil || !p.isStopped() {
+		t.Errorf("partition is not marked stopped: %v", err)
+	}
+	err = p.handlePartitionEvent(objects.Start)
+	if err != nil || p.stateMachine.Current() != objects.Active.String() {
+		t.Errorf("partition is not marked running: %v", err)
+	}
+	err = p.handlePartitionEvent(objects.Remove)
 	if err != nil || !p.isDraining() {
 		t.Errorf("partition is not marked draining: %v", err)
 	}

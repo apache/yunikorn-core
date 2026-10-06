@@ -2941,7 +2941,7 @@ func TestTryPreemption_PrematureVictimLoopTermination(t *testing.T) {
 // victim's resource size exceeds the ask queue's remaining guaranteed headroom.
 func TestTryPreemption_DecoupleAskQueueQuotaFromVictimSize(t *testing.T) {
 	appQueueMapping := NewAppQueueMapping()
-	node := newNode(nodeID1, map[string]resources.Quantity{"first": 8})
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
 	iterator := getNodeIteratorFn(node)
 	rootQ, err := createRootQueue(map[string]string{"first": "20"})
 	assert.NilError(t, err)
@@ -2971,12 +2971,12 @@ func TestTryPreemption_DecoupleAskQueueQuotaFromVictimSize(t *testing.T) {
 	// alloc1 is newer (-5s), so it sorts before alloc2, but is too large (8) to fit in askQueue's remaining headroom (2)
 	// alloc1 is 8 cores on the node (the only victim on this node)
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
+	ask1.createTime = time.Now().Add(-5 * time.Second)
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	alloc1.createTime = ask1.createTime
 	err2 := app1.AddAllocation(alloc1)
 	assert.NilError(t, err2)
-	app1.AddAllocation(alloc1)
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 

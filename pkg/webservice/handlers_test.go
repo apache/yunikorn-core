@@ -1950,17 +1950,13 @@ func TestGetApplicationPlaceholderUsedResource(t *testing.T) {
 		Placeholder:      true,
 		ResourcePerAlloc: &si.Resource{Resources: map[string]*si.Quantity{"vcore": {Value: 2}}},
 	})
-	_, _, err := part.UpdateAllocation(ph)
+	_, allocCreated, err := part.UpdateAllocation(ph)
 	assert.NilError(t, err, "placeholder allocation should have been added")
-	alloc := objects.NewAllocationFromSI(&si.Allocation{
-		AllocationKey:    "alloc-1",
-		ApplicationID:    "app-1",
-		PartitionName:    part.Name,
-		NodeID:           "node-1",
-		ResourcePerAlloc: &si.Resource{Resources: map[string]*si.Quantity{"vcore": {Value: 3}}},
-	})
-	_, _, err = part.UpdateAllocation(alloc)
+	assert.Check(t, allocCreated)
+	alloc := newAlloc("alloc-1", "app-1", "node-1", resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 3}))
+	_, allocCreated, err = part.UpdateAllocation(alloc)
 	assert.NilError(t, err, "allocation should have been added")
+	assert.Check(t, allocCreated)
 
 	NewWebApp(schedulerContext.Load(), nil)
 	req, err := createRequest(t, "/ws/v1/partition/default/queue/root.default/application/app-1", map[string]string{"partition": partitionNameWithoutClusterID, "queue": "root.default", "application": "app-1"})

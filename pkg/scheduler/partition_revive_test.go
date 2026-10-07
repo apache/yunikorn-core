@@ -23,6 +23,7 @@ import (
 
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 )
@@ -231,4 +232,111 @@ func TestRestoreAppQueueReclaimsCompletedApp(t *testing.T) {
 	assert.Assert(t, app.GetQueue() != nil, "queue must be re-attached")
 	assert.Assert(t, app.IsRevived(), "revived flag should be set")
 	assert.Equal(t, len(partition.GetCompletedApplications()), 0, "the completed generation must be dropped")
+}
+
+// The leaf queue can be cleaned up while the app sits on the completed list. resolveRevivedQueue must
+// recreate it dynamically so the revived app has somewhere to run.
+func TestResolveRevivedQueueRecreatesDynamicQueue(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", "root.recreated")
+
+	queue := partition.resolveRevivedQueue(app)
+	assert.Assert(t, queue != nil, "a dynamic leaf queue should be recreated")
+	assert.Equal(t, queue.QueuePath, "root.recreated")
+	assert.Assert(t, queue.IsLeafQueue(), "recreated queue must be a leaf")
+}
+
+// A revived application that ran in the recovery queue must have it recreated through the recovery
+// queue path rather than the regular dynamic queue path.
+func TestResolveRevivedQueueRecreatesRecoveryQueue(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", common.RecoveryQueueFull)
+
+	queue := partition.resolveRevivedQueue(app)
+	assert.Assert(t, queue != nil, "the recovery queue should be recreated")
+	assert.Assert(t, queue.IsLeafQueue(), "recovery queue must be a leaf")
+}
+
+// The queue can no longer be recreated (its parent is now a leaf): resolveRevivedQueue must give up.
+func TestResolveRevivedQueueCreateFails(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	// root.default is a leaf, so a child under it cannot be created
+	app := newApplication(appID1, "default", "root.default.sub")
+
+	queue := partition.resolveRevivedQueue(app)
+	assert.Assert(t, queue == nil, "queue under a leaf parent must not be created")
+}
+
+// The queue path now resolves to a non-leaf queue: the app cannot run there so revival must fail.
+func TestResolveRevivedQueueRejectsNonLeaf(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", "root")
+
+	queue := partition.resolveRevivedQueue(app)
+	assert.Assert(t, queue == nil, "a non-leaf queue must be rejected")
+}
+
+// restoreAppQueue returns false when no leaf queue can be resolved.
+func TestRestoreAppQueueFailsWithoutLeaf(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", "root")
+
+	assert.Assert(t, !partition.restoreAppQueue(app), "restore must fail when no leaf queue resolves")
+}
+
+// getOrReviveApplication returns nil when an active app lost its queue and it cannot be restored.
+func TestGetOrReviveApplicationRestoreFails(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	// non-leaf queue path means the queue cannot be restored
+	app := newApplication(appID1, "default", "root")
+	partition.Lock()
+	partition.applications[appID1] = app
+	partition.Unlock()
+	assert.Assert(t, app.GetQueue() == nil, "app must have no queue attached")
+
+	assert.Assert(t, partition.getOrReviveApplication(appID1) == nil, "revival must fail when the queue cannot be restored")
+}
+
+// reviveCompletedApplication hands the app back to the completed list when its queue cannot be restored.
+func TestReviveCompletedApplicationQueueGoneReturnsToCompleted(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	// non-leaf queue path means the queue cannot be restored
+	app := newApplication(appID1, "default", "root")
+	app.SetState(objects.Completed.String())
+	partition.Lock()
+	partition.completedApplications[appID1+"-100"] = app
+	partition.Unlock()
+
+	assert.Assert(t, partition.reviveCompletedApplication(appID1) == nil, "revival must fail when the queue cannot be restored")
+	assert.Assert(t, partition.getApplication(appID1) == nil, "app must not stay on the active list")
+	assert.Equal(t, len(partition.GetCompletedApplications()), 1, "app must be handed back to the completed list")
+}
+
+// Completed entries whose key suffix is not a timestamp are ignored rather than crashing the scan.
+func TestTakeCompletedApplicationSkipsUnparsableKey(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", defQueue)
+	app.SetState(objects.Completed.String())
+	partition.Lock()
+	partition.completedApplications[appID1+"notanumber"] = app
+	partition.Unlock()
+
+	assert.Assert(t, partition.takeCompletedApplication(appID1) == nil, "an unparsable key must be skipped")
+	assert.Equal(t, len(partition.GetCompletedApplications()), 1, "the skipped entry must be left alone")
 }

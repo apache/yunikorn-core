@@ -408,8 +408,9 @@ func TestTryPreemption(t *testing.T) {
 				assert.NilError(t, tt.mockPlugin.GetPredicateError())
 				assert.Assert(t, ok, "no victims found")
 				assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
-				assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
-				assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+				assert.Check(t, !alloc1.IsPreempted(), "alloc1 not preempted")
+				assert.Check(t, alloc2.IsPreempted(), "alloc2 preempted")
+				childQ1.DecPreemptingResource(alloc1.GetAllocatedResource())
 				assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 			} else {
 				assert.Assert(t, result == nil, "no result")
@@ -502,7 +503,7 @@ func TestTryAllocateDoesNotWaitForPreemptionRMReply(t *testing.T) {
 	ask.allowPreemptOther = true
 
 	plugin := mock.NewPreemptionPredicatePlugin([]mock.Preemption{
-		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
+		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0),
 	}, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()

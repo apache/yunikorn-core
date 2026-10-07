@@ -409,7 +409,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 			expected++
 			go func() {
 				defer wg.Done()
-				ch <- PredicateChecks(plugin, args)
+				ch <- runPredicateChecks(plugin, args)
 			}()
 		}
 		// wait for completion and close channel

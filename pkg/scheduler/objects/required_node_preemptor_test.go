@@ -280,3 +280,46 @@ func verifyFilterResult(t *testing.T, totalAllocations, requiredNodeAllocations,
 	assert.Equal(t, alreadyPreemptedAllocations, result.alreadyPreemptedAllocations)
 	assert.Equal(t, releasedPhAllocations, result.releasedPhAllocations)
 }
+
+func TestPruneVictims_SkipsUnhelpfulMultiResourceVictim(t *testing.T) {
+	node := NewNode(&si.NodeInfo{
+		NodeID: "node-multi",
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 10}, "second": {Value: 5}},
+		},
+	})
+	rootQ, err := createRootQueue(map[string]string{"first": "10", "second": "5"})
+	assert.NilError(t, err)
+	defaultQ, err := createManagedQueueGuaranteed(rootQ, "default", true, map[string]string{"first": "10", "second": "5"}, nil, nil)
+	assert.NilError(t, err)
+	app := newApplication("app1", "default", "root.default")
+	app.SetQueue(defaultQ)
+
+	// alloc1 (priority 1): {"first": 5} -> satisfies "first": 5
+	alloc1 := createAllocation("alloc1", "app1", node.NodeID, true, false, 1, false,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	assert.Assert(t, node.TryAddAllocation(alloc1))
+
+	// alloc2 (priority 2): {"first": 5} -> unhelpful! "first" is already satisfied by alloc1, and alloc2 has no "second"
+	alloc2 := createAllocation("alloc2", "app1", node.NodeID, true, false, 2, false,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	assert.Assert(t, node.TryAddAllocation(alloc2))
+
+	// alloc3 (priority 3): {"second": 5} -> satisfies remaining "second": 5
+	alloc3 := createAllocation("alloc3", "app1", node.NodeID, true, false, 3, false,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5}))
+	assert.Assert(t, node.TryAddAllocation(alloc3))
+
+	requiredAsk := createAllocationAsk("ds-ask", "app1", true, true, 20,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5}))
+
+	p := NewRequiredNodePreemptor(node, requiredAsk, app)
+	p.filterAllocations()
+	p.sortAllocations()
+	victims := p.pruneVictims(p.allocations)
+
+	// Only alloc1 and alloc3 should be preempted; alloc2 should be skipped!
+	assert.Equal(t, len(victims), 2)
+	assert.Equal(t, victims[0].GetAllocationKey(), "alloc1")
+	assert.Equal(t, victims[1].GetAllocationKey(), "alloc3")
+}

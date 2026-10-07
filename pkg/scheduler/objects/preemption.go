@@ -796,6 +796,9 @@ func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource
 	if preemptableResource.IsEmpty() {
 		return preemptableResource
 	}
+	if qps.Parent.isAncestorOf(qps.AskQueue) {
+		return preemptableResource
+	}
 
 	// Calculate min of current (leaf) and parent queue preemptable resource using current (leaf) queue as base because overall intention
 	// is to preempt something from the current queue (leaf).
@@ -803,6 +806,18 @@ func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource
 	// (might be because of other current queue siblings) and also leads to wrong perception.
 	// So minimum would be derived only for resource types in current (leaf) queue preemptable resource.
 	return resources.ComponentWiseMinOnlyExisting(preemptableResource, parentPreemptableResource)
+}
+
+func (qps *QueuePreemptionSnapshot) isAncestorOf(other *QueuePreemptionSnapshot) bool {
+	if qps == nil || other == nil {
+		return false
+	}
+	for cur := other.Parent; cur != nil; cur = cur.Parent {
+		if cur.QueuePath == qps.QueuePath {
+			return true
+		}
+	}
+	return false
 }
 
 func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.Resource {

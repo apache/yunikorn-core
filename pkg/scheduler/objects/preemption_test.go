@@ -2766,7 +2766,7 @@ func TestTryPreemption_ResidualShortfall(t *testing.T) {
 				ask := newAllocationAskPriority(alloc.allocKey, alloc.appID, resources.NewResourceFromMap(map[string]resources.Quantity{"first": resources.Quantity(alloc.quantity)}), alloc.priority)
 				assert.NilError(t, app.AddAllocationAsk(ask))
 				allocation := newAllocationAll(alloc.allocKey, alloc.appID, alloc.nodeID, "", resources.NewResourceFromMap(map[string]resources.Quantity{"first": resources.Quantity(alloc.quantity)}), false, alloc.priority)
-				app.AddAllocation(allocation)
+				assert.NilError(t, app.AddAllocation(allocation))
 
 				assert.Check(t, nodesMap[alloc.nodeID].TryAddAllocation(allocation), "TryAddAllocation failed for %s on %s", alloc.allocKey, alloc.nodeID)
 				assert.NilError(t, childQ.TryIncAllocatedResource(ask.GetAllocatedResource()))
@@ -3059,7 +3059,7 @@ func TestTryPreemption_PredicateTailVictimsNotTruncated(t *testing.T) {
 			assert.NilError(t, app1.AddAllocationAsk(ask1))
 			alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
 			alloc1.createTime = ask1.createTime
-			app1.AddAllocation(alloc1)
+			assert.NilError(t, app1.AddAllocation(alloc1))
 			assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 
@@ -3069,7 +3069,7 @@ func TestTryPreemption_PredicateTailVictimsNotTruncated(t *testing.T) {
 			assert.NilError(t, app1.AddAllocationAsk(ask2))
 			alloc2 := newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
 			alloc2.createTime = ask2.createTime
-			app1.AddAllocation(alloc2)
+			assert.NilError(t, app1.AddAllocation(alloc2))
 			assert.Check(t, node.TryAddAllocation(alloc2), "node alloc2 failed")
 			assert.NilError(t, childQ1.TryIncAllocatedResource(ask2.GetAllocatedResource()))
 
@@ -3137,7 +3137,7 @@ func TestTryPreemption_DecoupleAskQueueQuotaFromVictimSize_AdditionalVictims(t *
 	ask1 := newAllocationAsk("alloc1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
 	assert.NilError(t, app1.AddAllocationAsk(ask1))
 	alloc1 := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8}))
-	app1.AddAllocation(alloc1)
+	assert.NilError(t, app1.AddAllocation(alloc1))
 	assert.Check(t, node.TryAddAllocation(alloc1), "node alloc1 failed")
 	assert.NilError(t, childQ1.TryIncAllocatedResource(ask1.GetAllocatedResource()))
 

@@ -1739,7 +1739,7 @@ func TestTimeoutPlaceholderProcessingDoesNotWaitForRMReply(t *testing.T) {
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcores": 10})
 	ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
-	app.AddAllocation(ph)
+	assert.NilError(t, app.AddAllocation(ph))
 	app.addPlaceholderDataWithLocking(ph)
 	app.SetState(Running.String())
 	app.clearPlaceholderTimer()
@@ -1778,7 +1778,7 @@ func TestTimeoutStateTimerDoesNotWaitForRMReply(t *testing.T) {
 	app.SetState(Accepted.String())
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100})
 	ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
-	app.AddAllocation(ph)
+	assert.NilError(t, app.AddAllocation(ph))
 	app.addPlaceholderDataWithLocking(ph)
 	app.clearPlaceholderTimer()
 	app.SetState(Completing.String())

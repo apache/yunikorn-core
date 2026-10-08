@@ -622,26 +622,11 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	// to do: There is room for improvements especially when there are more victims. victims could be chosen based
 	// on different criteria. for example, victims could be picked up either from specific node (bin packing) or
 	// from multiple nodes (fair) given the choices.
-	for _, victim := range extraVictims {
-		// Victims from any node is acceptable as long as chosen node has enough space to accommodate the ask
-		// Otherwise, preempting victims from 'n' different nodes doesn't help to achieve the goal.
-		if victim.GetNodeID() != nodeID {
-			if !fitIn {
-				continue
-			}
-		}
-		// check if victim contributes to any resource dimension that is still needed
+	selectedExtraVictims := p.trimExtraVictims(extraVictims, totalVictimsResource, nodeID, fitIn)
+	for _, victim := range selectedExtraVictims {
+		finalVictims = append(finalVictims, victim)
 		allocRes := victim.GetAllocatedResource()
-		for k, needVal := range p.ask.GetAllocatedResource().Resources {
-			if totalVictimsResource.Resources[k] < needVal && allocRes.Resources[k] > 0 {
-				finalVictims = append(finalVictims, victim)
-				totalVictimsResource.AddTo(allocRes)
-				if victim.GetNodeID() == nodeID {
-					nodeVictimsResource.AddTo(allocRes)
-				}
-				break
-			}
-		}
+		totalVictimsResource.AddTo(allocRes)
 	}
 
 	if p.hasPreemptionShortfall(nodeID, nodeVictimsResource, totalVictimsResource) {
@@ -944,4 +929,301 @@ func isVictimQueueOverGuaranteed(askResource *resources.Resource, victimQueue *r
 		}
 	}
 	return false
+}
+
+// trimExtraVictims selects a minimal, best-fitting subset of extra victims that satisfies
+// the preemption ask's shortfall, mitigating over-preemption and collateral resource waste.
+func (p *Preemptor) trimExtraVictims(extraVictims []*Allocation, victimsTotalResource *resources.Resource, nodeID string, fitIn bool) []*Allocation {
+	if len(extraVictims) == 0 || p.ask == nil || p.ask.GetAllocatedResource() == nil || p.headRoom == nil {
+		return nil
+	}
+
+	// 1. Calculate initial shortfall vector that extra victims must collectively satisfy.
+	// Target demand is the ask resource requirement minus already available quota (headroom + node victims).
+	// initialDeficit preserves the target demand for Phase 5 backward reprieve, as shortfall is mutated in-place.
+	shortfall := make(map[string]resources.Quantity)
+	initialDeficit := make(map[string]resources.Quantity)
+	for resType, needQuantity := range p.ask.GetAllocatedResource().Resources {
+		remainingHeadroom, ok := p.headRoom.Resources[resType]
+		if !ok {
+			// In YuniKorn, an undefined resource dimension in queue headroom indicates
+			// no max quota constraint (unconstrained). It will not cause queue shortfall.
+			continue
+		}
+
+		var nodeVictimsAvail resources.Quantity
+		if victimsTotalResource != nil {
+			nodeVictimsAvail = victimsTotalResource.Resources[resType]
+		}
+
+		totalAvailableQuota := nodeVictimsAvail + remainingHeadroom
+		if needQuantity > totalAvailableQuota {
+			shortfallAmount := needQuantity - totalAvailableQuota
+			shortfall[resType] = shortfallAmount
+			initialDeficit[resType] = shortfallAmount
+		}
+	}
+	if len(shortfall) == 0 {
+		return nil
+	}
+
+	// 2. Partition extra victims directly into 4 tiers strictly following upstream preemption contract (YUNIKORN-3236):
+	// Tier 1 (score 2^34 + 2^33): Opt-in regular tasks (!originator && allowPreemptSelf)
+	// Tier 2 (score 2^34): Non-opt-in regular tasks (!originator && !allowPreemptSelf)
+	// Tier 3 (score 2^33): Opt-in driver tasks (originator && allowPreemptSelf)
+	// Tier 4 (score 0): Non-opt-in driver tasks (originator && !allowPreemptSelf)
+	var tier1OptInRegular []*Allocation
+	var tier2NonOptInRegular []*Allocation
+	var tier3OptInDriver []*Allocation
+	var tier4NonOptInDriver []*Allocation
+	for _, victim := range extraVictims {
+		if !fitIn && victim.GetNodeID() != nodeID {
+			continue
+		}
+		switch scoreAllocationType(victim) {
+		case scoreNonOriginator | scoreAllowPreempt:
+			tier1OptInRegular = append(tier1OptInRegular, victim)
+		case scoreNonOriginator:
+			tier2NonOptInRegular = append(tier2NonOptInRegular, victim)
+		case scoreAllowPreempt:
+			tier3OptInDriver = append(tier3OptInDriver, victim)
+		default:
+			tier4NonOptInDriver = append(tier4NonOptInDriver, victim)
+		}
+	}
+	if len(tier1OptInRegular)+len(tier2NonOptInRegular)+len(tier3OptInDriver)+len(tier4NonOptInDriver) == 0 {
+		return nil
+	}
+
+	capMap := buildCapacityMap(p.queue, p.ask.GetAllocatedResource(), extraVictims)
+	dimKeys := make([]string, 0, len(capMap))
+	for k := range capMap {
+		dimKeys = append(dimKeys, k)
+	}
+	sort.Strings(dimKeys)
+
+	// 3. Greedily select victims tier by tier
+	tiers := [][]*Allocation{
+		tier1OptInRegular,
+		tier2NonOptInRegular,
+		tier3OptInDriver,
+		tier4NonOptInDriver,
+	}
+	var selected []*Allocation
+	for _, tier := range tiers {
+		if len(shortfall) == 0 {
+			break
+		}
+		selected = append(selected, greedySelectVictims(tier, shortfall, capMap, dimKeys)...)
+	}
+
+	// Phase 4: All-or-Nothing check: if candidate pool is exhausted but shortfall remains unsatisfied,
+	// abort with nil to avoid partial useless preemption.
+	if len(shortfall) > 0 {
+		return nil
+	}
+
+	// Phase 5: Backward Reprieve (Minimality pruning)
+	return reprieveVictims(selected, initialDeficit)
+}
+
+type candidateVector struct {
+	alloc  *Allocation
+	vec    []float64
+	normSq float64
+}
+
+func newCandidateVector(alloc *Allocation, dimKeys []string, capMap map[string]float64) candidateVector {
+	vec := make([]float64, len(dimKeys))
+	if allocRes := alloc.GetAllocatedResource(); allocRes != nil {
+		for i, resType := range dimKeys {
+			if allocQuantity := allocRes.Resources[resType]; allocQuantity > 0 {
+				capacity := capMap[resType]
+				if capacity <= 0 {
+					capacity = 1.0
+				}
+				vec[i] = float64(allocQuantity) / capacity
+			}
+		}
+	}
+	return candidateVector{
+		alloc:  alloc,
+		vec:    vec,
+		normSq: vectorNormSq(vec),
+	}
+}
+
+// greedySelectVictims selects the best-fitting allocations from a pool to satisfy the shortfall.
+func greedySelectVictims(pool []*Allocation, shortfall map[string]resources.Quantity, capMap map[string]float64, dimKeys []string) []*Allocation {
+	if len(pool) == 0 {
+		return nil
+	}
+	candidates := make([]candidateVector, len(pool))
+	for i, alloc := range pool {
+		candidates[i] = newCandidateVector(alloc, dimKeys, capMap)
+	}
+
+	var selected []*Allocation
+	normR := make([]float64, len(dimKeys))
+	for len(shortfall) > 0 {
+		if len(candidates) == 0 {
+			break
+		}
+		for i, resType := range dimKeys {
+			reqQuantity := shortfall[resType]
+			if reqQuantity > 0 {
+				normR[i] = float64(reqQuantity) / capMap[resType]
+			} else {
+				normR[i] = 0
+			}
+		}
+		normRSq := vectorNormSq(normR)
+
+		bestCandidateIndex := -1
+		var bestScore float64
+		for idx, cand := range candidates {
+			if cand.normSq == 0 {
+				continue
+			}
+			dot := vectorDot(normR, cand.vec)
+			if dot <= 0 {
+				continue
+			}
+			score := geometricScore(dot, normRSq, cand.normSq)
+			if bestCandidateIndex == -1 || betterVictimCandidate(cand.alloc, candidates[bestCandidateIndex].alloc, score, bestScore) {
+				bestCandidateIndex = idx
+				bestScore = score
+			}
+		}
+		if bestCandidateIndex == -1 {
+			break
+		}
+		chosenCandidate := candidates[bestCandidateIndex].alloc
+		selected = append(selected, chosenCandidate)
+		for resType, allocQuantity := range chosenCandidate.GetAllocatedResource().Resources {
+			if remainingShortfall, exists := shortfall[resType]; exists {
+				if allocQuantity >= remainingShortfall {
+					delete(shortfall, resType)
+				} else {
+					shortfall[resType] = remainingShortfall - allocQuantity
+				}
+			}
+		}
+		candidates = append(candidates[:bestCandidateIndex], candidates[bestCandidateIndex+1:]...)
+	}
+	return selected
+}
+
+// buildCapacityMap creates a reference capacity map per resource dimension for vector normalization.
+func buildCapacityMap(queue *Queue, askResource *resources.Resource, victims []*Allocation) map[string]float64 {
+	capMap := make(map[string]float64)
+	var maxRes *resources.Resource
+	if queue != nil {
+		maxRes = queue.GetMaxResource()
+	}
+
+	recordCapacity := func(resType string, fallbackQuantity resources.Quantity) {
+		if _, exists := capMap[resType]; exists {
+			return
+		}
+		switch {
+		case maxRes != nil && maxRes.Resources[resType] > 0:
+			capMap[resType] = float64(maxRes.Resources[resType])
+		case fallbackQuantity > 0:
+			capMap[resType] = float64(fallbackQuantity)
+		default:
+			capMap[resType] = 1.0
+		}
+	}
+
+	if askResource != nil {
+		for resType, needQuantity := range askResource.Resources {
+			recordCapacity(resType, needQuantity)
+		}
+	}
+	for _, victim := range victims {
+		if allocRes := victim.GetAllocatedResource(); allocRes != nil {
+			for resType, allocQuantity := range allocRes.Resources {
+				recordCapacity(resType, allocQuantity)
+			}
+		}
+	}
+	return capMap
+}
+
+// vectorNormSq computes the squared L2-norm of a vector: Σ val^2
+func vectorNormSq(vec []float64) float64 {
+	var sum float64
+	for _, val := range vec {
+		sum += val * val
+	}
+	return sum
+}
+
+// vectorDot computes the dot product between two fixed-order vectors: Σ a[i] * b[i]
+func vectorDot(firstVec, secondVec []float64) float64 {
+	var dot float64
+	for i := 0; i < len(firstVec); i++ {
+		dot += firstVec[i] * secondVec[i]
+	}
+	return dot
+}
+
+// geometricScore computes the cosine/L2 shape matching score: dot / max(norm1Sq, norm2Sq)
+func geometricScore(dot, normRSq, normVSq float64) float64 {
+	maxNormSq := max(normRSq, normVSq)
+	if maxNormSq <= 0 {
+		return 0
+	}
+	return dot / maxNormSq
+}
+
+// betterVictimCandidate returns true if candidate is preferred over currentBest.
+// Priority: Preemption Tier (higher tier score) > Pod Priority (lower pod priority) > Geometric Score (higher) > Creation Time (newer) > Allocation Key (lexicographical)
+func betterVictimCandidate(candidate, currentBest *Allocation, candidateScore, currentBestScore float64) bool {
+	candidateTier := scoreAllocationType(candidate)
+	currentBestTier := scoreAllocationType(currentBest)
+	if candidateTier != currentBestTier {
+		return candidateTier > currentBestTier
+	}
+	if candidate.GetPriority() != currentBest.GetPriority() {
+		return candidate.GetPriority() < currentBest.GetPriority()
+	}
+	if candidateScore != currentBestScore {
+		return candidateScore > currentBestScore
+	}
+	if !candidate.GetCreateTime().Equal(currentBest.GetCreateTime()) {
+		return candidate.GetCreateTime().After(currentBest.GetCreateTime())
+	}
+	return candidate.GetAllocationKey() < currentBest.GetAllocationKey()
+}
+
+// reprieveVictims prunes redundant victims by scanning backwards and sparing allocations
+// whose removal does not cause any resource dimension to drop below the required deficit.
+func reprieveVictims(selected []*Allocation, initialDeficit map[string]resources.Quantity) []*Allocation {
+	if len(selected) <= 1 {
+		return selected
+	}
+	totalSelected := resources.NewResource()
+	for _, victim := range selected {
+		totalSelected.AddTo(victim.GetAllocatedResource())
+	}
+
+	for victimIndex := len(selected) - 1; victimIndex >= 0; victimIndex-- {
+		candidate := selected[victimIndex]
+		candidateRes := candidate.GetAllocatedResource()
+		canReprieve := true
+		for resType, requiredQuantity := range initialDeficit {
+			remainingAfterReprieve := totalSelected.Resources[resType] - candidateRes.Resources[resType]
+			if remainingAfterReprieve < requiredQuantity {
+				canReprieve = false
+				break
+			}
+		}
+		if canReprieve {
+			totalSelected.SubFrom(candidateRes)
+			selected = append(selected[:victimIndex], selected[victimIndex+1:]...)
+		}
+	}
+	return selected
 }

@@ -128,9 +128,10 @@ func SortAllocationsBasedOnAsk(allocations []*Allocation, total, ask *resources.
 	})
 }
 
-// scoreAllocationBasedOnAsk generates a relative score for an allocation based on ask. Higher-scored allocations are considered more likely
-// preemption candidates. Opted out pods are considered before originator pods.
-func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) uint64 {
+// scoreAllocationType generates a relative score for an allocation based on its type.
+// Higher-scored allocations are considered more likely preemption candidates.
+// Opted out pods are considered before originator pods.
+func scoreAllocationType(allocation *Allocation) uint64 {
 	var score uint64 = 0
 	if !allocation.IsOriginator() {
 		score |= scoreNonOriginator
@@ -138,6 +139,11 @@ func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) 
 	if allocation.IsAllowPreemptSelf() {
 		score |= scoreAllowPreempt
 	}
-	score += allocation.GetAllocatedResource().TypeMatching(ask)
 	return score
+}
+
+// scoreAllocationBasedOnAsk generates a relative score for an allocation based on ask. Higher-scored allocations are considered more likely
+// preemption candidates. Opted out pods are considered before originator pods.
+func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) uint64 {
+	return scoreAllocationType(allocation) + allocation.GetAllocatedResource().TypeMatching(ask)
 }

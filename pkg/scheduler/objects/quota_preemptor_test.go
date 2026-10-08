@@ -112,7 +112,7 @@ func TestQuotaChangeFilterVictims(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			asks := prepareAllocationAsks(t, node)
-			assignAllocationsToQueue(asks, leaf)
+			assignAllocationsToQueue(t, asks, leaf)
 			if tc.irrelevantAllocations[0] {
 				asks[0].SetRequiredNode("node2")
 				asks[1].SetRequiredNode("node2")
@@ -227,7 +227,7 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 			leaf.maxResource = tc.oldMax
 			leaf.guaranteedResource = tc.guaranteed
 			asks := tc.victims
-			assignAllocationsToQueue(asks, leaf)
+			assignAllocationsToQueue(t, asks, leaf)
 			leaf.maxResource = tc.newMax
 			leaf.guaranteedResource = tc.guaranteed
 			preemptor := NewQuotaPreemptor(tc.queue)
@@ -356,7 +356,7 @@ func TestQuotaChangeTryPreemptionWithDifferentResTypes(t *testing.T) {
 				leaf.maxResource = tc.oldMax
 				leaf.guaranteedResource = tc.guaranteed
 				asks := v.allocs
-				assignAllocationsToQueue(asks, leaf)
+				assignAllocationsToQueue(t, asks, leaf)
 				leaf.maxResource = tc.newMax
 				leaf.guaranteedResource = tc.guaranteed
 				preemptor := NewQuotaPreemptor(tc.queue)
@@ -609,7 +609,7 @@ func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.queue.maxResource = tc.oldMax
 			for q, v := range tc.victims {
-				assignAllocationsToQueue(v, q)
+				assignAllocationsToQueue(t, v, q)
 			}
 			tc.queue.maxResource = tc.newMax
 			tc.queue.guaranteedResource = tc.newMax

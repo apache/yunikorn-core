@@ -405,7 +405,8 @@ func TestNodeIteratorReserveUpdate(t *testing.T) {
 	app := newApplication(appID0, "default", "root.test")
 	for i, node := range allNodes {
 		ask := newAllocationAsk(fmt.Sprintf("ask-%d", i), appID0, resources.NewResourceFromMap(map[string]resources.Quantity{"some": resources.Quantity(5)}))
-		app.AddAllocation(ask)
+		err := app.AddAllocation(ask)
+		assert.NilError(t, err)
 		assert.NilError(t, node.Reserve(app, ask), "Reserving failed.")
 	}
 

@@ -158,6 +158,32 @@ func TestSchedulerApplicationsCompleted(t *testing.T) {
 	curr, err := sm.GetTotalApplicationsCompleted()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
+
+	sm.DecTotalApplicationsCompleted()
+	verifyMetric(t, 0, "completed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+
+	curr, err = sm.GetTotalApplicationsCompleted()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 0)
+}
+
+func TestSchedulerApplicationsRevived(t *testing.T) {
+	sm = getSchedulerMetrics(t)
+	defer unregisterMetrics()
+
+	sm.IncTotalApplicationsRevived()
+	verifyMetric(t, 1, "revived", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+
+	curr, err := sm.GetTotalApplicationsRevived()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 1)
+
+	sm.DecTotalApplicationsRevived()
+	verifyMetric(t, 0, "revived", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+
+	curr, err = sm.GetTotalApplicationsRevived()
+	assert.NilError(t, err)
+	assert.Equal(t, curr, 0)
 }
 
 func TestSchedulerApplicationsFailed(t *testing.T) {

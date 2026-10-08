@@ -168,6 +168,28 @@ func TestApplicationsCompleted(t *testing.T) {
 	curr, err := qm.GetQueueApplicationsCompleted()
 	assert.NilError(t, err)
 	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsCompleted()
+	curr, err = qm.GetQueueApplicationsCompleted()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
+}
+
+func TestApplicationsRevived(t *testing.T) {
+	qm = getQueueMetrics()
+	defer unregisterQueueMetrics()
+
+	qm.IncQueueApplicationsRevived()
+	verifyAppMetrics(t, "revived")
+
+	curr, err := qm.GetQueueApplicationsRevived()
+	assert.NilError(t, err)
+	assert.Equal(t, 1, curr)
+
+	qm.DecQueueApplicationsRevived()
+	curr, err = qm.GetQueueApplicationsRevived()
+	assert.NilError(t, err)
+	assert.Equal(t, 0, curr)
 }
 
 func TestAllocatedContainers(t *testing.T) {

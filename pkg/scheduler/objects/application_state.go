@@ -106,6 +106,11 @@ func eventDesc() fsm.Events {
 			Src:  []string{Accepted.String(), Running.String(), Completing.String()},
 			Dst:  Running.String(),
 		}, {
+			// revival: the shim sent new work for an application the core had already completed
+			Name: RunApplication.String(),
+			Src:  []string{Completed.String()},
+			Dst:  Running.String(),
+		}, {
 			Name: CompleteApplication.String(),
 			Src:  []string{Accepted.String(), Running.String()},
 			Dst:  Completing.String(),
@@ -253,10 +258,30 @@ func callbacks() fsm.Callbacks {
 			qm := metrics.GetQueueMetrics(app.queuePath)
 			qm.IncQueueApplicationsCompleted()
 			qm.IncQueueApplicationsCompletedTotal()
+			if app.revived.Load() {
+				app.revived.Store(false)
+				qm.DecQueueApplicationsRevived()
+				metrics.GetSchedulerMetrics().DecTotalApplicationsRevived()
+			}
 			app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 			app.executeTerminatedCallback()
 			app.clearPlaceholderTimer()
 			app.cleanupAsks()
+		},
+		fmt.Sprintf("leave_%s", Completed.String()): func(_ context.Context, event *fsm.Event) {
+			app := event.Args[0].(*Application) //nolint:errcheck
+			// Expired is still a terminal end state: only a revival back into the running
+			// lifecycle hands the completed gauges back.
+			if event.Dst == Expired.String() {
+				return
+			}
+			qm := metrics.GetQueueMetrics(app.queuePath)
+			qm.DecQueueApplicationsCompleted()
+			metrics.GetSchedulerMetrics().DecTotalApplicationsCompleted()
+			app.revived.Store(true)
+			qm.IncQueueApplicationsRevived()
+			metrics.GetSchedulerMetrics().IncTotalApplicationsRevived()
+			app.restoreAfterCompletion()
 		},
 		fmt.Sprintf("enter_%s", Failed.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck

@@ -115,35 +115,35 @@ partitions:
 `
 
 const configMultiPartitions = `
-partitions: 
+partitions:
   - name: gpu
     usergroupresolver:
       type: test
     preemption:
       enabled: false
-    queues: 
+    queues:
     - name: root
   - name: default
     usergroupresolver:
       type: ""
     nodesortpolicy:
       type: fair
-    queues: 
+    queues:
     - name: root
-      queues: 
+      queues:
       - name: default
         submitacl: "*"
 `
 
 const configTwoLevelQueues = `
-partitions: 
+partitions:
   - name: gpu
-    queues: 
+    queues:
     - name: root
   - name: default
-    nodesortpolicy: 
+    nodesortpolicy:
       type: binpacking
-    queues: 
+    queues:
     - name: root
       properties:
         application.sort.policy: fifo
@@ -156,24 +156,24 @@ partitions:
             memory: 400000
           max:
             memory: 600000
-      queues: 
+      queues:
       - name: a
-        queues: 
+        queues:
         - name: a1
           properties:
             application.sort.policy: fifo
-          resources: 
-            guaranteed: 
+          resources:
+            guaranteed:
               memory: 500000
               vcore: 50000
-            max: 
+            max:
               memory: 800000
               vcore: 80000
-        resources: 
-          guaranteed: 
+        resources:
+          guaranteed:
             memory: 500000
             vcore: 50000
-          max: 
+          max:
             memory: 800000
             vcore: 80000
 `
@@ -992,10 +992,11 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	assert.Equal(t, cs["default"].Applications["total"], 7)
 	assert.Equal(t, cs["default"].Applications[objects.New.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Accepted.String()], 1)
-	assert.Equal(t, cs["default"].Applications[objects.Running.String()], 1)
+	// app-5 was Completed and then received alloc-1, which revives it into Running
+	assert.Equal(t, cs["default"].Applications[objects.Running.String()], 2)
 	assert.Equal(t, cs["default"].Applications[objects.Completing.String()], 1)
 	assert.Equal(t, cs["default"].Applications[objects.Rejected.String()], 1)
-	assert.Equal(t, cs["default"].Applications[objects.Completed.String()], 1)
+	assert.Equal(t, cs["default"].Applications[objects.Completed.String()], 0)
 	assert.Equal(t, cs["default"].Applications[objects.Failed.String()], 1)
 	assert.DeepEqual(t, cs["default"].Capacity.Capacity, map[string]int64{"memory": 1000, "vcore": 1000})
 	assert.DeepEqual(t, cs["default"].Capacity.UsedCapacity, map[string]int64{"memory": 300, "vcore": 700})
@@ -2840,7 +2841,8 @@ func prepareUserAndGroupContext(t *testing.T, config string) {
 
 	// add an alloc
 	allocInfo := newAlloc(ask.GetAllocationKey(), ask.GetApplicationID(), "node-1", ask.GetAllocatedResource())
-	app.AddAllocation(allocInfo)
+	err = app.AddAllocation(allocInfo)
+	assert.NilError(t, err)
 	assert.Assert(t, app.IsRunning(), "Application did not return running state after alloc: %s", app.CurrentState())
 
 	NewWebApp(schedulerContext.Load(), nil)

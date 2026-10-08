@@ -215,13 +215,17 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 			nextCreationTime++
 			alloc := newFuzzAsk(key, appID, "", res, false, priority, "recovered-node", nextCreationTime)
 			assert.Assert(t, alloc != nil, "NewAllocationFromSI unexpectedly returned nil")
-			app.RecoverAllocationAsk(alloc)
-			// a recovered ask is already allocated (NodeID set => allocated=true in
-			// NewAllocationFromSI) so addAllocationAskInternal must NOT add it to the pending
-			// histogram: record it only as allocated, never as pending. This is the exact invariant
-			// this fuzz operation is probing.
-			keyPriority[key] = priority
-			allocatedKeys[key] = true
+			// RecoverAllocationAsk refuses an app in a terminal state (Failing/Failed/Rejected/
+			// Expired) rather than stranding the ask on it, and case 5 below deliberately drives
+			// the app to Failed, so the model may only record the key when the product took it.
+			if recoverErr := app.RecoverAllocationAsk(alloc); recoverErr == nil {
+				// a recovered ask is already allocated (NodeID set => allocated=true in
+				// NewAllocationFromSI) so addAllocationAskInternal must NOT add it to the pending
+				// histogram: record it only as allocated, never as pending. This is the exact invariant
+				// this fuzz operation is probing.
+				keyPriority[key] = priority
+				allocatedKeys[key] = true
+			}
 
 		case 5: // occasionally clear-all or fail-and-cleanup, otherwise another RemoveAllocationAsk-ish no-op
 			switch rng.Intn(50) {
@@ -304,11 +308,13 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 			}); ok {
 				ask := app.GetAllocationAsk(key)
 				assert.Assert(t, ask != nil, "seed=%d step=%d: allocated key %s missing from sa.requests", seed, i, key)
-				app.AddAllocation(ask)
-				// AddAllocation touches sa.allocations/allocatedResource and the app state only: it
-				// leaves sa.requests, the pending histogram and sortedRequests alone, so the pending
-				// and allocated reference sets are unchanged by design.
-				confirmedKeys[key] = true
+				// AddAllocation refuses a terminal app for the same reason RecoverAllocationAsk does
+				if addErr := app.AddAllocation(ask); addErr == nil {
+					// AddAllocation touches sa.allocations/allocatedResource and the app state only: it
+					// leaves sa.requests, the pending histogram and sortedRequests alone, so the pending
+					// and allocated reference sets are unchanged by design.
+					confirmedKeys[key] = true
+				}
 			}
 
 		case 7: // RollbackAllocation - revert a confirmed allocation back to a pending ask

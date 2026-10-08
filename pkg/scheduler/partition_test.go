@@ -5890,55 +5890,73 @@ func TestRemoveNodeRaceWithAllocate(t *testing.T) {
 	}
 }
 
-// TestUnreserveRaceWithRemoveNode verifies that an unreserve for a removed node leaves an ask that is allocated on
-// another node untouched. The shim placing a reserved ask does not remove the reservation.
+// TestUnreserveRaceWithRemoveNode verifies that an unreserve for a removed node only unwinds an ask allocated on that
+// node. The shim placing a reserved ask does not remove the reservation, so the ask can be allocated on any node.
 func TestUnreserveRaceWithRemoveNode(t *testing.T) {
-	setupUGM()
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
-	defer partition.userGroupCache.Stop()
+	tests := []struct {
+		name    string
+		nodeID  string
+		unwound bool
+	}{
+		{"allocated on the removed node", nodeID1, true},
+		{"allocated on another node", nodeID2, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
 
-	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
-	node1 := setupNode(t, nodeID1, partition, nodeRes)
-	node2 := setupNode(t, nodeID2, partition, nodeRes)
+			nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+			node1 := setupNode(t, nodeID1, partition, nodeRes)
+			node2 := setupNode(t, nodeID2, partition, nodeRes)
 
-	app := newApplication(appID1, "default", defQueue)
-	err = partition.AddApplication(app)
-	assert.NilError(t, err, "add application failed")
+			app := newApplication(appID1, "default", defQueue)
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, "add application failed")
 
-	askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
-	ask := newAllocationAsk(allocKey, appID1, askRes)
-	err = app.AddAllocationAsk(ask)
-	assert.NilError(t, err, "add ask failed")
-	partition.reserve(app, node1, ask)
+			askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+			ask := newAllocationAsk(allocKey, appID1, askRes)
+			err = app.AddAllocationAsk(ask)
+			assert.NilError(t, err, "add ask failed")
+			partition.reserve(app, node1, ask)
 
-	_, allocCreated, err := partition.UpdateAllocation(newAllocationAll(allocKey, appID1, nodeID2, "", askRes, 0, false))
-	assert.NilError(t, err, "shim placement failed")
-	assert.Assert(t, allocCreated, "shim placement should have created the allocation")
-	assert.Equal(t, app.NodeReservedForAsk(allocKey), nodeID1, "reservation should still be linked to the ask")
+			_, allocCreated, err := partition.UpdateAllocation(newAllocationAll(allocKey, appID1, tt.nodeID, "", askRes, 0, false))
+			assert.NilError(t, err, "shim placement failed")
+			assert.Assert(t, allocCreated, "shim placement should have created the allocation")
+			assert.Equal(t, app.NodeReservedForAsk(allocKey), nodeID1, "reservation should still be linked to the ask")
 
-	// a pending ask keeps the reserved allocation cycle running
-	bigRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100})
-	err = app.AddAllocationAsk(newAllocationAsk(allocKey2, appID1, bigRes))
-	assert.NilError(t, err, "add ask failed")
+			// a pending ask keeps the reserved allocation cycle running
+			bigRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100})
+			err = app.AddAllocationAsk(newAllocationAsk(allocKey2, appID1, bigRes))
+			assert.NilError(t, err, "add ask failed")
 
-	result := partition.root.TryReservedAllocate(partition.GetNodeIterator)
-	assert.Assert(t, result != nil, "reservation should have been processed")
-	assert.Equal(t, result.ResultType, objects.Unreserved, "allocated ask should be unreserved")
+			result := partition.root.TryReservedAllocate(partition.GetNodeIterator)
+			assert.Assert(t, result != nil, "reservation should have been processed")
+			assert.Equal(t, result.ResultType, objects.Unreserved, "allocated ask should be unreserved")
 
-	partition.removeNodeFromList(nodeID1)
-	assert.Assert(t, partition.allocate(result) == nil, "unreserve on a removed node should not return a result")
+			partition.removeNode(nodeID1)
+			assert.Assert(t, partition.allocate(result) == nil, "unreserve on a removed node should not return a result")
 
-	assert.Assert(t, ask.IsAllocated(), "ask allocated on another node should stay allocated")
-	assert.Equal(t, ask.GetNodeID(), nodeID2, "ask allocated on another node should keep its node")
-	assert.Assert(t, resources.Equals(app.GetPendingResource(), bigRes), "ask allocated on another node should not be pending")
+			if tt.unwound {
+				assert.Assert(t, !ask.IsAllocated(), "ask allocated on the removed node should be pending again")
+				assert.Assert(t, resources.Equals(app.GetPendingResource(), resources.Add(askRes, bigRes)), "ask allocated on the removed node should be counted as pending")
+				assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+				return
+			}
+			assert.Assert(t, ask.IsAllocated(), "ask allocated on another node should stay allocated")
+			assert.Equal(t, ask.GetNodeID(), nodeID2, "ask allocated on another node should keep its node")
+			assert.Assert(t, resources.Equals(app.GetPendingResource(), bigRes), "ask allocated on another node should not be pending")
 
-	partition.removeAllocation(&si.AllocationRelease{
-		PartitionName:   "test",
-		ApplicationID:   appID1,
-		AllocationKey:   allocKey,
-		TerminationType: si.TerminationType_STOPPED_BY_RM,
-	})
-	assert.Assert(t, node2.GetAllocation(allocKey) == nil, "allocation left on the node")
-	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+			partition.removeAllocation(&si.AllocationRelease{
+				PartitionName:   "test",
+				ApplicationID:   appID1,
+				AllocationKey:   allocKey,
+				TerminationType: si.TerminationType_STOPPED_BY_RM,
+			})
+			assert.Assert(t, node2.GetAllocation(allocKey) == nil, "allocation left on the node")
+			assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+		})
+	}
 }

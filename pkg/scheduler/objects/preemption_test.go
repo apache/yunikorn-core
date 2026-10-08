@@ -3245,3 +3245,57 @@ func TestPreemptor_hasPreemptionShortfall(t *testing.T) {
 		})
 	}
 }
+
+func TestPreemptor_calculateVictimsByNode(t *testing.T) {
+	ask := newAllocationAsk("ask", appID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	v0 := newAllocationWithKey("v0", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"second": 1}))
+	v1 := newAllocationWithKey("v1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	v2 := newAllocationWithKey("v2", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+
+	tests := []struct {
+		name            string
+		guaranteed      *resources.Resource
+		expectedIndex   int
+		expectedVictims []*Allocation
+	}{
+		{
+			name:            "early non-contributing victim in tail does not steal quota from head victim",
+			guaranteed:      resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 1}),
+			expectedIndex:   0,
+			expectedVictims: []*Allocation{v1},
+		},
+		{
+			name:            "both early non-contributing and post-FitIn victims appended to tail when quota allows",
+			guaranteed:      resources.NewResource(),
+			expectedIndex:   0,
+			expectedVictims: []*Allocation{v1, v0, v2},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			qSnap := &QueuePreemptionSnapshot{
+				QueuePath:          "root.child1",
+				Leaf:               true,
+				AllocatedResource:  resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4, "second": 1}),
+				PreemptingResource: resources.NewResource(),
+				GuaranteedResource: tc.guaranteed,
+			}
+			p := &Preemptor{
+				ask:                ask,
+				allocationsByQueue: map[string]*QueuePreemptionSnapshot{"root.child1": qSnap},
+				queueByAlloc: map[string]*QueuePreemptionSnapshot{
+					"v0": qSnap,
+					"v1": qSnap,
+					"v2": qSnap,
+				},
+			}
+			idx, victims := p.calculateVictimsByNode(resources.NewResource(), []*Allocation{v0, v1, v2})
+			assert.Equal(t, idx, tc.expectedIndex)
+			assert.Equal(t, len(victims), len(tc.expectedVictims))
+			for i := range tc.expectedVictims {
+				assert.Equal(t, victims[i], tc.expectedVictims[i])
+			}
+		})
+	}
+}

@@ -96,6 +96,10 @@ func creatApp1WithTwoDifferentAllocations(
 	} else {
 		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(app2Rec))
 		alloc2.createTime = ask2.createTime
+		err := app1.AddAllocation(alloc2)
+		if err != nil {
+			return nil, nil, err
+		}
 		if !node1.TryAddAllocation(alloc2) {
 			return nil, nil, fmt.Errorf("node alloc2 failed")
 		}
@@ -133,15 +137,23 @@ func resetNode(node *Node) {
 	for _, v := range node.allocations {
 		node.RemoveAllocation(v.allocationKey)
 	}
+	node.reservations = make(map[string]*reservation)
 }
 
 func resetQ(t *testing.T, queue *Queue) {
-	for _, v := range queue.applications {
+	for _, v := range queue.GetCopyOfApps() {
 		for _, a := range v.allocations {
-			v.RemoveAllocationAsk(a.allocationKey)
+			v.RemoveAllocation(a.allocationKey, si.TerminationType_STOPPED_BY_RM)
 			err := queue.DecAllocatedResource(a.GetAllocatedResource())
 			assert.NilError(t, err)
 		}
+		for _, req := range v.requests {
+			v.RemoveAllocationAsk(req.allocationKey)
+		}
+		for _, r := range v.reservations {
+			v.unReserveInternal(r)
+		}
+		v.queue.UnReserve(v.ApplicationID, len(v.reservations))
 		queue.RemoveApplication(v)
 	}
 	queue.applications = make(map[string]*Application)
@@ -363,7 +375,7 @@ func TestTryPreemption(t *testing.T) {
 
 	// register predicate handler
 	preemptions := []mock.Preemption{
-		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
+		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0),
 	}
 	wrongNodes := make(map[string]int, 1)
 	wrongNodes[nodeID2] = 10
@@ -399,8 +411,9 @@ func TestTryPreemption(t *testing.T) {
 				assert.NilError(t, tt.mockPlugin.GetPredicateError())
 				assert.Assert(t, ok, "no victims found")
 				assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
-				assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
-				assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+				assert.Check(t, !alloc1.IsPreempted(), "alloc1 not preempted")
+				assert.Check(t, alloc2.IsPreempted(), "alloc2 preempted")
+				childQ1.DecPreemptingResource(alloc1.GetAllocatedResource())
 				assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 			} else {
 				assert.Assert(t, result == nil, "no result")
@@ -438,7 +451,7 @@ func TestTryPreemption_SendEvent(t *testing.T) {
 
 	eventSystem := evtMock.NewEventSystem()
 	events := schedEvt.NewAskEvents(eventSystem)
-	alloc1.askEvents = events
+	alloc2.askEvents = events
 
 	app2, ask3, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5, "pods": 1}, "alloc3", appQueueMapping)
 	assert.NilError(t, err)
@@ -449,7 +462,7 @@ func TestTryPreemption_SendEvent(t *testing.T) {
 
 	// register predicate handler
 	preemptions := []mock.Preemption{
-		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
+		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0),
 	}
 	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
@@ -460,12 +473,12 @@ func TestTryPreemption_SendEvent(t *testing.T) {
 	assert.NilError(t, plugin.GetPredicateError())
 	assert.Assert(t, ok, "no victims found")
 	assert.Equal(t, "alloc3", result.Request.GetAllocationKey(), "wrong alloc")
-	assert.Check(t, alloc1.IsPreempted(), "alloc1 not preempted")
-	assert.Check(t, !alloc2.IsPreempted(), "alloc2 preempted")
+	assert.Check(t, !alloc1.IsPreempted(), "alloc1 not preempted")
+	assert.Check(t, alloc2.IsPreempted(), "alloc2 preempted")
 	assert.Equal(t, 1, len(eventSystem.Events))
 	event := eventSystem.Events[0]
-	assert.Equal(t, alloc1.applicationID, event.ReferenceID)
-	assert.Equal(t, alloc1.allocationKey, event.ObjectID)
+	assert.Equal(t, alloc2.applicationID, event.ReferenceID)
+	assert.Equal(t, alloc2.allocationKey, event.ObjectID)
 	assert.Equal(t, si.EventRecord_NONE, event.EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, event.EventChangeDetail)
 	assert.Equal(t, si.EventRecord_REQUEST, event.Type)
@@ -493,7 +506,7 @@ func TestTryAllocateDoesNotWaitForPreemptionRMReply(t *testing.T) {
 	ask.allowPreemptOther = true
 
 	plugin := mock.NewPreemptionPredicatePlugin([]mock.Preemption{
-		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc1"}, 0, 0),
+		mock.NewPreemption(true, "alloc3", nodeID1, []string{"alloc2"}, 0, 0),
 	}, nil, false, false)
 	plugins.RegisterSchedulerPlugin(plugin)
 	defer plugins.UnregisterSchedulerPlugins()
@@ -753,6 +766,7 @@ func TestTryPreemptionOnQueue(t *testing.T) {
 				assert.Check(t, ok == true, "either node1 or node2 chosen")
 				assert.Check(t, alloc1.IsPreempted() || alloc2.IsPreempted(), "either alloc1 or alloc2 preempted, but not both")
 				assert.Check(t, !alloc1.IsPreempted() || !alloc2.IsPreempted(), "either alloc1 or alloc2 not preempted, but not both")
+				childQ1.DecPreemptingResource(alloc1.GetAllocatedResource())
 				assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 			} else {
 				assert.Assert(t, result == nil, "no result")

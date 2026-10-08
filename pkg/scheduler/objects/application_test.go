@@ -3919,20 +3919,24 @@ func TestRequiredNodePreemptionWithPredicates(t *testing.T) {
 	rightNodes := make(map[string]int, 1)
 	rightNodes[nodeID1] = 10
 
+	type resInfo struct {
+		res        *resources.Resource
+		createTime time.Time
+	}
 	res1 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
 	res2 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
 	res3 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 
-	ask1Info := make(map[string]*resources.Resource)
-	ask1Info["ask-1"] = res1
+	ask1Info := make(map[string]*resInfo)
+	ask1Info["ask-1"] = &resInfo{res1, time.Now().Add(-30 * time.Second)}
 
-	ask2Info := make(map[string]*resources.Resource)
-	ask2Info["ask-1"] = res3
-	ask2Info["ask-3"] = res2
+	ask2Info := make(map[string]*resInfo)
+	ask2Info["ask-1"] = &resInfo{res3, time.Now().Add(-60 * time.Second)}
+	ask2Info["ask-3"] = &resInfo{res2, time.Now().Add(-30 * time.Second)}
 
 	tests := []struct {
 		name            string
-		asks            map[string]*resources.Resource
+		asks            map[string]*resInfo
 		mockPlugin      *mockCommon.PreemptionPredicatePlugin
 		result          bool
 		mockPluginError error
@@ -3959,7 +3963,8 @@ func TestRequiredNodePreemptionWithPredicates(t *testing.T) {
 			// add an ask
 			askInfo := make(map[string]*Allocation)
 			for k, v := range tt.asks {
-				ask := newAllocationAsk(k, "app-1", v)
+				ask := newAllocationAsk(k, "app-1", v.res)
+				ask.createTime = v.createTime
 				err = app.AddAllocationAsk(ask)
 				assert.NilError(t, err, "could not add ask "+k)
 				askInfo[k] = ask

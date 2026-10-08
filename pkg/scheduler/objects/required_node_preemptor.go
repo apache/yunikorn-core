@@ -160,7 +160,7 @@ func (p *PreemptionContext) sortAllocations() {
 }
 
 func (p *PreemptionContext) pruneVictims(victims []*Allocation) []*Allocation {
-	var prunedVictims []*Allocation
+	prunedVictims := make([]*Allocation, 0, len(victims))
 	var currentResource = resources.NewResource()
 	for _, allocation := range victims {
 		if !resources.StrictlyGreaterThanOrEquals(currentResource, p.requiredAsk.GetAllocatedResource()) {
@@ -230,7 +230,7 @@ func (p *PreemptionContext) runPredicates() []*Allocation {
 			zap.String("allocationKey", p.requiredAsk.GetAllocationKey()),
 			zap.String("allocationName", p.requiredAsk.GetAllocationName()),
 			zap.Int("victims", len(victims)),
-			zap.Int("passed victims", len(passedVictims)))
+			zap.Int("passedVictims", len(passedVictims)))
 	}
 	return passedVictims
 }

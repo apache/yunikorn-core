@@ -96,7 +96,10 @@ func creatApp1WithTwoDifferentAllocations(
 	} else {
 		alloc2 = newAllocationWithKey("alloc2", appID1, nodeID1, resources.NewResourceFromMap(app2Rec))
 		alloc2.createTime = ask2.createTime
-		app1.AddAllocation(alloc2)
+		err := app1.AddAllocation(alloc2)
+		if err != nil {
+			return nil, nil, err
+		}
 		if !node1.TryAddAllocation(alloc2) {
 			return nil, nil, fmt.Errorf("node alloc2 failed")
 		}

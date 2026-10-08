@@ -3120,8 +3120,8 @@ func TestTryPreemption_DecoupleAskQueueQuotaFromVictimSize_AdditionalVictims(t *
 	iterator := getNodeIteratorFn(node)
 	rootQ, err := createRootQueue(map[string]string{"first": "30"})
 	assert.NilError(t, err)
-	// Parent Max = 16, Guaranteed = 10
-	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "16"}, map[string]string{"first": "10"}, appQueueMapping)
+	// Parent Max = 16
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "16"}, nil, appQueueMapping)
 	assert.NilError(t, err)
 	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
 	assert.NilError(t, err)
@@ -3242,6 +3242,86 @@ func TestPreemptor_hasPreemptionShortfall(t *testing.T) {
 				},
 			}
 			assert.Equal(t, p.hasPreemptionShortfall(nodeID, tc.nodeVictimsResource, tc.totalVictimsResource), tc.expectedShortfall)
+		})
+	}
+}
+
+func TestTryPreemption_VictimQueueGuaranteedFloorViolation_AdditionalVictims(t *testing.T) {
+	testCases := []struct {
+		name                 string
+		victimResources      []map[string]resources.Quantity
+		expectedPreemptOk    bool
+		expectedPreemptedKey string
+	}{
+		{
+			name: "all candidate victims exceed preemptable quota",
+			victimResources: []map[string]resources.Quantity{
+				{"first": 6},
+				{"first": 6},
+			},
+			expectedPreemptOk:    false,
+			expectedPreemptedKey: "",
+		},
+		{
+			name: "oversized victims skipped to select smaller fitting victim",
+			victimResources: []map[string]resources.Quantity{
+				{"first": 6},
+				{"first": 4},
+				{"first": 2},
+			},
+			expectedPreemptOk:    true,
+			expectedPreemptedKey: "alloc-3",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			appQueueMapping := NewAppQueueMapping()
+			// node1 has 20 physical capacity (8 free after child1 uses 12), so node1 physically fits the 4-unit ask
+			// without node victims; preemption is triggered by parent queue headroom (Max = 14, used = 12, headroom = 2 < 4).
+			node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 20})
+			iterator := getNodeIteratorFn(node1)
+			rootQ, err := createRootQueue(map[string]string{"first": "20"})
+			assert.NilError(t, err)
+			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "14"}, nil, appQueueMapping)
+			assert.NilError(t, err)
+			// child1 Guaranteed = 10, child2 Guaranteed = 4 (10 + 4 = 14 == parent Max)
+			childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, map[string]string{"first": "14"}, map[string]string{"first": "10"}, appQueueMapping)
+			assert.NilError(t, err)
+			childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, map[string]string{"first": "14"}, map[string]string{"first": "4"}, appQueueMapping)
+			assert.NilError(t, err)
+
+			app1 := newApplication(appID1, "default", "root.parent.child1")
+			app1.SetQueue(childQ1)
+			childQ1.AddApplication(app1)
+			appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+			allocs := make([]*Allocation, 0, len(tc.victimResources))
+			for i, resMap := range tc.victimResources {
+				key := fmt.Sprintf("alloc-%d", i+1)
+				res := resources.NewResourceFromMap(resMap)
+				ask := newAllocationAsk(key, appID1, res)
+				ask.createTime = time.Now().Add(-time.Duration(i+1) * time.Hour)
+				assert.NilError(t, app1.AddAllocationAsk(ask))
+				alloc := newAllocationWithKey(key, appID1, nodeID1, res)
+				alloc.createTime = ask.createTime
+				app1.AddAllocation(alloc)
+				assert.Check(t, node1.TryAddAllocation(alloc), "node1 alloc failed")
+				assert.NilError(t, childQ1.TryIncAllocatedResource(res))
+				allocs = append(allocs, alloc)
+			}
+
+			app2, preemptorAsk, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 4}, "preemptor", appQueueMapping)
+			assert.NilError(t, err)
+			headRoom := childQ2.getHeadRoom()
+
+			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, preemptorAsk, iterator(), false)
+			result, ok := preemptor.TryPreemption()
+			assert.Equal(t, tc.expectedPreemptOk, ok)
+			assert.Equal(t, tc.expectedPreemptOk, result != nil)
+			for _, alloc := range allocs {
+				assert.Equal(t, alloc.GetAllocationKey() == tc.expectedPreemptedKey, alloc.IsPreempted())
+			}
 		})
 	}
 }

@@ -235,7 +235,8 @@ func (s *Scheduler) triggerQuotaPreemption() {
 }
 
 // inspectOutstandingRequests advertises new autoscaling demand and withdraws advertisements
-// that no longer fit policy headroom. Callbacks run after collection releases its locks.
+// that are no longer selected under current scheduling headroom.
+// Callbacks run after collection releases its locks.
 func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
 	log.Log(log.Scheduler).Debug("inspect outstanding requests")
 	// schedule each partition defined in the cluster
@@ -253,7 +254,7 @@ func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
 				ApplicationID: ask.GetApplicationID(),
 				AllocationKey: ask.GetAllocationKey(),
 				State:         si.UpdateContainerSchedulingStateRequest_SKIPPED,
-				Reason:        "request no longer fits queue or user/group policy headroom",
+				Reason:        "request is no longer selected for autoscaling under current scheduling headroom",
 			})
 			ask.SetScaleUpTriggered(false)
 		}

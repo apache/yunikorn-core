@@ -56,8 +56,8 @@ func TestInspectOutstandingRequestsCrossAppAdvertisementStability(t *testing.T) 
 	t.Cleanup(partition.userGroupCache.Stop)
 	scheduler := NewScheduler()
 	scheduler.clusterContext.partitions["test"] = partition
-	node1 := setupNode(t, "node-1", partition, outstandingRequestResource(10))
-	node2 := setupNode(t, "node-2", partition, outstandingRequestResource(10))
+	node1 := setupNode(t, "node-1", partition, outstandingRequestResource(5))
+	node2 := setupNode(t, "node-2", partition, outstandingRequestResource(5))
 
 	// Establish A's advertisement through a real unsuccessful scheduling attempt.
 	appA := newApplication(appID1, "test", "root.default")
@@ -94,64 +94,53 @@ func TestInspectOutstandingRequestsCrossAppAdvertisementStability(t *testing.T) 
 	assert.Equal(t, appY.GetAskMaxPriority(), int32(1))
 	// FIFO with priority enabled compares priority before submission time. These
 	// distinct priorities force Y before A independently of map order or timing.
-	t.Logf("application order for both inspections: %s (priority 1) -> %s (priority 0)", appY.ApplicationID, appA.ApplicationID)
+	t.Logf("application order while both asks are pending: %s (priority 1) -> %s (priority 0)", appY.ApplicationID, appA.ApplicationID)
 	stateA, stateY := appA.CurrentState(), appY.CurrentState()
-	record := func(inspection int, phase string) {
+	record := func(activeY bool) {
 		t.Helper()
 		queueAllocated := queue.GetAllocatedResource()
 		allocatedA, allocatedY := appA.GetAllocatedResource(), appY.GetAllocatedResource()
-		queueMax := queue.GetMaxResource()
+		queueMax := queue.GetMaxQueueSet()
 		// This leaf is directly below root, so its configured max minus allocated
 		// usage is the effective queue policy headroom. Root physical capacity
 		// is excluded from autoscaling policy headroom.
 		headroom := resources.Sub(queueMax, queueAllocated)
-		t.Logf("inspection %d %s: queue allocated=%v; app A allocated=%v; app Y allocated=%v; queue max=%v; policy headroom=%v; scaleUpTriggered A=%t Y=%t; app states A=%s Y=%s",
-			inspection, phase, queueAllocated, allocatedA, allocatedY, queueMax, headroom,
-			askA.HasTriggeredScaleUp(), askY.HasTriggeredScaleUp(), appA.CurrentState(), appY.CurrentState())
+
 		assert.Assert(t, resources.IsZero(queueAllocated) && resources.IsZero(allocatedA) && resources.IsZero(allocatedY))
 		assert.Assert(t, resources.IsZero(node1.GetAllocatedResource()) && resources.IsZero(node2.GetAllocatedResource()))
 		assert.Assert(t, resources.Equals(queueMax, outstandingRequestResource(20)))
 		assert.Assert(t, resources.Equals(headroom, outstandingRequestResource(20)))
-		assert.Assert(t, resources.Equals(queue.GetPendingResource(), outstandingRequestResource(24)))
+		pending := resources.Quantity(12)
+		if activeY {
+			pending = 24
+		}
+		assert.Assert(t, resources.Equals(queue.GetPendingResource(), outstandingRequestResource(pending)))
+		assert.Assert(t, resources.Equals(partition.root.GetMaxResource(), outstandingRequestResource(10)))
+		assert.Assert(t, !partition.root.GetMaxResource().FitInMaxUndef(askA.GetAllocatedResource()), "root physical capacity must not limit demand collection")
+		assert.Assert(t, !node1.FitInNode(askA.GetAllocatedResource()) && !node2.FitInNode(askA.GetAllocatedResource()))
 		assert.Assert(t, appA.GetAllocationAsk(askAKey) == askA && !askA.IsAllocated() && askA.IsSchedulingAttempted())
-		assert.Assert(t, appY.GetAllocationAsk(askYKey) == askY && !askY.IsAllocated() && askY.IsSchedulingAttempted())
+		if activeY {
+			assert.Assert(t, appY.GetAllocationAsk(askYKey) == askY && !askY.IsAllocated() && askY.IsSchedulingAttempted())
+			assert.Equal(t, appY.CurrentState(), stateY)
+		}
 		assert.Equal(t, appA.CurrentState(), stateA)
-		assert.Equal(t, appY.CurrentState(), stateY)
 	}
 
-	advertisementsY := 0
-	// Only inspect and observe here: no scheduling, allocation, release, node,
-	// application, or configuration updates between the two inspections.
-	for inspection := 1; inspection <= 2; inspection++ {
-		record(inspection, "before")
-		before := len(callback.updates)
-		count, total = scheduler.inspectOutstandingRequests()
-		record(inspection, "after")
-		t.Logf("inspection %d: new outstanding count=%d total=%v", inspection, count, total)
-		assert.Check(t, askA.HasTriggeredScaleUp(), "pending ask in another application must not withdraw A's advertisement")
-		assert.Check(t, askY.HasTriggeredScaleUp(), "Y must remain advertised after each inspection")
-		updates := callback.updates[before:]
-		for _, update := range updates {
-			t.Logf("inspection %d callback: %s(%s), application=%s, reason=%q",
-				inspection, update.state, update.allocationKey, update.applicationID, update.reason)
-			assert.Check(t, update.allocationKey != askAKey || update.state != si.UpdateContainerSchedulingStateRequest_SKIPPED,
-				"pending ask in another application must not cause SKIPPED(A)")
-			if update.applicationID == appY.ApplicationID && update.allocationKey == askYKey && update.state == si.UpdateContainerSchedulingStateRequest_FAILED {
-				advertisementsY++
-			}
-		}
-		if inspection == 1 {
-			assert.Equal(t, count, 1)
-			assert.Assert(t, resources.Equals(total, outstandingRequestResource(12)))
-			assert.Equal(t, len(updates), 1, "first inspection must emit only FAILED(Y)")
-			assert.Equal(t, updates[0].applicationID, appY.ApplicationID)
-			assert.Equal(t, updates[0].allocationKey, askYKey)
-			assert.Equal(t, updates[0].state, si.UpdateContainerSchedulingStateRequest_FAILED)
-		} else {
-			assert.Equal(t, count, 0)
-			assert.Assert(t, resources.IsZero(total), "second inspection must produce no new demand")
-			assert.Equal(t, len(updates), 0, "second inspection must not emit callbacks")
-		}
-	}
-	assert.Equal(t, advertisementsY, 1, "Y must be advertised exactly once")
+	failedA := outstandingRequestStateUpdate{applicationID: appA.ApplicationID, allocationKey: askA.GetAllocationKey(), state: si.UpdateContainerSchedulingStateRequest_FAILED}
+	skippedA := outstandingRequestStateUpdate{applicationID: appA.ApplicationID, allocationKey: askA.GetAllocationKey(), state: si.UpdateContainerSchedulingStateRequest_SKIPPED}
+	failedY := outstandingRequestStateUpdate{applicationID: appY.ApplicationID, allocationKey: askY.GetAllocationKey(), state: si.UpdateContainerSchedulingStateRequest_FAILED}
+	checkInspection := newSelectedAdvertisementInspector(t, scheduler, callback, appA, appY, askA, askY, record)
+	checkInspection("inspection 1", true, 1, false, skippedA, failedY)
+	checkInspection("inspection 2", true, 0, false)
+	checkInspection("inspection 3", true, 0, false)
+
+	// Cancel Y through the production RM release path; A must re-enter selection.
+	released, confirmed := partition.removeAllocation(&si.AllocationRelease{
+		ApplicationID: appY.ApplicationID, AllocationKey: askY.GetAllocationKey(),
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	})
+	assert.Assert(t, len(released) == 0 && confirmed == nil)
+	assert.Assert(t, appY.GetAllocationAsk(askY.GetAllocationKey()) == nil)
+	checkInspection("after cancelling Y", false, 1, true, failedA)
+	checkInspection("quiet after re-arm", false, 0, true)
 }

@@ -1196,44 +1196,40 @@ func (sa *Application) canAllocationReserve(alloc *Allocation) error {
 	return nil
 }
 
-func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, total, withdrawals *[]*Allocation) *resources.Resource {
+// getOutstandingRequests returns the resources selected for active autoscaling demand.
+// requests and withdrawals are callback deltas; retained advertisements only contribute
+// to selectedTotal. The caller supplies queue and per-application user/group budgets bounded by configured
+// policy and actual usage. Ordered selection can displace an individually policy-eligible ask.
+func (sa *Application) getOutstandingRequests(headRoom *resources.Resource, userHeadRoom *resources.Resource, requests, withdrawals *[]*Allocation) *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
-	resTotal := resources.NewResource()
-	if sa.sortedRequests == nil {
-		return resTotal
-	}
-	// Policy eligibility must not depend on the sequential budgets used to select new demand.
-	var policyHeadRoom *resources.Resource
-	policyHeadRoomComputed := false
-	policyUserHeadRoom := userHeadRoom
+	selectedTotal := resources.NewResource()
 	for _, request := range sa.sortedRequests {
 		if request.IsAllocated() || !request.IsSchedulingAttempted() {
 			continue
 		}
 
-		// ignore nil checks resource function calls are nil safe
+		selected := false
+		// Resource function calls are nil safe: undefined resources have no limit.
 		if headRoom.FitInMaxUndef(request.GetAllocatedResource()) && userHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
-			if !request.HasTriggeredScaleUp() && request.requiredNode == common.Empty && !sa.canReplace(request) {
-				// if headroom is still enough for the resources
-				*total = append(*total, request)
-				resTotal.AddTo(request.GetAllocatedResource())
+			if request.requiredNode == common.Empty && !sa.canReplace(request) {
+				selected = true
+				selectedTotal.AddTo(request.GetAllocatedResource())
+				if !request.HasTriggeredScaleUp() {
+					*requests = append(*requests, request)
+				}
 			}
-			// Eligible advertised asks still consume the local headroom budgets.
+			// Preserve local budgeting for fitting special asks, even though they
+			// are excluded from the selected autoscaling total propagated upward.
 			headRoom = resources.SubOnlyExisting(headRoom, request.GetAllocatedResource())
 			userHeadRoom = resources.SubOnlyExisting(userHeadRoom, request.GetAllocatedResource())
-		} else if request.HasTriggeredScaleUp() && withdrawals != nil {
-			if !policyHeadRoomComputed {
-				policyHeadRoom = sa.queue.getMaxHeadRoom()
-				policyHeadRoomComputed = true
-			}
-			if !policyHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) || !policyUserHeadRoom.FitInMaxUndef(request.GetAllocatedResource()) {
-				// Withdraw policy-ineligible demand separately from newly outstanding resources.
-				*withdrawals = append(*withdrawals, request)
-			}
+		}
+		if !selected && request.HasTriggeredScaleUp() && withdrawals != nil {
+			// Losing ordered selection is sufficient, even if stable policy still fits.
+			*withdrawals = append(*withdrawals, request)
 		}
 	}
-	return resTotal
+	return selectedTotal
 }
 
 // canReplace returns true if there is a placeholder for the task group available for the request.

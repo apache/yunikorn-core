@@ -105,46 +105,38 @@ func TestInspectOutstandingRequestsSameAppAdvertisementStability(t *testing.T) {
 				assert.Assert(t, !queuePolicy.FitInMaxUndef(outstandingRequestResource(24)), "two asks must exceed queue policy")
 			}
 			state := app.CurrentState()
-			checkPolicy := func() {
+			checkPolicy := func(activeY bool) {
 				t.Helper()
 				assert.Assert(t, resources.IsZero(queue.GetAllocatedResource()) && resources.IsZero(app.GetAllocatedResource()))
 				assert.Assert(t, resources.IsZero(node1.GetAllocatedResource()) && resources.IsZero(node2.GetAllocatedResource()))
 				assert.Assert(t, resources.Equals(queue.GetMaxQueueSet(), queuePolicy))
 				assert.Assert(t, resources.Equals(ugm.GetUserManager().Headroom(app.GetQueuePath(), appID1, app.GetUser()), userPolicy))
-				assert.Assert(t, resources.Equals(app.GetPendingResource(), outstandingRequestResource(24)))
+				pending := resources.Quantity(12)
+				if activeY {
+					pending = 24
+				}
+				assert.Assert(t, resources.Equals(app.GetPendingResource(), outstandingRequestResource(pending)))
 				assert.Assert(t, !askA.IsAllocated() && !peer.IsAllocated())
 				assert.Equal(t, app.CurrentState(), state)
 			}
 
-			peerAdvertisements := 0
-			// Only inspect and observe: no allocation, release, or configuration changes.
-			for inspection := 1; inspection <= 2; inspection++ {
-				checkPolicy()
-				t.Logf("inspection %d before: allocated=0 queue policy=%v user/group policy=%v triggered A=%t peer=%t",
-					inspection, queuePolicy, userPolicy, askA.HasTriggeredScaleUp(), peer.HasTriggeredScaleUp())
-				before := len(callback.updates)
-				count, total = scheduler.inspectOutstandingRequests()
-				checkPolicy()
-				t.Logf("inspection %d after: triggered A=%t peer=%t new demand count=%d total=%v",
-					inspection, askA.HasTriggeredScaleUp(), peer.HasTriggeredScaleUp(), count, total)
-				assert.Check(t, askA.HasTriggeredScaleUp(), "pending peer must not withdraw A's advertisement")
-				for _, update := range callback.updates[before:] {
-					t.Logf("inspection %d callback: %s(%s)", inspection, update.state, update.allocationKey)
-					assert.Check(t, update.allocationKey != askAKey || update.state != si.UpdateContainerSchedulingStateRequest_SKIPPED,
-						"pending peer must not cause SKIPPED(A)")
-					if update.allocationKey == peerKey && update.state == si.UpdateContainerSchedulingStateRequest_FAILED {
-						peerAdvertisements++
-					}
-				}
-				if inspection == 1 {
-					assert.Check(t, count == 1 && resources.Equals(total, outstandingRequestResource(12)))
-				} else {
-					assert.Check(t, count == 0 && resources.IsZero(total), "second inspection must produce no new demand")
-					assert.Check(t, len(callback.updates) == before, "second inspection must not emit callbacks")
-				}
-			}
-			assert.Equal(t, peerAdvertisements, 1)
-			assert.Assert(t, peer.HasTriggeredScaleUp())
+			failedA := outstandingRequestStateUpdate{applicationID: app.ApplicationID, allocationKey: askA.GetAllocationKey(), state: si.UpdateContainerSchedulingStateRequest_FAILED}
+			skippedA := outstandingRequestStateUpdate{applicationID: app.ApplicationID, allocationKey: askA.GetAllocationKey(), state: si.UpdateContainerSchedulingStateRequest_SKIPPED}
+			failedY := outstandingRequestStateUpdate{applicationID: app.ApplicationID, allocationKey: peer.GetAllocationKey(), state: si.UpdateContainerSchedulingStateRequest_FAILED}
+			checkInspection := newSelectedAdvertisementInspector(t, scheduler, callback, app, app, askA, peer, checkPolicy)
+			checkInspection("inspection 1", true, 1, false, skippedA, failedY)
+			checkInspection("inspection 2", true, 0, false)
+			checkInspection("inspection 3", true, 0, false)
+
+			// Cancel Y through the production RM release path; A must re-enter selection.
+			released, confirmed := partition.removeAllocation(&si.AllocationRelease{
+				ApplicationID: app.ApplicationID, AllocationKey: peer.GetAllocationKey(),
+				TerminationType: si.TerminationType_STOPPED_BY_RM,
+			})
+			assert.Assert(t, len(released) == 0 && confirmed == nil)
+			assert.Assert(t, app.GetAllocationAsk(peer.GetAllocationKey()) == nil)
+			checkInspection("after cancelling Y", false, 1, true, failedA)
+			checkInspection("quiet after re-arm", false, 0, true)
 		})
 	}
 }

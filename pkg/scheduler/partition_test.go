@@ -469,7 +469,12 @@ func TestPlaceholderDataWithPlaceholderPreemption(t *testing.T) {
 	for i := 1; i <= 6; i++ {
 		// add an ask for a placeholder and allocate
 		lastPh = phID + strconv.Itoa(i)
-		ask := newAllocationAskTG(lastPh, appID2, taskGroup, res, true)
+		// age is compared at hour granularity: make the last placeholder the youngest
+		var tags map[string]string
+		if i < 6 {
+			tags = map[string]string{siCommon.CreationTime: strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10)}
+		}
+		ask := newAllocationAskAll(lastPh, appID2, taskGroup, res, 1, true, tags)
 		err = gangApp.AddAllocationAsk(ask)
 		assert.NilError(t, err, "failed to add placeholder ask %s to app1", lastPh)
 		// try to allocate a placeholder via normal allocate

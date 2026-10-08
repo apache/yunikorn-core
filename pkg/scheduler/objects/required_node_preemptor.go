@@ -153,13 +153,10 @@ func (p *PreemptionContext) filterAllocations() filteringResult {
 	return result
 }
 
-// sort based on the following criteria in the specified order:
-// 1. By type (regular pods, opted out pods, driver/owner pods),
-// 2. By priority (least priority ask placed first),
-// 3. By Create time or age of the ask (younger ask placed first),
-// 4. By resource (ask with lesser allocated resources placed first)
 func (p *PreemptionContext) sortAllocations() {
-	SortAllocations(p.allocations)
+	shortfall := resources.SubEliminateNegative(p.requiredAsk.GetAllocatedResource(), p.node.GetAvailableResource())
+	shortfall.Prune()
+	SortAllocationsBasedOnAsk(p.allocations, p.node.GetCapacity(), shortfall)
 }
 
 func (p *PreemptionContext) GetVictims() []*Allocation {

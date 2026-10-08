@@ -455,3 +455,37 @@ func getPreemptableResource(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ
 	cRemaining2 := qpsChild2.GetPreemptableResource()
 	return rootRemaining, pRemaining, cRemaining1, cRemaining2
 }
+
+func TestGetPreemptableResource_SharedAncestor(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2, childQ3 := setup(t)
+	tests := []struct {
+		testName            string
+		askQueue            *Queue
+		expectedChild2Preem *resources.Resource
+	}{
+		{
+			testName:            "NonSharedAncestor_CapsVictimQueuePreemptableByParent",
+			askQueue:            childQ3,
+			expectedChild2Preem: smallestRes,
+		},
+		{
+			testName:            "SharedAncestor_ExemptsVictimQueueFromParentCap",
+			askQueue:            childQ1,
+			expectedChild2Preem: smallestResDouble,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			resetQueueResources(rootQ, parentQ, childQ1, childQ2)
+			parentQ.guaranteedResource = smallestRes
+			rootQ.allocatedResource = smallestResDouble
+			parentQ.allocatedResource = smallestResDouble
+			childQ2.allocatedResource = smallestResDouble
+
+			_, qpsParent, _, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2, tt.askQueue)
+			assert.Assert(t, resources.Equals(qpsParent.GetPreemptableResource(), smallestRes))
+			assert.Assert(t, resources.Equals(qpsChild2.GetPreemptableResource(), tt.expectedChild2Preem))
+		})
+	}
+}

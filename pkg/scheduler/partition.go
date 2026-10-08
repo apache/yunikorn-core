@@ -287,12 +287,19 @@ func (pc *PartitionContext) markPartitionForRemoval() {
 
 // Get the state of the partition.
 // No new nodes and applications will be accepted if stopped or being removed.
+func (pc *PartitionContext) isStopped() bool {
+	return pc.stateMachine.Current() == objects.Stopped.String()
+}
+
+// Get the state of the partition.
+// No new nodes and applications will be accepted if stopped or being removed.
 func (pc *PartitionContext) isDraining() bool {
 	return pc.stateMachine.Current() == objects.Draining.String()
 }
 
-func (pc *PartitionContext) isStopped() bool {
-	return pc.stateMachine.Current() == objects.Stopped.String()
+// IsRunning returns true if the partition in Active state.
+func (pc *PartitionContext) IsRunning() bool {
+	return pc.stateMachine.Is(objects.Active.String())
 }
 
 // Handle the state event for the partition.
@@ -324,7 +331,7 @@ func (pc *PartitionContext) getPlacementManager() *placement.AppPlacementManager
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	if pc.isDraining() || pc.isStopped() {
-		return fmt.Errorf("partition %s is stopped cannot add a new application %s", pc.Name, app.ApplicationID)
+		return fmt.Errorf("partition %s is stopped or draining, cannot add a new application %s", pc.Name, app.ApplicationID)
 	}
 
 	// Check if the app exists
@@ -727,7 +734,7 @@ func (pc *PartitionContext) AddNode(node *objects.Node) error {
 		zap.String("partition", pc.Name),
 		zap.String("nodeID", node.NodeID))
 	if pc.isDraining() || pc.isStopped() {
-		return fmt.Errorf("partition %s is stopped cannot add a new node %s", pc.Name, node.NodeID)
+		return fmt.Errorf("partition %s is draining or stopped, cannot add a new node %s", pc.Name, node.NodeID)
 	}
 	if err := pc.addNodeToList(node); err != nil {
 		return err

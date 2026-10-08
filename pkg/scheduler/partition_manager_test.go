@@ -99,6 +99,7 @@ func TestRemoveAll(t *testing.T) {
 
 	// make sure all nodes and applications are removed
 	p.partitionManager.remove()
+	assert.Assert(t, p.isDraining())
 	assert.Equal(t, 0, len(p.applications))
 	assert.Equal(t, 0, p.nodes.GetNodeCount())
 }

@@ -785,6 +785,13 @@ func (sq *Queue) GetQueuePath() string {
 	return sq.QueuePath
 }
 
+// IsStopped returns true if the queue in Stopped state.
+// No Existing applications will be scheduled
+// No new applications will be accepted.
+func (sq *Queue) IsStopped() bool {
+	return sq.stateMachine.Is(Stopped.String())
+}
+
 // IsDraining returns true if the queue in Draining state.
 // Existing applications will still be scheduled
 // No new applications will be accepted.
@@ -795,12 +802,6 @@ func (sq *Queue) IsDraining() bool {
 // IsRunning returns true if the queue in Active state.
 func (sq *Queue) IsRunning() bool {
 	return sq.stateMachine.Is(Active.String())
-}
-
-// IsStopped returns true if the queue in Stopped state.
-// The queue is skipped for scheduling in this state.
-func (sq *Queue) IsStopped() bool {
-	return sq.stateMachine.Is(Stopped.String())
 }
 
 // CurrentState returns the current state of the queue in string form.
@@ -1166,7 +1167,7 @@ func (sq *Queue) addChildQueue(child *Queue) error {
 	if sq.isLeaf {
 		return fmt.Errorf("cannot add a child queue to a leaf queue: %s", sq.QueuePath)
 	}
-	if sq.IsDraining() {
+	if sq.IsDraining() || sq.IsStopped() {
 		return fmt.Errorf("cannot add a child queue when queue is marked for deletion: %s", sq.QueuePath)
 	}
 

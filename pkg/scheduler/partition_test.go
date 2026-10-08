@@ -5759,3 +5759,23 @@ func TestRemoveAllocationPlaceholderReplacedWithoutReplacement(t *testing.T) {
 	assert.Assert(t, node1.GetAllocation("placeholder") == nil, "placeholder should be removed from node")
 	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue resource should be zero after placeholder removed")
 }
+
+func TestPartitionStates(t *testing.T) {
+	p := createPartitionContext(t)
+	err := p.handlePartitionEvent(objects.Stop)
+	if err != nil || !p.isStopped() {
+		t.Errorf("partition is not marked stopped: %v", err)
+	}
+	err = p.handlePartitionEvent(objects.Start)
+	if err != nil || !p.IsRunning() {
+		t.Errorf("partition is not marked running: %v", err)
+	}
+	err = p.handlePartitionEvent(objects.Remove)
+	if err != nil || !p.isDraining() {
+		t.Errorf("partition is not marked draining: %v", err)
+	}
+	err = p.handlePartitionEvent(objects.Start)
+	if err != nil || !p.IsRunning() {
+		t.Errorf("partition is not marked running: %v", err)
+	}
+}

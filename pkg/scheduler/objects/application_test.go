@@ -3015,7 +3015,7 @@ func TestRemoveDeallocatedAllocationNotTracked(t *testing.T) {
 	assert.NilError(t, err, "ask should have been added to app")
 	_, err = app.AllocateAsk(aKey)
 	assert.NilError(t, err, "ask should have been allocated")
-	app.AddAllocation(ask)
+	assert.NilError(t, app.AddAllocation(ask), "allocation should have been added")
 
 	_, err = app.DeallocateAsk(aKey)
 	assert.NilError(t, err, "ask should have been deallocated")

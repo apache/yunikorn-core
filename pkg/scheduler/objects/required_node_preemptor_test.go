@@ -200,6 +200,60 @@ func TestGetVictims(t *testing.T) {
 	removeAllocationAsks(node, asks)
 }
 
+func TestSortAllocations(t *testing.T) {
+	// case 1: victims are compared by their share of the node capacity, not by their raw quantities
+	node := NewNode(&si.NodeInfo{
+		NodeID: "node1",
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 100}, "second": {Value: 10}},
+		},
+	})
+	for _, alloc := range []*Allocation{
+		createAllocation("filler", "app1", node.NodeID, true, false, 30, false,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 85, "second": 7})),
+		createAllocation("alloc-a", "app1", node.NodeID, true, false, 10, false,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "second": 1})),
+		createAllocation("alloc-b", "app1", node.NodeID, true, false, 10, false,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 2})),
+	} {
+		assert.Assert(t, node.TryAddAllocation(alloc))
+	}
+	requiredAsk := createAllocationAsk("ds1", "app2", true, true, 20,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 1}))
+	p := NewRequiredNodePreemptor(node, requiredAsk, nil)
+	p.filterAllocations()
+	p.sortAllocations()
+	allocations := p.getAllocations()
+	assert.Equal(t, len(allocations), 2)
+	assert.Equal(t, allocations[0].GetAllocationKey(), "alloc-a")
+	assert.Equal(t, allocations[1].GetAllocationKey(), "alloc-b")
+
+	// case 2: only the resource types the node is short of are considered, a pod holding none of them goes last
+	node = NewNode(&si.NodeInfo{
+		NodeID: "node2",
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 10}, "pods": {Value: 10}},
+		},
+	})
+	for _, alloc := range []*Allocation{
+		createAllocation("best-effort", "app1", node.NodeID, true, false, 10, false,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"pods": 1})),
+		createAllocation("busy", "app1", node.NodeID, true, false, 10, false,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "pods": 1})),
+	} {
+		assert.Assert(t, node.TryAddAllocation(alloc))
+	}
+	requiredAsk = createAllocationAsk("ds2", "app2", true, true, 20,
+		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "pods": 1}))
+	p = NewRequiredNodePreemptor(node, requiredAsk, nil)
+	p.filterAllocations()
+	p.sortAllocations()
+	allocations = p.getAllocations()
+	assert.Equal(t, len(allocations), 2)
+	assert.Equal(t, allocations[0].GetAllocationKey(), "busy")
+	assert.Equal(t, allocations[1].GetAllocationKey(), "best-effort")
+}
+
 func verifyFilterResult(t *testing.T, totalAllocations, requiredNodeAllocations, resourceNotEnough, higherPriorityAllocations, alreadyPreemptedAllocations int, releasedPhAllocations int, result filteringResult) {
 	t.Helper()
 	assert.Equal(t, totalAllocations, result.totalAllocations)

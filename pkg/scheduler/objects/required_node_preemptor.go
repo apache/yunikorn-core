@@ -154,7 +154,9 @@ func (p *PreemptionContext) filterAllocations() filteringResult {
 }
 
 func (p *PreemptionContext) sortAllocations() {
-	SortAllocationsBasedOnAsk(p.allocations, p.node.GetCapacity(), p.requiredAsk.GetAllocatedResource())
+	shortfall := resources.SubEliminateNegative(p.requiredAsk.GetAllocatedResource(), p.node.GetAvailableResource())
+	shortfall.Prune()
+	SortAllocationsBasedOnAsk(p.allocations, p.node.GetCapacity(), shortfall)
 }
 
 func (p *PreemptionContext) GetVictims() []*Allocation {

@@ -5779,3 +5779,184 @@ func TestPartitionStates(t *testing.T) {
 		t.Errorf("partition is not marked running: %v", err)
 	}
 }
+
+// TestRemoveAllocationRaceWithAllocate verifies that a removal processed between the two steps of a
+// scheduling cycle still cleans up the node and the queue. Queue.TryAllocate() places the allocation
+// on the node and the application, PartitionContext.allocate() only finalises it afterwards.
+func TestRemoveAllocationRaceWithAllocate(t *testing.T) {
+	tests := []struct {
+		name   string
+		remove func(partition *PartitionContext)
+	}{
+		{"release", func(partition *PartitionContext) {
+			partition.removeAllocation(&si.AllocationRelease{
+				PartitionName:   "test",
+				ApplicationID:   appID1,
+				AllocationKey:   allocKey,
+				TerminationType: si.TerminationType_STOPPED_BY_RM,
+			})
+		}},
+		{"application removal", func(partition *PartitionContext) {
+			partition.removeApplication(appID1)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+
+			nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+			node := setupNode(t, nodeID1, partition, nodeRes)
+
+			app := newApplication(appID1, "default", defQueue)
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, "add application failed")
+
+			askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+			err = app.AddAllocationAsk(newAllocationAsk(allocKey, appID1, askRes))
+			assert.NilError(t, err, "add ask failed")
+
+			// the allocation is added to the node and the application here
+			result := partition.root.TryAllocate(partition.GetNodeIterator, partition.GetFullNodeIterator, partition.GetNode, partition.IsPreemptionEnabled())
+			assert.Assert(t, result != nil, "allocation should have been made")
+			assert.Assert(t, node.GetAllocation(allocKey) != nil, "node should have the allocation")
+
+			// the RM removal is processed before the allocation is finalised
+			tt.remove(partition)
+			partition.allocate(result)
+
+			assert.Assert(t, node.GetAllocation(allocKey) == nil, "allocation left on the node")
+			assert.Equal(t, 0, len(checkNodeAllocations(node, partition)), "orphan allocation reported on the node")
+			assert.Assert(t, resources.IsZero(node.GetAllocatedResource()), "node allocated resource should be zero")
+			assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+			used := app.GetTrackedDAOMap("usedResource")
+			assert.Assert(t, used[""] == nil, "resource usage tracked without an instance type")
+			assert.Assert(t, used[objects.UnknownInstanceType] != nil, "resource usage not tracked against the node instance type")
+		})
+	}
+}
+
+// TestRemoveNodeRaceWithAllocate verifies that an allocation unwound by PartitionContext.allocate() because its
+// node was removed returns to a pending ask without the node binding, in either order of the two node removal steps.
+func TestRemoveNodeRaceWithAllocate(t *testing.T) {
+	tests := []struct {
+		name     string
+		allocate func(t *testing.T, partition *PartitionContext, result *objects.AllocationResult)
+	}{
+		{"node removed before allocate", func(t *testing.T, partition *PartitionContext, result *objects.AllocationResult) {
+			partition.removeNode(nodeID1)
+			assert.Assert(t, partition.allocate(result) == nil, "allocation should have been unwound")
+		}},
+		{"node allocations removed after allocate", func(t *testing.T, partition *PartitionContext, result *objects.AllocationResult) {
+			node := partition.removeNodeFromList(nodeID1)
+			assert.Assert(t, partition.allocate(result) == nil, "allocation should have been unwound")
+			partition.removeNodeAllocations(node)
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+
+			nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+			setupNode(t, nodeID1, partition, nodeRes)
+
+			app := newApplication(appID1, "default", defQueue)
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, "add application failed")
+
+			askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+			err = app.AddAllocationAsk(newAllocationAsk(allocKey, appID1, askRes))
+			assert.NilError(t, err, "add ask failed")
+
+			result := partition.root.TryAllocate(partition.GetNodeIterator, partition.GetFullNodeIterator, partition.GetNode, partition.IsPreemptionEnabled())
+			assert.Assert(t, result != nil, "allocation should have been made")
+
+			tt.allocate(t, partition, result)
+
+			ask := app.GetAllocationAsk(allocKey)
+			assert.Assert(t, !ask.IsAllocated(), "ask should be pending again")
+			assert.Assert(t, resources.Equals(app.GetPendingResource(), askRes), "ask should be counted as pending")
+			assert.Equal(t, ask.GetNodeID(), "", "pending ask should not have a node ID")
+			assert.Assert(t, ask.GetBindTime().IsZero(), "pending ask should not have a bind time")
+			assert.Equal(t, ask.GetInstanceType(), "", "pending ask should not have an instance type")
+			assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+			assert.Assert(t, app.GetTrackedDAOMap("usedResource")[""] == nil, "resource usage tracked without an instance type")
+		})
+	}
+}
+
+// TestUnreserveRaceWithRemoveNode verifies that an unreserve for a removed node only unwinds an ask allocated on that
+// node. The shim placing a reserved ask does not remove the reservation, so the ask can be allocated on any node.
+func TestUnreserveRaceWithRemoveNode(t *testing.T) {
+	tests := []struct {
+		name    string
+		nodeID  string
+		unwound bool
+	}{
+		{"allocated on the removed node", nodeID1, true},
+		{"allocated on another node", nodeID2, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+
+			nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+			node1 := setupNode(t, nodeID1, partition, nodeRes)
+			node2 := setupNode(t, nodeID2, partition, nodeRes)
+
+			app := newApplication(appID1, "default", defQueue)
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, "add application failed")
+
+			askRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+			ask := newAllocationAsk(allocKey, appID1, askRes)
+			err = app.AddAllocationAsk(ask)
+			assert.NilError(t, err, "add ask failed")
+			partition.reserve(app, node1, ask)
+
+			_, allocCreated, err := partition.UpdateAllocation(newAllocationAll(allocKey, appID1, tt.nodeID, "", askRes, 0, false))
+			assert.NilError(t, err, "shim placement failed")
+			assert.Assert(t, allocCreated, "shim placement should have created the allocation")
+			assert.Equal(t, app.NodeReservedForAsk(allocKey), nodeID1, "reservation should still be linked to the ask")
+
+			// a pending ask keeps the reserved allocation cycle running
+			bigRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100})
+			err = app.AddAllocationAsk(newAllocationAsk(allocKey2, appID1, bigRes))
+			assert.NilError(t, err, "add ask failed")
+
+			result := partition.root.TryReservedAllocate(partition.GetNodeIterator)
+			assert.Assert(t, result != nil, "reservation should have been processed")
+			assert.Equal(t, result.ResultType, objects.Unreserved, "allocated ask should be unreserved")
+
+			partition.removeNode(nodeID1)
+			assert.Assert(t, partition.allocate(result) == nil, "unreserve on a removed node should not return a result")
+
+			if tt.unwound {
+				assert.Assert(t, !ask.IsAllocated(), "ask allocated on the removed node should be pending again")
+				assert.Assert(t, resources.Equals(app.GetPendingResource(), resources.Add(askRes, bigRes)), "ask allocated on the removed node should be counted as pending")
+				assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+				return
+			}
+			assert.Assert(t, ask.IsAllocated(), "ask allocated on another node should stay allocated")
+			assert.Equal(t, ask.GetNodeID(), nodeID2, "ask allocated on another node should keep its node")
+			assert.Assert(t, resources.Equals(app.GetPendingResource(), bigRes), "ask allocated on another node should not be pending")
+
+			partition.removeAllocation(&si.AllocationRelease{
+				PartitionName:   "test",
+				ApplicationID:   appID1,
+				AllocationKey:   allocKey,
+				TerminationType: si.TerminationType_STOPPED_BY_RM,
+			})
+			assert.Assert(t, node2.GetAllocation(allocKey) == nil, "allocation left on the node")
+			assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
+		})
+	}
+}

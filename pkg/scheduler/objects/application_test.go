@@ -2999,6 +2999,30 @@ func TestRollbackAllocationAskNotTracked(t *testing.T) {
 	assertMaxPriorityConsistent(t, app)
 }
 
+// TestRemoveDeallocatedAllocationNotTracked verifies that an allocation deallocated before it is removed adds
+// nothing to the tracked usage: it was never handed to the RM.
+func TestRemoveDeallocatedAllocationNotTracked(t *testing.T) {
+	setupUGM()
+	defer setupUGM()
+	app := newApplication(appID1, "default", "root.default")
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app.queue = queue
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	ask := newAllocationAsk(aKey, appID1, res)
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+	_, err = app.AllocateAsk(aKey)
+	assert.NilError(t, err, "ask should have been allocated")
+	assert.NilError(t, app.AddAllocation(ask), "allocation should have been added")
+
+	_, err = app.DeallocateAsk(aKey)
+	assert.NilError(t, err, "ask should have been deallocated")
+	assert.Assert(t, app.RemoveAllocation(aKey, si.TerminationType_UNKNOWN_TERMINATION_TYPE) != nil, "allocation should have been removed")
+	assert.Equal(t, len(app.GetTrackedDAOMap("usedResource")), 0, "deallocated allocation should not be tracked")
+}
+
 func TestAskEvents(t *testing.T) {
 	app := newApplication(appID1, "default", "root.default")
 	// Create event system after new application to avoid new app event.

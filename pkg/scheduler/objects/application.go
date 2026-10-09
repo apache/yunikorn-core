@@ -796,10 +796,21 @@ func (sa *Application) UpdateAllocationResources(alloc *Allocation, isQuotaPreem
 	}
 	delta.Prune()
 
+	if existing.IsPlaceholder() {
+		// the gang moves to Running when allocatedPlaceholder equals placeholderAsk, so the ask follows every resize
+		sa.placeholderAsk = resources.Add(sa.placeholderAsk, delta)
+		sa.placeholderAsk.Prune()
+	}
+
 	if existing.IsAllocated() {
 		// update allocated resources
-		sa.allocatedResource = resources.Add(sa.allocatedResource, delta)
-		sa.allocatedResource.Prune()
+		if existing.IsPlaceholder() {
+			sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, delta)
+			sa.allocatedPlaceholder.Prune()
+		} else {
+			sa.allocatedResource = resources.Add(sa.allocatedResource, delta)
+			sa.allocatedResource.Prune()
+		}
 		sa.queue.IncAllocatedResource(delta, isQuotaPreemptionEnabled)
 
 		// update user usage

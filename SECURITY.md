@@ -202,12 +202,21 @@ a webhook, or a pod spec is handled by the shim.
 
 The scheduler core deliberately ships with **no security controls of its own**: no authentication, no
 authorization at the transport layer, no TLS, no credential verification. Its entire security posture
-is inherited from the environment it is deployed into. Concretely: if you run or test YuniKorn with an
-over-permissive service account or an open RBAC binding, the core will exercise every privilege that
-identity grants — nothing in this repository restrains it. A correctly scoped service account and RBAC
-binding (owned by `yunikorn-k8shim` and `yunikorn-release`, not by this repo) is what produces the
-restrictions an operator actually wants. Do not read a permissive lab or CI deployment as the
-project's intended posture, and do not expect the core to compensate for a wide-open cluster identity.
+is inherited from the environment it is deployed into, and the controls that produce that posture live
+outside this repository — in `yunikorn-k8shim` (the admission controller) and `yunikorn-release` (the
+Helm charts, service account, and RBAC).
+
+The published Helm charts already apply least privilege: the RBAC entries have been pared down to
+what the scheduler actually needs to function. A standard deployment installed from those charts runs
+with minimal permissions, and that — not this repository — is what constrains what the scheduler can
+do in a cluster.
+
+Keep in mind, though, that **a scheduler is an inherently highly privileged application in a
+cluster**: it decides where workloads run, so it necessarily holds broad authority over pods
+cluster-wide. "Least privilege" for a scheduler is still a large privilege. If you hand-roll your own
+manifests instead of using the published charts, or you widen the bindings for a lab or CI setup, the
+core will exercise whatever that identity grants — nothing in this repository restrains it. Do not
+read a permissive test deployment as the project's intended posture.
 
 ### Deployment assumptions
 
@@ -268,10 +277,9 @@ access to the scheduler's entire state.
 | `GET /debug/pprof/*` (`heap`, `goroutine`, `profile`, `trace`, `cmdline`, `symbol`, …) | Go runtime profiling data | **Highest** — `profile` and `trace` block for their sample duration and are a denial-of-service vector as well as an information leak |
 
 `pkg/webservice/routes.go` already carries the project's own guidance on this: the `/debug/*`
-endpoints are not to be proxied by the web server, and their content is not for general consumption.
-Treat that comment as normative and block those routes at the proxy. The deprecated aliases
-`/ws/v1/stack` and `/ws/v1/fullstatedump` redirect to the `/debug` equivalents and are scheduled for
-removal.
+endpoints are not to be proxied by the web server, their content is not for general consumption, and
+it is not considered stable and can change from release to release. Treat that comment as normative
+and block those routes at the proxy.
 
 ### Identity, ACLs and authorization
 
@@ -450,9 +458,8 @@ because a report that satisfies it *is* in scope.
   Kubernetes, use a NetworkPolicy and avoid `LoadBalancer` or `NodePort` exposure.
 - If the REST API must be reachable by users, place it behind a reverse proxy that terminates TLS,
   authenticates the caller, and applies rate limits.
-- Block `/debug/*` (including all `/debug/pprof/*`) and the deprecated `/ws/v1/stack` and
-  `/ws/v1/fullstatedump` aliases at the proxy. Enable them deliberately, and temporarily, for
-  debugging.
+- Block `/debug/*` (including all `/debug/pprof/*`) at the proxy. Enable them deliberately, and
+  temporarily, for debugging.
 - Treat `/ws/v1/config` and `/ws/v1/partition/*/usage/*` as sensitive: they disclose your
   authorization policy and your user and group names.
 - Scrape `/ws/v1/metrics` from inside the cluster only. It shares the port, and the lack of
@@ -463,9 +470,10 @@ because a report that satisfies it *is* in scope.
 - If you use the LDAP resolver: enable `SSL`, use port `636`, leave `Insecure` at `false`, and mount
   the bind credential from a Secret.
 - Run at Info level or above in production. Enable Debug only temporarily, and redact before sharing.
-- **Scope the scheduler's service account and RBAC binding to least privilege.** As noted in
-  [Not secure by default](#not-secure-by-default), the core will exercise whatever privilege its
-  identity is granted — an open RBAC binding is not compensated for anywhere in this repository.
+- **Deploy using the published Helm charts.** Their RBAC is already pared down to what the scheduler
+  needs. If you maintain your own manifests, mirror those charts rather than widening the bindings —
+  as noted in [Not secure by default](#not-secure-by-default), the core will exercise whatever
+  privilege its identity is granted.
 - Keep the shim's admission controller enabled, and restrict which principals may set the user-info
   annotation, so that assumption A2 actually holds.
 
@@ -493,9 +501,12 @@ Practices already in place:
   ordinary public Jira issues.
 - Branch protection on `master` and the `branch-*` branches restricts force-push and deletion.
 
-Honest gap: CI does not currently run a dedicated dependency-vulnerability or deeper static-analysis
-scan beyond `gosec`. Contributions that add one — a `govulncheck` step in the pre-commit workflow
-would be a natural first move — are welcome; please open a Jira issue to discuss before sending a PR.
+CI does not currently run a dedicated dependency-vulnerability scan beyond `gosec`. Adding
+`govulncheck` has been considered, but it offers no way to suppress or ignore a false positive, and it
+currently reports two findings against this code base that are false positives — so adopting it would
+first require the plumbing to track accepted exceptions, otherwise the build would fail permanently.
+Contributions in this area are welcome; please open a Jira issue to discuss the approach before
+sending a PR.
 
 ## Maintaining this document
 

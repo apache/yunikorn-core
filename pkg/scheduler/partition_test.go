@@ -4266,13 +4266,16 @@ func TestUpdateAllocationPlaceholderResize(t *testing.T) {
 	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
 	err = app.AddAllocationAsk(newAllocationAskTG(phID2, appID1, taskGroup, res, true))
 	assert.NilError(t, err, "failed to add placeholder ask ph-2 to app")
+
+	// allocate both placeholders: the gang is complete
 	for i := 0; i < 2; i++ {
 		result := partition.tryAllocate()
 		assert.Assert(t, result != nil && result.Request != nil, "placeholder should have been allocated")
 	}
 	assert.Assert(t, app.IsRunning(), "app should be running once all placeholders are allocated, got state %s", app.CurrentState())
 
-	res3 := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 3})
+	// resize ph-1 from 2 to 3 vcore: what the shim sends after an in-place resize of the placeholder pod
+	resizedRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 3})
 	_, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&si.Allocation{
 		AllocationKey:    phID,
 		ApplicationID:    appID1,
@@ -4280,16 +4283,17 @@ func TestUpdateAllocationPlaceholderResize(t *testing.T) {
 		NodeID:           nodeID1,
 		TaskGroupName:    taskGroup,
 		Placeholder:      true,
-		ResourcePerAlloc: res3.ToProto(),
+		ResourcePerAlloc: resizedRes.ToProto(),
 	}))
 	assert.NilError(t, err, "failed to resize placeholder ph-1")
 	assert.Check(t, !allocCreated, "alloc should not have been created")
-	total := resources.Add(res, res3)
+	total := resources.Add(res, resizedRes)
 	assert.Check(t, resources.IsZero(app.GetAllocatedResource()), "placeholder resize booked on app allocated resources: %v", app.GetAllocatedResource())
 	assert.Check(t, resources.Equals(app.GetPlaceholderResource(), total), "app placeholder resources not updated: %v", app.GetPlaceholderResource())
 	assert.Check(t, resources.Equals(partition.GetQueue(defQueue).GetAllocatedResource(), total), "queue resources not updated")
 	assert.Check(t, resources.Equals(partition.GetNode(nodeID1).GetAllocatedResource(), total), "node resources not updated")
 
+	// replace both placeholders with real allocations
 	err = app.AddAllocationAsk(newAllocationAskTG(allocKey, appID1, taskGroup, res, false))
 	assert.NilError(t, err, "failed to add ask alloc-1 to app")
 	err = app.AddAllocationAsk(newAllocationAskTG(allocKey2, appID1, taskGroup, res, false))
@@ -4297,24 +4301,28 @@ func TestUpdateAllocationPlaceholderResize(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		result := partition.tryPlaceholderAllocate()
 		assert.Assert(t, result != nil && result.Request != nil, "placeholder should have been replaced")
-		partition.removeAllocation(&si.AllocationRelease{
+		released, confirmed := partition.removeAllocation(&si.AllocationRelease{
 			PartitionName:   "test",
 			ApplicationID:   appID1,
 			AllocationKey:   result.Request.GetRelease().GetAllocationKey(),
 			TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
 		})
+		assert.Equal(t, 0, len(released), "not expecting any released allocations")
+		assert.Assert(t, confirmed != nil, "replacement should have been confirmed")
 	}
 	assert.Equal(t, 0, partition.getPhAllocationCount(), "placeholder count should be 0 after replacement")
 	assert.Check(t, resources.IsZero(app.GetPlaceholderResource()), "app placeholder resources should be zero after replacement: %v", app.GetPlaceholderResource())
 	assert.Check(t, resources.Equals(app.GetAllocatedResource(), resources.Multiply(res, 2)), "app allocated resources should be the real allocations: %v", app.GetAllocatedResource())
 
+	// release the real allocations: the app has nothing left and completes
 	for _, key := range []string{allocKey, allocKey2} {
-		partition.removeAllocation(&si.AllocationRelease{
+		released, _ := partition.removeAllocation(&si.AllocationRelease{
 			PartitionName:   "test",
 			ApplicationID:   appID1,
 			AllocationKey:   key,
 			TerminationType: si.TerminationType_STOPPED_BY_RM,
 		})
+		assert.Equal(t, 1, len(released), "unexpected number of allocations released")
 	}
 	assert.Check(t, resources.IsZero(app.GetAllocatedResource()), "app allocated resources should be zero after release: %v", app.GetAllocatedResource())
 	assert.Assert(t, app.IsCompleting(), "app should be completing once all allocations are released, got state %s", app.CurrentState())

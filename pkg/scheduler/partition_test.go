@@ -5590,6 +5590,7 @@ func TestRemoveAllocationSchedulingFailedOnRM(t *testing.T) {
 	assert.Assert(t, released == nil, "SCHEDULING_FAILED_ON_RM should not echo released allocations to the shim")
 	assert.Assert(t, confirmed == nil, "SCHEDULING_FAILED_ON_RM should not return a confirmed allocation")
 	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "allocation count should be 0 after rollback")
+	assert.Equal(t, 0, partition.getPhAllocationCount(), "rollback of a normal allocation should not change the placeholder count")
 	assert.Assert(t, node.GetAllocation(allocKey) == nil, "node should not have the allocation after rollback")
 	assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero after rollback")
 	assert.Assert(t, resources.StrictlyGreaterThanZero(app.GetPendingResource()), "ask should be pending again after rollback")

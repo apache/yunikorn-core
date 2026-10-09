@@ -5682,6 +5682,55 @@ func TestRemoveAllocationSchedulingFailedOnRMNodeNotFound(t *testing.T) {
 	assert.Assert(t, resources.StrictlyGreaterThanZero(app.GetPendingResource()), "ask should be pending again after rollback")
 }
 
+// TestRemoveAllocationSchedulingFailedOnRMPlaceholder verifies that a placeholder rolled back after a bind
+// failure is no longer tracked as a placeholder by the app and the partition, and is counted once when it is
+// allocated again.
+func TestRemoveAllocationSchedulingFailedOnRMPlaceholder(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	nodeRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+	setupNode(t, nodeID1, partition, nodeRes)
+
+	phRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+	app := newApplicationTG(appID1, "default", defQueue, resources.Multiply(phRes, 2))
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "add application failed")
+	err = app.AddAllocationAsk(newAllocationAskTG(phID, appID1, taskGroup, phRes, true))
+	assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
+	err = app.AddAllocationAsk(newAllocationAskTG(phID2, appID1, taskGroup, phRes, true))
+	assert.NilError(t, err, "failed to add placeholder ask ph-2 to app")
+
+	result := partition.tryAllocate()
+	assert.Assert(t, result != nil && result.Request != nil, "placeholder should have been allocated")
+	assert.Equal(t, 1, partition.getPhAllocationCount(), "placeholder allocation should be registered")
+
+	released, confirmed := partition.removeAllocation(&si.AllocationRelease{
+		PartitionName:   "test",
+		ApplicationID:   appID1,
+		AllocationKey:   result.Request.GetAllocationKey(),
+		TerminationType: si.TerminationType_SCHEDULING_FAILED_ON_RM,
+	})
+	assert.Assert(t, released == nil, "SCHEDULING_FAILED_ON_RM should not echo released allocations to the shim")
+	assert.Assert(t, confirmed == nil, "SCHEDULING_FAILED_ON_RM should not return a confirmed allocation")
+	assert.Equal(t, 0, partition.GetTotalAllocationCount(), "allocation count should be 0 after rollback")
+	assert.Equal(t, 0, partition.getPhAllocationCount(), "placeholder count should be 0 after rollback")
+	assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "app placeholder resource should be zero after rollback, got %v", app.GetPlaceholderResource())
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "app allocated resource should be zero after rollback, got %v", app.GetAllocatedResource())
+
+	result = partition.tryAllocate()
+	assert.Assert(t, result != nil && result.Request != nil, "rolled back placeholder should have been allocated again")
+	assert.Assert(t, app.IsAccepted(), "app should wait for the second placeholder, got state %s", app.CurrentState())
+	result = partition.tryAllocate()
+	assert.Assert(t, result != nil && result.Request != nil, "second placeholder should have been allocated")
+	assert.Assert(t, app.IsRunning(), "app should be running once all placeholders are allocated, got state %s", app.CurrentState())
+	assert.Equal(t, 2, partition.getPhAllocationCount(), "both placeholder allocations should be registered once")
+	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), resources.Multiply(phRes, 2)), "app placeholder resource should count both placeholders once, got %v", app.GetPlaceholderResource())
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "app allocated resource should be zero, got %v", app.GetAllocatedResource())
+}
+
 func TestRemoveAppWithReservations(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)

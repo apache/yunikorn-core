@@ -962,7 +962,8 @@ func (sa *Application) DeallocateAsk(allocKey string) (*resources.Resource, erro
 // This is used when the shim fails to bind a pod after the core has allocated it,
 // allowing the task to be re-scheduled on a different node.
 // The application must be in Accepted or Running state for rollback to succeed.
-func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource, error) {
+// Returns the rolled back allocation.
+func (sa *Application) RollbackAllocation(allocKey string) (*Allocation, error) {
 	sa.Lock()
 	defer sa.Unlock()
 
@@ -980,7 +981,7 @@ func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource,
 	}
 
 	// Restore pending FIRST. This ensures hasZeroAllocations() sees pending > 0 when
-	// we later decrement allocatedResource, preventing a spurious CompleteApplication event.
+	// we later decrement allocatedResource for a non-placeholder, preventing a spurious CompleteApplication event.
 	if _, err := sa.deallocateAsk(ask); err != nil {
 		return nil, fmt.Errorf("failed to deallocate ask %s during rollback on app %s: %w", allocKey, sa.ApplicationID, err)
 	}
@@ -989,8 +990,18 @@ func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource,
 	ask.SetNodeID("")
 
 	res := ask.GetAllocatedResource()
-	sa.allocatedResource = resources.Sub(sa.allocatedResource, res)
-	sa.allocatedResource.Prune()
+	if ask.IsPlaceholder() {
+		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, res)
+		sa.allocatedPlaceholder.Prune()
+		// a timer left running without allocated placeholders would release the real allocations on timeout
+		if resources.IsZero(sa.allocatedPlaceholder) {
+			sa.clearPlaceholderTimer()
+			sa.hasPlaceholderAlloc = false
+		}
+	} else {
+		sa.allocatedResource = resources.Sub(sa.allocatedResource, res)
+		sa.allocatedResource.Prune()
+	}
 	sa.decUserResourceUsage(res, false)
 	delete(sa.allocations, allocKey)
 
@@ -1000,7 +1011,7 @@ func (sa *Application) RollbackAllocation(allocKey string) (*resources.Resource,
 		zap.String("appID", sa.ApplicationID),
 		zap.String("allocationKey", allocKey))
 
-	return res, nil
+	return ask, nil
 }
 
 func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error) {

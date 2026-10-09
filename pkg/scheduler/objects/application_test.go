@@ -4701,7 +4701,7 @@ func TestRollbackAllocationFromAccepted(t *testing.T) {
 	// Execute rollback.
 	returned, err := app.RollbackAllocation(aKey)
 	assert.NilError(t, err, "rollback should succeed from Accepted state")
-	assert.Assert(t, resources.Equals(returned, res), "returned resource should match allocation resource, got %v", returned)
+	assert.Equal(t, returned, ask, "rollback should return the rolled back allocation")
 
 	// Allocation is removed from the map.
 	assert.Assert(t, app.allocations[aKey] == nil, "allocation should have been removed from map")
@@ -4753,7 +4753,7 @@ func TestRollbackAllocationFromRunning(t *testing.T) {
 	// Execute rollback.
 	returned, err := app.RollbackAllocation(aKey)
 	assert.NilError(t, err, "rollback should succeed from Running state")
-	assert.Assert(t, resources.Equals(returned, res), "returned resource should match allocation resource, got %v", returned)
+	assert.Equal(t, returned, ask, "rollback should return the rolled back allocation")
 
 	// Allocation is removed.
 	assert.Assert(t, app.allocations[aKey] == nil, "allocation should have been removed from map")
@@ -4812,7 +4812,7 @@ func TestRollbackAllocationPartial(t *testing.T) {
 	// Roll back only the first allocation.
 	returned, err := app.RollbackAllocation(aKey)
 	assert.NilError(t, err, "partial rollback should succeed")
-	assert.Assert(t, resources.Equals(returned, res), "returned resource should equal res, got %v", returned)
+	assert.Equal(t, returned, ask1, "rollback should return the rolled back allocation")
 
 	// Second allocation is untouched.
 	assert.Assert(t, app.allocations[aKey2] != nil, "second allocation should still exist")
@@ -4826,6 +4826,40 @@ func TestRollbackAllocationPartial(t *testing.T) {
 
 	// App remains Running because the second allocation is still active.
 	assert.Assert(t, app.IsRunning(), "app should remain Running after partial rollback")
+}
+
+// TestRollbackAllocationPlaceholder verifies that a placeholder rollback reverts the placeholder
+// tracking, including the placeholder timer, and leaves the real allocation tracking untouched.
+func TestRollbackAllocationPlaceholder(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root.unknown")
+	app.queue = queue
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	ph := newAllocationAskTG(aKey, appID1, tg1, res)
+	err = app.AddAllocationAsk(ph)
+	assert.NilError(t, err, "placeholder ask should have been added")
+	_, err = app.AllocateAsk(aKey)
+	assert.NilError(t, err, "AllocateAsk should succeed")
+	ph.SetNodeID(nodeID1)
+	err = app.AddAllocation(ph)
+	assert.NilError(t, err, "placeholder allocation should have been added")
+	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), res), "placeholder resource should equal res before rollback, got %v", app.GetPlaceholderResource())
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "placeholder timer should be started by the placeholder allocation")
+	assertUserGroupResource(t, getTestUserGroup(), res)
+
+	returned, err := app.RollbackAllocation(aKey)
+	assert.NilError(t, err, "rollback should succeed")
+	assert.Assert(t, returned.IsPlaceholder(), "returned allocation should be the placeholder")
+	assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "placeholder resource should be zero after rollback, got %v", app.GetPlaceholderResource())
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "placeholder timer should be cleared when no placeholder is allocated")
+	assert.Assert(t, !app.HasPlaceholderAllocation(), "app should not report a placeholder allocation after rollback")
+	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should be zero after rollback, got %v", app.GetAllocatedResource())
+	assert.Assert(t, resources.Equals(app.GetPendingResource(), res), "pending resource should be restored after rollback, got %v", app.GetPendingResource())
+	assertUserGroupResource(t, getTestUserGroup(), nil)
+	assert.Assert(t, app.IsAccepted(), "app should remain in Accepted state after rollback")
 }
 
 func TestApplicationBackoff(t *testing.T) {

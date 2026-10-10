@@ -796,8 +796,8 @@ func (sa *Application) UpdateAllocationResources(alloc *Allocation, isQuotaPreem
 	}
 	delta.Prune()
 
-	// the gang moves to Running when allocatedPlaceholder equals placeholderAsk, so the ask follows every resize.
-	// Without a placeholder ask there is no gang to complete, and a delta must not create one.
+	// the gang moves to Running when allocatedPlaceholder equals placeholderAsk, so the ask follows every placeholder
+	// resize, pending or allocated. Without a placeholder ask there is no gang to complete, and a delta must not create one.
 	if existing.IsPlaceholder() && !resources.IsZero(sa.placeholderAsk) {
 		sa.placeholderAsk = resources.Add(sa.placeholderAsk, delta)
 		sa.placeholderAsk.Prune()

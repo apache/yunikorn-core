@@ -1244,35 +1244,44 @@ func TestUpdateAllocationResourcePlaceholder(t *testing.T) {
 }
 
 func TestUpdateAllocationResourcePlaceholderWithoutAsk(t *testing.T) {
-	setupUGM()
-	app := newApplication(appID1, "default", "root.a")
-	root, err := createRootQueue(nil)
-	assert.NilError(t, err, "failed to create root queue")
-	queue, err := createDynamicQueue(root, "test", false, nil)
-	assert.NilError(t, err, "failed to create test queue")
-	app.SetQueue(queue)
+	// ph2 matches the grow delta in size, which must not look like a completed gang
+	tests := map[string]map[string]string{
+		"grow":       {"first": "4", "second": "4"},
+		"shrink":     {"first": "1", "second": "1"},
+		"mixed sign": {"first": "3", "second": "1"},
+	}
+	for name, resized := range tests {
+		t.Run(name, func(t *testing.T) {
+			setupUGM()
+			app := newApplication(appID1, "default", "root.a")
+			root, err := createRootQueue(nil)
+			assert.NilError(t, err, "failed to create root queue")
+			queue, err := createDynamicQueue(root, "test", false, nil)
+			assert.NilError(t, err, "failed to create test queue")
+			app.SetQueue(queue)
 
-	res, err := resources.NewResourceFromConf(map[string]string{"first": "2"})
-	assert.NilError(t, err, "failed to create resource with error")
-	res2, err := resources.NewResourceFromConf(map[string]string{"first": "4"})
-	assert.NilError(t, err, "failed to create resource with error")
-	err = app.AddAllocationAsk(newAllocationAskTG(aKey, appID1, tg1, res))
-	assert.NilError(t, err, "placeholder ask ph1 should have been added")
-	err = app.AddAllocationAsk(newAllocationAskTG(aKey2, appID1, tg1, res))
-	assert.NilError(t, err, "placeholder ask ph2 should have been added")
+			res, err := resources.NewResourceFromConf(map[string]string{"first": "2", "second": "2"})
+			assert.NilError(t, err, "failed to create resource with error")
+			res2, err := resources.NewResourceFromConf(resized)
+			assert.NilError(t, err, "failed to create resource with error")
+			err = app.AddAllocationAsk(newAllocationAskTG(aKey, appID1, tg1, res))
+			assert.NilError(t, err, "placeholder ask ph1 should have been added")
+			err = app.AddAllocationAsk(newAllocationAskTG(aKey2, appID1, tg1, res))
+			assert.NilError(t, err, "placeholder ask ph2 should have been added")
 
-	err = app.UpdateAllocationResources(newAllocationAskTG(aKey, appID1, tg1, res2), false)
-	assert.NilError(t, err, "error returned on resized pending placeholder")
-	assert.Check(t, resources.IsZero(app.GetPlaceholderAsk()), "resize created a placeholder ask: %v", app.GetPlaceholderAsk())
+			err = app.UpdateAllocationResources(newAllocationAskTG(aKey, appID1, tg1, res2), false)
+			assert.NilError(t, err, "error returned on resized pending placeholder")
+			assert.Check(t, resources.IsZero(app.GetPlaceholderAsk()), "resize created a placeholder ask: %v", app.GetPlaceholderAsk())
 
-	// ph2 matches the resize delta in size, which must not look like a completed gang
-	_, err = app.AllocateAsk(aKey2)
-	assert.NilError(t, err, "AllocateAsk for ph2 should succeed")
-	ph2 := app.GetAllocationAsk(aKey2)
-	ph2.SetNodeID(nodeID1)
-	err = app.AddAllocation(ph2)
-	assert.NilError(t, err, "placeholder allocation ph2 should have been added")
-	assert.Assert(t, app.IsAccepted(), "app should not run with ph1 still pending, got state %s", app.CurrentState())
+			_, err = app.AllocateAsk(aKey2)
+			assert.NilError(t, err, "AllocateAsk for ph2 should succeed")
+			ph2 := app.GetAllocationAsk(aKey2)
+			ph2.SetNodeID(nodeID1)
+			err = app.AddAllocation(ph2)
+			assert.NilError(t, err, "placeholder allocation ph2 should have been added")
+			assert.Assert(t, app.IsAccepted(), "app should not run with ph1 still pending, got state %s", app.CurrentState())
+		})
+	}
 }
 
 func TestQueueUpdate(t *testing.T) {

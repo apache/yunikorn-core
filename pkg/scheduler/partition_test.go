@@ -3769,10 +3769,7 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	// plugin to let the pre-check fail on node-1 only, means we cannot replace the placeholder
 	plugin := mock.NewPredicatePlugin(false, false, map[string]int{nodeID1: 0, nodeID2: 1})
 	plugins.RegisterSchedulerPlugin(plugin)
-	defer func() {
-		passPlugin := mock.NewPredicatePlugin(false, false, map[string]int{nodeID1: 0, nodeID2: 1})
-		plugins.RegisterSchedulerPlugin(passPlugin)
-	}()
+	defer plugins.UnregisterSchedulerPlugins()
 	var tgRes, res *resources.Resource
 	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")
@@ -4249,6 +4246,183 @@ func TestUpdateAllocationWithAskAndQuotaPreemption(t *testing.T) {
 			partition.removeApplication(appID1)
 		})
 	}
+}
+
+func TestUpdateAllocationPlaceholderResize(t *testing.T) {
+	type resize struct {
+		key string
+		res map[string]resources.Quantity
+	}
+	tests := []struct {
+		name string
+		// resizes while ph-1 is allocated and ph-2 is pending, then once both are allocated
+		beforeGang []resize
+		afterGang  []resize
+	}{
+		{"grow after the gang is complete", nil,
+			[]resize{{phID, map[string]resources.Quantity{"vcore": 3, "memory": 2}}}},
+		{"shrink before the gang is complete",
+			[]resize{{phID, map[string]resources.Quantity{"vcore": 1, "memory": 2}}, {phID2, map[string]resources.Quantity{"vcore": 1, "memory": 1}}}, nil},
+		{"mixed sign delta",
+			[]resize{{phID, map[string]resources.Quantity{"vcore": 3, "memory": 1}}},
+			[]resize{{phID2, map[string]resources.Quantity{"vcore": 1, "memory": 3}}}},
+		{"resource type dropped and added",
+			[]resize{{phID, map[string]resources.Quantity{"vcore": 2}}},
+			[]resize{{phID2, map[string]resources.Quantity{"vcore": 2, "memory": 2, "gpu": 1}}}},
+		{"repeated resizes",
+			[]resize{{phID, map[string]resources.Quantity{"vcore": 3, "memory": 2}}, {phID, map[string]resources.Quantity{"vcore": 1, "memory": 1}}, {phID2, map[string]resources.Quantity{"vcore": 5, "memory": 2}}, {phID2, map[string]resources.Quantity{"vcore": 1, "memory": 1}}},
+			[]resize{{phID, map[string]resources.Quantity{"vcore": 4, "memory": 3}}, {phID, map[string]resources.Quantity{"vcore": 2, "memory": 1}}, {phID2, map[string]resources.Quantity{"vcore": 3, "memory": 2}}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+			setupNode(t, nodeID1, partition, resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 20, "memory": 20, "gpu": 2}))
+
+			res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 2, "memory": 2})
+			exp := &placeholderExpectation{
+				state:       objects.Accepted.String(),
+				size:        map[string]*resources.Resource{phID: res, phID2: res},
+				allocated:   map[string]bool{},
+				ask:         resources.Multiply(res, 2),
+				real:        resources.NewResource(),
+				realPending: resources.NewResource(),
+			}
+			app := newApplicationTG(appID1, "default", defQueue, resources.Multiply(res, 2))
+			err = partition.AddApplication(app)
+			assert.NilError(t, err, "add application failed")
+			err = app.AddAllocationAsk(newAllocationAskTG(phID, appID1, taskGroup, res, true))
+			assert.NilError(t, err, "failed to add placeholder ask ph-1 to app")
+			result := partition.tryAllocate()
+			assert.Assert(t, result != nil && result.Request != nil && result.Request.GetAllocationKey() == phID, "placeholder ph-1 should have been allocated")
+			exp.allocated[phID] = true
+			err = app.AddAllocationAsk(newAllocationAskTG(phID2, appID1, taskGroup, res, true))
+			assert.NilError(t, err, "failed to add placeholder ask ph-2 to app")
+			assertPlaceholderAccounting(t, "ph-1 allocated", partition, app, exp)
+
+			resizePlaceholders := func(resizes []resize) {
+				for _, r := range resizes {
+					size := resources.NewResourceFromMap(r.res)
+					resizePlaceholder(t, partition, r.key, size, exp.allocated[r.key])
+					exp.ask = resources.Add(exp.ask, resources.Sub(size, exp.size[r.key]))
+					exp.size[r.key] = size
+					assertPlaceholderAccounting(t, fmt.Sprintf("resize %s to %s", r.key, size), partition, app, exp)
+				}
+			}
+			resizePlaceholders(tt.beforeGang)
+			result = partition.tryAllocate()
+			assert.Assert(t, result != nil && result.Request != nil && result.Request.GetAllocationKey() == phID2, "placeholder ph-2 should have been allocated")
+			exp.allocated[phID2] = true
+			exp.state = objects.Running.String()
+			assertPlaceholderAccounting(t, "ph-2 allocated", partition, app, exp)
+			resizePlaceholders(tt.afterGang)
+
+			// replace both placeholders with real allocations that fit any of them
+			realRes := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1})
+			err = app.AddAllocationAsk(newAllocationAskTG(allocKey, appID1, taskGroup, realRes, false))
+			assert.NilError(t, err, "failed to add ask alloc-1 to app")
+			err = app.AddAllocationAsk(newAllocationAskTG(allocKey2, appID1, taskGroup, realRes, false))
+			assert.NilError(t, err, "failed to add ask alloc-2 to app")
+			exp.realPending = resources.Multiply(realRes, 2)
+			assertPlaceholderAccounting(t, "real asks added", partition, app, exp)
+			for i := 0; i < 2; i++ {
+				result = partition.tryPlaceholderAllocate()
+				assert.Assert(t, result != nil && result.Request != nil, "placeholder should have been replaced")
+				phKey := result.Request.GetRelease().GetAllocationKey()
+				released, confirmed := partition.removeAllocation(&si.AllocationRelease{
+					PartitionName:   "test",
+					ApplicationID:   appID1,
+					AllocationKey:   phKey,
+					TerminationType: si.TerminationType_PLACEHOLDER_REPLACED,
+				})
+				assert.Equal(t, 0, len(released), "not expecting any released allocations")
+				assert.Assert(t, confirmed != nil, "replacement should have been confirmed")
+				delete(exp.size, phKey)
+				delete(exp.allocated, phKey)
+				exp.realPending.SubFrom(realRes)
+				exp.real.AddTo(realRes)
+				assertPlaceholderAccounting(t, "replace "+phKey, partition, app, exp)
+			}
+
+			// release the real allocations: the app has nothing left and completes
+			for i, key := range []string{allocKey, allocKey2} {
+				released, _ := partition.removeAllocation(&si.AllocationRelease{
+					PartitionName:   "test",
+					ApplicationID:   appID1,
+					AllocationKey:   key,
+					TerminationType: si.TerminationType_STOPPED_BY_RM,
+				})
+				assert.Equal(t, 1, len(released), "unexpected number of allocations released")
+				exp.real.SubFrom(realRes)
+				if i == 1 {
+					exp.state = objects.Completing.String()
+				}
+				assertPlaceholderAccounting(t, "release "+key, partition, app, exp)
+			}
+		})
+	}
+}
+
+// placeholderExpectation is what the test expects the scheduler to track, built only from the test's own actions
+type placeholderExpectation struct {
+	state       string                         // application state
+	size        map[string]*resources.Resource // size of each placeholder that is not replaced yet
+	allocated   map[string]bool                // placeholders that are allocated
+	ask         *resources.Resource            // placeholder ask of the application
+	real        *resources.Resource            // usage of the real allocations
+	realPending *resources.Resource            // real asks waiting to replace a placeholder
+}
+
+// assertPlaceholderAccounting checks the application state, every placeholder's size, the app split, pending usage
+// and placeholder ask, and the queue, node, user and partition tracking against the expectation.
+func assertPlaceholderAccounting(t *testing.T, step string, partition *PartitionContext, app *objects.Application, exp *placeholderExpectation) {
+	t.Helper()
+	assert.Check(t, app.CurrentState() == exp.state, "%s: app state %s, expected %s", step, app.CurrentState(), exp.state)
+	allocatedPh, pending := resources.NewResource(), exp.realPending.Clone()
+	for key, size := range exp.size {
+		ph := app.GetAllocationAsk(key)
+		assert.Assert(t, ph != nil, "%s: placeholder %s not found", step, key)
+		assert.Check(t, resources.Equals(ph.GetAllocatedResource(), size), "%s: placeholder %s size %v, expected %v", step, key, ph.GetAllocatedResource(), size)
+		if exp.allocated[key] {
+			allocatedPh.AddTo(size)
+		} else {
+			pending.AddTo(size)
+		}
+	}
+	total := resources.Add(exp.real, allocatedPh)
+	queue := partition.GetQueue(defQueue)
+	assert.Check(t, resources.Equals(app.GetAllocatedResource(), exp.real), "%s: app allocated resources %v, expected %v", step, app.GetAllocatedResource(), exp.real)
+	assert.Check(t, resources.Equals(app.GetPlaceholderResource(), allocatedPh), "%s: app placeholder resources %v, expected %v", step, app.GetPlaceholderResource(), allocatedPh)
+	assert.Check(t, resources.Equals(app.GetPendingResource(), pending), "%s: app pending resources %v, expected %v", step, app.GetPendingResource(), pending)
+	assert.Check(t, resources.Equals(queue.GetPendingResource(), pending), "%s: queue pending resources %v, expected %v", step, queue.GetPendingResource(), pending)
+	assert.Check(t, resources.Equals(app.GetPlaceholderAsk(), exp.ask), "%s: placeholder ask %v, expected %v", step, app.GetPlaceholderAsk(), exp.ask)
+	assert.Check(t, resources.Equals(queue.GetAllocatedResource(), total), "%s: queue resources %v, expected %v", step, queue.GetAllocatedResource(), total)
+	assert.Check(t, resources.Equals(partition.GetNode(nodeID1).GetAllocatedResource(), total), "%s: node resources %v, expected %v", step, partition.GetNode(nodeID1).GetAllocatedResource(), total)
+	userRes := ugm.GetUserManager().GetUserResources(getTestUserGroup().User)
+	assert.Check(t, resources.Equals(userRes, total), "%s: user resources %v, expected %v", step, userRes, total)
+	assert.Check(t, partition.getPhAllocationCount() == len(exp.allocated), "%s: partition placeholder count %d, expected %d", step, partition.getPhAllocationCount(), len(exp.allocated))
+}
+
+// resizePlaceholder sends what the shim sends after an in-place resize of the placeholder pod
+func resizePlaceholder(t *testing.T, partition *PartitionContext, key string, size *resources.Resource, allocated bool) {
+	t.Helper()
+	nodeID := ""
+	if allocated {
+		nodeID = nodeID1
+	}
+	_, allocCreated, err := partition.UpdateAllocation(objects.NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    key,
+		ApplicationID:    appID1,
+		PartitionName:    "test",
+		NodeID:           nodeID,
+		TaskGroupName:    taskGroup,
+		Placeholder:      true,
+		ResourcePerAlloc: size.ToProto(),
+	}))
+	assert.NilError(t, err, "failed to resize placeholder %s", key)
+	assert.Check(t, !allocCreated, "alloc should not have been created")
 }
 
 func TestRemoveAllocationAsk(t *testing.T) {

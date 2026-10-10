@@ -625,7 +625,7 @@ func (sa *Application) GetPlaceholderResource() *resources.Resource {
 }
 
 // GetPlaceholderAsk returns the total placeholder resource request for this application
-// Is only set on app creation and used when app is added to a queue
+// Set on app creation and adjusted when a placeholder is resized
 func (sa *Application) GetPlaceholderAsk() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
@@ -796,10 +796,22 @@ func (sa *Application) UpdateAllocationResources(alloc *Allocation, isQuotaPreem
 	}
 	delta.Prune()
 
+	// the gang moves to Running when allocatedPlaceholder equals placeholderAsk, so the ask follows every placeholder
+	// resize, pending or allocated. Without a placeholder ask there is no gang to complete, and a delta must not create one.
+	if existing.IsPlaceholder() && !resources.IsZero(sa.placeholderAsk) {
+		sa.placeholderAsk = resources.Add(sa.placeholderAsk, delta)
+		sa.placeholderAsk.Prune()
+	}
+
 	if existing.IsAllocated() {
 		// update allocated resources
-		sa.allocatedResource = resources.Add(sa.allocatedResource, delta)
-		sa.allocatedResource.Prune()
+		if existing.IsPlaceholder() {
+			sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, delta)
+			sa.allocatedPlaceholder.Prune()
+		} else {
+			sa.allocatedResource = resources.Add(sa.allocatedResource, delta)
+			sa.allocatedResource.Prune()
+		}
 		sa.queue.IncAllocatedResource(delta, isQuotaPreemptionEnabled)
 
 		// update user usage

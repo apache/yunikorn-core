@@ -1193,6 +1193,97 @@ func TestUpdateAllocationResourceAllocated(t *testing.T) {
 	assert.Check(t, resources.Equals(res2, queue.GetAllocatedResource()), "resources not updated on queue")
 }
 
+func TestUpdateAllocationResourcePlaceholder(t *testing.T) {
+	setupUGM()
+	app := newApplication(appID1, "default", "root.a")
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create root queue")
+	queue, err := createDynamicQueue(root, "test", false, nil)
+	assert.NilError(t, err, "failed to create test queue")
+	app.SetQueue(queue)
+
+	res, err := resources.NewResourceFromConf(map[string]string{"first": "2"})
+	assert.NilError(t, err, "failed to create resource with error")
+	res2, err := resources.NewResourceFromConf(map[string]string{"first": "3"})
+	assert.NilError(t, err, "failed to create resource with error")
+	app.placeholderAsk = resources.Multiply(res, 2)
+	ph1 := newAllocationAskTG(aKey, appID1, tg1, res)
+	err = app.AddAllocationAsk(ph1)
+	assert.NilError(t, err, "placeholder ask ph1 should have been added")
+	err = app.AddAllocationAsk(newAllocationAskTG(aKey2, appID1, tg1, res))
+	assert.NilError(t, err, "placeholder ask ph2 should have been added")
+	_, err = app.AllocateAsk(aKey)
+	assert.NilError(t, err, "AllocateAsk for ph1 should succeed")
+	ph1.SetNodeID(nodeID1)
+	queue.IncAllocatedResource(res, false)
+	err = app.AddAllocation(ph1)
+	assert.NilError(t, err, "placeholder allocation ph1 should have been added")
+
+	// resize the allocated placeholder
+	err = app.UpdateAllocationResources(newAllocationAll(aKey, appID1, nodeID1, tg1, res2, true, 0), false)
+	assert.NilError(t, err, "error returned on resized allocated placeholder")
+	assert.Check(t, resources.IsZero(app.GetAllocatedResource()), "placeholder resize booked on app allocated resources: %v", app.GetAllocatedResource())
+	assert.Check(t, resources.Equals(res2, app.GetPlaceholderResource()), "resources not updated on app placeholder resources: %v", app.GetPlaceholderResource())
+	assert.Check(t, resources.Equals(resources.Add(res, res2), app.GetPlaceholderAsk()), "placeholder ask not updated: %v", app.GetPlaceholderAsk())
+	assert.Check(t, resources.Equals(res2, queue.GetAllocatedResource()), "resources not updated on queue")
+	assertUserGroupResource(t, getTestUserGroup(), res2)
+
+	// resize the pending placeholder
+	err = app.UpdateAllocationResources(newAllocationAskTG(aKey2, appID1, tg1, res2), false)
+	assert.NilError(t, err, "error returned on resized pending placeholder")
+	assert.Check(t, resources.Equals(res2, app.GetPendingResource()), "resources not updated on app pending resources")
+	assert.Check(t, resources.Equals(resources.Multiply(res2, 2), app.GetPlaceholderAsk()), "placeholder ask not updated: %v", app.GetPlaceholderAsk())
+
+	_, err = app.AllocateAsk(aKey2)
+	assert.NilError(t, err, "AllocateAsk for ph2 should succeed")
+	ph2 := app.GetAllocationAsk(aKey2)
+	ph2.SetNodeID(nodeID1)
+	err = app.AddAllocation(ph2)
+	assert.NilError(t, err, "placeholder allocation ph2 should have been added")
+	assert.Assert(t, app.IsRunning(), "app should be running once all resized placeholders are allocated, got state %s", app.CurrentState())
+}
+
+func TestUpdateAllocationResourcePlaceholderWithoutAsk(t *testing.T) {
+	// ph2 matches the grow delta in size, which must not look like a completed gang
+	tests := map[string]map[string]string{
+		"grow":       {"first": "4", "second": "4"},
+		"shrink":     {"first": "1", "second": "1"},
+		"mixed sign": {"first": "3", "second": "1"},
+	}
+	for name, resized := range tests {
+		t.Run(name, func(t *testing.T) {
+			setupUGM()
+			app := newApplication(appID1, "default", "root.a")
+			root, err := createRootQueue(nil)
+			assert.NilError(t, err, "failed to create root queue")
+			queue, err := createDynamicQueue(root, "test", false, nil)
+			assert.NilError(t, err, "failed to create test queue")
+			app.SetQueue(queue)
+
+			res, err := resources.NewResourceFromConf(map[string]string{"first": "2", "second": "2"})
+			assert.NilError(t, err, "failed to create resource with error")
+			res2, err := resources.NewResourceFromConf(resized)
+			assert.NilError(t, err, "failed to create resource with error")
+			err = app.AddAllocationAsk(newAllocationAskTG(aKey, appID1, tg1, res))
+			assert.NilError(t, err, "placeholder ask ph1 should have been added")
+			err = app.AddAllocationAsk(newAllocationAskTG(aKey2, appID1, tg1, res))
+			assert.NilError(t, err, "placeholder ask ph2 should have been added")
+
+			err = app.UpdateAllocationResources(newAllocationAskTG(aKey, appID1, tg1, res2), false)
+			assert.NilError(t, err, "error returned on resized pending placeholder")
+			assert.Check(t, resources.IsZero(app.GetPlaceholderAsk()), "resize created a placeholder ask: %v", app.GetPlaceholderAsk())
+
+			_, err = app.AllocateAsk(aKey2)
+			assert.NilError(t, err, "AllocateAsk for ph2 should succeed")
+			ph2 := app.GetAllocationAsk(aKey2)
+			ph2.SetNodeID(nodeID1)
+			err = app.AddAllocation(ph2)
+			assert.NilError(t, err, "placeholder allocation ph2 should have been added")
+			assert.Assert(t, app.IsAccepted(), "app should not run with ph1 still pending, got state %s", app.CurrentState())
+		})
+	}
+}
+
 func TestQueueUpdate(t *testing.T) {
 	app := newApplication(appID1, "default", "root.a")
 

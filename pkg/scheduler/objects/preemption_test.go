@@ -356,7 +356,7 @@ func TestSortVictimsForPreemption(t *testing.T) {
 	optedOutOriginatorPod := createAllocation("optedOutOriginatorPod", "app1", nodeID1, false, true, 10, false, res)
 
 	allocationsByNode := map[string][]*Allocation{
-		nodeID1: {optedOutOriginatorPod, originatorPod, optedOutPod, regularPod},
+		nodeID1: {optedOutPod, originatorPod, regularPod, optedOutOriginatorPod},
 	}
 	sortVictimsForPreemption(allocationsByNode)
 

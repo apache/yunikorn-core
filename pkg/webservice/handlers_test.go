@@ -2299,12 +2299,19 @@ func TestGetEvents(t *testing.T) {
 	prepareSchedulerContext(t)
 	// prepareSchedulerContext hides creating a new context so make sure we clean up after use
 	defer schedulerContext.Load().Stop()
+
+	// empty buffer
+	events.Init()
+	checkNoEvents(t, "")
+
 	appEvent, nodeEvent, queueEvent := addEvents(t)
 
 	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
 
 	checkSingleEvent(t, appEvent, "count=1")
 	checkSingleEvent(t, queueEvent, "start=2")
+	// start after highest id
+	checkNoEvents(t, "start=3")
 
 	// illegal requests
 	checkIllegalBatchRequest(t, "count=xyz", `strconv.ParseUint: parsing "xyz": invalid syntax`)
@@ -2317,38 +2324,6 @@ func TestGetEvents(t *testing.T) {
 	maxRESTResponseSize.Store(1)
 	defer maxRESTResponseSize.Store(configs.DefaultRESTResponseSize)
 	checkSingleEvent(t, appEvent, "count=3")
-}
-
-func TestGetEventsNoRecords(t *testing.T) {
-	prepareSchedulerContext(t)
-	// prepareSchedulerContext hides creating a new context so make sure we clean up after use
-	defer schedulerContext.Load().Stop()
-
-	tests := []struct {
-		name       string
-		withEvents bool
-		query      string
-	}{
-		{"empty buffer", false, ""},
-		{"start after highest id", true, "start=3"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.withEvents {
-				addEvents(t)
-			} else {
-				events.Init()
-			}
-			defer events.GetEventSystem().Stop()
-			req, err := http.NewRequest("GET", "/ws/v1/events/batch?"+tc.query, strings.NewReader(""))
-			assert.NilError(t, err)
-			rr := httptest.NewRecorder()
-			http.HandlerFunc(getEvents).ServeHTTP(rr, req)
-			assert.Equal(t, http.StatusOK, rr.Code)
-			// clients must get an empty list, not null
-			assert.Assert(t, strings.Contains(rr.Body.String(), `"EventRecords":[]`), "unexpected response: %s", rr.Body.String())
-		})
-	}
 }
 
 func TestGetEventsWhenTrackingDisabled(t *testing.T) {
@@ -2729,6 +2704,17 @@ func checkSingleEvent(t *testing.T, event *si.EventRecord, query string) {
 	assert.Assert(t, eventDao.InstanceUUID != "")
 	assert.Equal(t, 1, len(eventDao.EventRecords))
 	compareEvents(t, event, eventDao.EventRecords[0])
+}
+
+func checkNoEvents(t *testing.T, query string) {
+	t.Helper()
+	req, err := http.NewRequest("GET", "/ws/v1/events/batch?"+query, strings.NewReader(""))
+	assert.NilError(t, err)
+	rr := httptest.NewRecorder()
+	http.HandlerFunc(getEvents).ServeHTTP(rr, req)
+	assert.Equal(t, http.StatusOK, rr.Code)
+	// clients must get an empty list, not null
+	assert.Assert(t, strings.Contains(rr.Body.String(), `"EventRecords":[]`), "unexpected response: %s", rr.Body.String())
 }
 
 func checkIllegalBatchRequest(t *testing.T, query, msg string) {

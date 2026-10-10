@@ -37,8 +37,8 @@ var (
 	preemptAttemptFrequency        = 15 * time.Second
 	preemptCheckConcurrency        = 10
 	scoreFitMax             uint64 = 1 << 32
-	scoreOriginator         uint64 = 1 << 33
-	scoreNoPreempt          uint64 = 1 << 34
+	scoreNoPreempt          uint64 = 1 << 33
+	scoreOriginator         uint64 = 1 << 34
 	scoreUnfit              uint64 = 1 << 35
 )
 
@@ -876,28 +876,28 @@ func (qps *QueuePreemptionSnapshot) RemoveAllocation(alloc *resources.Resource) 
 	qps.AllocatedResource.SubFrom(alloc)
 }
 
-// sortVictimsForPreemption sorts allocations on each node, preferring those that have opted-in to preemption,
-// those that are not originating tasks for an application, and newest first
+// sortVictimsForPreemption sorts allocations on each node, preferring those that are not originating tasks for an
+// application, those that have opted-in to preemption, and newest first
 func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 	for _, allocations := range allocationsByNode {
 		sort.SliceStable(allocations, func(i, j int) bool {
 			leftAsk := allocations[i]
 			rightAsk := allocations[j]
 
-			// sort asks which allow themselves to be preempted first
-			if leftAsk.IsAllowPreemptSelf() && !rightAsk.IsAllowPreemptSelf() {
-				return true
-			}
-			if rightAsk.IsAllowPreemptSelf() && !leftAsk.IsAllowPreemptSelf() {
-				return false
-			}
-
-			// next those that are not app originators
+			// sort asks which are not app originators first
 			if leftAsk.IsOriginator() && !rightAsk.IsOriginator() {
 				return false
 			}
 			if rightAsk.IsOriginator() && !leftAsk.IsOriginator() {
 				return true
+			}
+
+			// next those that allow themselves to be preempted
+			if leftAsk.IsAllowPreemptSelf() && !rightAsk.IsAllowPreemptSelf() {
+				return true
+			}
+			if rightAsk.IsAllowPreemptSelf() && !leftAsk.IsAllowPreemptSelf() {
+				return false
 			}
 
 			// finally sort by creation time descending

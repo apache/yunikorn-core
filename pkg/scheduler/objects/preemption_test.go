@@ -348,6 +348,25 @@ func TestIsVictimQueueOverGuaranteed(t *testing.T) {
 	}
 }
 
+func TestSortVictimsForPreemption(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	regularPod := createAllocation("regularPod", "app1", nodeID1, true, false, 10, false, res)
+	originatorPod := createAllocation("originatorPod", "app1", nodeID1, true, true, 10, false, res)
+	optedOutPod := createAllocation("optedOutPod", "app1", nodeID1, false, false, 10, false, res)
+	optedOutOriginatorPod := createAllocation("optedOutOriginatorPod", "app1", nodeID1, false, true, 10, false, res)
+
+	allocationsByNode := map[string][]*Allocation{
+		nodeID1: {optedOutOriginatorPod, originatorPod, optedOutPod, regularPod},
+	}
+	sortVictimsForPreemption(allocationsByNode)
+
+	allocations := allocationsByNode[nodeID1]
+	assert.Equal(t, allocations[0].GetAllocationKey(), "regularPod")
+	assert.Equal(t, allocations[1].GetAllocationKey(), "optedOutPod")
+	assert.Equal(t, allocations[2].GetAllocationKey(), "originatorPod")
+	assert.Equal(t, allocations[3].GetAllocationKey(), "optedOutOriginatorPod")
+}
+
 func TestTryPreemption(t *testing.T) {
 	appQueueMapping := NewAppQueueMapping()
 	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "pods": 5})

@@ -472,7 +472,8 @@ func (sa *Application) clearPlaceholderTimer() {
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
-	if (sa.IsRunning() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder) {
+	// a rollback can leave a started application without allocated placeholders: Case 2 must not release its real allocations
+	if sa.IsRunning() || sa.IsCompleting() {
 		// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
 		var toRelease []*Allocation
 		replacing := 0
@@ -993,9 +994,9 @@ func (sa *Application) RollbackAllocation(allocKey string) (*Allocation, error) 
 	if ask.IsPlaceholder() {
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, res)
 		sa.allocatedPlaceholder.Prune()
-		// a timer left running without allocated placeholders would release the real allocations on timeout
+		// keep the placeholder timer: the gang deadline counts from the first placeholder allocation and also
+		// covers this placeholder when it is allocated again
 		if resources.IsZero(sa.allocatedPlaceholder) {
-			sa.clearPlaceholderTimer()
 			sa.hasPlaceholderAlloc = false
 		}
 	} else {

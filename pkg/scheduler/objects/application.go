@@ -994,9 +994,9 @@ func (sa *Application) RollbackAllocation(allocKey string) (*Allocation, error) 
 	if ask.IsPlaceholder() {
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, res)
 		sa.allocatedPlaceholder.Prune()
-		// a timer left running without allocated placeholders would release the real allocations on timeout
+		// keep the placeholder timer: the gang deadline counts from the first placeholder allocation and also
+		// covers this placeholder when it is allocated again
 		if resources.IsZero(sa.allocatedPlaceholder) {
-			sa.clearPlaceholderTimer()
 			sa.hasPlaceholderAlloc = false
 		}
 	} else {

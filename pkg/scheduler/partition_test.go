@@ -4306,7 +4306,6 @@ func TestUpdateAllocationPlaceholderResize(t *testing.T) {
 				for _, r := range resizes {
 					size := resources.NewResourceFromMap(r.res)
 					resizePlaceholder(t, partition, r.key, size, exp.allocated[r.key])
-					exp.ask = resources.Add(exp.ask, resources.Sub(size, exp.size[r.key]))
 					exp.size[r.key] = size
 					assertPlaceholderAccounting(t, fmt.Sprintf("resize %s to %s", r.key, size), partition, app, exp)
 				}
@@ -4370,7 +4369,7 @@ type placeholderExpectation struct {
 	state       string                         // application state
 	size        map[string]*resources.Resource // size of each placeholder that is not replaced yet
 	allocated   map[string]bool                // placeholders that are allocated
-	ask         *resources.Resource            // placeholder ask of the application
+	ask         *resources.Resource            // placeholder ask as the shim declared it, which a resize must not change
 	real        *resources.Resource            // usage of the real allocations
 	realPending *resources.Resource            // real asks waiting to replace a placeholder
 }

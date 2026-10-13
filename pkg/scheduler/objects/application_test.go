@@ -1224,7 +1224,8 @@ func TestUpdateAllocationResourcePlaceholder(t *testing.T) {
 	assert.NilError(t, err, "error returned on resized allocated placeholder")
 	assert.Check(t, resources.IsZero(app.GetAllocatedResource()), "placeholder resize booked on app allocated resources: %v", app.GetAllocatedResource())
 	assert.Check(t, resources.Equals(res2, app.GetPlaceholderResource()), "resources not updated on app placeholder resources: %v", app.GetPlaceholderResource())
-	assert.Check(t, resources.Equals(resources.Add(res, res2), app.GetPlaceholderAsk()), "placeholder ask not updated: %v", app.GetPlaceholderAsk())
+	assert.Check(t, resources.Equals(resources.Multiply(res, 2), app.GetPlaceholderAsk()), "placeholder ask changed: %v", app.GetPlaceholderAsk())
+	assert.Check(t, resources.Equals(resources.Sub(res2, res), app.placeholderResize), "placeholder resize not tracked: %v", app.placeholderResize)
 	assert.Check(t, resources.Equals(res2, queue.GetAllocatedResource()), "resources not updated on queue")
 	assertUserGroupResource(t, getTestUserGroup(), res2)
 
@@ -1232,7 +1233,8 @@ func TestUpdateAllocationResourcePlaceholder(t *testing.T) {
 	err = app.UpdateAllocationResources(newAllocationAskTG(aKey2, appID1, tg1, res2), false)
 	assert.NilError(t, err, "error returned on resized pending placeholder")
 	assert.Check(t, resources.Equals(res2, app.GetPendingResource()), "resources not updated on app pending resources")
-	assert.Check(t, resources.Equals(resources.Multiply(res2, 2), app.GetPlaceholderAsk()), "placeholder ask not updated: %v", app.GetPlaceholderAsk())
+	assert.Check(t, resources.Equals(resources.Multiply(res, 2), app.GetPlaceholderAsk()), "placeholder ask changed: %v", app.GetPlaceholderAsk())
+	assert.Check(t, resources.Equals(resources.Multiply(resources.Sub(res2, res), 2), app.placeholderResize), "placeholder resize not tracked: %v", app.placeholderResize)
 
 	_, err = app.AllocateAsk(aKey2)
 	assert.NilError(t, err, "AllocateAsk for ph2 should succeed")
@@ -1271,7 +1273,7 @@ func TestUpdateAllocationResourcePlaceholderWithoutAsk(t *testing.T) {
 
 			err = app.UpdateAllocationResources(newAllocationAskTG(aKey, appID1, tg1, res2), false)
 			assert.NilError(t, err, "error returned on resized pending placeholder")
-			assert.Check(t, resources.IsZero(app.GetPlaceholderAsk()), "resize created a placeholder ask: %v", app.GetPlaceholderAsk())
+			assert.Check(t, resources.IsZero(app.placeholderResize), "resize tracked without a placeholder ask: %v", app.placeholderResize)
 
 			_, err = app.AllocateAsk(aKey2)
 			assert.NilError(t, err, "AllocateAsk for ph2 should succeed")

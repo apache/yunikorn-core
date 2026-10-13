@@ -106,6 +106,7 @@ type Application struct {
 	allocatedPlaceholder *resources.Resource         // total allocated placeholder resources
 	allocations          map[string]*Allocation      // list of all satisfied allocations
 	placeholderAsk       *resources.Resource         // total placeholder request for the app (all task groups)
+	placeholderResize    *resources.Resource         // net resize of the placeholders, kept apart from the shim's placeholderAsk
 	stateMachine         *fsm.FSM                    // application state machine
 	stateTimer           *time.Timer                 // timer for state time
 	execTimeout          time.Duration               // execTimeout for the application run
@@ -153,6 +154,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		allocations:           make(map[string]*Allocation),
 		stateMachine:          NewAppState(),
 		placeholderAsk:        resources.NewResourceFromProto(siApp.PlaceholderAsk),
+		placeholderResize:     resources.NewResource(),
 		startTime:             time.Time{},
 		finishedTime:          time.Time{},
 		rejectedMessage:       "",
@@ -625,7 +627,7 @@ func (sa *Application) GetPlaceholderResource() *resources.Resource {
 }
 
 // GetPlaceholderAsk returns the total placeholder resource request for this application
-// Set on app creation and adjusted when a placeholder is resized
+// Is only set on app creation and used when app is added to a queue
 func (sa *Application) GetPlaceholderAsk() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
@@ -796,11 +798,11 @@ func (sa *Application) UpdateAllocationResources(alloc *Allocation, isQuotaPreem
 	}
 	delta.Prune()
 
-	// the gang moves to Running when allocatedPlaceholder equals placeholderAsk, so the ask follows every placeholder
-	// resize, pending or allocated. Without a placeholder ask there is no gang to complete, and a delta must not create one.
+	// the gang moves to Running when allocatedPlaceholder equals placeholderAsk plus every placeholder resize, pending
+	// or allocated. Without a placeholder ask there is no gang to complete, and a delta must not create one.
 	if existing.IsPlaceholder() && !resources.IsZero(sa.placeholderAsk) {
-		sa.placeholderAsk = resources.Add(sa.placeholderAsk, delta)
-		sa.placeholderAsk.Prune()
+		sa.placeholderResize = resources.Add(sa.placeholderResize, delta)
+		sa.placeholderResize.Prune()
 	}
 
 	if existing.IsAllocated() {
@@ -2154,7 +2156,7 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		sa.maxAllocatedResource = resources.ComponentWiseMax(sa.allocatedPlaceholder, sa.maxAllocatedResource)
 
 		// If there are no more placeholder to allocate we should move state
-		if resources.Equals(sa.allocatedPlaceholder, sa.placeholderAsk) {
+		if resources.Equals(sa.allocatedPlaceholder, resources.Add(sa.placeholderAsk, sa.placeholderResize)) {
 			if err := sa.HandleApplicationEvent(RunApplication); err != nil {
 				log.Log(log.SchedApplication).Error("Unexpected app state change failure while adding allocation",
 					zap.String("currentState", sa.stateMachine.Current()),

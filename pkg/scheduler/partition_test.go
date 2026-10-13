@@ -5890,16 +5890,18 @@ func TestRemoveNodeRaceWithAllocate(t *testing.T) {
 	}
 }
 
-// TestUnreserveRaceWithRemoveNode verifies that an unreserve for a removed node only unwinds an ask allocated on that
-// node. The shim placing a reserved ask does not remove the reservation, so the ask can be allocated on any node.
+// TestUnreserveRaceWithRemoveNode verifies that an unreserve for a removed node only unwinds an ask whose own node is
+// gone. The shim placing a reserved ask does not remove the reservation, so the ask can be allocated on any node.
 func TestUnreserveRaceWithRemoveNode(t *testing.T) {
 	tests := []struct {
 		name    string
 		nodeID  string
+		removed []string
 		unwound bool
 	}{
-		{"allocated on the removed node", nodeID1, true},
-		{"allocated on another node", nodeID2, false},
+		{"allocated on the removed node", nodeID1, []string{nodeID1}, true},
+		{"allocated on another node", nodeID2, []string{nodeID1}, false},
+		{"allocated on another removed node", nodeID2, []string{nodeID1, nodeID2}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -5936,12 +5938,14 @@ func TestUnreserveRaceWithRemoveNode(t *testing.T) {
 			assert.Assert(t, result != nil, "reservation should have been processed")
 			assert.Equal(t, result.ResultType, objects.Unreserved, "allocated ask should be unreserved")
 
-			partition.removeNode(nodeID1)
+			for _, nodeID := range tt.removed {
+				partition.removeNode(nodeID)
+			}
 			assert.Assert(t, partition.allocate(result) == nil, "unreserve on a removed node should not return a result")
 
 			if tt.unwound {
-				assert.Assert(t, !ask.IsAllocated(), "ask allocated on the removed node should be pending again")
-				assert.Assert(t, resources.Equals(app.GetPendingResource(), resources.Add(askRes, bigRes)), "ask allocated on the removed node should be counted as pending")
+				assert.Assert(t, !ask.IsAllocated(), "ask allocated on a removed node should be pending again")
+				assert.Assert(t, resources.Equals(app.GetPendingResource(), resources.Add(askRes, bigRes)), "ask allocated on a removed node should be counted as pending")
 				assert.Assert(t, resources.IsZero(partition.GetQueue(defQueue).GetAllocatedResource()), "queue allocated resource should be zero")
 				return
 			}

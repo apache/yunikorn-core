@@ -26,6 +26,7 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -224,6 +225,11 @@ func callbacks() fsm.Callbacks {
 		fmt.Sprintf("leave_%s", Running.String()): func(_ context.Context, event *fsm.Event) {
 			if event.Dst != Running.String() {
 				app := event.Args[0].(*Application) //nolint:errcheck
+				// an application back in Accepted that still holds placeholders is counted as running, like before it
+				// went Running: add it before the running count drops so that its slot is never free in between
+				if event.Dst == Accepted.String() && !resources.IsZero(app.allocatedPlaceholder) {
+					app.queue.setAllocatingAccepted(app.ApplicationID)
+				}
 				app.queue.decRunningApps()
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()

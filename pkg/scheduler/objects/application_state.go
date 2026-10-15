@@ -45,6 +45,7 @@ const (
 	FailApplication
 	ExpireApplication
 	ResumeApplication
+	RollbackApplication
 )
 
 const (
@@ -52,7 +53,7 @@ const (
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication", "resumeApplication"}[ae]
+	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication", "resumeApplication", "rollbackApplication"}[ae]
 }
 
 // ----------------------------------
@@ -131,6 +132,10 @@ func eventDesc() fsm.Events {
 			Src:  []string{New.String(), Accepted.String()},
 			Dst:  Resuming.String(),
 		}, {
+			Name: RollbackApplication.String(),
+			Src:  []string{Running.String()},
+			Dst:  Accepted.String(),
+		}, {
 			Name: ExpireApplication.String(),
 			Src:  []string{Completed.String(), Failed.String(), Rejected.String()},
 			Dst:  Expired.String(),
@@ -183,7 +188,10 @@ func callbacks() fsm.Callbacks {
 		fmt.Sprintf("enter_%s", Accepted.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
 			metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsAccepted()
-			metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
+			// a rollback returns an application that was already counted as accepted
+			if event.Event != RollbackApplication.String() {
+				metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
+			}
 		},
 		fmt.Sprintf("leave_%s", Accepted.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck

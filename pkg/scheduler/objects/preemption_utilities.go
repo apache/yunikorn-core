@@ -22,7 +22,12 @@ import (
 	"sort"
 	"time"
 
+	"go.uber.org/zap"
+
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/log"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/api"
+	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
 var (
@@ -140,4 +145,43 @@ func scoreAllocationBasedOnAsk(allocation *Allocation, ask *resources.Resource) 
 	}
 	score += allocation.GetAllocatedResource().TypeMatching(ask)
 	return score
+}
+
+func runPredicateChecks(plugin api.ResourceManagerCallback, args *si.PreemptionPredicatesArgs) *predicateCheckResult {
+	result := &predicateCheckResult{
+		allocationKey:   args.AllocationKey,
+		nodeID:          args.NodeID,
+		success:         false,
+		index:           -1,
+		predicateErrors: make(map[string]int32),
+	}
+	if len(args.PreemptAllocationKeys) == 0 {
+		// normal check; there are sufficient resources to run on this node
+		if err := plugin.Predicates(&si.PredicatesArgs{
+			AllocationKey: args.AllocationKey,
+			NodeID:        args.NodeID,
+			Allocate:      true,
+		}); err == nil {
+			result.success = true
+			result.index = -1
+		} else {
+			log.Log(log.SchedPreemption).Debug("Normal predicate check failed",
+				zap.String("AllocationKey", args.AllocationKey),
+				zap.String("NodeID", args.NodeID),
+				zap.Error(err))
+			result.predicateErrors[err.Error()]++
+		}
+	} else if response := plugin.PreemptionPredicates(args); response != nil {
+		// preemption check; at least one allocation will need preemption
+		result.success = response.GetSuccess()
+		if result.success {
+			result.index = int(response.GetIndex())
+		} else {
+			log.Log(log.SchedPreemption).Debug("Preemption predicate check failed",
+				zap.String("AllocationKey", args.AllocationKey),
+				zap.String("NodeID", args.NodeID))
+			result.predicateErrors = response.GetErrorMessage()
+		}
+	}
+	return result
 }

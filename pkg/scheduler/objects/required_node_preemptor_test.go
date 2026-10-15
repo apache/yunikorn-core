@@ -146,16 +146,16 @@ func TestGetVictims(t *testing.T) {
 	asks := prepareAllocationAsks(t, node)
 	p.filterAllocations()
 	p.sortAllocations()
-	victims := p.GetVictims()
-	assert.Equal(t, len(victims), 4)
-	assert.Equal(t, victims[0].GetAllocationKey(), "ask5")
-	assert.Equal(t, resources.Equals(victims[0].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
-	assert.Equal(t, victims[1].GetAllocationKey(), "ask1")
-	assert.Equal(t, resources.Equals(victims[1].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})), true)
-	assert.Equal(t, victims[2].GetAllocationKey(), "ask4")
-	assert.Equal(t, resources.Equals(victims[2].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
-	assert.Equal(t, victims[3].GetAllocationKey(), "ask2")
-	assert.Equal(t, resources.Equals(victims[3].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})), true)
+	prunedVictims := p.pruneVictims(p.allocations)
+	assert.Equal(t, len(prunedVictims), 4)
+	assert.Equal(t, prunedVictims[0].GetAllocationKey(), "ask5")
+	assert.Equal(t, resources.Equals(prunedVictims[0].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
+	assert.Equal(t, prunedVictims[1].GetAllocationKey(), "ask1")
+	assert.Equal(t, resources.Equals(prunedVictims[1].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})), true)
+	assert.Equal(t, prunedVictims[2].GetAllocationKey(), "ask4")
+	assert.Equal(t, resources.Equals(prunedVictims[2].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
+	assert.Equal(t, prunedVictims[3].GetAllocationKey(), "ask2")
+	assert.Equal(t, resources.Equals(prunedVictims[3].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})), true)
 	removeAllocationAsks(node, asks)
 
 	// case 2: victims are available and its resources are matching with ds request ask (but with different quantity)
@@ -165,8 +165,8 @@ func TestGetVictims(t *testing.T) {
 	asks = prepareAllocationAsks(t, node)
 	p2.filterAllocations()
 	p2.sortAllocations()
-	victims2 := p2.GetVictims()
-	assert.Equal(t, len(victims2), 1)
+	prunedVictims2 := p2.pruneVictims(p2.allocations)
+	assert.Equal(t, len(prunedVictims2), 1)
 	removeAllocationAsks(node, asks)
 
 	// case 3: allocations are available and its resources are matching partially with ds request ask (because of different resource types), hence no victims
@@ -182,8 +182,8 @@ func TestGetVictims(t *testing.T) {
 	p3.sortAllocations()
 
 	// allocations are available but no exact match for choosing victims
-	victims3 := p3.GetVictims()
-	assert.Equal(t, len(victims3), 0)
+	prunedVictims3 := p3.pruneVictims(p3.allocations)
+	assert.Equal(t, len(prunedVictims3), 0)
 	removeAllocationAsks(node, asks)
 
 	// case 4: victim chosen earlier released in the meantime
@@ -195,8 +195,8 @@ func TestGetVictims(t *testing.T) {
 	p4.sortAllocations()
 	err = asks[1].SetReleased(true)
 	assert.NilError(t, err)
-	victims = p4.GetVictims()
-	assert.Equal(t, len(victims), 4)
+	prunedVictims4 := p4.pruneVictims(p4.allocations)
+	assert.Equal(t, len(prunedVictims4), 4)
 	removeAllocationAsks(node, asks)
 }
 

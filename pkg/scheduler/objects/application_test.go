@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -3889,6 +3890,129 @@ func TestRequiredNodePreemption(t *testing.T) {
 	// check for preemption related events
 	for _, event := range mockEvents.Events {
 		assert.Assert(t, !strings.Contains(strings.ToLower(event.Message), "preemption"), "received a preemption related event")
+	}
+}
+
+func TestRequiredNodePreemptionWithPredicates(t *testing.T) {
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 20})
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return node
+	}
+	appQueueMapping := NewAppQueueMapping()
+
+	// set queue
+	rootQ, err := createRootQueue(map[string]string{"first": "20"})
+	assert.NilError(t, err)
+	childQ, err := createManagedQueueWithAppQueueMapping(rootQ, "default", false, map[string]string{"first": "20"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	// register predicate handler
+	preemptions := []mockCommon.Preemption{
+		mockCommon.NewPreemption(true, "ask-2", nodeID1, []string{"ask-1"}, 0, 0),
+	}
+	preemptions1 := []mockCommon.Preemption{
+		mockCommon.NewPreemption(true, "ask-2", nodeID1, []string{"ask-3", "ask-1"}, 0, 0),
+	}
+	wrongNodes := make(map[string]int, 1)
+	wrongNodes[nodeID2] = 10
+	rightNodes := make(map[string]int, 1)
+	rightNodes[nodeID1] = 10
+
+	type resInfo struct {
+		res        *resources.Resource
+		createTime time.Time
+	}
+	res1 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
+	res2 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 15})
+	res3 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+
+	ask1Info := make(map[string]*resInfo)
+	ask1Info["ask-1"] = &resInfo{res1, time.Now().Add(-30 * time.Second)}
+
+	ask2Info := make(map[string]*resInfo)
+	ask2Info["ask-1"] = &resInfo{res3, time.Now().Add(-60 * time.Second)}
+	ask2Info["ask-3"] = &resInfo{res2, time.Now().Add(-30 * time.Second)}
+
+	tests := []struct {
+		name            string
+		asks            map[string]*resInfo
+		mockPlugin      *mockCommon.PreemptionPredicatePlugin
+		result          bool
+		mockPluginError error
+		expectedVictims []string
+	}{
+		{"nil plugin, so no predicate checks", ask1Info, nil, true, nil, []string{"ask-1"}},
+		{"prefilter fails", ask1Info, mockCommon.NewPreemptionPredicatePlugin(preemptions, nil, true, false), false, errors.New("fail"), nil},
+		{"prefilter passes but none of the node from iterator is available in feasible nodes", ask1Info, mockCommon.NewPreemptionPredicatePlugin(preemptions, wrongNodes, false, false), false, nil, nil},
+		{"prefilter pass with expected feasible nodes, filter fails", ask1Info, mockCommon.NewPreemptionPredicatePlugin(preemptions, rightNodes, false, true), false, errors.New("fail"), nil},
+		{"both prefilter and filter passes with correct feasible nodes", ask1Info, mockCommon.NewPreemptionPredicatePlugin(preemptions, rightNodes, false, false), true, nil, []string{"ask-1"}},
+		{"both prefilter and filter passes with correct feasible nodes but predicate checks failed for 1 victim", ask2Info, mockCommon.NewPreemptionPredicatePlugin(preemptions1, rightNodes, false, false), true, nil, []string{"ask-3"}},
+		{"both prefilter and filter passes with empty feasible nodes", ask1Info, mockCommon.NewPreemptionPredicatePlugin(preemptions, nil, false, false), true, nil, []string{"ask-1"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := newApplication(appID1, "default", "root.default")
+			app.SetQueue(childQ)
+			childQ.AddApplication(app)
+			appQueueMapping.AddAppQueueMapping(app.ApplicationID, childQ)
+
+			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+			preemptionAttemptsRemaining := 1
+
+			// add an ask
+			askInfo := make(map[string]*Allocation)
+			for k, v := range tt.asks {
+				ask := newAllocationAsk(k, "app-1", v.res)
+				ask.createTime = v.createTime
+				err = app.AddAllocationAsk(ask)
+				assert.NilError(t, err, "could not add ask "+k)
+				askInfo[k] = ask
+
+				result := app.tryAllocate(headRoom, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+				assert.Equal(t, result.ResultType, Allocated, "could not allocate ask")
+				assert.Equal(t, result.Request.allocationKey, k, "unexpected allocation key")
+			}
+
+			// add ask2 with required node
+			ask2 := newAllocationAsk("ask-2", "app-1", res1)
+			ask2.requiredNode = nodeID1
+			err = app.AddAllocationAsk(ask2)
+			assert.NilError(t, err, "could not add ask-2")
+
+			// try to allocate ask2 with node being full - expect a reservation
+			result := app.tryAllocate(headRoom, true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+			assert.Equal(t, result.ResultType, Reserved, "allocation result is not reserved")
+			assert.Equal(t, result.Request.allocationKey, "ask-2", "unexpected allocation key")
+			err = app.Reserve(node, ask2)
+			assert.NilError(t, err, "reservation failed")
+
+			if tt.mockPlugin != nil {
+				plugins.RegisterSchedulerPlugin(tt.mockPlugin)
+			}
+			app.tryReservedAllocate(headRoom, iterator)
+			if tt.result {
+				for _, expVictim := range tt.expectedVictims {
+					assert.Assert(t, askInfo[expVictim].IsPreempted(), "ask1 has not been preempted")
+				}
+				assert.Assert(t, ask2.HasTriggeredPreemption(), "ask2 has not triggered preemption")
+			} else {
+				for _, expVictim := range tt.expectedVictims {
+					assert.Assert(t, !askInfo[expVictim].IsPreempted(), "ask1 has not been preempted")
+				}
+				assert.Assert(t, !ask2.HasTriggeredPreemption(), "ask2 triggered preemption")
+			}
+			if tt.mockPluginError != nil {
+				assert.ErrorContains(t, tt.mockPlugin.GetPredicateError(), tt.mockPluginError.Error())
+			}
+			// reset
+			resetQ(t, childQ)
+			resetNode(node)
+			appQueueMapping.RemoveAppQueueMapping(app.ApplicationID)
+			if tt.mockPlugin != nil {
+				plugins.UnregisterSchedulerPlugins()
+			}
+		})
 	}
 }
 

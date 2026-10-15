@@ -61,6 +61,7 @@ func TestSolutionScoring(t *testing.T) {
 
 	assert.Check(t, noOp.betterThan(none, singleAlloc), "noop should be better than nil")
 	assert.Check(t, noOp.betterThan(ideal, singleAlloc), "noop should be better than ideal")
+	assert.Check(t, noPreempt.getSolutionScore(singleNoPreempt) < originator.getSolutionScore(singleOriginator), "no-preempt should be better than originator")
 }
 
 func TestPredicateCheckResult_String(t *testing.T) {

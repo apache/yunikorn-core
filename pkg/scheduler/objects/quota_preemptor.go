@@ -165,24 +165,17 @@ func getChildQueuesPreemptableResource(queue *Queue, parentPreemptableResource *
 	// Total preemptable resource (sum of all children's preemptable resources) would be calculated along the way.
 	for _, child := range children {
 		allocated := child.GetAllocatedResource()
-		guaranteed := child.GetGuaranteedResource()
-		// Skip child if there is no usage or usage below or equals guaranteed
-		if allocated.IsEmpty() || guaranteed.StrictlyGreaterThanOrEqualsOnlyExisting(allocated) {
+		if allocated.IsEmpty() {
 			continue
 		}
-		var usedResource *resources.Resource
-		if !guaranteed.IsEmpty() {
-			usedResource = resources.SubOnlyExisting(guaranteed, allocated)
-		} else {
-			usedResource = allocated
-		}
-		preemptableResource := resources.NewResource()
-		for k, v := range usedResource.Resources {
-			if v < 0 {
-				preemptableResource.Resources[k] = v * -1
-			} else {
-				preemptableResource.Resources[k] = v
+		preemptableResource := resources.SubOnlyExisting(allocated, child.GetGuaranteedResource())
+		for resourceType, v := range preemptableResource.Resources {
+			if _, ok := parentPreemptableResource.Resources[resourceType]; !ok || v <= 0 {
+				delete(preemptableResource.Resources, resourceType)
 			}
+		}
+		if preemptableResource.IsEmpty() {
+			continue
 		}
 		childrenPreemptableResource[child] = preemptableResource
 		totalPreemptableResource.AddTo(preemptableResource)

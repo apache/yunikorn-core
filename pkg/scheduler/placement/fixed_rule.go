@@ -54,9 +54,9 @@ func (fr *fixedRule) ruleDAO() *dao.RuleDAO {
 	return &dao.RuleDAO{
 		Name: fr.getName(),
 		Parameters: map[string]string{
-			"queue":     fr.queue,
-			"create":    strconv.FormatBool(fr.create),
-			"qualified": strconv.FormatBool(fr.qualified),
+			"queue":   fr.queue,
+			create:    strconv.FormatBool(fr.create),
+			qualified: strconv.FormatBool(fr.qualified),
 		},
 		ParentRule: pDAO,
 		Filter:     fr.filter.filterDAO(),

@@ -54,7 +54,7 @@ func (tr *tagRule) ruleDAO() *dao.RuleDAO {
 		Name: tr.getName(),
 		Parameters: map[string]string{
 			"tagName": tr.tagName,
-			"create":  strconv.FormatBool(tr.create),
+			create:    strconv.FormatBool(tr.create),
 		},
 		ParentRule: pDAO,
 		Filter:     tr.filter.filterDAO(),

@@ -120,7 +120,7 @@ func (tr *TrackedResource) EqualsDAO(right map[string]map[string]int64) bool {
 	for k, v := range tr.TrackedResourceMap {
 		if inner, ok := right[k]; !ok {
 			return false
-		} else if !maps.Equal(v.DAOMap(), inner) {
+		} else if !maps.Equal(v.DAOMap(), inner) { //nolint: govet
 			return false
 		}
 	}

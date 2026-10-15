@@ -399,7 +399,7 @@ partitions:
 		{"provided not exist", "unknown", "", tags, user},
 		{"provided parent", "root.parent", "", tags, user},
 		{"acl deny", "root.acldeny", "", tags, deny},
-		{"create", "unknown", "root.namespace", map[string]string{"namespace": "namespace"}, user},
+		{create, "unknown", "root.namespace", map[string]string{"namespace": "namespace"}, user},
 		{"deny create", "unknown", "", map[string]string{"namespace": "namespace"}, deny},
 		{"forced exist", providedQ, providedQ, map[string]string{siCommon.AppTagCreateForce: "true"}, user},
 		{"forced and create", "unknown", "root.namespace", map[string]string{siCommon.AppTagCreateForce: "true", "namespace": "namespace"}, user},

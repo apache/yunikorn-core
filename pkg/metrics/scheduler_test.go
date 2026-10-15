@@ -38,10 +38,10 @@ func TestDrainingNodes(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncDrainingNodes()
-	verifyMetric(t, 1, "draining", "yunikorn_scheduler_node", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "draining", "yunikorn_scheduler_node", dto.MetricType_GAUGE, StateLabel)
 
 	sm.DecDrainingNodes()
-	verifyMetric(t, 0, "draining", "yunikorn_scheduler_node", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 0, "draining", "yunikorn_scheduler_node", dto.MetricType_GAUGE, StateLabel)
 }
 
 func TestTotalDecommissionedNodes(t *testing.T) {
@@ -49,7 +49,7 @@ func TestTotalDecommissionedNodes(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalDecommissionedNodes()
-	verifyMetric(t, 1, "decommissioned", "yunikorn_scheduler_node", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "decommissioned", "yunikorn_scheduler_node", dto.MetricType_GAUGE, StateLabel)
 }
 
 func TestTryPreemptionLatency(t *testing.T) {
@@ -101,14 +101,14 @@ func TestSchedulerApplicationsRunning(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsRunning()
-	verifyMetric(t, 1, "running", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "running", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 
 	curr, err := sm.GetTotalApplicationsRunning()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
 
 	sm.DecTotalApplicationsRunning()
-	verifyMetric(t, 0, "running", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 0, "running", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 }
 
 func TestSchedulerApplicationsCompleting(t *testing.T) {
@@ -116,10 +116,10 @@ func TestSchedulerApplicationsCompleting(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsCompleting()
-	verifyMetric(t, 1, "completing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "completing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 
 	sm.DecTotalApplicationsCompleting()
-	verifyMetric(t, 0, "completing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 0, "completing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 }
 
 func TestSchedulerApplicationsResuming(t *testing.T) {
@@ -127,14 +127,14 @@ func TestSchedulerApplicationsResuming(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsResuming()
-	verifyMetric(t, 1, "resuming", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "resuming", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 
 	curr, err := sm.GetTotalApplicationsResuming()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
 
 	sm.DecTotalApplicationsResuming()
-	verifyMetric(t, 0, "resuming", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 0, "resuming", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 }
 
 func TestSchedulerApplicationsFailing(t *testing.T) {
@@ -142,10 +142,10 @@ func TestSchedulerApplicationsFailing(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsFailing()
-	verifyMetric(t, 1, "failing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "failing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 
 	sm.DecTotalApplicationsFailing()
-	verifyMetric(t, 0, "failing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 0, "failing", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 }
 
 func TestSchedulerApplicationsCompleted(t *testing.T) {
@@ -153,14 +153,14 @@ func TestSchedulerApplicationsCompleted(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsCompleted()
-	verifyMetric(t, 1, "completed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "completed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 
 	curr, err := sm.GetTotalApplicationsCompleted()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
 
 	sm.DecTotalApplicationsCompleted()
-	verifyMetric(t, 0, "completed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 0, "completed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 
 	curr, err = sm.GetTotalApplicationsCompleted()
 	assert.NilError(t, err)
@@ -172,14 +172,14 @@ func TestSchedulerApplicationsRevived(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsRevived()
-	verifyMetric(t, 1, "revived", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "revived", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 
 	curr, err := sm.GetTotalApplicationsRevived()
 	assert.NilError(t, err)
 	assert.Equal(t, curr, 1)
 
 	sm.DecTotalApplicationsRevived()
-	verifyMetric(t, 0, "revived", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 0, "revived", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 
 	curr, err = sm.GetTotalApplicationsRevived()
 	assert.NilError(t, err)
@@ -191,7 +191,7 @@ func TestSchedulerApplicationsFailed(t *testing.T) {
 	defer unregisterMetrics()
 
 	sm.IncTotalApplicationsFailed()
-	verifyMetric(t, 1, "failed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, "state")
+	verifyMetric(t, 1, "failed", "yunikorn_scheduler_application_total", dto.MetricType_GAUGE, StateLabel)
 }
 
 func TestSchedulingCycle(t *testing.T) {

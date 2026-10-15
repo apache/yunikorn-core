@@ -47,7 +47,7 @@ func (tr *testRule) ruleDAO() *dao.RuleDAO {
 	return &dao.RuleDAO{
 		Name: types.Test,
 		Parameters: map[string]string{
-			"create": strconv.FormatBool(tr.create),
+			create: strconv.FormatBool(tr.create),
 		},
 		ParentRule: pDAO,
 		Filter:     tr.filter.filterDAO(),

@@ -272,7 +272,7 @@ func (qt *QueueTracker) getMaxResources() map[string]*resources.Resource {
 	maxRes := map[string]*resources.Resource{qt.queuePath: qt.maxResources}
 	for _, cqt := range qt.childQueueTrackers {
 		childUsage := cqt.getMaxResources()
-		maps.Copy(maxRes, childUsage)
+		maps.Copy(maxRes, childUsage) //nolint: govet
 	}
 	return maxRes
 }
@@ -286,7 +286,7 @@ func (qt *QueueTracker) getMaxApplications() map[string]uint64 {
 	maxApps := map[string]uint64{qt.queuePath: qt.maxRunningApps}
 	for _, cqt := range qt.childQueueTrackers {
 		childApps := cqt.getMaxApplications()
-		maps.Copy(maxApps, childApps)
+		maps.Copy(maxApps, childApps) //nolint: govet
 	}
 	return maxApps
 }
@@ -300,7 +300,7 @@ func (qt *QueueTracker) getUsedResources() map[string]*resources.Resource {
 	maxRes := map[string]*resources.Resource{qt.queuePath: qt.resourceUsage}
 	for _, cqt := range qt.childQueueTrackers {
 		childUsage := cqt.getUsedResources()
-		maps.Copy(maxRes, childUsage)
+		maps.Copy(maxRes, childUsage) //nolint: govet
 	}
 	return maxRes
 }

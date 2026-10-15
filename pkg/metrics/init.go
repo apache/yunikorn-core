@@ -33,6 +33,10 @@ const (
 	EventSubsystem = "event"
 	// MetricNameInvalidByteReplacement byte used to replace invalid bytes in prometheus metric names
 	MetricNameInvalidByteReplacement = '_'
+
+	StateLabel  = "state"
+	LevelLabel  = "level"
+	ResultLabel = "result"
 )
 
 var once sync.Once

@@ -175,6 +175,29 @@ func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, ph
 	return NewApplication(siApp, getTestUserGroup(), mockEventHandler, ""), mockEventHandler
 }
 
+// newGangApplication creates an application that asks for count placeholders of res
+func newGangApplication(res *resources.Resource, count int64) *Application {
+	siApp := &si.AddApplicationRequest{
+		ApplicationID:  appID1,
+		QueueName:      "root.unknown",
+		PartitionName:  "default",
+		PlaceholderAsk: resources.Multiply(res, count).ToProto(),
+	}
+	return NewApplication(siApp, getTestUserGroup(), nil, "")
+}
+
+// allocatePlaceholder adds a placeholder ask for key and allocates it on nodeID1
+func allocatePlaceholder(t *testing.T, app *Application, key string, res *resources.Resource) {
+	ph := newAllocationAskTG(key, appID1, tg1, res)
+	err := app.AddAllocationAsk(ph)
+	assert.NilError(t, err, "placeholder ask %s should have been added", key)
+	_, err = app.AllocateAsk(key)
+	assert.NilError(t, err, "AllocateAsk %s should succeed", key)
+	ph.SetNodeID(nodeID1)
+	err = app.AddAllocation(ph)
+	assert.NilError(t, err, "placeholder allocation %s should have been added", key)
+}
+
 // Create node with minimal info
 func newNode(nodeID string, totalMap map[string]resources.Quantity) *Node {
 	total := resources.NewResourceFromMap(totalMap)

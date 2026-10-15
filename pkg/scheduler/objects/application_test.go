@@ -4828,32 +4828,18 @@ func TestRollbackAllocationPartial(t *testing.T) {
 	assert.Assert(t, app.IsRunning(), "app should remain Running after partial rollback")
 }
 
-// TestRollbackAllocationPlaceholder verifies that a placeholder rollback reverts the placeholder tracking and
-// leaves the real allocation tracking untouched. The placeholder timer keeps running, also after the last
-// placeholder is rolled back.
+// TestRollbackAllocationPlaceholder verifies that a placeholder rollback reverts the placeholder tracking and peak,
+// moves the application back to Accepted, and clears the placeholder timer once no placeholder is left allocated.
 func TestRollbackAllocationPlaceholder(t *testing.T) {
 	setupUGM()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	siApp := &si.AddApplicationRequest{
-		ApplicationID:  appID1,
-		QueueName:      "root.unknown",
-		PartitionName:  "default",
-		PlaceholderAsk: resources.Multiply(res, 2).ToProto(),
-	}
-	app := NewApplication(siApp, getTestUserGroup(), nil, "")
+	app := newGangApplication(res, 2)
 	app.queue = queue
 
 	for _, key := range []string{aKey, aKey2} {
-		ph := newAllocationAskTG(key, appID1, tg1, res)
-		err = app.AddAllocationAsk(ph)
-		assert.NilError(t, err, "placeholder ask %s should have been added", key)
-		_, err = app.AllocateAsk(key)
-		assert.NilError(t, err, "AllocateAsk %s should succeed", key)
-		ph.SetNodeID(nodeID1)
-		err = app.AddAllocation(ph)
-		assert.NilError(t, err, "placeholder allocation %s should have been added", key)
+		allocatePlaceholder(t, app, key, res)
 	}
 	assert.Assert(t, app.IsRunning(), "app should be in Running state once all placeholders are allocated")
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "placeholder timer should be started by the placeholder allocation")
@@ -4862,78 +4848,67 @@ func TestRollbackAllocationPlaceholder(t *testing.T) {
 	returned, err := app.RollbackAllocation(aKey)
 	assert.NilError(t, err, "rollback should succeed")
 	assert.Assert(t, returned.IsPlaceholder(), "returned allocation should be the placeholder")
+	assert.Assert(t, app.IsAccepted(), "app should move back to Accepted state, got state %s", app.CurrentState())
 	assert.Assert(t, resources.Equals(app.GetPlaceholderResource(), res), "placeholder resource should only include the remaining placeholder, got %v", app.GetPlaceholderResource())
+	assert.Assert(t, resources.Equals(app.GetMaxAllocatedResource(), res), "peak should not include the rolled back placeholder, got %v", app.GetMaxAllocatedResource())
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "placeholder timer should keep running while a placeholder is allocated")
 	assert.Assert(t, app.HasPlaceholderAllocation(), "app should still report a placeholder allocation")
 
 	_, err = app.RollbackAllocation(aKey2)
 	assert.NilError(t, err, "rollback of the last placeholder should succeed")
+	assert.Assert(t, app.IsAccepted(), "app should remain in Accepted state, got state %s", app.CurrentState())
 	assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "placeholder resource should be zero after rollback, got %v", app.GetPlaceholderResource())
-	assert.Assert(t, app.getPlaceholderTimer() != nil, "placeholder timer should keep running after the last placeholder is rolled back")
+	assert.Assert(t, resources.IsZero(app.GetMaxAllocatedResource()), "peak should be zero after rollback, got %v", app.GetMaxAllocatedResource())
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "placeholder timer should be cleared when no placeholder is allocated")
 	assert.Assert(t, !app.HasPlaceholderAllocation(), "app should not report a placeholder allocation after rollback")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should be zero after rollback, got %v", app.GetAllocatedResource())
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), resources.Multiply(res, 2)), "pending resource should be restored after rollback, got %v", app.GetPendingResource())
 	assertUserGroupResource(t, getTestUserGroup(), nil)
-	assert.Assert(t, app.IsRunning(), "app should remain in Running state after rollback")
 }
 
-// TestTimeoutPlaceholderAfterRollback verifies the placeholder timeout once a rollback left no placeholder allocated:
-// an Accepted application times out as an incomplete gang, a Running one keeps its real allocations.
-func TestTimeoutPlaceholderAfterRollback(t *testing.T) {
+// TestRollbackAllocationPlaceholderWithRealAllocation verifies that a placeholder rollback leaves the state of an
+// application that runs because of a real allocation alone.
+func TestRollbackAllocationPlaceholderWithRealAllocation(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
-	newGangApp := func(t *testing.T) *Application {
-		setupUGM()
-		queue, err := createRootQueue(nil)
-		assert.NilError(t, err, "queue create failed")
-		siApp := &si.AddApplicationRequest{
-			ApplicationID:  appID1,
-			QueueName:      "root.unknown",
-			PartitionName:  "default",
-			PlaceholderAsk: resources.Multiply(res, 2).ToProto(),
-		}
-		app := NewApplication(siApp, getTestUserGroup(), nil, "")
-		app.queue = queue
-		return app
-	}
-	allocate := func(t *testing.T, app *Application, alloc *Allocation) {
-		err := app.AddAllocationAsk(alloc)
-		assert.NilError(t, err, "ask %s should have been added", alloc.GetAllocationKey())
-		_, err = app.AllocateAsk(alloc.GetAllocationKey())
-		assert.NilError(t, err, "AllocateAsk %s should succeed", alloc.GetAllocationKey())
-		alloc.SetNodeID(nodeID1)
-		err = app.AddAllocation(alloc)
-		assert.NilError(t, err, "allocation %s should have been added", alloc.GetAllocationKey())
-	}
+	app := newGangApplication(res, 2)
+	app.queue = queue
 
-	t.Run("Accepted", func(t *testing.T) {
-		app := newGangApp(t)
-		allocate(t, app, newAllocationAskTG(aKey, appID1, tg1, res))
-		err := app.AddAllocationAsk(newAllocationAskTG(aKey2, appID1, tg1, res))
-		assert.NilError(t, err, "placeholder ask should have been added")
-		_, err = app.RollbackAllocation(aKey)
-		assert.NilError(t, err, "rollback should succeed")
-		assert.Assert(t, app.getPlaceholderTimer() != nil, "placeholder timer should keep the gang deadline")
+	real := newAllocationAsk(aKey3, appID1, res)
+	err = app.AddAllocationAsk(real)
+	assert.NilError(t, err, "real ask should have been added")
+	_, err = app.AllocateAsk(aKey3)
+	assert.NilError(t, err, "AllocateAsk should succeed")
+	real.SetNodeID(nodeID1)
+	err = app.AddAllocation(real)
+	assert.NilError(t, err, "real allocation should have been added")
+	allocatePlaceholder(t, app, aKey, res)
+	assert.Assert(t, app.IsRunning(), "app should be in Running state with a real allocation")
 
-		app.timeoutPlaceholderProcessing()
-		assert.Assert(t, app.IsResuming(), "soft gang should resume on timeout, got state %s", app.CurrentState())
-		assert.Equal(t, len(app.getAllRequestsInternal()), 0, "placeholder asks should be removed on timeout")
-	})
+	_, err = app.RollbackAllocation(aKey)
+	assert.NilError(t, err, "rollback should succeed")
+	assert.Assert(t, app.IsRunning(), "app should remain in Running state, got state %s", app.CurrentState())
+}
 
-	t.Run("Running", func(t *testing.T) {
-		app := newGangApp(t)
-		allocate(t, app, newAllocationAskTG(aKey, appID1, tg1, res))
-		allocate(t, app, newAllocationAskTG(aKey2, appID1, tg1, res))
-		app.RemoveAllocation(aKey, si.TerminationType_PLACEHOLDER_REPLACED)
-		real := newAllocationAsk(aKey3, appID1, res)
-		allocate(t, app, real)
-		_, err := app.RollbackAllocation(aKey2)
-		assert.NilError(t, err, "rollback should succeed")
-		assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "no placeholder should be allocated, got %v", app.GetPlaceholderResource())
+// TestTimeoutPlaceholderAfterRollback verifies that a gang that is incomplete again after a rollback times out as
+// an incomplete gang.
+func TestTimeoutPlaceholderAfterRollback(t *testing.T) {
+	setupUGM()
+	queue, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	app := newGangApplication(res, 2)
+	app.queue = queue
+	allocatePlaceholder(t, app, aKey, res)
+	allocatePlaceholder(t, app, aKey2, res)
+	_, err = app.RollbackAllocation(aKey2)
+	assert.NilError(t, err, "rollback should succeed")
 
-		app.timeoutPlaceholderProcessing()
-		assert.Assert(t, app.IsRunning(), "app should remain in Running state, got state %s", app.CurrentState())
-		assert.Assert(t, !real.IsReleased(), "real allocation should not be released on placeholder timeout")
-	})
+	app.timeoutPlaceholderProcessing()
+	assert.Assert(t, app.IsResuming(), "soft gang should resume on timeout, got state %s", app.CurrentState())
+	assert.Equal(t, len(app.getAllRequestsInternal()), 0, "placeholder asks should be removed on timeout")
 }
 
 func TestApplicationBackoff(t *testing.T) {

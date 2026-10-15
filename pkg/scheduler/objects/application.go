@@ -994,10 +994,21 @@ func (sa *Application) RollbackAllocation(allocKey string) (*Allocation, error) 
 	if ask.IsPlaceholder() {
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, res)
 		sa.allocatedPlaceholder.Prune()
-		// keep the placeholder timer: the gang deadline counts from the first placeholder allocation and also
-		// covers this placeholder when it is allocated again
+		// placeholders are only rolled back while the gang forms and placeholder usage only grows, so the peak
+		// includes this placeholder
+		sa.maxAllocatedResource = resources.ComponentWiseMax(resources.Sub(sa.maxAllocatedResource, res), sa.allocatedPlaceholder)
+		sa.maxAllocatedResource.Prune()
 		if resources.IsZero(sa.allocatedPlaceholder) {
+			sa.clearPlaceholderTimer()
 			sa.hasPlaceholderAlloc = false
+		}
+		// the application moved to Running when its last placeholder was allocated: the gang is incomplete again
+		if sa.IsRunning() && resources.IsZero(sa.allocatedResource) {
+			if err := sa.HandleApplicationEvent(RollbackApplication); err != nil {
+				log.Log(log.SchedApplication).Warn("Unexpected app state change failure while rolling back a placeholder",
+					zap.String("currentState", sa.stateMachine.Current()),
+					zap.Error(err))
+			}
 		}
 	} else {
 		sa.allocatedResource = resources.Sub(sa.allocatedResource, res)

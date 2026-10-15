@@ -422,7 +422,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 			if result.success {
 				if bestResult == nil {
 					bestResult = result
-				} else if result.betterThan(bestResult, p.allocationsByNode) {
+				} else if result.betterThan(bestResult, victimsByNode) {
 					bestResult = result
 				}
 			} else {
@@ -432,7 +432,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 			}
 		}
 		// if the best resultType we have from this batch meets all our criteria, don't run another batch
-		if bestResult.isSatisfactory(p.allocationsByNode) {
+		if bestResult.isSatisfactory(victimsByNode) {
 			break
 		}
 	}

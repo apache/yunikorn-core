@@ -993,20 +993,22 @@ func (sa *Application) RollbackAllocation(allocKey string) (*Allocation, error) 
 	if ask.IsPlaceholder() {
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, res)
 		sa.allocatedPlaceholder.Prune()
-		// placeholders are only rolled back while the gang forms and placeholder usage only grows, so the peak
-		// includes this placeholder
-		sa.maxAllocatedResource = resources.ComponentWiseMax(resources.Sub(sa.maxAllocatedResource, res), sa.allocatedPlaceholder)
-		sa.maxAllocatedResource.Prune()
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.clearPlaceholderTimer()
 			sa.hasPlaceholderAlloc = false
 		}
-		// the application moved to Running when its last placeholder was allocated: the gang is incomplete again
-		if sa.IsRunning() && resources.IsZero(sa.allocatedResource) {
-			if err := sa.HandleApplicationEvent(RollbackApplication); err != nil {
-				log.Log(log.SchedApplication).Warn("Unexpected app state change failure while rolling back a placeholder",
-					zap.String("currentState", sa.stateMachine.Current()),
-					zap.Error(err))
+		// without real allocations the gang is still forming: placeholder usage only grew, so the peak includes this
+		// placeholder, and a Running application got there when its last placeholder was allocated
+		if resources.IsZero(sa.allocatedResource) {
+			sa.maxAllocatedResource = resources.ComponentWiseMax(resources.Sub(sa.maxAllocatedResource, res), sa.allocatedPlaceholder)
+			sa.maxAllocatedResource.Prune()
+			if sa.IsRunning() {
+				if err := sa.HandleApplicationEvent(RollbackApplication); err != nil {
+					log.Log(log.SchedApplication).Warn("Application state not changed to Accepted while rolling back a placeholder allocation",
+						zap.String("currentState", sa.CurrentState()),
+						zap.Stringer("event", RollbackApplication),
+						zap.Error(err))
+				}
 			}
 		}
 	} else {

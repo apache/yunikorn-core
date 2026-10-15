@@ -175,27 +175,26 @@ func newApplicationWithPlaceholderTimeout(appID, partition, queueName string, ph
 	return NewApplication(siApp, getTestUserGroup(), mockEventHandler, ""), mockEventHandler
 }
 
-// newGangApplication creates an application that asks for count placeholders of res
-func newGangApplication(res *resources.Resource, count int64) *Application {
+// Create application with a placeholder ask for the task groups
+func newApplicationTG(appID, partition, queueName string, task *resources.Resource) *Application {
 	siApp := &si.AddApplicationRequest{
-		ApplicationID:  appID1,
-		QueueName:      "root.unknown",
-		PartitionName:  "default",
-		PlaceholderAsk: resources.Multiply(res, count).ToProto(),
+		ApplicationID:  appID,
+		QueueName:      queueName,
+		PartitionName:  partition,
+		PlaceholderAsk: task.ToProto(),
 	}
 	return NewApplication(siApp, getTestUserGroup(), nil, "")
 }
 
-// allocatePlaceholder adds a placeholder ask for key and allocates it on nodeID1
-func allocatePlaceholder(t *testing.T, app *Application, key string, res *resources.Resource) {
-	ph := newAllocationAskTG(key, appID1, tg1, res)
-	err := app.AddAllocationAsk(ph)
-	assert.NilError(t, err, "placeholder ask %s should have been added", key)
-	_, err = app.AllocateAsk(key)
-	assert.NilError(t, err, "AllocateAsk %s should succeed", key)
-	ph.SetNodeID(nodeID1)
-	err = app.AddAllocation(ph)
-	assert.NilError(t, err, "placeholder allocation %s should have been added", key)
+// allocateAndAdd adds the ask to the application, allocates it on nodeID1 and adds the allocation
+func allocateAndAdd(t *testing.T, app *Application, ask *Allocation) {
+	err := app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask %s should have been added", ask.GetAllocationKey())
+	_, err = app.AllocateAsk(ask.GetAllocationKey())
+	assert.NilError(t, err, "AllocateAsk %s should succeed", ask.GetAllocationKey())
+	ask.SetNodeID(nodeID1)
+	err = app.AddAllocation(ask)
+	assert.NilError(t, err, "allocation %s should have been added", ask.GetAllocationKey())
 }
 
 // Create node with minimal info

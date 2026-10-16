@@ -1388,6 +1388,43 @@ func TestIsEmpty(t *testing.T) {
 	assert.Equal(t, leaf.IsEmpty(), false, "queue with registered app should not be empty")
 }
 
+func TestGetOutstandingRequestsResults(t *testing.T) {
+	root, err := createRootQueue(map[string]string{"memory": "20"})
+	assert.NilError(t, err)
+	// Preserve the public API's non-nil empty results for a root with no asks.
+	requests, withdrawals := root.GetOutstandingRequests()
+	assert.Assert(t, requests != nil && len(requests) == 0)
+	assert.Assert(t, withdrawals != nil && len(withdrawals) == 0)
+	leaf, err := createManagedQueue(root, "leaf", false, map[string]string{"memory": "20"})
+	assert.NilError(t, err)
+	app := newApplication("app-1", "default", "root.leaf")
+	app.queue = leaf
+	leaf.AddApplication(app)
+	resource := func(amount resources.Quantity) *resources.Resource {
+		return resources.NewResourceFromMap(map[string]resources.Quantity{"memory": amount})
+	}
+	askA := newAllocationAsk("ask-A", "app-1", resource(12))
+	askA.SetSchedulingAttempted(true)
+	askA.SetScaleUpTriggered(true)
+	assert.NilError(t, app.AddAllocationAsk(askA))
+	askC := newAllocationAsk("ask-C", "app-1", resource(9))
+	askC.SetSchedulingAttempted(true)
+	assert.NilError(t, app.AddAllocationAsk(askC))
+	assert.NilError(t, leaf.TryIncAllocatedResource(resource(9)))
+
+	// A is a withdrawal candidate, while C is newly outstanding demand.
+	requests, withdrawals = root.GetOutstandingRequests()
+	assert.Equal(t, len(requests), 1)
+	assert.Assert(t, requests[0] == askC)
+	assert.Equal(t, len(withdrawals), 1)
+	assert.Assert(t, withdrawals[0] == askA)
+	assert.Assert(t, askA.HasTriggeredScaleUp(), "collection must leave advertisement changes to inspection")
+
+	// Collection retains the root-only contract.
+	requests, withdrawals = leaf.GetOutstandingRequests()
+	assert.Assert(t, requests == nil && withdrawals == nil)
+}
+
 func TestGetOutstandingRequestMax(t *testing.T) {
 	// queue structure:
 	// root (max.cpu = 5)
@@ -1458,15 +1495,15 @@ func testOutstanding(t *testing.T, allocMap, usedMap map[string]string) {
 	}
 
 	// verify get outstanding requests for root, and child queues
-	rootTotal := root.GetOutstandingRequests()
+	rootTotal, _ := root.GetOutstandingRequests()
 	assert.Equal(t, len(rootTotal), 15)
 
 	queue1Total := make([]*Allocation, 0)
-	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total)
+	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total, nil)
 	assert.Equal(t, len(queue1Total), 10)
 
 	queue2Total := make([]*Allocation, 0)
-	queue2.getOutStandingRequestsInternal(resources.NewResource(), &queue2Total)
+	queue2.getOutStandingRequestsInternal(resources.NewResource(), &queue2Total, nil)
 	assert.Equal(t, len(queue2Total), 5)
 
 	// simulate queue1 has some allocated resources
@@ -1474,27 +1511,28 @@ func testOutstanding(t *testing.T, allocMap, usedMap map[string]string) {
 	assert.NilError(t, err, "failed to increment allocated resources")
 
 	queue1Total = make([]*Allocation, 0)
-	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total)
+	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total, nil)
 	assert.Equal(t, len(queue1Total), 5)
 
 	queue2Total = make([]*Allocation, 0)
-	queue2.getOutStandingRequestsInternal(resources.NewResource(), &queue2Total)
+	queue2.getOutStandingRequestsInternal(resources.NewResource(), &queue2Total, nil)
 	assert.Equal(t, len(queue2Total), 5)
 
-	rootTotal = root.GetOutstandingRequests()
+	rootTotal, _ = root.GetOutstandingRequests()
 	assert.Equal(t, len(rootTotal), 10)
 
 	// remove app2 from queue2
 	queue2.RemoveApplication(app2)
 	queue2Total = make([]*Allocation, 0)
-	queue2.getOutStandingRequestsInternal(resources.NewResource(), &queue2Total)
+	queue2.getOutStandingRequestsInternal(resources.NewResource(), &queue2Total, nil)
 	assert.Equal(t, len(queue2Total), 0)
 
-	rootTotal = root.GetOutstandingRequests()
+	rootTotal, _ = root.GetOutstandingRequests()
 	assert.Equal(t, len(rootTotal), 5)
 
 	// test for non-root queue
-	assert.Assert(t, queue1.GetOutstandingRequests() == nil)
+	rootTotal, withdrawals := queue1.GetOutstandingRequests()
+	assert.Assert(t, rootTotal == nil && withdrawals == nil)
 }
 
 func TestGetOutstandingOnlyUntracked(t *testing.T) {
@@ -1531,11 +1569,11 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	}
 
 	// verify get outstanding requests for root, and child queues
-	rootTotal := root.GetOutstandingRequests()
+	rootTotal, _ := root.GetOutstandingRequests()
 	assert.Equal(t, len(rootTotal), 20)
 
 	queue1Total := make([]*Allocation, 0)
-	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total)
+	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total, nil)
 	assert.Equal(t, len(queue1Total), 20)
 
 	// simulate queue1 has some allocated resources
@@ -1544,12 +1582,12 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	assert.NilError(t, err, "failed to increment allocated resources")
 
 	queue1Total = make([]*Allocation, 0)
-	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total)
+	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total, nil)
 	assert.Equal(t, len(queue1Total), 20)
 	headRoom := queue1.getHeadRoom()
 	assert.Assert(t, resources.IsZero(headRoom), "headroom should have been zero")
 
-	rootTotal = root.GetOutstandingRequests()
+	rootTotal, _ = root.GetOutstandingRequests()
 	assert.Equal(t, len(rootTotal), 20)
 	headRoom = root.getHeadRoom()
 	assert.Assert(t, resources.IsZero(headRoom), "headroom should have been zero")
@@ -1587,15 +1625,15 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	rootTotal := root.GetOutstandingRequests()
+	rootTotal, _ := root.GetOutstandingRequests()
 	assert.Equal(t, len(rootTotal), 30)
 
 	queue1Total := make([]*Allocation, 0)
-	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total)
+	queue1.getOutStandingRequestsInternal(resources.NewResource(), &queue1Total, nil)
 	assert.Equal(t, len(queue1Total), 10)
 
 	queue2Total := make([]*Allocation, 0)
-	queue2.getOutStandingRequestsInternal(resources.NewResource(), &queue2Total)
+	queue2.getOutStandingRequestsInternal(resources.NewResource(), &queue2Total, nil)
 	assert.Equal(t, len(queue2Total), 20)
 }
 
@@ -1630,11 +1668,11 @@ func TestOutstandingMultipleApps(t *testing.T) {
 		assert.NilError(t, err, "failed to add allocation ask")
 	}
 
-	rootTotal := root.GetOutstandingRequests()
+	rootTotal, _ := root.GetOutstandingRequests()
 	assert.Equal(t, len(rootTotal), 2)
 
 	leafTotal := make([]*Allocation, 0)
-	leaf.getOutStandingRequestsInternal(nil, &leafTotal)
+	leaf.getOutStandingRequestsInternal(nil, &leafTotal, nil)
 	assert.Equal(t, len(rootTotal), 2)
 }
 
@@ -1687,7 +1725,7 @@ func TestOutStandingRequestMultipleChildrenWithMax(t *testing.T) {
 	leaf2.AddApplication(leaf2App)
 	leaf2.IncAllocatedResource(allocatedRes, false)
 
-	outstanding := root.GetOutstandingRequests()
+	outstanding, _ := root.GetOutstandingRequests()
 	assert.Equal(t, 2, len(outstanding), "expected 2 outstanding requests to be collected")
 	assert.Equal(t, "ask-leaf1", outstanding[0].allocationKey)
 	assert.Equal(t, "ask1-leaf2", outstanding[1].allocationKey)

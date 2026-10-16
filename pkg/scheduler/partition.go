@@ -960,9 +960,9 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 	return released, confirmed
 }
 
-func (pc *PartitionContext) calculateOutstandingRequests() []*objects.Allocation {
+func (pc *PartitionContext) calculateOutstandingRequests() ([]*objects.Allocation, []*objects.Allocation) {
 	if !resources.StrictlyGreaterThanZero(pc.root.GetPendingResource()) {
-		return nil
+		return nil, nil
 	}
 	return pc.root.GetOutstandingRequests()
 }

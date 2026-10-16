@@ -1803,43 +1803,50 @@ func (sq *Queue) TryPlaceholderAllocate(iterator func() NodeIterator, getnode fu
 	return nil
 }
 
-// GetOutstandingRequests builds a slice of pending allocation asks that fits into the queue's headroom.
-// This method can only be called for the root of the queue hierarchy. Otherwise it returns nil.
-func (sq *Queue) GetOutstandingRequests() []*Allocation {
-	total := make([]*Allocation, 0)
+// GetOutstandingRequests selects active autoscaling demand in scheduler order using selection budgets
+// initialized from current queue and per-application user/group headroom. Collective pending selection
+// against shared user/group limits across applications is not tracked here.
+// The first slice contains new advertisements; the second contains advertisements no longer selected.
+// Retained advertisements consume the shared queue selection budget without entering either callback slice.
+// Root physical capacity is excluded; selection budgets begin at its children.
+// This method can only be called for the root of the queue hierarchy. Otherwise it returns nil slices.
+func (sq *Queue) GetOutstandingRequests() ([]*Allocation, []*Allocation) {
 	if sq.parent != nil {
-		return nil
+		return nil, nil
 	}
 
+	requests := make([]*Allocation, 0)
+	withdrawals := make([]*Allocation, 0)
 	for _, child := range sq.sortQueues() {
-		_ = child.getOutStandingRequestsInternal(resources.NewResource(), &total)
+		_ = child.getOutStandingRequestsInternal(resources.NewResource(), &requests, &withdrawals)
 	}
-	return total
+	return requests, withdrawals
 }
 
-func (sq *Queue) getOutStandingRequestsInternal(parentHeadroom *resources.Resource, total *[]*Allocation) *resources.Resource {
+// getOutStandingRequestsInternal propagates all selected advertisement resources upward,
+// including existing advertisements. Callback deltas must not replenish the shared budget.
+func (sq *Queue) getOutStandingRequestsInternal(parentHeadroom *resources.Resource, requests, withdrawals *[]*Allocation) *resources.Resource {
 	headRoom := sq.internalHeadRoom(parentHeadroom)
-	outstandingTotal := resources.NewResource() // accumulated resource usage of all collected asks on this level
+	selectedTotal := resources.NewResource()
 
 	if sq.IsLeafQueue() {
-		// while calculating outstanding requests, we calculate all the requests that can fit into the queue's headroom,
-		// all these requests are qualified to trigger the up scaling.
 		for _, app := range sq.sortApplications(false) {
-			// calculate the users' headroom
+			// UGM supplies actual-usage headroom independently for each application.
+			// Collective pending selection against shared user/group limits is not tracked here.
 			userHeadroom := ugm.GetUserManager().Headroom(app.queuePath, app.ApplicationID, app.user)
-			appTotal := app.getOutstandingRequests(headRoom, userHeadroom, total)
-			outstandingTotal.AddTo(appTotal)
-			headRoom = resources.SubOnlyExisting(headRoom, appTotal)
+			appSelectedTotal := app.getOutstandingRequests(headRoom, userHeadroom, requests, withdrawals)
+			selectedTotal.AddTo(appSelectedTotal)
+			headRoom = resources.SubOnlyExisting(headRoom, appSelectedTotal)
 		}
 	} else {
 		for _, child := range sq.sortQueues() {
-			queueTotal := child.getOutStandingRequestsInternal(headRoom, total)
-			outstandingTotal.AddTo(queueTotal)
-			headRoom = resources.SubOnlyExisting(headRoom, queueTotal)
+			queueSelectedTotal := child.getOutStandingRequestsInternal(headRoom, requests, withdrawals)
+			selectedTotal.AddTo(queueSelectedTotal)
+			headRoom = resources.SubOnlyExisting(headRoom, queueSelectedTotal)
 		}
 	}
 
-	return outstandingTotal
+	return selectedTotal
 }
 
 // TryReservedAllocate tries to allocate a reservation.

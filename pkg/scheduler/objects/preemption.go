@@ -20,7 +20,6 @@ package objects
 
 import (
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -796,7 +795,7 @@ func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource
 	// Otherwise, doing min calculation with parent level (for a different res types) would lead to a wrong perception
 	// of choosing this current queue to select the victims when that is not the fact.
 	// As you move down the hierarchy, results calculated at lower level has higher precedence.
-	if preemptableResource.IsEmpty() {
+	if preemptableResource.IsEmpty() || qps.Parent.isAncestorOfStarvingAsk() {
 		return preemptableResource
 	}
 
@@ -806,6 +805,30 @@ func (qps *QueuePreemptionSnapshot) GetPreemptableResource() *resources.Resource
 	// (might be because of other current queue siblings) and also leads to wrong perception.
 	// So minimum would be derived only for resource types in current (leaf) queue preemptable resource.
 	return resources.ComponentWiseMinOnlyExisting(preemptableResource, parentPreemptableResource)
+}
+
+func (qps *QueuePreemptionSnapshot) isAncestorOf(other *QueuePreemptionSnapshot) bool {
+	if qps == nil || other == nil {
+		return false
+	}
+	for cur := other.Parent; cur != nil; cur = cur.Parent {
+		if cur.QueuePath == qps.QueuePath {
+			return true
+		}
+	}
+	return false
+}
+
+func (qps *QueuePreemptionSnapshot) hasRemainingGuaranteed() bool {
+	if qps == nil || qps.GuaranteedResource.IsEmpty() {
+		return false
+	}
+	used := resources.SubOnlyExisting(qps.AllocatedResource, qps.PreemptingResource)
+	return !resources.SubOnlyExisting(qps.GuaranteedResource, used).IsEmpty()
+}
+
+func (qps *QueuePreemptionSnapshot) isAncestorOfStarvingAsk() bool {
+	return qps != nil && qps.isAncestorOf(qps.AskQueue) && qps.AskQueue.hasRemainingGuaranteed()
 }
 
 func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.Resource {
@@ -824,9 +847,9 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 	}
 	used := resources.SubOnlyExisting(qps.AllocatedResource, qps.PreemptingResource)
 	remainingGuaranteed = resources.SubOnlyExisting(remainingGuaranteed, used)
-	if qps.AskQueue != nil {
+	if !remainingGuaranteed.IsEmpty() && qps.AskQueue != nil {
 		// In case ask queue has guaranteed set, its own values carries higher precedence over the parent or ancestor
-		if qps.AskQueue.QueuePath == qps.QueuePath && !remainingGuaranteed.IsEmpty() {
+		if qps.AskQueue.QueuePath == qps.QueuePath {
 			return resources.MergeIfNotPresent(remainingGuaranteed, parent)
 		}
 		// Queue (potential victim queue path) being processed currently sharing common ancestors or parent with ask queue should not propagate its
@@ -834,11 +857,7 @@ func (qps *QueuePreemptionSnapshot) GetRemainingGuaranteedResource() *resources.
 		// has been set. Otherwise, propagating the remaining guaranteed downwards would give wrong perception and those queues might not be chosen
 		// as victims for sibling ( who is under guaranteed and starving for resources) in the same level.
 		// Overall, this increases the chance of choosing victims for preemptor from siblings without causing preemption storm or loop.
-		askQueueRemainingGuaranteed := qps.AskQueue.GuaranteedResource.Clone()
-		askQueueUsed := qps.AskQueue.AllocatedResource.Clone()
-		askQueueUsed = resources.SubOnlyExisting(askQueueUsed, qps.AskQueue.PreemptingResource)
-		askQueueRemainingGuaranteed = resources.SubOnlyExisting(askQueueRemainingGuaranteed, askQueueUsed)
-		if !remainingGuaranteed.IsEmpty() && strings.HasPrefix(qps.AskQueue.QueuePath, qps.QueuePath) && !askQueueRemainingGuaranteed.IsEmpty() {
+		if qps.isAncestorOfStarvingAsk() {
 			return nil
 		}
 	}

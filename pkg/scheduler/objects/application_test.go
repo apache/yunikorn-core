@@ -3931,7 +3931,8 @@ func TestRequiredNodePreemptionWithPredicates(t *testing.T) {
 	ask1Info["ask-1"] = &resInfo{res1, time.Now().Add(-30 * time.Second)}
 
 	ask2Info := make(map[string]*resInfo)
-	ask2Info["ask-1"] = &resInfo{res3, time.Now().Add(-60 * time.Second)}
+	// age is compared at hour granularity: keep ask-3 the youngest
+	ask2Info["ask-1"] = &resInfo{res3, time.Now().Add(-2 * time.Hour)}
 	ask2Info["ask-3"] = &resInfo{res2, time.Now().Add(-30 * time.Second)}
 
 	tests := []struct {

@@ -1795,7 +1795,7 @@ func (pc *PartitionContext) rollbackAllocation(appID, allocationKey string, app 
 	queue := app.GetQueue()
 	// Retrieve node ID before rolling back (RollbackAllocation clears it on the ask).
 	nodeID := app.GetAllocationNodeID(allocationKey)
-	res, err := app.RollbackAllocation(allocationKey)
+	alloc, err := app.RollbackAllocation(allocationKey)
 	if err != nil {
 		log.Log(log.SchedPartition).Warn("failed to rollback allocation",
 			zap.String("appID", appID),
@@ -1811,13 +1811,16 @@ func (pc *PartitionContext) rollbackAllocation(appID, allocationKey string, app 
 			zap.String("allocationKey", allocationKey),
 			zap.String("nodeID", nodeID))
 	}
-	if err := queue.DecAllocatedResource(res); err != nil {
+	if err := queue.DecAllocatedResource(alloc.GetAllocatedResource()); err != nil {
 		log.Log(log.SchedPartition).Warn("failed to release resources from queue during rollback",
 			zap.String("appID", appID),
 			zap.String("allocationKey", allocationKey),
 			zap.Error(err))
 	}
 	pc.updateAllocationCount(-1)
+	if alloc.IsPlaceholder() {
+		pc.decPhAllocationCount(1)
+	}
 	log.Log(log.SchedPartition).Info("allocation rolled back to pending ask",
 		zap.String("appID", appID),
 		zap.String("allocationKey", allocationKey),

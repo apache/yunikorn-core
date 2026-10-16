@@ -326,17 +326,17 @@ func Test_providedRule_ruleDAO(t *testing.T) {
 		{
 			"base",
 			configs.PlacementRule{Name: "provided"},
-			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{"create": "false"}},
+			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{create: "false"}},
 		},
 		{
 			"parent",
 			configs.PlacementRule{Name: "provided", Create: true, Parent: &configs.PlacementRule{Name: "test", Create: true}},
-			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{"create": "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{"create": "true"}}},
+			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{create: "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{create: "true"}}},
 		},
 		{
 			"filter",
 			configs.PlacementRule{Name: "provided", Create: false, Filter: configs.Filter{Type: filterDeny, Users: []string{"john*"}}},
-			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{"create": "false"}, Filter: &dao.FilterDAO{Type: filterDeny, UserExp: "john*"}},
+			&dao.RuleDAO{Name: "provided", Parameters: map[string]string{create: "false"}, Filter: &dao.FilterDAO{Type: filterDeny, UserExp: "john*"}},
 		},
 	}
 	for _, tt := range tests {

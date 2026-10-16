@@ -352,7 +352,7 @@ func TestLDAPLookupGroupIds(t *testing.T) {
 			lu.access = newMockLdapAccess(mockResult, nil)
 			groups, err := lu.LDAPLookupGroupIds(u)
 			assert.NilError(t, err)
-			assert.Assert(t, slices.Equal(groups, tt.groups), "group slices are not equal")
+			assert.Assert(t, slices.Equal(groups, tt.groups), "group slices are not equal") //nolint: govet
 		})
 	}
 

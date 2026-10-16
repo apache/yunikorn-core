@@ -302,7 +302,7 @@ func verifyAppMetrics(t *testing.T, expectedState string) {
 		assert.Equal(t, 2, len(labels))
 		assert.Equal(t, "queue", *labels[0].Name)
 		assert.Equal(t, "root.test", *labels[0].Value)
-		assert.Equal(t, "state", *labels[1].Name)
+		assert.Equal(t, StateLabel, *labels[1].Name)
 		assert.Equal(t, expectedState, *labels[1].Value)
 	}
 
@@ -320,7 +320,7 @@ func verifyContainerMetrics(t *testing.T, expectedState string, value float64) {
 			assert.Equal(t, dto.MetricType_COUNTER, metric.GetType())
 			m := metric.Metric[0]
 			assert.Equal(t, 1, len(m.Label))
-			assert.Equal(t, "state", *m.Label[0].Name)
+			assert.Equal(t, StateLabel, *m.Label[0].Name)
 			assert.Equal(t, expectedState, *m.Label[0].Value)
 			assert.Assert(t, m.Counter != nil)
 			assert.Equal(t, value, *m.Counter.Value)
@@ -342,7 +342,7 @@ func verifyResourceMetricsLabel(t *testing.T, expectedState, expectedResource st
 		assert.Equal(t, "root.test", *labels[0].Value)
 		assert.Equal(t, "resource", *labels[1].Name)
 		assert.Equal(t, expectedResource, *labels[1].Value)
-		assert.Equal(t, "state", *labels[2].Name)
+		assert.Equal(t, StateLabel, *labels[2].Name)
 		assert.Equal(t, expectedState, *labels[2].Value)
 	}
 

@@ -33,6 +33,11 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
+const (
+	create    = "create"
+	qualified = "qualified"
+)
+
 // ErrorRejected is the standard error returned if placement has failed
 var ErrorRejected = errors.New("application rejected: no placement rule matched")
 

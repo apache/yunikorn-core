@@ -2466,7 +2466,7 @@ func TestResource_Prune(t *testing.T) {
 			original := NewResourceFromMap(tt.input)
 			original.Prune()
 			assert.Equal(t, len(tt.output), len(original.Resources), "unexpected resource types returned")
-			assert.Assert(t, maps.Equal(original.Resources, tt.output), "resource type maps are not equal")
+			assert.Assert(t, maps.Equal(original.Resources, tt.output), "resource type maps are not equal") //nolint: govet
 		})
 	}
 }

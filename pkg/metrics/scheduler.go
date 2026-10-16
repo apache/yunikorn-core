@@ -84,7 +84,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "container_allocation_attempt_total",
 			Help:      "Total number of attempts to allocate containers. State of the attempt includes `allocated`, `rejected`, `error`, `released`",
-		}, []string{"state"})
+		}, []string{StateLabel})
 
 	s.applicationSubmission = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -92,7 +92,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_submission_total",
 			Help:      "Total number of application submissions. State of the attempt includes `new`, `accepted` and `rejected`.",
-		}, []string{"result"})
+		}, []string{ResultLabel})
 
 	s.application = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -100,7 +100,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "application_total",
 			Help:      "Total number of applications. State of the application includes `running`, `resuming`, `failing`, `completing`, `completed` and `failed`.",
-		}, []string{"state"})
+		}, []string{StateLabel})
 
 	s.node = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -108,7 +108,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Subsystem: SchedulerSubsystem,
 			Name:      "node",
 			Help:      "Total number of nodes. State of the node includes `active` and `failed`.",
-		}, []string{"state"})
+		}, []string{StateLabel})
 
 	s.schedulingLatency = prometheus.NewHistogram(
 		prometheus.HistogramOpts{
@@ -137,7 +137,7 @@ func InitSchedulerMetrics() *SchedulerMetrics {
 			Name:      "node_sorting_latency_milliseconds",
 			Help:      "Latency of all nodes sorting, in seconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 10, 8), // start from 0.1ms
-		}, []string{"level"})
+		}, []string{LevelLabel})
 
 	s.tryNodeLatency = prometheus.NewHistogram(
 		prometheus.HistogramOpts{

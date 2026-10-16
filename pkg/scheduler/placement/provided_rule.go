@@ -52,7 +52,7 @@ func (pr *providedRule) ruleDAO() *dao.RuleDAO {
 	return &dao.RuleDAO{
 		Name: pr.getName(),
 		Parameters: map[string]string{
-			"create": strconv.FormatBool(pr.create),
+			create: strconv.FormatBool(pr.create),
 		},
 		ParentRule: pDAO,
 		Filter:     pr.filter.filterDAO(),

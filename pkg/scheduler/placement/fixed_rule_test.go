@@ -273,22 +273,22 @@ func Test_fixedRule_ruleDAO(t *testing.T) {
 		{
 			"base",
 			configs.PlacementRule{Name: "fixed", Value: "default"},
-			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", "qualified": "false", "create": "false"}},
+			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", qualified: "false", create: "false"}},
 		},
 		{
-			"qualified",
+			qualified,
 			configs.PlacementRule{Name: "fixed", Value: "root.default"},
-			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "root.default", "qualified": "true", "create": "false"}},
+			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "root.default", qualified: "true", create: "false"}},
 		},
 		{
 			"parent",
 			configs.PlacementRule{Name: "fixed", Value: "default", Create: true, Parent: &configs.PlacementRule{Name: "test", Create: true}},
-			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", "qualified": "false", "create": "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{"create": "true"}}},
+			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", qualified: "false", create: "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{create: "true"}}},
 		},
 		{
 			"filter",
 			configs.PlacementRule{Name: "fixed", Value: "default", Create: true, Filter: configs.Filter{Type: filterAllow, Groups: []string{"group1", "group2"}}},
-			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", "qualified": "false", "create": "true"}, Filter: &dao.FilterDAO{Type: filterAllow, GroupList: []string{"group1", "group2"}}},
+			&dao.RuleDAO{Name: "fixed", Parameters: map[string]string{"queue": "default", qualified: "false", create: "true"}, Filter: &dao.FilterDAO{Type: filterAllow, GroupList: []string{"group1", "group2"}}},
 		},
 	}
 	for _, tt := range tests {

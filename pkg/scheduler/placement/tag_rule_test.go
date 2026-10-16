@@ -344,22 +344,22 @@ func Test_tagRule_ruleDAO(t *testing.T) {
 		{
 			"base",
 			configs.PlacementRule{Name: "tag", Value: "namespace"},
-			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "namespace", "create": "false"}},
+			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "namespace", create: "false"}},
 		},
 		{
 			"mixedcase",
 			configs.PlacementRule{Name: "tag", Value: "MixedCaseTag"},
-			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "mixedcasetag", "create": "false"}},
+			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "mixedcasetag", create: "false"}},
 		},
 		{
 			"parent",
 			configs.PlacementRule{Name: "tag", Value: "one", Create: true, Parent: &configs.PlacementRule{Name: "test", Create: true}},
-			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "one", "create": "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{"create": "true"}}},
+			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "one", create: "true"}, ParentRule: &dao.RuleDAO{Name: "test", Parameters: map[string]string{create: "true"}}},
 		},
 		{
 			"filter",
 			configs.PlacementRule{Name: "tag", Value: "two", Create: true, Filter: configs.Filter{Type: filterDeny, Groups: []string{"group[0-9]"}}},
-			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "two", "create": "true"}, Filter: &dao.FilterDAO{Type: filterDeny, GroupExp: "group[0-9]"}},
+			&dao.RuleDAO{Name: "tag", Parameters: map[string]string{"tagName": "two", create: "true"}, Filter: &dao.FilterDAO{Type: filterDeny, GroupExp: "group[0-9]"}},
 		},
 	}
 	for _, tt := range tests {

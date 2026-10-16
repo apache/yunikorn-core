@@ -341,12 +341,11 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 
 	for app, victims := range apps {
 		if len(victims) > 0 {
-			qpc.results.claimedResource = victimsTotalResource
-			qpc.results.preemptedVictims = victims
+			var releasedVictims []*Allocation
 			for _, victim := range victims {
 				err := victim.MarkPreempted()
 				if err != nil {
-					log.Log(log.SchedRequiredNodePreemption).Warn("allocation is already released, ignoring in quota preemption process",
+					log.Log(log.SchedQuotaChangePreemption).Warn("allocation is already released, ignoring in quota preemption process",
 						zap.String("applicationID", victim.GetApplicationID()),
 						zap.String("allocationKey", victim.GetAllocationKey()))
 					continue
@@ -359,9 +358,14 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 					zap.String("nodeID", victim.GetNodeID()))
 				qpc.queue.IncPreemptingResource(victim.GetAllocatedResource())
 				victim.SendPreemptedByQuotaChangeEvent(qpc.queue.GetQueuePath())
+				releasedVictims = append(releasedVictims, victim)
+				qpc.results.claimedResource = resources.Add(qpc.results.claimedResource, victim.GetAllocatedResource())
 			}
-			app.notifyRMAllocationReleased(victims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
-				"preempting allocations to enforce new max quota for queue : "+qpc.queue.GetQueuePath())
+			if len(releasedVictims) > 0 {
+				qpc.results.preemptedVictims = append(qpc.results.preemptedVictims, releasedVictims...)
+				app.notifyRMAllocationReleased(releasedVictims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
+					"preempting allocations to enforce new max quota for queue : "+qpc.queue.GetQueuePath())
+			}
 		}
 	}
 }

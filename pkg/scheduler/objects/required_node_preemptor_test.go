@@ -126,7 +126,7 @@ func TestGetVictims(t *testing.T) {
 		NodeID:     "node",
 		Attributes: nil,
 		SchedulableResource: &si.Resource{
-			Resources: map[string]*si.Quantity{"first": {Value: 100}},
+			Resources: map[string]*si.Quantity{"first": {Value: 76}},
 		},
 	})
 
@@ -198,6 +198,23 @@ func TestGetVictims(t *testing.T) {
 	prunedVictims4 := p4.pruneVictims(p4.allocations)
 	assert.Equal(t, len(prunedVictims4), 4)
 	removeAllocationAsks(node, asks)
+
+	// case 5: node already has partial available resource (24 free out of 100), so asking for 25 only requires 1 victim (ask5: 5) instead of 4
+	nodeWithAvail := NewNode(&si.NodeInfo{
+		NodeID:     "node-avail",
+		Attributes: nil,
+		SchedulableResource: &si.Resource{
+			Resources: map[string]*si.Quantity{"first": {Value: 100}},
+		},
+	})
+	p5 := NewRequiredNodePreemptor(nodeWithAvail, requiredAsk, app)
+	asks = prepareAllocationAsks(t, nodeWithAvail)
+	p5.filterAllocations()
+	p5.sortAllocations()
+	victims5 := p5.pruneVictims(p5.allocations)
+	assert.Equal(t, len(victims5), 1)
+	assert.Equal(t, victims5[0].GetAllocationKey(), "ask5")
+	removeAllocationAsks(nodeWithAvail, asks)
 }
 
 func TestSortAllocations(t *testing.T) {

@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -727,6 +728,64 @@ func TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList(t *testing.T)
 	assert.Equal(t, "node-10", result.nodeID, "wrong node")
 	assert.Equal(t, 1, len(result.victims), "wrong victim count")
 	assert.Equal(t, "regular-10", result.victims[0].GetAllocationKey(), "wrong victim")
+}
+
+// countingPreemptionPlugin answers every preemption check with success at its start index and counts the checks, so
+// a test can tell which batches were sent to the shim.
+type countingPreemptionPlugin struct {
+	mock.ResourceManagerCallback
+	checks atomic.Int32
+}
+
+func (p *countingPreemptionPlugin) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
+	p.checks.Add(1)
+	return &si.PreemptionPredicatesResponse{Success: true, Index: args.StartIndex}
+}
+
+// TestCheckPreemptionPredicates_ResultOrder Test how the results of the predicate checks are ranked: a better score
+// wins wherever the node sits in the sorted checks, equal scores fall back to the sorted check order, a batch holding
+// a satisfactory result ends the checks and a batch without one runs the next batch. Every node is sent a single
+// victim at start index 0, R for a regular pod and O for an originator, and the node IDs sort in the listed order.
+func TestCheckPreemptionPredicates_ResultOrder(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	tests := []struct {
+		name       string
+		victims    string
+		wantNode   string
+		wantChecks int
+	}{
+		{"better score beats check order", "OOR", "node-02", 3},
+		{"equal scores resolve in check order", strings.Repeat("R", preemptCheckConcurrency), "node-00", preemptCheckConcurrency},
+		{"satisfactory batch ends the checks", strings.Repeat("R", preemptCheckConcurrency+1), "node-00", preemptCheckConcurrency},
+		{"unsatisfactory batch runs the next batch", strings.Repeat("O", preemptCheckConcurrency) + "R", "node-10", preemptCheckConcurrency + 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			victimsByNode := make(map[string][]*Allocation)
+			checks := make([]*si.PreemptionPredicatesArgs, 0, len(tt.victims))
+			for i, kind := range tt.victims {
+				nodeID := fmt.Sprintf("node-%02d", i)
+				victim := createAllocation(fmt.Sprintf("victim-%02d", i), appID1, nodeID, true, kind == 'O', 0, false, res)
+				victimsByNode[nodeID] = []*Allocation{victim}
+				checks = append(checks, &si.PreemptionPredicatesArgs{
+					AllocationKey:         "ask",
+					NodeID:                nodeID,
+					PreemptAllocationKeys: []string{victim.GetAllocationKey()},
+					StartIndex:            0,
+				})
+			}
+			plugin := &countingPreemptionPlugin{}
+			plugins.RegisterSchedulerPlugin(plugin)
+			defer plugins.UnregisterSchedulerPlugins()
+
+			result, predicateErrors := (&Preemptor{}).checkPreemptionPredicates(checks, victimsByNode)
+			assert.Equal(t, 0, len(predicateErrors), "unexpected predicate errors")
+			assert.Assert(t, result != nil, "no result")
+			assert.Assert(t, result.success, "check failed")
+			assert.Equal(t, tt.wantNode, result.nodeID, "wrong node")
+			assert.Equal(t, tt.wantChecks, int(plugin.checks.Load()), "wrong number of checks")
+		})
+	}
 }
 
 // TestTryPreemption_NodeWithCapacityLesserThanAsk Test try preemption on node whose capacity is lesser than ask resource requirements with simple queue hierarchy. Since Node won't accommodate the ask even after preempting all allocations, there is no use in considering the node.

@@ -46,7 +46,7 @@ func (pcr *predicateCheckResult) getSolutionScore(victimsByNode map[string][]*Al
 	if pcr == nil || !pcr.success {
 		return scoreUnfit
 	}
-	allocations, ok := victimsByNode[pcr.nodeID]
+	victims, ok := victimsByNode[pcr.nodeID]
 	if !ok {
 		return scoreUnfit
 	}
@@ -55,16 +55,16 @@ func (pcr *predicateCheckResult) getSolutionScore(victimsByNode map[string][]*Al
 	if pcr.index < 0 {
 		return score
 	}
-	if pcr.index >= len(allocations) {
+	if pcr.index >= len(victims) {
 		// shouldn't happen
 		return scoreUnfit
 	}
 	for i := 0; i <= pcr.index; i++ {
-		allocation := allocations[i]
-		if allocation.IsOriginator() {
+		victim := victims[i]
+		if victim.IsOriginator() {
 			score |= scoreOriginator
 		}
-		if !allocation.IsAllowPreemptSelf() {
+		if !victim.IsAllowPreemptSelf() {
 			score |= scoreNoPreempt
 		}
 	}

@@ -653,14 +653,12 @@ func TestTryPreemption_OnNode_ScoresReorderedVictims(t *testing.T) {
 	regular2.createTime = testBaseTime
 	originator := createAllocation("originator", appID1, nodeID1, true, true, 0, false, second)
 	optedOut := createAllocation("opted-out", appID1, nodeID2, false, false, 0, false, both)
-	for _, victim := range []*Allocation{regular1, regular2, originator} {
+	nodes := map[string]*Node{nodeID1: node1, nodeID2: node2}
+	for _, victim := range []*Allocation{regular1, regular2, originator, optedOut} {
 		assert.NilError(t, app1.AddAllocation(victim))
-		assert.Check(t, node1.TryAddAllocation(victim), "node1 %s failed", victim.GetAllocationKey())
+		assert.Check(t, nodes[victim.GetNodeID()].TryAddAllocation(victim), "node %s failed", victim.GetAllocationKey())
 		assert.NilError(t, childQ1.TryIncAllocatedResource(victim.GetAllocatedResource()))
 	}
-	assert.NilError(t, app1.AddAllocation(optedOut))
-	assert.Check(t, node2.TryAddAllocation(optedOut), "node2 opted-out failed")
-	assert.NilError(t, childQ1.TryIncAllocatedResource(optedOut.GetAllocatedResource()))
 
 	app2, ask, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 1, "second": 1}, "ask", appQueueMapping)
 	assert.NilError(t, err)
@@ -724,7 +722,8 @@ func TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList(t *testing.T)
 	result, predicateErrors := preemptor.checkPreemptionPredicates(checks, victimsByNode)
 	assert.NilError(t, plugin.GetPredicateError())
 	assert.Equal(t, 0, len(predicateErrors), "unexpected predicate errors")
-	assert.Assert(t, result != nil && result.success, "no successful result")
+	assert.Assert(t, result != nil, "no result")
+	assert.Assert(t, result.success, "check failed")
 	assert.Equal(t, "node-10", result.nodeID, "wrong node")
 	assert.Equal(t, 1, len(result.victims), "wrong victim count")
 	assert.Equal(t, "regular-10", result.victims[0].GetAllocationKey(), "wrong victim")

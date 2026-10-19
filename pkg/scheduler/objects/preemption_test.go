@@ -731,7 +731,8 @@ func TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList(t *testing.T)
 }
 
 // countingPreemptionPlugin answers every preemption check with success at its start index and counts the checks, so
-// a test can tell which batches were sent to the shim.
+// a test can tell which batches were sent to the shim. The first node in check order answers after the others, so
+// the order in which the answers arrive differs from the check order.
 type countingPreemptionPlugin struct {
 	mock.ResourceManagerCallback
 	checks atomic.Int32
@@ -739,6 +740,9 @@ type countingPreemptionPlugin struct {
 
 func (p *countingPreemptionPlugin) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
 	p.checks.Add(1)
+	if args.NodeID == "node-00" {
+		time.Sleep(time.Millisecond)
+	}
 	return &si.PreemptionPredicatesResponse{Success: true, Index: args.StartIndex}
 }
 

@@ -26,6 +26,8 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/mock"
+	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -37,6 +39,9 @@ func TestInspectOutstandingRequests(t *testing.T) {
 	assert.NilError(t, err, "unable to create partition: %v", err)
 	defer partition.userGroupCache.Stop()
 	scheduler.clusterContext.partitions["test"] = partition
+	csu := mock.NewContainerStateUpdater()
+	plugins.RegisterSchedulerPlugin(csu)
+	defer plugins.UnregisterSchedulerPlugins()
 
 	// two applications with no asks
 	app1 := newApplication(appID1, "test", "root.default")
@@ -90,6 +95,9 @@ func TestInspectOutstandingRequests(t *testing.T) {
 	assert.Equal(t, 3, noRequests)
 	assert.Assert(t, resources.Equals(totalResources, expectedTotal),
 		"total resource expected: %v, got: %v", expectedTotal, totalResources)
+	update := csu.GetContainerUpdateRequest()
+	assert.Assert(t, update != nil, "outstanding request should be reported to the RM")
+	assert.Equal(t, update.State, si.UpdateContainerSchedulingStateRequest_FAILED)
 
 	// Check #2: try again, pending asks are not collected
 	noRequests, totalResources = scheduler.inspectOutstandingRequests()

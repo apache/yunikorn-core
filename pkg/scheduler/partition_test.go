@@ -3774,10 +3774,7 @@ func TestFailReplacePlaceholder(t *testing.T) {
 	// plugin to let the pre-check fail on node-1 only, means we cannot replace the placeholder
 	plugin := mock.NewPredicatePlugin(false, false, map[string]int{nodeID1: 0, nodeID2: 1})
 	plugins.RegisterSchedulerPlugin(plugin)
-	defer func() {
-		passPlugin := mock.NewPredicatePlugin(false, false, map[string]int{nodeID1: 0, nodeID2: 1})
-		plugins.RegisterSchedulerPlugin(passPlugin)
-	}()
+	defer plugins.UnregisterSchedulerPlugins()
 	var tgRes, res *resources.Resource
 	tgRes, err = resources.NewResourceFromConf(map[string]string{"vcore": "10"})
 	assert.NilError(t, err, "failed to create resource")

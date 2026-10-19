@@ -1291,6 +1291,7 @@ func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 // root.parent.child2. Guaranteed set 5. Request of first:5 is waiting for resources.
 // root.parent.child3. Guaranteed not set. 1 Allocation is running on node2. Total usage is first:5.
 // High priority ask should not be touched and remaining 2 allocs should be preempted to free up resources
+// Both nodes fit the ask without node preemption and score the same, so node1 is chosen by the check order (lower node ID).
 func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	appQueueMapping := NewAppQueueMapping()
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 30})

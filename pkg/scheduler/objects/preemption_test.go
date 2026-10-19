@@ -614,18 +614,10 @@ func TestTryPreemptionOnNode(t *testing.T) {
 	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
-// TestTryPreemption_OnNode_ScoresReorderedVictims Test that node selection scores the victim list sent to the shim
-// and not the sorted allocation list of the node, once calculateVictimsByNode has moved a victim to the tail.
-// Setup:
-// Nodes are Node1 and Node2. Nodes are full. No space to accommodate the ask of first:1, second:1.
-// root.parent.child1. Guaranteed not set. All 4 Allocations belong to a single app.
-// Node1 runs regular-1 (first:1), regular-2 (first:1) and originator (second:1). Sorted by preference the node list is
-// [regular-1, regular-2, originator]. Freeing regular-1 leaves a shortfall of second:1 that regular-2 does not reduce,
-// so the shim receives [regular-1, originator, regular-2] with start index 1 and answers index 1.
-// Node2 runs opted-out (first:1, second:1) with allowPreemptSelf false. The shim receives [opted-out] and answers index 0.
-// root.parent.child2. Guaranteed set, first:5, second:5. Request of first:1, second:1 is waiting for resources.
-// Node1 costs an originator (scoreOriginator + 2) and Node2 an opted-out pod (scoreNoPreempt + 1), so Node2 must win.
-// Scoring the sorted allocation list instead charges Node1 for regular-1 and regular-2 only and preempts the originator.
+// TestTryPreemption_OnNode_ScoresReorderedVictims Node selection must score the victim list sent to the shim. On node1
+// regular-2 no longer reduces the shortfall once regular-1 is freed, so the shim receives [regular-1, originator,
+// regular-2] and answers index 1: node1 costs an originator, node2 only an opted-out pod, and node2 must win. Scored on
+// the sorted allocations, node1 would be charged for two regular pods and the originator would be preempted.
 func TestTryPreemption_OnNode_ScoresReorderedVictims(t *testing.T) {
 	appQueueMapping := NewAppQueueMapping()
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 2, "second": 1})
@@ -687,10 +679,9 @@ func TestTryPreemption_OnNode_ScoresReorderedVictims(t *testing.T) {
 	assert.Check(t, !originator.IsPreempted(), "originator preempted")
 }
 
-// TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList Test that the check ending the predicate batches early
-// scores the victim list sent to the shim. Every node holds a regular allocation first in the sorted allocation list,
-// but the victim list sent to the shim is a single originator on every node except the last one, which sorts into the
-// second batch. No node of the first batch is satisfactory, so the regular victim of the second batch must win.
+// TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList The early exit between batches must score the victim
+// list sent to the shim. Every node sorts a regular allocation first, but the shim is sent a single originator on all
+// nodes except the last, which falls into the second batch, so no node of the first batch may be satisfactory.
 func TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	allocationsByNode := make(map[string][]*Allocation)
@@ -730,9 +721,8 @@ func TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList(t *testing.T)
 	assert.Equal(t, "regular-10", result.victims[0].GetAllocationKey(), "wrong victim")
 }
 
-// countingPreemptionPlugin answers every preemption check with success at its start index and counts the checks, so
-// a test can tell which batches were sent to the shim. The first node in check order answers after the others, so
-// the order in which the answers arrive differs from the check order.
+// countingPreemptionPlugin accepts every check at its start index and counts the checks; node-00 answers last so the
+// answer order differs from the check order.
 type countingPreemptionPlugin struct {
 	mock.ResourceManagerCallback
 	checks atomic.Int32
@@ -746,10 +736,9 @@ func (p *countingPreemptionPlugin) PreemptionPredicates(args *si.PreemptionPredi
 	return &si.PreemptionPredicatesResponse{Success: true, Index: args.StartIndex}
 }
 
-// TestCheckPreemptionPredicates_ResultOrder Test how the results of the predicate checks are ranked: a better score
-// wins wherever the node sits in the sorted checks, equal scores fall back to the sorted check order, a batch holding
-// a satisfactory result ends the checks and a batch without one runs the next batch. Every node is sent a single
-// victim at start index 0, R for a regular pod and O for an originator, and the node IDs sort in the listed order.
+// TestCheckPreemptionPredicates_ResultOrder A better score wins wherever the node sorts, equal scores resolve in check
+// order, a satisfactory batch ends the checks and an unsatisfactory one runs the next. Each node is sent one victim at
+// start index 0, R regular or O originator, and the node IDs sort in the listed order.
 func TestCheckPreemptionPredicates_ResultOrder(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	tests := []struct {

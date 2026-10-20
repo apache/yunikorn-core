@@ -44,14 +44,16 @@ var (
 
 // Preemptor encapsulates the functionality required for preemption victim selection
 type Preemptor struct {
-	application     *Application        // application containing ask
-	queue           *Queue              // queue to preempt for
-	queuePath       string              // path of queue to preempt for
-	headRoom        *resources.Resource // current queue headroom
-	preemptionDelay time.Duration       // preemption delay
-	ask             *Allocation         // ask to be preempted for
-	iterator        NodeIterator        // iterator to enumerate all nodes
-	nodesTried      bool                // flag indicating that scheduling has already been tried on all nodes
+	queuePriorityVictims bool
+	victimRanks          map[string]int64
+	application          *Application        // application containing ask
+	queue                *Queue              // queue to preempt for
+	queuePath            string              // path of queue to preempt for
+	headRoom             *resources.Resource // current queue headroom
+	preemptionDelay      time.Duration       // preemption delay
+	ask                  *Allocation         // ask to be preempted for
+	iterator             NodeIterator        // iterator to enumerate all nodes
+	nodesTried           bool                // flag indicating that scheduling has already been tried on all nodes
 
 	// lazily-populated work structures
 	allocationsByQueue map[string]*QueuePreemptionSnapshot // map of queue snapshots by queue path
@@ -76,14 +78,15 @@ type QueuePreemptionSnapshot struct {
 // NewPreemptor creates a new preemptor. The preemptor itself is not thread safe, and assumes the application lock is held.
 func NewPreemptor(application *Application, headRoom *resources.Resource, preemptionDelay time.Duration, ask *Allocation, iterator NodeIterator, nodesTried bool) *Preemptor {
 	return &Preemptor{
-		application:     application,
-		queue:           application.queue,
-		queuePath:       application.queuePath,
-		headRoom:        headRoom,
-		preemptionDelay: preemptionDelay,
-		ask:             ask,
-		iterator:        iterator,
-		nodesTried:      nodesTried,
+		queuePriorityVictims: application.queue.usesQueuePriorityVictims(),
+		application:          application,
+		queue:                application.queue,
+		queuePath:            application.queuePath,
+		headRoom:             headRoom,
+		preemptionDelay:      preemptionDelay,
+		ask:                  ask,
+		iterator:             iterator,
+		nodesTried:           nodesTried,
 	}
 }
 
@@ -475,6 +478,12 @@ func (p *Preemptor) calculateAdditionalVictims(nodeVictims []*Allocation) ([]*Al
 		}
 	}
 	SortAllocationsBasedOnAsk(potentialVictims, askQueue.GetMaxResource(), p.ask.GetAllocatedResource())
+	if p.queuePriorityVictims {
+		// Preserve upstream tie-breaking within each tier.
+		sort.SliceStable(potentialVictims, func(i, j int) bool {
+			return p.victimRanks[potentialVictims[i].GetAllocationKey()] < p.victimRanks[potentialVictims[j].GetAllocationKey()]
+		})
+	}
 
 	// evaluate each potential victim in turn, stopping once sufficient resources have been freed
 	victims := make([]*Allocation, 0)
@@ -584,6 +593,13 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	released := p.initWorkingState()
 	p.application.executeReservationReleasedCallback(released)
 
+	if p.queuePriorityVictims {
+		return p.tryQueuePriorityStages()
+	}
+	return p.tryPreemptionCandidates()
+}
+
+func (p *Preemptor) tryPreemptionCandidates() (*AllocationResult, bool) {
 	// try to find a node to schedule on and victims to preempt
 	nodeID, nodeVictims, ok := p.tryNodes()
 	if !ok {

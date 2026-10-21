@@ -110,6 +110,39 @@ func TestUpdateAllocationRestoresQueueForUnqueuedApp(t *testing.T) {
 	assert.Assert(t, resources.Equals(app.GetQueue().GetPendingResource(), res), "queue must track the new ask")
 }
 
+func TestUpdateAllocationDoesNotRestoreQueueForUnqueuedFailedApp(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+	app := newApplication(appID1, "default", defQueue)
+	assert.NilError(t, partition.AddApplication(app), "add application failed")
+	queue := app.GetQueue()
+	assert.Assert(t, queue != nil, "admitted app must have a queue")
+	// Model queue cleanup before the failed app is removed from the active map.
+	app.SetState(objects.Failed.String())
+	app.UnSetQueue()
+
+	assert.Assert(t, partition.getApplication(appID1) == app, "failed app must remain on the active list")
+	assert.Assert(t, app.GetQueue() == nil, "failed app must be detached")
+	assert.Assert(t, queue.GetCopyOfApps()[appID1] == nil, "failed app must be off the queue")
+	assert.Assert(t, app.IsFailed(), "app must be Failed before late work arrives")
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
+	askCreated, allocCreated, err := partition.UpdateAllocation(newAllocationAsk("late-ask", appID1, res))
+	assert.Check(t, err != nil, "late work for a failed app must be rejected")
+	assert.Check(t, !askCreated, "rejected work must not create an ask")
+	assert.Check(t, !allocCreated, "rejected work must not create an allocation")
+	assert.Check(t, partition.getApplication(appID1) == app, "rejected work must preserve active ownership")
+	assert.Check(t, app.IsFailed(), "rejected work must leave the app Failed")
+	assert.Check(t, app.GetQueue() == nil, "rejected work must leave the app detached")
+	assert.Check(t, queue.GetCopyOfApps()[appID1] == nil, "rejected work must not restore queue membership")
+	assert.Check(t, app.GetAllocationAsk("late-ask") == nil, "rejected work must not be tracked")
+	assert.Check(t, !app.IsRevived(), "rejected work must not commit revival")
+	assert.Check(t, resources.IsZero(app.GetPendingResource()), "rejected work must not add application pending resources")
+	assert.Check(t, resources.IsZero(queue.GetPendingResource()), "rejected work must not add queue pending resources")
+}
+
 func TestUpdateAllocationUnknownAppStillFails(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
@@ -134,6 +167,57 @@ func TestUpdateAllocationDoesNotReviveExpiredApplication(t *testing.T) {
 	_, _, err = partition.UpdateAllocation(newAllocationAsk("late-ask", appID1, res))
 	assert.ErrorContains(t, err, "failed to find application", "expired apps must not be revived")
 	assert.Equal(t, len(partition.GetCompletedApplications()), 1, "expired app should stay on the completed list")
+}
+
+func TestRejectedAllocationDoesNotRestoreFailedApplication(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+	app := newApplication(appID1, "default", defQueue)
+	assert.NilError(t, partition.AddApplication(app), "add application failed")
+	queue := app.GetQueue()
+	assert.Assert(t, queue != nil, "admitted app must have a queue")
+	// Run terminal cleanup synchronously, as in the other partition revival fixtures.
+	app.SetState(objects.Failed.String())
+	partition.moveTerminatedApp(appID1)
+
+	assert.Assert(t, partition.getApplication(appID1) == nil, "failed app must be off the active list")
+	assert.Assert(t, app.GetQueue() == nil, "failed app must be detached")
+	assert.Assert(t, queue.GetCopyOfApps()[appID1] == nil, "failed app must be off the queue")
+	assert.Equal(t, len(partition.GetCompletedApplications()), 1)
+	var completedKey string
+	for key, completed := range partition.completedApplications {
+		assert.Assert(t, completed == app, "completed entry must retain the failed app")
+		completedKey = key
+	}
+	finishedTime := app.FinishedTime()
+	assert.Assert(t, !finishedTime.IsZero(), "cleanup must record the finished time")
+	assert.Assert(t, !app.IsRevived(), "failed app must not be marked revived")
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
+	askCreated, allocCreated, err := partition.UpdateAllocation(newAllocationAsk("late-ask", appID1, res))
+	assert.Assert(t, err != nil, "late work for a failed app must be rejected")
+	assert.Check(t, !askCreated && !allocCreated, "rejected work must not create an ask or allocation")
+	assert.Check(t, partition.getApplication(appID1) == nil, "rejected work must not restore active ownership")
+	assert.Check(t, partition.completedApplications[completedKey] == app, "rejected work must retain the original completed entry")
+	assert.Check(t, app.IsFailed(), "rejected work must leave the app Failed")
+	assert.Check(t, app.GetQueue() == nil, "rejected work must leave the app detached")
+	assert.Check(t, queue.GetCopyOfApps()[appID1] == nil, "rejected work must not restore queue membership")
+	assert.Check(t, app.GetAllocationAsk("late-ask") == nil, "rejected work must not be tracked")
+	assert.Check(t, resources.IsZero(app.GetPendingResource()), "rejected work must not add application pending resources")
+	assert.Check(t, resources.IsZero(queue.GetPendingResource()), "rejected work must not add queue pending resources")
+	assert.Check(t, !app.IsRevived(), "rejected work must not commit revival")
+	assert.Check(t, app.FinishedTime().Equal(finishedTime), "rejected work must preserve the finished time")
+
+	fresh := newApplication(appID1, "default", defQueue)
+	assert.Assert(t, fresh != app, "same-ID admission must use a distinct application")
+	err = partition.AddApplication(fresh)
+	assert.Check(t, err == nil, "fresh same-ID admission must succeed: %v", err)
+	assert.Check(t, partition.getApplication(appID1) == fresh, "active ownership must belong to the fresh app")
+	assert.Check(t, fresh.GetQueue() == queue, "fresh app must be attached to its queue")
+	assert.Check(t, queue.GetCopyOfApps()[appID1] == fresh, "queue ownership must belong to the fresh app")
+	assert.Check(t, partition.completedApplications[completedKey] == app, "failed app must remain historical after same-ID admission")
 }
 
 // enter_Completed dispatches moveTerminatedApp on its own goroutine. If the app is revived before

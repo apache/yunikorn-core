@@ -36,15 +36,17 @@ type predicateCheckResult struct {
 	predicateErrors map[string]int32
 }
 
-func (pcr *predicateCheckResult) betterThan(other *predicateCheckResult, allocationsByNode map[string][]*Allocation) bool {
-	return pcr.getSolutionScore(allocationsByNode) < other.getSolutionScore(allocationsByNode)
+func (pcr *predicateCheckResult) betterThan(other *predicateCheckResult, victimsByNode map[string][]*Allocation) bool {
+	return pcr.getSolutionScore(victimsByNode) < other.getSolutionScore(victimsByNode)
 }
 
-func (pcr *predicateCheckResult) getSolutionScore(allocationsByNode map[string][]*Allocation) uint64 {
+// getSolutionScore scores the victims up to and including pcr.index. The index returned by the shim refers to the
+// victim list it was sent, so victimsByNode must hold that list and not the sorted allocations of the node.
+func (pcr *predicateCheckResult) getSolutionScore(victimsByNode map[string][]*Allocation) uint64 {
 	if pcr == nil || !pcr.success {
 		return scoreUnfit
 	}
-	allocations, ok := allocationsByNode[pcr.nodeID]
+	victims, ok := victimsByNode[pcr.nodeID]
 	if !ok {
 		return scoreUnfit
 	}
@@ -53,16 +55,16 @@ func (pcr *predicateCheckResult) getSolutionScore(allocationsByNode map[string][
 	if pcr.index < 0 {
 		return score
 	}
-	if pcr.index >= len(allocations) {
+	if pcr.index >= len(victims) {
 		// shouldn't happen
 		return scoreUnfit
 	}
 	for i := 0; i <= pcr.index; i++ {
-		allocation := allocations[i]
-		if allocation.IsOriginator() {
+		victim := victims[i]
+		if victim.IsOriginator() {
 			score |= scoreOriginator
 		}
-		if !allocation.IsAllowPreemptSelf() {
+		if !victim.IsAllowPreemptSelf() {
 			score |= scoreNoPreempt
 		}
 	}
@@ -71,8 +73,8 @@ func (pcr *predicateCheckResult) getSolutionScore(allocationsByNode map[string][
 	return score
 }
 
-func (pcr *predicateCheckResult) isSatisfactory(allocationsByNode map[string][]*Allocation) bool {
-	return pcr.getSolutionScore(allocationsByNode) < scoreFitMax
+func (pcr *predicateCheckResult) isSatisfactory(victimsByNode map[string][]*Allocation) bool {
+	return pcr.getSolutionScore(victimsByNode) < scoreFitMax
 }
 
 func (pcr *predicateCheckResult) populateVictims(victimsByNode map[string][]*Allocation) {

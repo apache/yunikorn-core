@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -613,6 +614,230 @@ func TestTryPreemptionOnNode(t *testing.T) {
 	assert.Equal(t, len(ask3.GetAllocationLog()), 0)
 }
 
+// TestTryPreemption_OnNode_ScoresReorderedVictims Node selection must score the victim list sent to the shim. On node1
+// regular-2 no longer reduces the shortfall once regular-1 is freed, so the shim receives [regular-1, originator,
+// regular-2] and answers index 1: node1 costs an originator, node2 only an opted-out pod, and node2 must win. Scored on
+// the sorted allocations, node1 would be charged for two regular pods and the originator would be preempted.
+func TestTryPreemption_OnNode_ScoresReorderedVictims(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 2, "second": 1})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 1, "second": 1})
+	iterator := getNodeIteratorFn(node1, node2)
+	rootQ, err := createRootQueue(map[string]string{"first": "10", "second": "10"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "5", "second": "5"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+	first := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	second := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 1})
+	both := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1, "second": 1})
+	regular1 := createAllocation("regular-1", appID1, nodeID1, true, false, 0, false, first)
+	regular1.createTime = testBaseTime.Add(time.Minute)
+	regular2 := createAllocation("regular-2", appID1, nodeID1, true, false, 0, false, first)
+	regular2.createTime = testBaseTime
+	originator := createAllocation("originator", appID1, nodeID1, true, true, 0, false, second)
+	optedOut := createAllocation("opted-out", appID1, nodeID2, false, false, 0, false, both)
+	nodes := map[string]*Node{nodeID1: node1, nodeID2: node2}
+	for _, victim := range []*Allocation{regular1, regular2, originator, optedOut} {
+		assert.NilError(t, app1.AddAllocation(victim))
+		assert.Check(t, nodes[victim.GetNodeID()].TryAddAllocation(victim), "node %s failed", victim.GetAllocationKey())
+		assert.NilError(t, childQ1.TryIncAllocatedResource(victim.GetAllocatedResource()))
+	}
+
+	app2, ask, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 1, "second": 1}, "ask", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask, iterator(), false)
+
+	// register predicate handler
+	preemptions := []mock.Preemption{
+		mock.NewPreemption(true, "ask", nodeID1, []string{"regular-1", "originator", "regular-2"}, 1, 1),
+		mock.NewPreemption(true, "ask", nodeID2, []string{"opted-out"}, 0, 0),
+	}
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.NilError(t, plugin.GetPredicateError())
+	assert.Assert(t, result != nil, "no result")
+	assert.Assert(t, ok, "no victims found")
+	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
+	assert.Check(t, optedOut.IsPreempted(), "opted-out not preempted")
+	assert.Check(t, !regular1.IsPreempted(), "regular-1 preempted")
+	assert.Check(t, !regular2.IsPreempted(), "regular-2 preempted")
+	assert.Check(t, !originator.IsPreempted(), "originator preempted")
+}
+
+// TestTryPreemption_OnQueue_EmptyNodeBeatsOriginatorNode verifies that an empty node that fits the ask beats a node
+// whose only eligible victim is the originator. The regular allocation on the unschedulable node3 can be selected as a
+// queue victim instead, without preempting the originator.
+func TestTryPreemption_OnQueue_EmptyNodeBeatsOriginatorNode(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5})
+	node3 := newNode(nodeID3, map[string]resources.Quantity{"first": 5})
+	iterator := getNodeIteratorFn(node1, node2, node3)
+	rootQ, err := createRootQueue(map[string]string{"first": "100"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "5"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	originator := createAllocation("originator", appID1, nodeID1, true, true, 0, false, res)
+	regular := createAllocation("regular", appID1, nodeID3, true, false, 0, false, res)
+	nodes := map[string]*Node{nodeID1: node1, nodeID3: node3}
+	for _, victim := range []*Allocation{originator, regular} {
+		assert.NilError(t, app1.AddAllocation(victim))
+		assert.Check(t, nodes[victim.GetNodeID()].TryAddAllocation(victim), "node %s failed", victim.GetAllocationKey())
+		assert.NilError(t, childQ1.TryIncAllocatedResource(victim.GetAllocatedResource()))
+	}
+	node3.SetSchedulable(false)
+
+	app2, ask, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "ask", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask, iterator(), false)
+
+	// register predicate handler
+	preemptions := []mock.Preemption{
+		mock.NewPreemption(true, "ask", nodeID1, []string{"originator"}, 0, 0),
+	}
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.NilError(t, plugin.GetPredicateError())
+	assert.Assert(t, result != nil, "no result")
+	assert.Assert(t, ok, "no victims found")
+	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
+	assert.Check(t, regular.IsPreempted(), "regular not preempted")
+	assert.Check(t, !originator.IsPreempted(), "originator preempted")
+}
+
+// TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList The early exit between batches must score the victim
+// list sent to the shim. Every node sorts a regular allocation first, but the shim is sent a single originator on all
+// nodes except the last, which falls into the second batch, so no node of the first batch may be satisfactory.
+func TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	allocationsByNode := make(map[string][]*Allocation)
+	victimsByNode := make(map[string][]*Allocation)
+	checks := make([]*si.PreemptionPredicatesArgs, 0)
+	preemptions := make([]mock.Preemption, 0)
+	for i := 0; i <= preemptCheckConcurrency; i++ {
+		nodeID := fmt.Sprintf("node-%02d", i)
+		regular := createAllocation(fmt.Sprintf("regular-%02d", i), appID1, nodeID, true, false, 0, false, res)
+		originator := createAllocation(fmt.Sprintf("originator-%02d", i), appID1, nodeID, true, true, 0, false, res)
+		allocationsByNode[nodeID] = []*Allocation{regular, originator}
+		victim := originator
+		if i == preemptCheckConcurrency {
+			victim = regular
+		}
+		victimsByNode[nodeID] = []*Allocation{victim}
+		checks = append(checks, &si.PreemptionPredicatesArgs{
+			AllocationKey:         "ask",
+			NodeID:                nodeID,
+			PreemptAllocationKeys: []string{victim.GetAllocationKey()},
+			StartIndex:            0,
+		})
+		preemptions = append(preemptions, mock.NewPreemption(true, "ask", nodeID, []string{victim.GetAllocationKey()}, 0, 0))
+	}
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	preemptor := &Preemptor{allocationsByNode: allocationsByNode}
+	result, predicateErrors := preemptor.checkPreemptionPredicates(checks, victimsByNode)
+	assert.NilError(t, plugin.GetPredicateError())
+	assert.Equal(t, 0, len(predicateErrors), "unexpected predicate errors")
+	assert.Assert(t, result != nil, "no result")
+	assert.Assert(t, result.success, "check failed")
+	assert.Equal(t, "node-10", result.nodeID, "wrong node")
+	assert.Equal(t, 1, len(result.victims), "wrong victim count")
+	assert.Equal(t, "regular-10", result.victims[0].GetAllocationKey(), "wrong victim")
+}
+
+// countingPreemptionPlugin accepts every check at its start index and counts the checks; node-00 answers last so the
+// answer order differs from the check order.
+type countingPreemptionPlugin struct {
+	mock.ResourceManagerCallback
+	checks atomic.Int32
+}
+
+func (p *countingPreemptionPlugin) PreemptionPredicates(args *si.PreemptionPredicatesArgs) *si.PreemptionPredicatesResponse {
+	p.checks.Add(1)
+	if args.NodeID == "node-00" {
+		time.Sleep(time.Millisecond)
+	}
+	return &si.PreemptionPredicatesResponse{Success: true, Index: args.StartIndex}
+}
+
+// TestCheckPreemptionPredicates_ResultOrder A better score wins wherever the node sorts, equal scores resolve in check
+// order, a satisfactory batch ends the checks and an unsatisfactory one runs the next. Each node is sent one victim at
+// start index 0, R regular or O originator, and the node IDs sort in the listed order.
+func TestCheckPreemptionPredicates_ResultOrder(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	tests := []struct {
+		name       string
+		victims    string
+		wantNode   string
+		wantChecks int
+	}{
+		{"better score beats check order", "OOR", "node-02", 3},
+		{"equal scores resolve in check order", strings.Repeat("R", preemptCheckConcurrency), "node-00", preemptCheckConcurrency},
+		{"satisfactory batch ends the checks", strings.Repeat("R", preemptCheckConcurrency+1), "node-00", preemptCheckConcurrency},
+		{"unsatisfactory batch runs the next batch", strings.Repeat("O", preemptCheckConcurrency) + "R", "node-10", preemptCheckConcurrency + 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			victimsByNode := make(map[string][]*Allocation)
+			checks := make([]*si.PreemptionPredicatesArgs, 0, len(tt.victims))
+			for i, kind := range tt.victims {
+				nodeID := fmt.Sprintf("node-%02d", i)
+				victim := createAllocation(fmt.Sprintf("victim-%02d", i), appID1, nodeID, true, kind == 'O', 0, false, res)
+				victimsByNode[nodeID] = []*Allocation{victim}
+				checks = append(checks, &si.PreemptionPredicatesArgs{
+					AllocationKey:         "ask",
+					NodeID:                nodeID,
+					PreemptAllocationKeys: []string{victim.GetAllocationKey()},
+					StartIndex:            0,
+				})
+			}
+			plugin := &countingPreemptionPlugin{}
+			plugins.RegisterSchedulerPlugin(plugin)
+			defer plugins.UnregisterSchedulerPlugins()
+
+			result, predicateErrors := (&Preemptor{}).checkPreemptionPredicates(checks, victimsByNode)
+			assert.Equal(t, 0, len(predicateErrors), "unexpected predicate errors")
+			assert.Assert(t, result != nil, "no result")
+			assert.Assert(t, result.success, "check failed")
+			assert.Equal(t, tt.wantNode, result.nodeID, "wrong node")
+			assert.Equal(t, tt.wantChecks, int(plugin.checks.Load()), "wrong number of checks")
+		})
+	}
+}
+
 // TestTryPreemption_NodeWithCapacityLesserThanAsk Test try preemption on node whose capacity is lesser than ask resource requirements with simple queue hierarchy. Since Node won't accommodate the ask even after preempting all allocations, there is no use in considering the node.
 // Guaranteed and Max resource set on both victim queue path and preemptor queue path in 2 levels. victim and preemptor queue are siblings.
 // Request (Preemptor) resource type matches with all resource types of the victim. But Guaranteed set only on specific resource type. 2 Victims are available, but 1 should be preempted because further preemption would make usage go below the guaranteed quota
@@ -1123,6 +1348,7 @@ func TestTryPreemption_OnQueue_VictimsOnDifferentNodes(t *testing.T) {
 // root.parent.child2. Guaranteed set 5. Request of first:5 is waiting for resources.
 // root.parent.child3. Guaranteed not set. 1 Allocation is running on node2. Total usage is first:5.
 // High priority ask should not be touched and remaining 2 allocs should be preempted to free up resources
+// Both nodes fit the ask without node preemption and score the same, so node1 is chosen by the check order (lower node ID).
 func TestTryPreemption_OnQueue_VictimsAvailable_LowerPriority(t *testing.T) {
 	appQueueMapping := NewAppQueueMapping()
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 30})

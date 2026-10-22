@@ -679,6 +679,64 @@ func TestTryPreemption_OnNode_ScoresReorderedVictims(t *testing.T) {
 	assert.Check(t, !originator.IsPreempted(), "originator preempted")
 }
 
+// TestTryPreemption_OnQueue_EmptyNodeBeatsOriginatorNode On the queue path a node that fits the ask and holds no eligible
+// victim must beat a node whose only victim is an originator. node1 is full with the originator, node2 is empty and
+// node3 is unschedulable, so its regular pod can only be a queue victim: the ask is reserved on node2 and the regular
+// pod is preempted instead of the originator.
+func TestTryPreemption_OnQueue_EmptyNodeBeatsOriginatorNode(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	node2 := newNode(nodeID2, map[string]resources.Quantity{"first": 5})
+	node3 := newNode(nodeID3, map[string]resources.Quantity{"first": 5})
+	iterator := getNodeIteratorFn(node1, node2, node3)
+	rootQ, err := createRootQueue(map[string]string{"first": "100"})
+	assert.NilError(t, err)
+	parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, map[string]string{"first": "10"}, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, nil, nil, appQueueMapping)
+	assert.NilError(t, err)
+	childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, nil, map[string]string{"first": "5"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	app1 := newApplication(appID1, "default", "root.parent.child1")
+	app1.SetQueue(childQ1)
+	childQ1.AddApplication(app1)
+	appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	originator := createAllocation("originator", appID1, nodeID1, true, true, 0, false, res)
+	regular := createAllocation("regular", appID1, nodeID3, true, false, 0, false, res)
+	nodes := map[string]*Node{nodeID1: node1, nodeID3: node3}
+	for _, victim := range []*Allocation{originator, regular} {
+		assert.NilError(t, app1.AddAllocation(victim))
+		assert.Check(t, nodes[victim.GetNodeID()].TryAddAllocation(victim), "node %s failed", victim.GetAllocationKey())
+		assert.NilError(t, childQ1.TryIncAllocatedResource(victim.GetAllocatedResource()))
+	}
+	node3.SetSchedulable(false)
+
+	app2, ask, err := creatApp2(childQ2, map[string]resources.Quantity{"first": 5}, "ask", appQueueMapping)
+	assert.NilError(t, err)
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+	preemptor := NewPreemptor(app2, headRoom, 30*time.Second, ask, iterator(), false)
+
+	// register predicate handler
+	preemptions := []mock.Preemption{
+		mock.NewPreemption(true, "ask", nodeID1, []string{"originator"}, 0, 0),
+	}
+	plugin := mock.NewPreemptionPredicatePlugin(preemptions, nil, false, false)
+	plugins.RegisterSchedulerPlugin(plugin)
+	defer plugins.UnregisterSchedulerPlugins()
+
+	result, ok := preemptor.TryPreemption()
+	assert.NilError(t, plugin.GetPredicateError())
+	assert.Assert(t, result != nil, "no result")
+	assert.Assert(t, ok, "no victims found")
+	assert.Equal(t, nodeID2, result.NodeID, "wrong node")
+	assert.Check(t, regular.IsPreempted(), "regular not preempted")
+	assert.Check(t, !originator.IsPreempted(), "originator preempted")
+}
+
 // TestCheckPreemptionPredicates_SatisfactoryCheckUsesVictimList The early exit between batches must score the victim
 // list sent to the shim. Every node sorts a regular allocation first, but the shim is sent a single originator on all
 // nodes except the last, which falls into the second batch, so no node of the first batch may be satisfactory.

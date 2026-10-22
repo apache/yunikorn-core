@@ -679,10 +679,9 @@ func TestTryPreemption_OnNode_ScoresReorderedVictims(t *testing.T) {
 	assert.Check(t, !originator.IsPreempted(), "originator preempted")
 }
 
-// TestTryPreemption_OnQueue_EmptyNodeBeatsOriginatorNode On the queue path a node that fits the ask and holds no eligible
-// victim must beat a node whose only victim is an originator. node1 is full with the originator, node2 is empty and
-// node3 is unschedulable, so its regular pod can only be a queue victim: the ask is reserved on node2 and the regular
-// pod is preempted instead of the originator.
+// TestTryPreemption_OnQueue_EmptyNodeBeatsOriginatorNode verifies that an empty node that fits the ask beats a node
+// whose only eligible victim is the originator. The regular allocation on the unschedulable node3 can be selected as a
+// queue victim instead, without preempting the originator.
 func TestTryPreemption_OnQueue_EmptyNodeBeatsOriginatorNode(t *testing.T) {
 	appQueueMapping := NewAppQueueMapping()
 	node1 := newNode(nodeID1, map[string]resources.Quantity{"first": 5})

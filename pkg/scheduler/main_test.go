@@ -21,10 +21,14 @@ package scheduler
 import (
 	"testing"
 
+	godeadlock "github.com/sasha-s/go-deadlock"
+
 	"github.com/apache/yunikorn-core/pkg/common/leakcheck"
 )
 
 // TestMain fails the package if a test leaks a goroutine.
 func TestMain(m *testing.M) {
+	// Pooled deadlock timers cannot be reused across synctest bubbles.
+	godeadlock.Opts.TimerPool = godeadlock.TimerPoolDisabled
 	leakcheck.VerifyTestMain(m)
 }

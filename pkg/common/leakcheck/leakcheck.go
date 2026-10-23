@@ -28,9 +28,8 @@
 // package that needs an exemption nothing else needs can pass it to
 // VerifyTestMain instead of widening the shared list.
 //
-// Every test package in the repository is instrumented. pkg/rmproxy is the one
-// package without a TestMain, because it has no test functions at all: the
-// check there would guard nothing. Add one along with its first test.
+// Every test package in the repository is instrumented. A package that needs
+// its own TestMain setup does it in main_test.go before calling VerifyTestMain.
 package leakcheck
 
 import (

@@ -538,6 +538,10 @@ func (a *Allocation) HasTriggeredPreemption() bool {
 }
 
 // LessThan compares two allocations by priority and then creation time.
+// NOTE: deliberately not a strict ordering - a (priority, createTime) tie reports true in BOTH
+// directions. sortedRequests.reinsert (sorted_asks.go) relies on exactly that to land a returning
+// ask at the head of its tie-group; tightening the tie handling here would silently flip that
+// placement to the tail. TestReinsertHeadOfTieGroup pins the dependency.
 func (a *Allocation) LessThan(other *Allocation) bool {
 	if a.priority == other.priority {
 		return a.createTime.After(other.createTime) || a.createTime.Equal(other.createTime)

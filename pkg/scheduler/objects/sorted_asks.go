@@ -35,7 +35,17 @@ func (s *sortedRequests) insert(ask *Allocation) {
 		return
 	}
 
-	idx := sort.Search(size, func(i int) bool {
+	// the slow path is exactly reinsert's placement; share it so the two cannot diverge
+	s.reinsert(ask)
+}
+
+// reinsert puts an ask that is returning to the pending set (deallocated after a reverted or
+// failed allocation) back into the slice. Unlike insert it never takes the append fast path: with
+// LessThan reporting a (priority, createTime) tie as true in both directions, the binary search
+// stops at the FIRST tie-peer, so the returning ask lands at the head of its tie-group and is
+// retried before the peers it had already been tried ahead of.
+func (s *sortedRequests) reinsert(ask *Allocation) {
+	idx := sort.Search(len(*s), func(i int) bool {
 		return (*s)[i].LessThan(ask)
 	})
 	s.insertAt(idx, ask)
@@ -49,9 +59,12 @@ func (s *sortedRequests) insertAt(index int, ask *Allocation) {
 	(*s)[index] = ask
 }
 
+// remove drops the entry that IS the passed ask, matching on pointer identity: that is cheaper than
+// comparing allocationKeys, and every caller passes the object it resolved from sa.requests or read
+// out of the slice itself.
 func (s *sortedRequests) remove(ask *Allocation) {
 	for i, a := range *s {
-		if a.allocationKey == ask.allocationKey {
+		if a == ask {
 			s.removeAt(i)
 			return
 		}

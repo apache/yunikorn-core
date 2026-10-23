@@ -1014,9 +1014,8 @@ func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error)
 	// the ask just left the pending set
 	sa.removeFromPriorities(ask.GetPriority())
 	// keep sortedRequests limited to pending asks only: remove on allocate, re-insert on
-	// deallocate. This is safe here because every caller that iterates sa.sortedRequests while
-	// calling allocateAsk either uses an index loop that tolerates the removal (tryAllocate) or
-	// ranges over a snapshot (tryPlaceholderAllocate) - see the comments at those call sites.
+	// deallocate. Callers that iterate sa.sortedRequests while calling allocateAsk (tryAllocate,
+	// tryPlaceholderAllocate) range over a snapshot so the removal cannot disturb the loop.
 	sa.sortedRequests.remove(ask)
 
 	delta := ask.GetAllocatedResource()
@@ -1267,14 +1266,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	// because the len check above guarantees at least one iteration would occur.
 	backoffThreshold := sa.queue.GetMaxAppUnschedAskBackoff()
 	// get all the requests from the app sorted in order
-	// allocateAsk drops the ask from sa.sortedRequests and every path that allocates returns, so the
-	// only removal this loop ever observes is the ghost repair below. The index based loop re-reads
-	// len() and re-indexes the current slice on every iteration, which is what makes that
-	// remove-and-continue safe. Iterating a slices.Clone snapshot instead (as tryPlaceholderAllocate
-	// has to) measured -11% pods/s and 2x bytes/op on BenchmarkScheduling: it is O(pending) per call
-	// for a loop that normally exits at index 0.
-	for i := 0; i < len(sa.sortedRequests); i++ {
-		request := sa.sortedRequests[i]
+	// iterate over a snapshot: allocateAsk and the ghost repair below remove from sa.sortedRequests
+	for _, request := range slices.Clone(sa.sortedRequests) {
 		if backoffThreshold > 0 && unschedulable >= backoffThreshold {
 			log.Log(log.SchedApplication).Info("too many unschedulable asks in the application, waiting",
 				zap.String("application ID", sa.ApplicationID),
@@ -1295,9 +1288,6 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 				zap.String("appID", sa.ApplicationID),
 				zap.String("allocationKey", request.GetAllocationKey()))
 			sa.sortedRequests.remove(request)
-			// the remove shifted the tail down one slot: step back so the next iteration lands on
-			// the ask that took this index
-			i--
 			continue
 		}
 		// check if there is a replacement possible

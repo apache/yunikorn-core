@@ -131,6 +131,8 @@ func TestConfigUpdate(t *testing.T) {
 	assert.Assert(t, ok, "expected an EventSystemImpl")
 	eventSystem.StartService()
 	defer eventSystem.Stop()
+	// remove the callback before the stop: the config reset would restart a stopped instance
+	defer configs.RemoveConfigMapCallback(eventSystem.eventSystemId)
 
 	assert.Assert(t, eventSystem.IsEventTrackingEnabled())
 	assert.Equal(t, eventSystem.getRingBufferCapacity(), uint64(configs.DefaultEventRingBufferCapacity))

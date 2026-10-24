@@ -48,6 +48,7 @@ func TestUpdateAllocationRevivesCompletedApplication(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	completedPartitionApp(t, partition)
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
@@ -70,6 +71,7 @@ func TestUpdateAllocationRevivesCompletedApplicationWithNode(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	completedPartitionApp(t, partition)
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
@@ -94,6 +96,7 @@ func TestUpdateAllocationRestoresQueueForUnqueuedApp(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", defQueue)
 	assert.NilError(t, partition.AddApplication(app), "add application failed")
 	app.SetState(objects.Completed.String())
@@ -114,6 +117,7 @@ func TestUpdateAllocationUnknownAppStillFails(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	_, _, err = partition.UpdateAllocation(newAllocationAsk("ask", "no-such-app", res))
@@ -125,6 +129,7 @@ func TestUpdateAllocationDoesNotReviveExpiredApplication(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", defQueue)
 	assert.NilError(t, partition.AddApplication(app), "add application failed")
 	app.SetState(objects.Expired.String())
@@ -142,6 +147,7 @@ func TestMoveTerminatedAppSkipsRevivedApplication(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", defQueue)
 	assert.NilError(t, partition.AddApplication(app), "add application failed")
 	app.SetState(objects.Completed.String())
@@ -167,6 +173,7 @@ func TestReviveTakesLatestCompletedGeneration(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 
 	older := newApplication(appID1, "default", defQueue)
 	older.SetState(objects.Completed.String())
@@ -192,6 +199,7 @@ func TestMoveTerminatedAppSkipsAppRevivedMidFlight(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", defQueue)
 	assert.NilError(t, partition.AddApplication(app), "add application failed")
 	queue := app.GetQueue()
@@ -215,6 +223,7 @@ func TestRestoreAppQueueReclaimsCompletedApp(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", defQueue)
 	assert.NilError(t, partition.AddApplication(app), "add application failed")
 	app.SetState(objects.Completed.String())
@@ -240,6 +249,7 @@ func TestResolveRevivedQueueRecreatesDynamicQueue(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", "root.recreated")
 
 	queue := partition.resolveRevivedQueue(app)
@@ -254,6 +264,7 @@ func TestResolveRevivedQueueRecreatesRecoveryQueue(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", common.RecoveryQueueFull)
 
 	queue := partition.resolveRevivedQueue(app)
@@ -266,6 +277,7 @@ func TestResolveRevivedQueueCreateFails(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	// root.default is a leaf, so a child under it cannot be created
 	app := newApplication(appID1, "default", "root.default.sub")
 
@@ -278,6 +290,7 @@ func TestResolveRevivedQueueRejectsNonLeaf(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", "root")
 
 	queue := partition.resolveRevivedQueue(app)
@@ -289,6 +302,7 @@ func TestRestoreAppQueueFailsWithoutLeaf(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", "root")
 
 	assert.Assert(t, !partition.restoreAppQueue(app), "restore must fail when no leaf queue resolves")
@@ -299,6 +313,7 @@ func TestGetOrReviveApplicationRestoreFails(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	// non-leaf queue path means the queue cannot be restored
 	app := newApplication(appID1, "default", "root")
 	partition.Lock()
@@ -314,6 +329,7 @@ func TestReviveCompletedApplicationQueueGoneReturnsToCompleted(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	// non-leaf queue path means the queue cannot be restored
 	app := newApplication(appID1, "default", "root")
 	app.SetState(objects.Completed.String())
@@ -331,6 +347,7 @@ func TestTakeCompletedApplicationSkipsUnparsableKey(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", defQueue)
 	app.SetState(objects.Completed.String())
 	partition.Lock()

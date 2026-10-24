@@ -284,10 +284,10 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 			// one RecoverAllocationAsk just added (~line 1263-1264) - so the fuzzer does the same and
 			// passes app.GetAllocationAsk(key) rather than building a second Allocation for the same
 			// key. That matters here: RollbackAllocation deallocates the object it found in
-			// sa.allocations, and if that were a different object the resulting
-			// sortedRequests.insert would put an Allocation into sortedRequests that sa.requests
-			// never contained - a state the product itself cannot produce, so asserting on it would
-			// be testing fiction.
+			// sa.allocations, and deallocateAsk only counts an ask as pending again when it still IS
+			// the object sa.requests holds for that key - so a second Allocation built for the same
+			// key would fail that identity check for a reason the product itself cannot produce,
+			// making the assertions test fiction.
 			if key, ok := pickRandomFilteredKey(rng, allocatedKeys, func(k string) bool {
 				if confirmedKeys[k] {
 					// already in sa.allocations: confirming the same key twice would add its
@@ -523,8 +523,8 @@ func snapshotAddState(app *Application, taskGroup string) (*resources.Resource, 
 
 // assertFuzzInvariants rebuilds the expected pending-ask histogram, max and sortedRequests membership
 // from the reference model (keyPriority + pendingKeys) and compares it against the application's
-// incrementally maintained state. On any mismatch it fails with the seed and step number embedded in the message so the
-// failure is reproducible via `go test -run .../seed-<seed>`.
+// incrementally maintained state. On any mismatch it fails with the seed and step number embedded
+// in the message so the failure is reproducible via `go test -run .../seed-<seed>`.
 // It returns the number of distinct pending priorities observed this step, so the caller can track
 // coverage high-water marks without a second pass over pendingKeys.
 func assertFuzzInvariants(t *testing.T, app *Application, keyPriority map[string]int32, pendingKeys map[string]bool, seed int64, step int) int {

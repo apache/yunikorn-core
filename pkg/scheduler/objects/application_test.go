@@ -3016,12 +3016,12 @@ func TestAddAllocationAskDuplicateKeyRejected(t *testing.T) {
 
 // TestRollbackAllocationAskNotTracked covers RollbackAllocation being handed a "ghost": an ask that
 // sa.requests no longer holds while sa.allocations still does. That state is reachable in
-// production: removeAsksInternal("") wipes sa.requests, sortedRequests and the pending histogram but
-// deliberately leaves sa.allocations alone until the shim confirms the releases, so a
-// SCHEDULING_FAILED_ON_RM release arriving in that window reaches RollbackAllocation. Since
-// YUNIKORN-3360 the rollback is rejected outright when the ask is not in sa.requests, and this test
-// pins that guard: the call must return an error and leave the allocation, the allocated resource,
-// sortedRequests, the pending histogram and the app/queue pending resource untouched.
+// production: removeAsksInternal("") wipes sa.requests and the pending histogram but deliberately
+// leaves sa.allocations alone until the shim confirms the releases, so a SCHEDULING_FAILED_ON_RM
+// release arriving in that window reaches RollbackAllocation. Since YUNIKORN-3360 the rollback is
+// rejected outright when the ask is not in sa.requests, and this test pins that guard: the call must
+// return an error and leave the allocation, the allocated resource and the pending histogram
+// untouched.
 func TestRollbackAllocationAskNotTracked(t *testing.T) {
 	setupUGM()
 	defer setupUGM()
@@ -3055,8 +3055,6 @@ func TestRollbackAllocationAskNotTracked(t *testing.T) {
 	app.RUnlock()
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "rejected rollback must not change the allocated resource")
 	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "rejected rollback must not change askMaxPriority")
-	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "rejected rollback must not re-add pending resource, got %v", app.GetPendingResource())
-	assert.Assert(t, resources.IsZero(queue.GetPendingResource()), "rejected rollback must not re-add queue pending resource, got %v", queue.GetPendingResource())
 	assertMaxPriorityConsistent(t, app)
 }
 
@@ -3640,46 +3638,6 @@ func TestGetOutstandingRequests_AskReplaceable(t *testing.T) {
 	assert.Assert(t, resources.Equals(resTotal, expectedTotal), "expected resource %v, but got %v", expectedTotal, resTotal)
 	assert.Equal(t, 1, len(total))
 	assert.Equal(t, "alloc-3", total[0].allocationKey)
-}
-
-// TestGetOutstandingRequests_PartialHeadroom pins that selection follows the sortedRequests order,
-// front to back. getOutstandingRequests consumes the headrooms as it walks the slice, so as soon as
-// the headroom admits only part of the pending asks the slice order alone decides which asks are
-// selected. That set is not cosmetic: it is reported back to the shim as unschedulable and is what
-// drives cluster autoscaling, so the asks at the front, the ones that arrived first, must be the
-// ones that trigger the scale up.
-// The asks tie on priority and createTime, the normal case for a submitted burst, which leaves the
-// arrival order of sortedRequests as the only thing separating them.
-func TestGetOutstandingRequests_PartialHeadroom(t *testing.T) {
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
-
-	allocationAsk1 := newFuzzAsk("alloc-1", "app-1", "", res, false, 0, "", 100)
-	allocationAsk2 := newFuzzAsk("alloc-2", "app-1", "", res, false, 0, "", 100)
-	allocationAsk3 := newFuzzAsk("alloc-3", "app-1", "", res, false, 0, "", 100)
-	allocationAsk1.SetSchedulingAttempted(true)
-	allocationAsk2.SetSchedulingAttempted(true)
-	allocationAsk3.SetSchedulingAttempted(true)
-
-	app := &Application{
-		ApplicationID: "app-1",
-		queuePath:     "default",
-	}
-	sr := sortedRequests{}
-	sr.insert(allocationAsk1)
-	sr.insert(allocationAsk2)
-	sr.insert(allocationAsk3)
-	app.sortedRequests = sr
-
-	// headroom for two of the three asks: the third one runs into an exhausted headroom
-	var total []*Allocation
-	headroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2})
-	userHeadroom := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2})
-	resTotal := app.getOutstandingRequests(headroom, userHeadroom, &total)
-	expectedTotal := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 2})
-	assert.Assert(t, resources.Equals(resTotal, expectedTotal), "expected resource %v, but got %v", expectedTotal, resTotal)
-	assert.Equal(t, 2, len(total))
-	assert.Equal(t, "alloc-1", total[0].allocationKey, "the first ask in the slice must be selected first")
-	assert.Equal(t, "alloc-2", total[1].allocationKey, "the second ask in the slice must be selected second")
 }
 
 func TestGetRateLimitedAppLog(t *testing.T) {

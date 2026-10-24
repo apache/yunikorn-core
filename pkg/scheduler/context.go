@@ -324,19 +324,15 @@ func (cc *ClusterContext) removePartitionsByRMID(event *rmevent.RMPartitionsRemo
 func (cc *ClusterContext) removePartitionsByRMIDResult(event *rmevent.RMPartitionsRemoveEvent) *rmevent.Result {
 	cc.Lock()
 	defer cc.Unlock()
-	partitionToRemove := make(map[string]bool)
 
 	// Just remove corresponding partitions
-	for k, partition := range cc.partitions {
-		if partition.RmID == event.RmID {
-			partition.partitionManager.Stop()
-			partitionToRemove[k] = true
+	for _, part := range cc.partitions {
+		if part.RmID == event.RmID {
+			part.partitionManager.Stop()
+			delete(cc.partitions, part.Name)
 		}
 	}
 
-	for partitionName := range partitionToRemove {
-		delete(cc.partitions, partitionName)
-	}
 	// Done, return the result to send after unlocking
 	return &rmevent.Result{
 		Succeeded: true,
@@ -410,6 +406,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 	for _, part := range cc.partitions {
 		if !visited[part.Name] {
 			part.partitionManager.Stop()
+			delete(cc.partitions, part.Name)
 			log.Log(log.SchedContext).Info("marked partition for removal",
 				zap.String("partitionName", part.Name))
 		}
@@ -594,14 +591,6 @@ func (cc *ClusterContext) NeedPreemption() bool {
 	defer cc.RUnlock()
 
 	return cc.needPreemption
-}
-
-// Callback from the partition manager to finalise the removal of the partition
-func (cc *ClusterContext) removePartition(partitionName string) {
-	cc.Lock()
-	defer cc.Unlock()
-
-	delete(cc.partitions, partitionName)
 }
 
 // addNode adds a new node to the cluster enforcing just one unlimited node in the cluster.

@@ -2353,6 +2353,9 @@ func TestGetEvents(t *testing.T) {
 	// prepareSchedulerContext hides creating a new context so make sure we clean up after use
 	defer schedulerContext.Load().Stop()
 	appEvent, nodeEvent, queueEvent := addEvents(t)
+	// addEvents hides starting the event system so make sure we stop it after use
+	ev := events.GetEventSystem()
+	defer ev.Stop()
 
 	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
 
@@ -2582,7 +2585,8 @@ func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
 }
 
 func TestGetStream_SetReadDeadlineFails(t *testing.T) {
-	_, req := initEventsAndCreateRequest(t)
+	ev, req := initEventsAndCreateRequest(t)
+	defer ev.Stop()
 	resp := NewResponseRecorderWithDeadline()
 	resp.setReadFails = true
 

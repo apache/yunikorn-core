@@ -1033,33 +1033,28 @@ func (sa *Application) deallocateAsk(ask *Allocation) (*resources.Resource, erro
 	}
 
 	// The ask returns to the pending set, but only if it still IS this application's ask: an ask that
-	// has already been dropped from sa.requests must not be resurrected as a ghost that tryAllocate
-	// would then try to schedule. Since YUNIKORN-3360 no production caller can present one -
-	// RollbackAllocation rejects an untracked ask before it reaches here, the public DeallocateAsk
-	// resolves its ask out of sa.requests, and the tryPlaceholderAllocate reverts pass back the ask
-	// they just allocated - so this is defence-in-depth.
+	// has already been dropped from sa.requests must not be counted again or resurrected as a ghost
+	// that tryAllocate would then try to schedule. The callers either resolve the ask out of
+	// sa.requests (DeallocateAsk) or pass back the ask they just allocated (the
+	// tryPlaceholderAllocate reverts), and since YUNIKORN-3360 RollbackAllocation rejects a key that
+	// sa.requests does not hold, so this is defence-in-depth. The identity comparison (not just a
+	// presence check) also covers a stale ask object that has since been replaced by a new ask under
+	// the same key.
 	// This matches the converged behaviour of the full rescan this change replaced:
 	// updateAskMaxPriority derived the max by scanning sa.requests, so an ask absent from sa.requests
 	// never influenced it.
-	delta := ask.GetAllocatedResource()
 	if sa.requests[ask.GetAllocationKey()] == ask {
 		sa.addToPriorities(ask.GetPriority())
 		// the ask is pending again: re-insert it at the head of its (priority, createTime)
 		// tie-group so the next cycle retries it before the peers it was already tried ahead of
 		sa.sortedRequests.reinsert(ask)
-		// The pending resource follows the same rule as the histogram and sortedRequests: it only
-		// counts asks the application still tracks. Guarding it here (rather than in the caller)
-		// keeps all four pending-side structures - histogram, sortedRequests, sa.pending, queue
-		// pending - behind one decision instead of three guarded and one not.
-		sa.pending = resources.Add(sa.pending, delta)
-		// update the pending of the queue with the same delta
-		sa.queue.incPendingResource(delta)
 	}
 
-	// The returned delta stays the ask's resource even when the guard above rejects the ask: the
-	// allocation being rolled back genuinely occupied its node and its queue's ALLOCATED tracking,
-	// and callers (partition rollbackAllocation, tryPlaceholderAllocate's revert) use the return to
-	// unwind that side. Only the PENDING re-add is conditional on the ask still being tracked.
+	delta := ask.GetAllocatedResource()
+	sa.pending = resources.Add(sa.pending, delta)
+	// update the pending of the queue with the same delta
+	sa.queue.incPendingResource(delta)
+
 	return delta, nil
 }
 

@@ -303,7 +303,6 @@ func (pc *PartitionContext) IsRunning() bool {
 }
 
 // Handle the state event for the partition.
-// The state machine handles the locking.
 func (pc *PartitionContext) handlePartitionEvent(event objects.ObjectEvent) error {
 	err := pc.stateMachine.Event(context.Background(), event.String(), pc.Name)
 	if err == nil {

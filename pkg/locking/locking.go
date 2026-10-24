@@ -141,10 +141,19 @@ func IsDeadlockDetected() bool {
 	return deadlockDetected.Load()
 }
 
+// Mutex, and RWMutex below it, declare themselves lock primitives to the checklocks analysis.
+// Without the declaration the analysis recognises a lock by its type name only, so the
+// forwarders in forwarders.go read as ordinary methods that take a lock and return without
+// releasing it and every one of them needs a "+checklocksignore" to silence that; see
+// forwarders.go for what those ignores cost. Whether a type behaves as a Mutex or an RWMutex
+// is taken from the type itself: it has an RLock method or it does not.
+//
+// +checklockslocktype
 type Mutex struct {
-	godeadlock.Mutex
+	mu godeadlock.Mutex
 }
 
+// +checklockslocktype
 type RWMutex struct {
-	godeadlock.RWMutex
+	mu godeadlock.RWMutex
 }

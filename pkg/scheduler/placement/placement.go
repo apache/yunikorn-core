@@ -42,6 +42,7 @@ const (
 var ErrorRejected = errors.New("application rejected: no placement rule matched")
 
 type AppPlacementManager struct {
+	// +checklocks:RWMutex
 	rules   []rule
 	queueFn func(string) *objects.Queue
 

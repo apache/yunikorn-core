@@ -42,21 +42,26 @@ import (
 
 const disableReservation = "DISABLE_RESERVATION"
 
+// +lockclass:ClusterContext
 type ClusterContext struct {
-	partitions     map[string]*PartitionContext
+	// +checklocks:RWMutex
+	partitions map[string]*PartitionContext
+	// +checklocks:RWMutex
 	policyGroup    string
-	rmEventHandler handler.EventHandler
+	rmEventHandler handler.EventHandler // set once during startup and never changed, no lock needed
 	uuid           string
 
 	// config values that change scheduling behaviour
 	needPreemption      bool
 	reservationDisabled bool
 
+	// +checklocks:RWMutex
 	rmInfo    map[string]*RMInformation
 	startTime time.Time
 
 	locking.RWMutex
 
+	// +checklocks:RWMutex
 	lastHealthCheckResult *dao.SchedulerHealthDAOInfo
 }
 
@@ -85,6 +90,8 @@ func NewClusterContext(rmID, policyGroup string, config []byte) (*ClusterContext
 	if cc.reservationDisabled {
 		objects.SetReservationDelay(math.MaxInt64)
 	}
+	// the cluster context is still being built and cannot be reached yet, no lock is taken:
+	// the analysis follows that from the literal above rather than being told to ignore it
 	err = cc.updateSchedulerConfig(conf, rmID)
 	if err != nil {
 		return nil, err
@@ -249,6 +256,7 @@ func (cc *ClusterContext) processRMConfigUpdateEventResult(event *rmevent.RMConf
 		}
 	}
 	// update scheduler configuration
+	// YUNIKORN-3410: config update reaches partitionManager.Stop → removePartition → cc.Lock re-entry
 	err = cc.updateSchedulerConfig(conf, rmID)
 	if err != nil {
 		return &rmevent.Result{Succeeded: false, Reason: err.Error()}
@@ -329,6 +337,7 @@ func (cc *ClusterContext) removePartitionsByRMIDResult(event *rmevent.RMPartitio
 	// Just remove corresponding partitions
 	for k, partition := range cc.partitions {
 		if partition.RmID == event.RmID {
+			// YUNIKORN-3410: same re-entry, see above
 			partition.partitionManager.Stop()
 			partitionToRemove[k] = true
 		}
@@ -357,6 +366,7 @@ func (cc *ClusterContext) UpdateRMSchedulerConfig(rmID string, config []byte) er
 	if err != nil {
 		return err
 	}
+	// YUNIKORN-3410: same re-entry, see above
 	err = cc.updateSchedulerConfig(conf, rmID)
 	if err != nil {
 		return err
@@ -371,6 +381,7 @@ func (cc *ClusterContext) UpdateRMSchedulerConfig(rmID string, config []byte) er
 // Called if the config file is updated, indirectly when the webservice is called.
 // During tests this is called outside of the even system to init.
 // unlocked call must only be called holding the ClusterContext lock
+// +checklocks:cc.RWMutex
 func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, rmID string) error {
 	visited := map[string]bool{}
 	var err error
@@ -409,6 +420,7 @@ func (cc *ClusterContext) updateSchedulerConfig(conf *configs.SchedulerConfig, r
 	// get the removed partitions, mark them as deleted
 	for _, part := range cc.partitions {
 		if !visited[part.Name] {
+			// YUNIKORN-3410: Stop reaches removePartition, which takes the cluster context lock the caller holds
 			part.partitionManager.Stop()
 			log.Log(log.SchedContext).Info("marked partition for removal",
 				zap.String("partitionName", part.Name))
@@ -860,6 +872,7 @@ func (cc *ClusterContext) GetNode(nodeID, partitionName string) *objects.Node {
 	return partition.GetNode(nodeID)
 }
 
+// +checklocks:cc.RWMutex
 func (cc *ClusterContext) SetRMInfo(rmID string, rmBuildInformation map[string]string) {
 	if cc.rmInfo == nil {
 		cc.rmInfo = make(map[string]*RMInformation)

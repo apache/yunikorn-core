@@ -53,6 +53,16 @@ func (c *UserGroupCache) getUGmap() map[string]*UserGroup {
 	return c.ugs
 }
 
+// stopCacheOnCleanup stops the cache the test leaves behind when it ends. The cache is a reuse
+// singleton: stopping anything but the current instance closes an already closed channel.
+func stopCacheOnCleanup(t *testing.T) {
+	t.Cleanup(func() {
+		if instance != nil {
+			instance.Stop()
+		}
+	})
+}
+
 // UserGroupResolver Config for the test
 var testResolver = configs.UserGroupResolver{
 	Type: "test",
@@ -130,6 +140,7 @@ func TestGetUserGroupCache(t *testing.T) {
 // Tests for the LDAP resolver using the mock implementation
 
 func TestGetUserGroup(t *testing.T) {
+	stopCacheOnCleanup(t)
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
@@ -192,6 +203,7 @@ func TestGetUserGroup(t *testing.T) {
 }
 
 func TestBrokenUserGroup(t *testing.T) {
+	stopCacheOnCleanup(t)
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
@@ -262,6 +274,7 @@ func TestBrokenUserGroup(t *testing.T) {
 }
 
 func TestGetUserGroupFail(t *testing.T) {
+	stopCacheOnCleanup(t)
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
@@ -328,6 +341,7 @@ func TestGetUserGroupFail(t *testing.T) {
 }
 
 func TestCacheCleanUp(t *testing.T) {
+	stopCacheOnCleanup(t)
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
@@ -397,6 +411,7 @@ func TestCacheCleanUp(t *testing.T) {
 }
 
 func TestIntervalCacheCleanUp(t *testing.T) {
+	stopCacheOnCleanup(t)
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
@@ -459,6 +474,7 @@ func TestIntervalCacheCleanUp(t *testing.T) {
 }
 
 func TestConvertUGI(t *testing.T) {
+	stopCacheOnCleanup(t)
 	testCases := []struct {
 		name     string
 		resolver configs.UserGroupResolver
@@ -561,6 +577,7 @@ func TestConvertUGI(t *testing.T) {
 // Without the Bug 1 fix (var now time.Time never assigned), now.Unix() always returns a
 // large negative constant so the eviction condition is never true and entries live forever.
 func TestCleanUpCacheUsesRealTime(t *testing.T) {
+	stopCacheOnCleanup(t)
 	testCache := GetUserGroupCache(testResolver, &ConfigReaderMock{}, &LdapAccessMock{})
 	testCache.resetCache()
 
@@ -584,6 +601,7 @@ func TestCleanUpCacheUsesRealTime(t *testing.T) {
 // whose positive cache entry has exceeded poscache seconds.
 // Without the Bug 2 fix, the stale entry is returned blindly regardless of age.
 func TestPositiveCacheHitExpiryTriggersRefresh(t *testing.T) {
+	stopCacheOnCleanup(t)
 	testCache := GetUserGroupCache(testResolver, &ConfigReaderMock{}, &LdapAccessMock{})
 	testCache.resetCache()
 

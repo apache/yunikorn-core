@@ -48,17 +48,15 @@ import (
 //
 // Placeholder (gang) allocations are deliberately out of scope, they are covered separately.
 //
-// The sequences are generated from a fixed set of seeds: a seed fixes the operations that are
-// generated. The scheduler itself does not break every tie the same way twice, so the outcome of a
-// scheduling cycle, and with it the exact state a sequence reaches, can differ between runs of the
-// same seed. The failure report therefore carries the tail of the operation history next to the
-// seed and the step number.
+// The sequences are generated from a fixed set of seeds. A seed does not fix the operations that
+// are generated: an operation draws from the generator a number of times that depends on the state
+// it finds, and the scheduler does not break every tie the same way twice. A seed is therefore not a
+// replay, and the failure report carries the full operation history next to the seed and the step.
 
 const (
-	propNodeCount   = 3
-	propMaxApps     = 8
-	propSteps       = 800
-	propHistoryTail = 25
+	propNodeCount = 3
+	propMaxApps   = 8
+	propSteps     = 800
 	// propNodeMem and propNodeVCore are the capacity of every node of the pool. A node is small
 	// compared to the queue maximums on purpose: an ask that fits in the queue but on none of the
 	// nodes is the case that reserves a node.
@@ -74,7 +72,7 @@ const (
 	propSeedEnv = "YUNIKORN_PARTITION_FUZZ_SEED"
 )
 
-// propSeeds are the seeds used for every run: sequences must be stable over time and over -count
+// propSeeds are the seeds used for every run: the same set runs over time and over -count
 var propSeeds = []int64{1, 7, 42, 1234, 20260817}
 
 // the operations that are generated, see applyOp for their meaning
@@ -87,6 +85,7 @@ const (
 	opTryAllocate
 	opTryReservedAllocate
 	opRelease
+	opReleaseAll
 )
 
 // weights of the generated operations: the scheduling cycle and the ask additions are weighted up
@@ -103,6 +102,7 @@ var propOpWeights = []struct {
 	{opTryAllocate, 30},
 	{opTryReservedAllocate, 10},
 	{opRelease, 14},
+	{opReleaseAll, 3},
 }
 
 // the leaf queues the applications are placed in: leaf-a and leaf-b have a maximum set, leaf-c does
@@ -116,15 +116,15 @@ var propUsers = []security.UserGroup{
 	{User: "fuzz-user-2", Groups: []string{"fuzz-group-2"}},
 }
 
-// the termination types a release is generated for. PLACEHOLDER_REPLACED is not part of the list:
-// it is only ever sent for a placeholder that has a real allocation linked to it and placeholders
-// are out of scope for this fuzzer.
+// the termination types a release is generated for. The RM sends PLACEHOLDER_REPLACED only for a
+// placeholder with a linked replacement: for a real allocation the core must treat it as a removal.
 var propTerminationTypes = []si.TerminationType{
 	si.TerminationType_UNKNOWN_TERMINATION_TYPE,
 	si.TerminationType_STOPPED_BY_RM,
 	si.TerminationType_TIMEOUT,
 	si.TerminationType_PREEMPTED_BY_SCHEDULER,
 	si.TerminationType_SCHEDULING_FAILED_ON_RM,
+	si.TerminationType_PLACEHOLDER_REPLACED,
 }
 
 // newPropertyPartition creates the partition the fuzzer runs against:
@@ -278,8 +278,8 @@ func (f *partitionFuzzer) pickOp() int {
 	return opTryAllocate
 }
 
-// pick returns a random entry of the passed in list, the list must be sorted to keep the generated
-// sequence stable for a seed
+// pick returns a random entry of the passed in list, the list must be sorted so map iteration order
+// does not drive the generated sequence
 func (f *partitionFuzzer) pick(list []string) string {
 	return list[f.rng.Intn(len(list))]
 }
@@ -302,6 +302,8 @@ func (f *partitionFuzzer) applyOp(op int) bool {
 		return f.tryReservedAllocate()
 	case opRelease:
 		return f.release()
+	case opReleaseAll:
+		return f.releaseAll()
 	}
 	return false
 }
@@ -468,8 +470,48 @@ func (f *partitionFuzzer) release() bool {
 	return true
 }
 
-// run generates and runs the operation sequence, checking all invariants after every operation
-func (f *partitionFuzzer) run(steps int) {
+// releaseAll releases every allocation of an application in one request: the release the RM sends
+// with an empty allocation key
+func (f *partitionFuzzer) releaseAll() bool {
+	if len(f.allocated) == 0 {
+		return false
+	}
+	appIDs := make(map[string]bool)
+	for _, entry := range f.allocated {
+		appIDs[entry.appID] = true
+	}
+	appID := f.pick(propSortedKeys(appIDs))
+	if f.partition.GetApplication(appID) == nil {
+		return false
+	}
+	// a rollback is handled before the empty key is looked at and releases nothing
+	allowed := make([]si.TerminationType, 0, len(propTerminationTypes))
+	for _, termination := range propTerminationTypes {
+		if termination == si.TerminationType_SCHEDULING_FAILED_ON_RM {
+			continue
+		}
+		allowed = append(allowed, termination)
+	}
+	termination := allowed[f.rng.Intn(len(allowed))]
+	released, confirmed := f.partition.removeAllocation(&si.AllocationRelease{
+		PartitionName:   f.partition.Name,
+		ApplicationID:   appID,
+		AllocationKey:   "",
+		TerminationType: termination,
+	})
+	for _, key := range propSortedKeys(f.allocated) {
+		if f.allocated[key].appID == appID {
+			delete(f.allocated, key)
+		}
+	}
+	f.count("released all")
+	f.record("removeAllocation(all, app=%s, type=%s) released=%d confirmed=%t", appID, termination, len(released), confirmed != nil)
+	return true
+}
+
+// run generates and runs the operation sequence, checking all invariants after every operation. The
+// returned statistics are what the sequence covered.
+func (f *partitionFuzzer) run(steps int) map[string]int {
 	for f.step = 1; f.step <= steps; f.step++ {
 		if !f.applyOp(f.pickOp()) {
 			// the preconditions of the operation are not met, nothing was run
@@ -480,9 +522,11 @@ func (f *partitionFuzzer) run(steps int) {
 	for _, name := range propSortedKeys(f.stats) {
 		f.t.Logf("seed %d covered: %s: %d", f.seed, name, f.stats[name])
 	}
+	return f.stats
 }
 
-// check runs all invariants and fails the test with a replayable report if any of them is violated
+// check runs all invariants and fails the test with the full operation history if any of them is
+// violated
 func (f *partitionFuzzer) check() {
 	violations := make([]string, 0)
 	violations = append(violations, f.checkQueue(f.partition.GetQueue(configs.RootQueue))...)
@@ -494,12 +538,8 @@ func (f *partitionFuzzer) check() {
 		return
 	}
 
-	history := f.history
-	if len(history) > propHistoryTail {
-		history = history[len(history)-propHistoryTail:]
-	}
-	f.t.Fatalf("partition accounting invariant violated\nseed: %d\nstep: %d\nviolations:\n  %s\nlast %d operations:\n  %s",
-		f.seed, f.step, strings.Join(violations, "\n  "), len(history), strings.Join(history, "\n  "))
+	f.t.Fatalf("partition accounting invariant violated\nseed: %d\nstep: %d\nviolations:\n  %s\nall %d operations:\n  %s",
+		f.seed, f.step, strings.Join(violations, "\n  "), len(f.history), strings.Join(f.history, "\n  "))
 }
 
 // checkQueue walks the queue hierarchy from the root down and verifies:
@@ -624,7 +664,7 @@ func (f *partitionFuzzer) checkReservations() []string {
 			continue
 		}
 		// the reservations of a node are not returned in a stable order, sort the violations of the
-		// node to keep the failure report of a replay identical
+		// node to keep the failure report in a stable order
 		nodeViolations := make([]string, 0)
 		for _, reservation := range node.GetReservations() {
 			reserved++
@@ -646,9 +686,9 @@ func (f *partitionFuzzer) checkReservations() []string {
 				nodeViolations = append(nodeViolations, fmt.Sprintf("R1 reservation: node %s reservation %s references node %s",
 					nodeID, key, reservedNode.NodeID))
 			}
-			if reserved := app.NodeReservedForAsk(key); reserved != nodeID {
+			if reservedOn := app.NodeReservedForAsk(key); reservedOn != nodeID {
 				nodeViolations = append(nodeViolations, fmt.Sprintf("R1 reservation: node %s reservation %s is reserved on %q by application %s",
-					nodeID, key, reserved, app.ApplicationID))
+					nodeID, key, reservedOn, app.ApplicationID))
 			}
 		}
 		sort.Strings(nodeViolations)
@@ -720,8 +760,8 @@ func (f *partitionFuzzer) checkModel() []string {
 	return violations
 }
 
-// propSortedKeys returns the keys of the given map in a stable order: the generated sequence and
-// the failure report of a replay must be identical
+// propSortedKeys returns the keys of the given map in a stable order: map iteration order must not
+// drive the generated sequence or the failure report
 func propSortedKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for key := range m {
@@ -732,10 +772,36 @@ func propSortedKeys[V any](m map[string]V) []string {
 }
 
 func TestPartitionProperty(t *testing.T) {
-	for _, seed := range propSeedList(t) {
+	covered := make(map[string]int)
+	seeds := propSeedList(t)
+	ran := 0
+	for _, seed := range seeds {
 		t.Run(fmt.Sprintf("seed-%d", seed), func(t *testing.T) {
-			newPartitionFuzzer(t, seed).run(propSteps)
+			ran++
+			for name, count := range newPartitionFuzzer(t, seed).run(propSteps) {
+				covered[name] += count
+			}
 		})
+	}
+	// the floors hold only when every seed ran to the end: a seed filter skips some and a failure stops one
+	if ran < len(seeds) || t.Failed() {
+		return
+	}
+	// a flow that no seed reached would pass without having been tested
+	floors := []string{
+		"node removed with allocations",
+		"application removed with allocations",
+		"steps with a reservation",
+		"tryReservedAllocate placed an allocation",
+		"released all",
+	}
+	for _, termination := range propTerminationTypes {
+		floors = append(floors, "released "+termination.String())
+	}
+	for _, name := range floors {
+		if covered[name] == 0 {
+			t.Errorf("the generated sequences never covered %q", name)
+		}
 	}
 }
 

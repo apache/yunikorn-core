@@ -265,6 +265,8 @@ func TestHandleInfraEventGoroutine(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for activity from handleInfraEvent")
 	}
+	// the registration created the partitions and their background services
+	defer scheduler.clusterContext.Stop()
 
 	close(scheduler.stop)
 	select {

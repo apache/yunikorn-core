@@ -52,6 +52,7 @@ partitions:
 func TestNewHealthChecker(t *testing.T) {
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
+	defer schedulerContext.Stop()
 	c := NewHealthChecker(schedulerContext)
 	assert.Assert(t, c != nil, "HealthChecker shouldn't be nil")
 }
@@ -60,6 +61,7 @@ func TestRunOnce(t *testing.T) {
 	metrics.Reset()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
+	defer schedulerContext.Stop()
 	assert.Assert(t, schedulerContext.GetLastHealthCheckResult() == nil, "lastHealthCheckResult should be nil initially")
 
 	healthChecker := NewHealthChecker(schedulerContext)
@@ -78,6 +80,7 @@ func TestStartStop(t *testing.T) {
 
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
+	defer schedulerContext.Stop()
 	assert.Assert(t, schedulerContext.GetLastHealthCheckResult() == nil, "lastHealthCheckResult should be nil initially")
 
 	// update resources to some negative value
@@ -102,6 +105,7 @@ func TestConfigUpdate(t *testing.T) {
 
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
+	defer schedulerContext.Stop()
 	assert.Assert(t, schedulerContext.GetLastHealthCheckResult() == nil, "lastHealthCheckResult should be nil initially")
 
 	healthChecker := NewHealthChecker(schedulerContext)
@@ -157,6 +161,7 @@ func TestUpdateSchedulerLastHealthStatus(t *testing.T) {
 	schedulerMetrics := metrics.GetSchedulerMetrics()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
+	defer schedulerContext.Stop()
 
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	updateSchedulerLastHealthStatus(&healthInfo, schedulerContext)
@@ -173,6 +178,7 @@ func TestGetSchedulerHealthStatusContext(t *testing.T) {
 	schedulerMetrics := metrics.GetSchedulerMetrics()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
+	defer schedulerContext.Stop()
 	// everything OK
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")
@@ -242,6 +248,7 @@ func TestGetSchedulerHealthStatusMetrics(t *testing.T) {
 	schedulerMetrics := metrics.GetSchedulerMetrics()
 	schedulerContext, err := NewClusterContext("rmID", "policyGroup", []byte(configDefault))
 	assert.NilError(t, err, "Error when load schedulerContext from config")
+	defer schedulerContext.Stop()
 	// everything OK
 	healthInfo := GetSchedulerHealthStatus(schedulerMetrics, schedulerContext)
 	assert.Assert(t, healthInfo.Healthy, "Scheduler should be healthy")

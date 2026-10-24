@@ -281,6 +281,14 @@ func (ec *EventSystemImpl) restart() {
 	ec.StartServiceWithPublisher(true)
 }
 
+// SetEventTrackingEnabled overrides the tracking flag until the next start or config reload.
+// VisibleForTesting
+func (ec *EventSystemImpl) SetEventTrackingEnabled(enabled bool) {
+	ec.Lock()
+	defer ec.Unlock()
+	ec.trackingEnabled = enabled
+}
+
 // CloseAllStreams closes all existing streams.
 // VisibleForTesting
 func (ec *EventSystemImpl) CloseAllStreams() {

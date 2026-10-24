@@ -2376,19 +2376,16 @@ func TestGetEvents(t *testing.T) {
 }
 
 func TestGetEventsWhenTrackingDisabled(t *testing.T) {
-	original := configs.GetConfigMap()
-	defer func() {
-		ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-		ev.Stop()
-		configs.SetConfigMap(original)
-	}()
-	configMap := map[string]string{
-		configs.CMEventTrackingEnabled: "false",
-	}
-	configs.SetConfigMap(configMap)
 	events.Init()
 	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	ev.StartServiceWithPublisher(false)
+	prev := ev.IsEventTrackingEnabled()
+	ev.SetEventTrackingEnabled(false)
+	defer func() {
+		// a later config change in this package would restart this stopped instance if the flag differed
+		ev.SetEventTrackingEnabled(prev)
+		ev.Stop()
+	}()
 
 	req, err := http.NewRequest("GET", "/ws/v1/events/batch", strings.NewReader(""))
 	assert.NilError(t, err)
@@ -2539,17 +2536,14 @@ func TestGetStream_Count(t *testing.T) {
 }
 
 func TestGetStream_TrackingDisabled(t *testing.T) {
-	original := configs.GetConfigMap()
+	ev, req := initEventsAndCreateRequest(t)
+	prev := ev.IsEventTrackingEnabled()
+	ev.SetEventTrackingEnabled(false)
 	defer func() {
-		ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+		// a later config change in this package would restart this stopped instance if the flag differed
+		ev.SetEventTrackingEnabled(prev)
 		ev.Stop()
-		configs.SetConfigMap(original)
 	}()
-	configMap := map[string]string{
-		configs.CMEventTrackingEnabled: "false",
-	}
-	configs.SetConfigMap(configMap)
-	_, req := initEventsAndCreateRequest(t)
 	resp := httptest.NewRecorder()
 
 	assertGetStreamError(t, false, req, resp, http.StatusInternalServerError, "Event tracking is disabled")

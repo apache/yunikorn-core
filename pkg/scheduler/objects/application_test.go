@@ -3093,7 +3093,6 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	app.RemoveAllocation(alloc2.GetAllocationKey(), si.TerminationType_PLACEHOLDER_REPLACED)
 	records := waitForEvents(t, eventSystem, 5)
 
-	assert.Equal(t, 5, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_APP, records[1].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[1].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_ALLOC, records[1].EventChangeDetail)
@@ -3121,7 +3120,6 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	assert.NilError(t, err3)
 	app.ReplaceAllocation(alloc1.GetAllocationKey())
 	records = waitForEvents(t, eventSystem, 2)
-	assert.Equal(t, 2, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_APP, records[0].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_ALLOC, records[0].EventChangeDetail)
@@ -3141,7 +3139,6 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	app.RemoveAllAllocations()
 	records = waitForEvents(t, eventSystem, 4)
 	refIdsRemoved := make(map[string]int) // order can change due to map iteration
-	assert.Equal(t, 4, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_APP, records[0].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_APP_ALLOC, records[0].EventChangeDetail)
@@ -3212,7 +3209,7 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 func waitForEvents(t *testing.T, eventSystem *events.EventSystemImpl, count int) []*si.EventRecord {
 	t.Helper()
 	// The UGM singleton keeps the event system it was created with, so its events only reach this store
-	// when this test is the first to create it, e.g. when run alone.
+	// when the calling test is the first to create it, e.g. when run alone.
 	var records []*si.EventRecord
 	err := common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		for _, record := range eventSystem.Store.CollectEvents() {

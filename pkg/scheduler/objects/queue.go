@@ -1088,9 +1088,9 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	sq.Lock()
 	delete(sq.applications, appID)
 	delete(sq.appPriorities, appID)
-	delete(sq.allocatingAcceptedApps, appID)
 	priority := sq.recalculatePriority()
 	sq.Unlock()
+	sq.removeAllocatingAccepted(appID)
 	app.appEvents.SendRemoveApplicationEvent(appID)
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
@@ -2084,6 +2084,21 @@ func (sq *Queue) setAllocatingAccepted(appID string) {
 	sq.Lock()
 	defer sq.Unlock()
 	sq.allocatingAcceptedApps[appID] = true
+}
+
+// removeAllocatingAccepted stops tracking the application in accepted state that has placeholders allocated.
+// Used when the application is removed before it reaches the running state.
+// For this queue (recursively).
+func (sq *Queue) removeAllocatingAccepted(appID string) {
+	if sq == nil {
+		return
+	}
+	if sq.parent != nil {
+		sq.parent.removeAllocatingAccepted(appID)
+	}
+	sq.Lock()
+	defer sq.Unlock()
+	delete(sq.allocatingAcceptedApps, appID)
 }
 
 func (sq *Queue) GetPreemptionPolicy() policies.PreemptionPolicy {

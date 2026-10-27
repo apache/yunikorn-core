@@ -671,6 +671,30 @@ func TestRemoveApplication(t *testing.T) {
 	assert.Assert(t, resources.IsZero(root.allocatedResource), "root queue allocated resource not updated correctly")
 }
 
+func TestRemoveApplicationAllocatingAccepted(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var parent, leaf *Queue
+	parent, err = createManagedQueueMaxApps(root, "parent", true, nil, 1)
+	assert.NilError(t, err, "failed to create parent queue")
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	// app in accepted state with placeholders allocated takes the only slot on the parent
+	app := newApplication("app-1", "default", "root.parent.leaf")
+	leaf.AddApplication(app)
+	leaf.setAllocatingAccepted(app.ApplicationID)
+	assert.Assert(t, !leaf.canRunApp("app-2"), "parent max running apps reached, should be denied")
+
+	// removing the app before it runs must release the slot on all queues in the hierarchy
+	leaf.RemoveApplication(app)
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 0, "app not removed from leaf list")
+	assert.Equal(t, len(parent.allocatingAcceptedApps), 0, "app not removed from parent list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 0, "app not removed from root list")
+	assert.Assert(t, leaf.canRunApp("app-2"), "parent slot should be released after removal")
+}
+
 func TestQueueStates(t *testing.T) {
 	// create the root
 	root, err := createRootQueue(nil)
@@ -3278,6 +3302,42 @@ func TestQueue_setAllocatingAccepted(t *testing.T) {
 	}()
 	var q *Queue
 	q.setAllocatingAccepted("")
+}
+
+func TestQueue_removeAllocatingAccepted(t *testing.T) {
+	// create the root
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var leaf, leaf2 *Queue
+	leaf, err = createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	leaf2, err = createManagedQueue(root, "leaf2", false, nil)
+	assert.NilError(t, err, "failed to create leaf2 queue")
+
+	leaf.setAllocatingAccepted("test-1")
+	leaf.setAllocatingAccepted("test-2")
+	leaf2.setAllocatingAccepted("test-3")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 3, "expected 3 apps in root list")
+
+	leaf.removeAllocatingAccepted("test-1")
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 1, "expected 1 app in leaf list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "expected 2 apps in root list")
+	assert.Assert(t, !root.allocatingAcceptedApps["test-1"], "app should be removed from root list")
+	leaf.removeAllocatingAccepted("test-1")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 2, "expected no change after removing same app again")
+
+	leaf2.removeAllocatingAccepted("test-3")
+	assert.Equal(t, len(leaf2.allocatingAcceptedApps), 0, "expected 0 apps in leaf2 list")
+	assert.Equal(t, len(leaf.allocatingAcceptedApps), 1, "expected no change in leaf list")
+	assert.Equal(t, len(root.allocatingAcceptedApps), 1, "expected 1 app in root list")
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatal("panic on nil queue removeAllocatingAccepted")
+		}
+	}()
+	var q *Queue
+	q.removeAllocatingAccepted("")
 }
 
 func TestQueueEvents(t *testing.T) {

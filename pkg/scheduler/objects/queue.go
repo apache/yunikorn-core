@@ -1088,9 +1088,14 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	sq.Lock()
 	delete(sq.applications, appID)
 	delete(sq.appPriorities, appID)
+	allocatingAccepted := sq.allocatingAcceptedApps[appID]
+	delete(sq.allocatingAcceptedApps, appID)
 	priority := sq.recalculatePriority()
 	sq.Unlock()
-	sq.removeAllocatingAccepted(appID)
+	// an app removed before it reached the running state is also tracked on all parents
+	if allocatingAccepted {
+		sq.parent.removeAllocatingAccepted(appID)
+	}
 	app.appEvents.SendRemoveApplicationEvent(appID)
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)
@@ -2087,8 +2092,8 @@ func (sq *Queue) setAllocatingAccepted(appID string) {
 }
 
 // removeAllocatingAccepted stops tracking the application in accepted state that has placeholders allocated.
-// Used when the application is removed before it reaches the running state.
-// For this queue (recursively).
+// Used when the application is removed before it reached the running state, the tracking is otherwise
+// cleaned up by incRunningApps. For this queue (recursively).
 func (sq *Queue) removeAllocatingAccepted(appID string) {
 	if sq == nil {
 		return

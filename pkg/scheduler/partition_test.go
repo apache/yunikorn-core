@@ -4525,6 +4525,58 @@ func TestTryAllocateMaxRunning(t *testing.T) {
 	assert.Equal(t, result.Request.GetAllocationKey(), allocKey, "expected ask alloc-1 to be allocated")
 }
 
+func TestTryAllocateMaxRunningRemoveAccepted(t *testing.T) {
+	const resType = "vcore"
+	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	// set max running apps on the parent only
+	parent := partition.getQueueInternal("root.parent")
+	parent.SetMaxRunningApps(1)
+
+	// add first app to the partition
+	appRes, err := resources.NewResourceFromConf(map[string]string{resType: "2"})
+	assert.NilError(t, err, "app resource creation failed")
+	app := newApplicationTG(appID1, "default", "root.parent.sub-leaf", appRes)
+	err = partition.AddApplication(app)
+	assert.NilError(t, err, "failed to add app-1 to partition")
+	var res *resources.Resource
+	res, err = resources.NewResourceFromConf(map[string]string{resType: "1"})
+	assert.NilError(t, err, "failed to create resource")
+	err = app.AddAllocationAsk(newAllocationAskTG(allocKey, appID1, "ph1", res, true))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-1")
+
+	// allocate should work: app stays in accepted state (placeholder!)
+	result := partition.tryAllocate()
+	if result == nil || result.Request == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, app.CurrentState(), objects.Accepted.String(), "application should have stayed in accepted state")
+
+	// add second app to the partition
+	app2 := newApplication(appID2, "default", "root.parent.sub-leaf")
+	err = partition.AddApplication(app2)
+	assert.NilError(t, err, "failed to add app-2 to partition")
+	err = app2.AddAllocationAsk(newAllocationAsk(allocKey, appID2, res))
+	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
+
+	// allocation should fail max running app is reached on parent via accepted allocating
+	result = partition.tryAllocate()
+	if result != nil {
+		t.Fatal("allocation should not have returned as parent limit is reached")
+	}
+
+	// remove the first app before it reached the running state: the parent limit is released
+	partition.removeApplication(appID1)
+	result = partition.tryAllocate()
+	if result == nil || result.Request == nil {
+		t.Fatal("allocation did not return any allocation")
+	}
+	assert.Equal(t, result.Request.GetApplicationID(), appID2, "expected application app-2 to be allocated")
+	assert.Equal(t, result.Request.GetAllocationKey(), allocKey, "expected ask alloc-1 to be allocated")
+}
+
 func TestNewQueueEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck

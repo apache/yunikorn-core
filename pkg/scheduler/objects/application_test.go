@@ -3091,13 +3091,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	assert.NilError(t, err2)
 	app.RemoveAllocation(alloc1.GetAllocationKey(), si.TerminationType_STOPPED_BY_RM)
 	app.RemoveAllocation(alloc2.GetAllocationKey(), si.TerminationType_PLACEHOLDER_REPLACED)
-	noEvents := uint64(0)
-	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
-		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 5
-	})
-	assert.NilError(t, err, "expected 5 events, got %d", noEvents)
-	records := eventSystem.Store.CollectEvents()
+	records := waitForEvents(t, eventSystem, 5)
 
 	assert.Equal(t, 5, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_APP, records[1].Type)
@@ -3126,13 +3120,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	err3 := app.AddAllocation(alloc1)
 	assert.NilError(t, err3)
 	app.ReplaceAllocation(alloc1.GetAllocationKey())
-	noEvents = 0
-	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
-		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 2
-	})
-	assert.NilError(t, err, "expected 2 events, got %d", noEvents)
-	records = eventSystem.Store.CollectEvents()
+	records = waitForEvents(t, eventSystem, 2)
 	assert.Equal(t, 2, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_APP, records[0].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
@@ -3151,12 +3139,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	err5 := app.AddAllocation(alloc2)
 	assert.NilError(t, err5)
 	app.RemoveAllAllocations()
-	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
-		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 4
-	})
-	assert.NilError(t, err, "expected 4 events, got %d", noEvents)
-	records = eventSystem.Store.CollectEvents()
+	records = waitForEvents(t, eventSystem, 4)
 	refIdsRemoved := make(map[string]int) // order can change due to map iteration
 	assert.Equal(t, 4, len(records), "number of events")
 	assert.Equal(t, si.EventRecord_APP, records[0].Type)
@@ -3218,17 +3201,29 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 		return nil
 	})
 
-	noEvents := uint64(0)
-	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
-		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 4
-	})
-	assert.NilError(t, err, "expected 4 events, got %d", noEvents)
-	records := eventSystem.Store.CollectEvents()
+	records := waitForEvents(t, eventSystem, 4)
 	assert.Equal(t, si.EventRecord_REQUEST, records[3].Type)
 	assert.Equal(t, si.EventRecord_NONE, records[3].EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[3].EventChangeDetail)
 	assert.Equal(t, "app-1", records[3].ReferenceID)
+}
+
+// waitForEvents collects count events from the store, skipping USERGROUP events.
+func waitForEvents(t *testing.T, eventSystem *events.EventSystemImpl, count int) []*si.EventRecord {
+	t.Helper()
+	// The UGM singleton keeps the event system it was created with, so its events only reach this store
+	// when this test is the first to create it, e.g. when run alone.
+	var records []*si.EventRecord
+	err := common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
+		for _, record := range eventSystem.Store.CollectEvents() {
+			if record.Type != si.EventRecord_USERGROUP {
+				records = append(records, record)
+			}
+		}
+		return len(records) == count
+	})
+	assert.NilError(t, err, "expected %d events, got %d", count, len(records))
+	return records
 }
 
 func TestRequestDoesNotFitQueueEvents(t *testing.T) {

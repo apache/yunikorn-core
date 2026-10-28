@@ -401,28 +401,24 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 	predicateErrors := make(map[string]int)
 	for _, batch := range batches {
 		var wg sync.WaitGroup
-		ch := make(chan *predicateCheckResult, len(batch))
-		expected := 0
-		for _, args := range batch {
+		// keep the results in the sorted order of the checks, so that nodes with an equal score are resolved by that
+		// order and not by the order in which the shim answers
+		results := make([]*predicateCheckResult, len(batch))
+		for i, args := range batch {
 			// add goroutine for checking preemption
 			wg.Add(1)
-			expected++
 			go func() {
 				defer wg.Done()
-				ch <- runPredicateChecks(plugin, args)
+				results[i] = runPredicateChecks(plugin, args)
 			}()
 		}
-		// wait for completion and close channel
-		go func() {
-			wg.Wait()
-			close(ch)
-		}()
-		for result := range ch {
+		wg.Wait()
+		for _, result := range results {
 			// if resultType is successful, keep track of it
 			if result.success {
 				if bestResult == nil {
 					bestResult = result
-				} else if result.betterThan(bestResult, p.allocationsByNode) {
+				} else if result.betterThan(bestResult, victimsByNode) {
 					bestResult = result
 				}
 			} else {
@@ -432,7 +428,7 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 			}
 		}
 		// if the best resultType we have from this batch meets all our criteria, don't run another batch
-		if bestResult.isSatisfactory(p.allocationsByNode) {
+		if bestResult.isSatisfactory(victimsByNode) {
 			break
 		}
 	}

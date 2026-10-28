@@ -54,19 +54,20 @@ type Queue struct {
 	Name      string // Queue name as in the config etc.
 
 	// Private fields need protection
-	sortType             policies.SortPolicy       // How applications (leaf) or queues (parents) are sorted
-	children             map[string]*Queue         // Only for direct children, parent queue only
-	childPriorities      map[string]int32          // cached priorities for child queues
-	applications         map[string]*Application   // only for leaf queue
-	appPriorities        map[string]int32          // cached priorities for application
-	reservedApps         map[string]int            // applications reserved within this queue, with reservation count
-	parent               *Queue                    // link back to the parent in the scheduler
-	pending              *resources.Resource       // pending resource for the apps in the queue
-	allocatedResource    *resources.Resource       // allocated resource for the apps in the queue
-	preemptingResource   *resources.Resource       // preempting resource for the apps in the queue
-	prioritySortEnabled  bool                      // whether priority is used for request sorting
-	priorityPolicy       policies.PriorityPolicy   // priority policy
-	priorityOffset       int32                     // priority offset for this queue relative to others
+	sortType             policies.SortPolicy     // How applications (leaf) or queues (parents) are sorted
+	children             map[string]*Queue       // Only for direct children, parent queue only
+	childPriorities      map[string]int32        // cached priorities for child queues
+	applications         map[string]*Application // only for leaf queue
+	appPriorities        map[string]int32        // cached priorities for application
+	reservedApps         map[string]int          // applications reserved within this queue, with reservation count
+	parent               *Queue                  // link back to the parent in the scheduler
+	pending              *resources.Resource     // pending resource for the apps in the queue
+	allocatedResource    *resources.Resource     // allocated resource for the apps in the queue
+	preemptingResource   *resources.Resource     // preempting resource for the apps in the queue
+	prioritySortEnabled  bool                    // whether priority is used for request sorting
+	priorityPolicy       policies.PriorityPolicy // priority policy
+	priorityOffset       int32                   // priority offset for this queue relative to others
+	queuePriorityVictims bool
 	preemptionPolicy     policies.PreemptionPolicy // preemption policy
 	preemptionDelay      time.Duration             // time delay before preemption is considered
 	quotaPreemptionDelay time.Duration             // time delay before quota preemption is considered
@@ -685,6 +686,7 @@ func (sq *Queue) resetProperties() {
 	sq.priorityOffset = 0
 	sq.priorityPolicy = policies.DefaultPriorityPolicy
 	sq.preemptionPolicy = policies.DefaultPreemptionPolicy
+	sq.queuePriorityVictims = false
 	sq.preemptionDelay = configs.DefaultPreemptionDelay
 	sq.unschedAskBackoff = 0
 	sq.askBackoffDelay = configs.DefaultAskBackOffDelay
@@ -742,6 +744,8 @@ func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 				log.Log(log.SchedQueue).Debug("queue preemption policy configuration error",
 					zap.Error(err))
 			}
+		case configs.PreemptionVictimPolicy:
+			sq.queuePriorityVictims = value == configs.PreemptionVictimQueuePriority
 		case configs.PreemptionDelay:
 			if sq.isLeaf {
 				sq.preemptionDelay, err = convertDelay(value, configs.DefaultPreemptionDelay)
@@ -2415,4 +2419,11 @@ func (sq *Queue) GetBackoffDelay() time.Duration {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.askBackoffDelay
+}
+
+// usesQueuePriorityVictims reads the effective (possibly inherited) policy.
+func (sq *Queue) usesQueuePriorityVictims() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.queuePriorityVictims
 }

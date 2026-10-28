@@ -37,13 +37,16 @@ import (
 // StartService() and Stop() must not cause panic
 func TestSimpleStartAndStop(t *testing.T) {
 	Init()
-	eventSystem := GetEventSystem()
+	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
+	assert.Assert(t, ok, "expected an EventSystemImpl")
 	// adding event to stopped eventSystem does not cause panic
 	eventSystem.AddEvent(nil)
 	time.Sleep(10 * time.Millisecond) // tiny sleep to yield
 	before := runtime.NumGoroutine()
 	eventSystem.StartService()
 	defer eventSystem.Stop()
+	// remove the callback: a later config change can restart this stopped instance
+	defer configs.RemoveConfigMapCallback(eventSystem.eventSystemId)
 	after := runtime.NumGoroutine()
 	assert.Equal(t, before+2, after, "expected 2 new go routines: handler and publisher")
 	// add an event
@@ -65,6 +68,7 @@ func TestSingleEventStoredCorrectly(t *testing.T) {
 	// don't run publisher, because it can collect the event while we're waiting
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()
+	defer configs.RemoveConfigMapCallback(eventSystem.eventSystemId)
 
 	event := si.EventRecord{
 		Type:        si.EventRecord_REQUEST,
@@ -98,6 +102,7 @@ func TestGetEvents(t *testing.T) {
 	assert.Assert(t, ok, "expected an EventSystemImpl")
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()
+	defer configs.RemoveConfigMapCallback(eventSystem.eventSystemId)
 
 	for i := 0; i < 10; i++ {
 		event := &si.EventRecord{
@@ -131,6 +136,8 @@ func TestConfigUpdate(t *testing.T) {
 	assert.Assert(t, ok, "expected an EventSystemImpl")
 	eventSystem.StartService()
 	defer eventSystem.Stop()
+	// remove the callback before the stop: the config reset would restart a stopped instance
+	defer configs.RemoveConfigMapCallback(eventSystem.eventSystemId)
 
 	assert.Assert(t, eventSystem.IsEventTrackingEnabled())
 	assert.Equal(t, eventSystem.getRingBufferCapacity(), uint64(configs.DefaultEventRingBufferCapacity))
@@ -161,9 +168,11 @@ func TestConfigUpdate(t *testing.T) {
 
 func TestEventStreaming(t *testing.T) {
 	Init()
-	eventSystem := GetEventSystem()
+	eventSystem, ok := GetEventSystem().(*EventSystemImpl)
+	assert.Assert(t, ok, "expected an EventSystemImpl")
 	eventSystem.StartService()
 	defer eventSystem.Stop()
+	defer configs.RemoveConfigMapCallback(eventSystem.eventSystemId)
 
 	stream := eventSystem.CreateEventStream("test", 10)
 	defer eventSystem.RemoveStream(stream)
@@ -269,6 +278,7 @@ func TestAddEventConcurrentStop(t *testing.T) {
 	assert.Assert(t, ok, "expected an EventSystemImpl")
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()
+	defer configs.RemoveConfigMapCallback(eventSystem.eventSystemId)
 
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -300,6 +310,7 @@ func TestAddEventAfterRestart(t *testing.T) {
 	metrics.GetEventMetrics().Reset()
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()
+	defer configs.RemoveConfigMapCallback(eventSystem.eventSystemId)
 
 	var wg sync.WaitGroup
 	wg.Add(2)

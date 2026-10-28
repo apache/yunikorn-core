@@ -3033,7 +3033,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	rootConfig := configs.QueueConfig{
 		Name: "root",
 	}
@@ -3443,7 +3443,7 @@ func TestQueueEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err)
 	queue.Name = "testQueue"

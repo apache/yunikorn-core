@@ -3210,6 +3210,7 @@ func waitForEvents(t *testing.T, eventSystem *events.EventSystemImpl, count int)
 	t.Helper()
 	var records []*si.EventRecord
 	err := common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
+		// CollectEvents() empties the store, so each poll only returns events stored since the previous poll.
 		for _, record := range eventSystem.Store.CollectEvents() {
 			if record.Type != si.EventRecord_USERGROUP {
 				records = append(records, record)

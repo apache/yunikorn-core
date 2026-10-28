@@ -213,6 +213,19 @@ func benchmarkScopedLoggerInfoFiltered(iterations int) int64 {
 	return (time.Since(start).Nanoseconds()) / int64(iterations)
 }
 
+func TestScopedLoggerWith(t *testing.T) {
+	_ = Log(Test)
+	initTestLogger()
+	defer resetTestLogger()
+	UpdateLoggingConfig(map[string]string{
+		"log.level":      "DEBUG",
+		"log.core.level": "WARN",
+	})
+	core := Log(Core).With(zap.String("foo", "bar")).Core()
+	assert.Assert(t, !core.Enabled(zapcore.InfoLevel), "info should be filtered by the logger level")
+	assert.Assert(t, core.Enabled(zapcore.WarnLevel), "warn should be allowed by the logger level")
+}
+
 func TestParseLevel(t *testing.T) {
 	assert.Equal(t, zapcore.DebugLevel, *parseLevel("-2"), "out of range low")
 	assert.Equal(t, zapcore.DebugLevel, *parseLevel("-1"))

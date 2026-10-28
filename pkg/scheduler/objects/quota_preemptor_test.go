@@ -790,9 +790,87 @@ func createQueueSetups(t *testing.T, parent *Queue, leafResG configs.Resources, 
 }
 
 func createVictim(t *testing.T, allocKey string, node *Node, adjustment int, allocRes *resources.Resource) *Allocation {
+	return createVictimForApp(t, allocKey, "app1", node, adjustment, allocRes)
+}
+
+func createVictimForApp(t *testing.T, allocKey string, appID string, node *Node, adjustment int, allocRes *resources.Resource) *Allocation {
 	baseTime := time.Now().Truncate(time.Hour).Add(30 * time.Minute)
-	allocation := createAllocation(allocKey, "app1", node.NodeID, true, false, 10, false, allocRes)
+	allocation := createAllocation(allocKey, appID, node.NodeID, true, false, 10, false, allocRes)
 	allocation.createTime = baseTime.Add(-time.Minute * time.Duration(adjustment))
 	assert.Assert(t, node.TryAddAllocation(allocation))
 	return allocation
+}
+
+func TestQuotaChangeTryPreemption_MultipleApplications(t *testing.T) {
+	events.Init()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+
+	testCases := []struct {
+		name                    string
+		releaseVictimKey        string
+		expectedPreemptedKeys   []string
+		expectedClaimedResource *resources.Resource
+	}{
+		{
+			name:                    "all valid victims across multiple apps",
+			releaseVictimKey:        "",
+			expectedPreemptedKeys:   []string{"alloc-app1-1", "alloc-app1-2", "alloc-app2-1"},
+			expectedClaimedResource: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 30}),
+		},
+		{
+			name:                    "ignore already released victim in multi app preemption",
+			releaseVictimKey:        "alloc-app1-2",
+			expectedPreemptedKeys:   []string{"alloc-app1-1", "alloc-app2-1"},
+			expectedClaimedResource: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20}),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			node := NewNode(&si.NodeInfo{
+				NodeID: "node",
+				SchedulableResource: &si.Resource{
+					Resources: map[string]*si.Quantity{"first": {Value: 100}},
+				},
+			})
+			parent, err := NewConfiguredQueue(configs.QueueConfig{Name: "parent", Parent: true}, nil, false, nil)
+			assert.NilError(t, err)
+			leaf, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf"}, parent, false, nil)
+			assert.NilError(t, err)
+
+			allocRes := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+			v1 := createVictimForApp(t, "alloc-app1-1", "app1", node, 5, allocRes)
+			v2 := createVictimForApp(t, "alloc-app1-2", "app1", node, 4, allocRes)
+			v3 := createVictimForApp(t, "alloc-app2-1", "app2", node, 3, allocRes)
+
+			leaf.maxResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+			assignAllocationsToQueue(t, []*Allocation{v1, v2, v3}, leaf)
+
+			leaf.maxResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+			leaf.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+
+			preemptor := NewQuotaPreemptor(leaf)
+			preemptor.setPreemptableResources()
+			preemptor.allocations = []*Allocation{v1, v2, v3}
+
+			if tc.releaseVictimKey != "" {
+				for _, victim := range preemptor.allocations {
+					if victim.GetAllocationKey() == tc.releaseVictimKey {
+						assert.NilError(t, victim.SetReleased(true))
+					}
+				}
+			}
+
+			preemptor.preemptVictims()
+
+			assert.Equal(t, len(preemptor.results.preemptedVictims), len(tc.expectedPreemptedKeys))
+			assertPreemptedAllocationKeys(t, preemptor.results.preemptedVictims, tc.expectedPreemptedKeys)
+			assert.Assert(t, resources.Equals(preemptor.results.claimedResource, tc.expectedClaimedResource))
+
+			removeAllocationAsks(node, []*Allocation{v1, v2, v3})
+			resetQueue(parent)
+			_ = eventSystem.Store.CollectEvents()
+		})
+	}
 }

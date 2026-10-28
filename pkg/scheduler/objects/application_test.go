@@ -3205,11 +3205,9 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	assert.Equal(t, "app-1", records[3].ReferenceID)
 }
 
-// waitForEvents collects count events from the store, skipping USERGROUP events.
+// waitForEvents collects count events, skipping USERGROUP events, which only reach this store if the UGM was created after events.Init().
 func waitForEvents(t *testing.T, eventSystem *events.EventSystemImpl, count int) []*si.EventRecord {
 	t.Helper()
-	// The UGM singleton keeps the event system it was created with, so its events only reach this store
-	// when the calling test is the first to create it, e.g. when run alone.
 	var records []*si.EventRecord
 	err := common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		for _, record := range eventSystem.Store.CollectEvents() {

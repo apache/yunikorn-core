@@ -4534,8 +4534,7 @@ func TestNewQueueEvents(t *testing.T) {
 		User: "test",
 	})
 	assert.NilError(t, err)
-	// The UGM singleton keeps the event system it was created with, so its events only reach this store
-	// when this test is the first to create it, e.g. when run alone.
+	// skip USERGROUP events, they only reach this store if the UGM was created after events.Init()
 	var records []*si.EventRecord
 	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
 		for _, record := range eventSystem.Store.CollectEvents() {

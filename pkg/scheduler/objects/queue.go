@@ -1088,14 +1088,9 @@ func (sq *Queue) RemoveApplication(app *Application) {
 	sq.Lock()
 	delete(sq.applications, appID)
 	delete(sq.appPriorities, appID)
-	allocatingAccepted := sq.allocatingAcceptedApps[appID]
-	delete(sq.allocatingAcceptedApps, appID)
 	priority := sq.recalculatePriority()
 	sq.Unlock()
-	// an app removed before it reached the running state is also tracked on all parents
-	if allocatingAccepted {
-		sq.parent.removeAllocatingAccepted(appID)
-	}
+	sq.removeAllocatingAccepted(appID)
 	app.appEvents.SendRemoveApplicationEvent(appID)
 
 	sq.parent.UpdateQueuePriority(sq.Name, priority)

@@ -1416,9 +1416,12 @@ func (sq *Queue) IncPreemptingResource(alloc *resources.Resource) {
 	if sq == nil {
 		return
 	}
+	// update parent
+	sq.parent.IncPreemptingResource(alloc)
+
+	// update this queue
 	sq.Lock()
 	defer sq.Unlock()
-	sq.parent.IncPreemptingResource(alloc)
 	sq.preemptingResource = resources.Add(sq.preemptingResource, alloc)
 	sq.updatePreemptingResourceMetrics()
 }
@@ -1428,9 +1431,12 @@ func (sq *Queue) DecPreemptingResource(alloc *resources.Resource) {
 	if sq == nil {
 		return
 	}
+	// update parent
+	sq.parent.DecPreemptingResource(alloc)
+
+	// update this queue
 	sq.Lock()
 	defer sq.Unlock()
-	sq.parent.DecPreemptingResource(alloc)
 	sq.preemptingResource = resources.Sub(sq.preemptingResource, alloc)
 	sq.updatePreemptingResourceMetrics()
 	// We should update the metrics before pruning the resource.

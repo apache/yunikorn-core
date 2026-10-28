@@ -143,7 +143,7 @@ func TestQuotaChangeTryPreemption(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	leaf, err := NewConfiguredQueue(configs.QueueConfig{
 		Name: "leaf",
 	}, nil, false, nil)
@@ -594,7 +594,7 @@ func TestQuotaChangeTryPreemptionForParentQueue(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	node := NewNode(&si.NodeInfo{
 		NodeID:     "node",
 		Attributes: nil,

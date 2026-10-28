@@ -316,7 +316,7 @@ func TestAppAllocReservation(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	if app == nil || app.ApplicationID != appID1 {
@@ -489,7 +489,7 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, aKey, record.ReferenceID, "incorrect reference ID, expected placeholder alloc ID")
 	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
 	assert.Equal(t, si.EventRecord_APP_REQUEST, record.EventChangeDetail, "incorrect change detail, expected app request")
-	eventSystem.Stop()
+	eventSystem.StopAndCleanConfigMapCallback()
 
 	// a second ask adds to the pending total
 	ask = newAllocationAsk(aKey2, appID1, res)
@@ -3194,7 +3194,7 @@ func TestAskEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
@@ -3261,7 +3261,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
@@ -3366,7 +3366,7 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)

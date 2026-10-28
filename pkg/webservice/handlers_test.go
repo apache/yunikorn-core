@@ -2355,8 +2355,8 @@ func TestGetEvents(t *testing.T) {
 	defer schedulerContext.Load().Stop()
 	appEvent, nodeEvent, queueEvent := addEvents(t)
 	// addEvents hides starting the event system so make sure we stop it after use
-	ev := events.GetEventSystem()
-	defer ev.Stop()
+	ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	defer ev.StopAndCleanConfigMapCallback()
 
 	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
 
@@ -2380,7 +2380,7 @@ func TestGetEventsWhenTrackingDisabled(t *testing.T) {
 	original := configs.GetConfigMap()
 	defer func() {
 		ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-		ev.Stop()
+		ev.StopAndCleanConfigMapCallback()
 		configs.SetConfigMap(original)
 	}()
 	configMap := map[string]string{
@@ -2400,7 +2400,7 @@ func TestGetStream(t *testing.T) {
 	setup(t, configDefault, 1)
 	defer schedulerContext.Load().Stop()
 	ev, req := initEventsAndCreateRequest(t)
-	defer ev.Stop()
+	defer ev.StopAndCleanConfigMapCallback()
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req = req.Clone(cancelCtx)
@@ -2441,7 +2441,7 @@ func TestGetStream_StreamClosedByProducer(t *testing.T) {
 	setup(t, configDefault, 1)
 	defer schedulerContext.Load().Stop()
 	ev, req := initEventsAndCreateRequest(t)
-	defer ev.Stop()
+	defer ev.StopAndCleanConfigMapCallback()
 	resp := NewResponseRecorderWithDeadline() // MockResponseWriter does not implement http.Flusher
 
 	go func() {
@@ -2482,7 +2482,7 @@ func TestGetStream_Count(t *testing.T) {
 	setup(t, configDefault, 1)
 	defer schedulerContext.Load().Stop()
 	ev, req := initEventsAndCreateRequest(t)
-	defer ev.Stop()
+	defer ev.StopAndCleanConfigMapCallback()
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	req = req.Clone(cancelCtx)
@@ -2545,7 +2545,7 @@ func TestGetStream_TrackingDisabled(t *testing.T) {
 	original := configs.GetConfigMap()
 	defer func() {
 		ev := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
-		ev.Stop()
+		ev.StopAndCleanConfigMapCallback()
 		configs.SetConfigMap(original)
 	}()
 	configMap := map[string]string{
@@ -2560,7 +2560,7 @@ func TestGetStream_TrackingDisabled(t *testing.T) {
 
 func TestGetStream_NoWriteDeadline(t *testing.T) {
 	ev, req := initEventsAndCreateRequest(t)
-	defer ev.Stop()
+	defer ev.StopAndCleanConfigMapCallback()
 	resp := httptest.NewRecorder() // does not have SetWriteDeadline()
 
 	assertGetStreamError(t, false, req, resp, http.StatusInternalServerError, "Cannot set write deadline: feature not supported")
@@ -2570,7 +2570,7 @@ func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
 	setup(t, configDefault, 1)
 	defer schedulerContext.Load().Stop()
 	ev, req := initEventsAndCreateRequest(t)
-	defer ev.Stop()
+	defer ev.StopAndCleanConfigMapCallback()
 	resp := NewResponseRecorderWithDeadline()
 	resp.setWriteFailsAt = 2 // only the second SetWriteDeadline() will fail
 	resp.setWriteFails = true
@@ -2589,7 +2589,7 @@ func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
 
 func TestGetStream_SetReadDeadlineFails(t *testing.T) {
 	ev, req := initEventsAndCreateRequest(t)
-	defer ev.Stop()
+	defer ev.StopAndCleanConfigMapCallback()
 	resp := NewResponseRecorderWithDeadline()
 	resp.setReadFails = true
 
@@ -2608,7 +2608,7 @@ func TestGetStream_Limit(t *testing.T) {
 	})
 	resp := NewResponseRecorderWithDeadline()
 	ev, req := initEventsAndCreateRequest(t)
-	defer ev.Stop()
+	defer ev.StopAndCleanConfigMapCallback()
 
 	cancelCtx, cancel := context.WithCancel(context.Background())
 	req = req.Clone(cancelCtx)

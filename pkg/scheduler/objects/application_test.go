@@ -511,7 +511,8 @@ func TestAddAllocAsk(t *testing.T) {
 	clonePlaceholderData := app.GetAllPlaceholderData()
 	assert.Equal(t, len(clonePlaceholderData), 1)
 	assert.Equal(t, len(app.placeholderData), 1)
-	assert.Equal(t, clonePlaceholderData[0], app.placeholderData[tg1])
+	assert.DeepEqual(t, clonePlaceholderData[0], app.placeholderData[tg1])
+	assert.Assert(t, clonePlaceholderData[0] != app.placeholderData[tg1], "placeholder data should be a copy")
 	assertPlaceholderData(t, app, tg1, 1, 1, 0, res)
 
 	ask = newAllocationAskTG(aKey4, appID1, tg1, res)

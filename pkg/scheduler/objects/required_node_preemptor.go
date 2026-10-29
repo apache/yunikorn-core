@@ -162,6 +162,9 @@ func (p *PreemptionContext) pruneVictims(victims []*Allocation) []*Allocation {
 	currentResource.AddTo(p.node.GetAvailableResource())
 	for _, allocation := range victims {
 		if !resources.StrictlyGreaterThanOrEquals(currentResource, p.requiredAsk.GetAllocatedResource()) {
+			if !p.isHelpfulVictim(allocation, currentResource) {
+				continue
+			}
 			currentResource.AddTo(allocation.GetAllocatedResource())
 			prunedVictims = append(prunedVictims, allocation)
 		} else {
@@ -175,6 +178,16 @@ func (p *PreemptionContext) pruneVictims(victims []*Allocation) []*Allocation {
 		return prunedVictims
 	}
 	return nil
+}
+
+func (p *PreemptionContext) isHelpfulVictim(allocation *Allocation, currentResource *resources.Resource) bool {
+	allocResource := allocation.GetAllocatedResource()
+	for resourceType, needVal := range p.requiredAsk.GetAllocatedResource().Resources {
+		if currentResource.Resources[resourceType] < needVal && allocResource.Resources[resourceType] > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // runPredicates Run Predicate checks to confirm whether collected victims from the required node is

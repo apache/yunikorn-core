@@ -35,7 +35,7 @@ func (f filteredCore) Enabled(level zapcore.Level) bool {
 }
 
 func (f filteredCore) With(fields []zapcore.Field) zapcore.Core {
-	return f.inner.With(fields)
+	return filteredCore{level: f.level, inner: f.inner.With(fields)}
 }
 
 func (f filteredCore) Check(entry zapcore.Entry, ce *zapcore.CheckedEntry) *zapcore.CheckedEntry {

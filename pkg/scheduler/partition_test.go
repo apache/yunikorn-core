@@ -4534,13 +4534,17 @@ func TestNewQueueEvents(t *testing.T) {
 		User: "test",
 	})
 	assert.NilError(t, err)
-	noEvents := uint64(0)
+	// skip USERGROUP events, they only reach this store if the UGM was created after events.Init()
+	var records []*si.EventRecord
 	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
-		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 3
+		for _, record := range eventSystem.Store.CollectEvents() {
+			if record.Type != si.EventRecord_USERGROUP {
+				records = append(records, record)
+			}
+		}
+		return len(records) == 3
 	})
-	assert.NilError(t, err, "expected 3 events, got %d", noEvents)
-	records := eventSystem.Store.CollectEvents()
+	assert.NilError(t, err, "expected 3 events, got %d", len(records))
 	assert.Equal(t, si.EventRecord_QUEUE, records[0].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[0].EventChangeDetail)

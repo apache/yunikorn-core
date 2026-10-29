@@ -2507,12 +2507,14 @@ func (sa *Application) addPlaceholderData(ask *Allocation) {
 	sa.placeholderData[taskGroupName].Count++
 }
 
+// GetAllPlaceholderData returns a copy of the placeholder data of all task groups of the application
 func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 	sa.RLock()
 	defer sa.RUnlock()
 	var placeholders []*PlaceholderData
 	for _, taskGroup := range sa.placeholderData {
-		placeholders = append(placeholders, taskGroup)
+		phData := *taskGroup
+		placeholders = append(placeholders, &phData)
 	}
 	return placeholders
 }

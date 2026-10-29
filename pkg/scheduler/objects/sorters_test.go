@@ -371,7 +371,7 @@ func TestSortAppsPriorityFair(t *testing.T) {
 }
 
 // sortApplications builds the list from a map, so the input order of the sort changes per run.
-// Sort a fixed list in both orders to make sure the higher priority is checked on both sides.
+// Sort a fixed list in both orders to make sure the first check of each sorter runs on both sides.
 func TestSortAppsPriorityInputOrder(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
@@ -386,17 +386,19 @@ func TestSortAppsPriorityInputOrder(t *testing.T) {
 	low.submissionTime = baseline.Add(-time.Minute)
 
 	tests := []struct {
-		name   string
-		sorter func([]*Application)
+		name     string
+		sorter   func([]*Application)
+		expected []string
 	}{
-		{"priority and fairness", func(apps []*Application) { sortApplicationsByPriorityAndFairness(apps, nil) }},
-		{"priority and submission time", sortApplicationsByPriorityAndSubmissionTime},
+		{"priority and fairness", func(apps []*Application) { sortApplicationsByPriorityAndFairness(apps, nil) }, []string{"app-high", "app-low"}},
+		{"priority and submission time", sortApplicationsByPriorityAndSubmissionTime, []string{"app-high", "app-low"}},
+		{"submission time and priority", sortApplicationsBySubmissionTimeAndPriority, []string{"app-low", "app-high"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			for _, list := range [][]*Application{{high, low}, {low, high}} {
 				tt.sorter(list)
-				assertAppListLength(t, list, []string{"app-high", "app-low"}, tt.name)
+				assertAppListLength(t, list, tt.expected, tt.name)
 			}
 		})
 	}

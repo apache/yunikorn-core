@@ -370,6 +370,40 @@ func TestSortAppsPriorityFair(t *testing.T) {
 	assertAppList(t, list, []int{2, 0, 3, 1}, "app-1 & app-3 allocated")
 }
 
+// sortApplications builds the list from a map, so the input order of the sort changes per run.
+// Sort a fixed list in both orders to make sure the first check of each sorter runs on both sides.
+func TestSortAppsPriorityInputOrder(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": resources.Quantity(100)})
+	baseline := time.Now()
+	// app-high has the higher priority, but more usage and a later submission time than app-low
+	high := newApplication("app-high", "partition", "queue")
+	high.askMaxPriority = 5
+	high.allocatedResource = resources.Multiply(res, 10)
+	high.submissionTime = baseline
+	low := newApplication("app-low", "partition", "queue")
+	low.allocatedResource = res
+	low.submissionTime = baseline.Add(-time.Minute)
+
+	tests := []struct {
+		name     string
+		sorter   func([]*Application)
+		expected []string
+	}{
+		{"priority and fairness", func(apps []*Application) { sortApplicationsByPriorityAndFairness(apps, nil) }, []string{"app-high", "app-low"}},
+		{"priority and submission time", sortApplicationsByPriorityAndSubmissionTime, []string{"app-high", "app-low"}},
+		{"submission time and priority", sortApplicationsBySubmissionTimeAndPriority, []string{"app-low", "app-high"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, list := range [][]*Application{{high, low}, {low, high}} {
+				tt.sorter(list)
+				assertAppListLength(t, list, tt.expected, tt.name)
+			}
+		})
+	}
+}
+
 func queueNames(list []*Queue) string {
 	result := make([]string, 0)
 	for _, v := range list {

@@ -750,7 +750,7 @@ func TestGoldenDecisionTrace(t *testing.T) { //nolint:funlen
 
 	preRestartTrace := ms.mockRM.getTrace()
 	oldMockRM := ms.mockRM
-	ms.serviceContext.StopAll()
+	ms.Stop()
 
 	err = ms.Init(goldenConfig, false, false)
 	assert.NilError(t, err, "RegisterResourceManager failed on restart")

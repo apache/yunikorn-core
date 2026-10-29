@@ -141,7 +141,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	// --------------------------------------------------
 	// keep the existing mockRM
 	mockRM := ms.mockRM
-	ms.serviceContext.StopAll()
+	ms.Stop()
 
 	part, rootQ, queueA := doRecoverySetup(t, configData, ms, true, false, []string{"node-1:1234", "node-2:1234"}, true, []string{appID1}, nil)
 
@@ -237,7 +237,7 @@ func TestSchedulerRecovery2Allocations(t *testing.T) {
 	// --------------------------------------------------
 	// keep the existing mockRM
 	mockRM := ms.mockRM
-	ms.serviceContext.StopAll()
+	ms.Stop()
 	doRecoverySetup(t, configData, ms, true, false, []string{"node-1:1234"}, true, []string{appID1}, nil)
 	allocs := mockRM.nodeAllocations["node-1:1234"]
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{Allocations: allocs, RmID: "rm:123"})
@@ -422,7 +422,7 @@ partitions:
 	// --------------------------------------------------
 	// Phase 2) Restart the scheduler, test recovery
 	// --------------------------------------------------
-	ms.serviceContext.StopAll()
+	ms.Stop()
 
 	// restart
 	part, rootQ, _ = doRecoverySetup(t, configData, ms, true, false, []string{"node-1:1234", "node-2:1234"}, true, []string{appID1}, map[string]string{"namespace": "app-1-namespace"})

@@ -898,7 +898,7 @@ func TestPartitions(t *testing.T) { //nolint:funlen
 	schedulerContext.Store(&scheduler.ClusterContext{})
 	// The resolver is protected by a once(). Need to stop and clear the resolver before we create a new partition
 	// to ensure the partition will have the expected setup. Clean up after the test to not impact other tests.
-	defer schedulerContext.Load().Stop()
+	defer func() { schedulerContext.Load().Stop() }()
 
 	var req *http.Request
 	req, err := http.NewRequest("GET", "/ws/v1/partitions", strings.NewReader(""))
@@ -1212,6 +1212,7 @@ func TestGetPartitionQueueHandler(t *testing.T) {
 
 func TestGetPartitionQueueHandlerBackoffAndQuotaPreemptionFields(t *testing.T) {
 	setup(t, configQueueBackoffProperties, 1)
+	defer func() { schedulerContext.Load().Stop() }()
 
 	NewWebApp(schedulerContext.Load(), nil)
 
@@ -1229,7 +1230,7 @@ func TestGetPartitionQueueHandlerBackoffAndQuotaPreemptionFields(t *testing.T) {
 func TestGetClusterInfo(t *testing.T) {
 	schedulerContext.Store(&scheduler.ClusterContext{})
 	// clean up started background routines when done
-	defer schedulerContext.Load().Stop()
+	defer func() { schedulerContext.Load().Stop() }()
 	resp := &MockResponseWriter{}
 	req, err := http.NewRequest("GET", "/ws/v1/clusters", strings.NewReader(""))
 	assert.NilError(t, err, "error while creating http request")
@@ -2352,6 +2353,9 @@ func TestGetEvents(t *testing.T) {
 	// prepareSchedulerContext hides creating a new context so make sure we clean up after use
 	defer schedulerContext.Load().Stop()
 	appEvent, nodeEvent, queueEvent := addEvents(t)
+	// addEvents hides starting the event system so make sure we stop it after use
+	ev := events.GetEventSystem()
+	defer ev.Stop()
 
 	checkAllEvents(t, []*si.EventRecord{appEvent, nodeEvent, queueEvent})
 
@@ -2581,7 +2585,8 @@ func TestGetStream_SetWriteDeadlineFails(t *testing.T) {
 }
 
 func TestGetStream_SetReadDeadlineFails(t *testing.T) {
-	_, req := initEventsAndCreateRequest(t)
+	ev, req := initEventsAndCreateRequest(t)
+	defer ev.Stop()
 	resp := NewResponseRecorderWithDeadline()
 	resp.setReadFails = true
 

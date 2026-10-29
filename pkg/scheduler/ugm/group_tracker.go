@@ -27,11 +27,16 @@ import (
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
 )
 
+// +lockclass:GroupTracker
 type GroupTracker struct {
-	groupName    string            // Name of the group for which usage is being tracked upon
+	groupName string // Name of the group for which usage is being tracked upon
+	// +checklocks:RWMutex
 	applications map[string]string // Hold applications currently run by all users belong to this group
-	queueTracker *QueueTracker     // Holds the actual resource usage of queue path where application run
-	events       *ugmEvents
+	// The queue tracker itself is lock free, it relies on the lock of this tracker, so the
+	// lock has to be held to reach any of the usage it holds.
+	// +checklocks:RWMutex
+	queueTracker *QueueTracker // Holds the actual resource usage of queue path where application run
+	events       *ugmEvents    // set on creation and never changed, no lock needed
 
 	locking.RWMutex
 }

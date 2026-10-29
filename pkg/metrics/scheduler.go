@@ -60,14 +60,15 @@ type SchedulerMetrics struct {
 	applicationSubmission *prometheus.CounterVec
 	application           *prometheus.GaugeVec
 	node                  *prometheus.GaugeVec
-	nodeResourceUsage     map[string]*prometheus.GaugeVec
-	schedulingLatency     prometheus.Histogram
-	schedulingCycle       prometheus.Histogram
-	sortingLatency        *prometheus.HistogramVec
-	tryNodeLatency        prometheus.Histogram
-	tryPreemptionLatency  prometheus.Histogram
-	tryNodeEvaluation     prometheus.Histogram
-	lock                  locking.RWMutex
+	// +checklocks:lock
+	nodeResourceUsage    map[string]*prometheus.GaugeVec
+	schedulingLatency    prometheus.Histogram
+	schedulingCycle      prometheus.Histogram
+	sortingLatency       *prometheus.HistogramVec
+	tryNodeLatency       prometheus.Histogram
+	tryPreemptionLatency prometheus.Histogram
+	tryNodeEvaluation    prometheus.Histogram
+	lock                 locking.RWMutex
 }
 
 // InitSchedulerMetrics to initialize scheduler metrics

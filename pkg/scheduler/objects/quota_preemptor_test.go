@@ -807,6 +807,7 @@ func TestQuotaChangeTryPreemption_MultipleApplications(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.StopAndCleanConfigMapCallback()
 
 	testCases := []struct {
 		name                    string

@@ -234,19 +234,30 @@ func (s *Scheduler) triggerQuotaPreemption() {
 	}
 }
 
-// inspect on the outstanding requests for each of the queues,
-// update request state accordingly to shim if needed.
-// this function filters out all outstanding requests that being
-// skipped due to insufficient cluster resources and update the
-// state through the ContainerSchedulingStateUpdaterPlugin in order
-// to trigger the auto-scaling.
+// inspectOutstandingRequests advertises new autoscaling demand and withdraws advertisements
+// that are no longer selected under current scheduling headroom.
+// Callbacks run after collection releases its locks.
 func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
 	log.Log(log.Scheduler).Debug("inspect outstanding requests")
 	// schedule each partition defined in the cluster
 	total := resources.NewResource()
 	noRequests := 0
 	for _, psc := range s.clusterContext.GetPartitionMapClone() {
-		requests := psc.calculateOutstandingRequests()
+		updater := plugins.GetResourceManagerCallbackPlugin()
+		if updater == nil {
+			// Leave advertisement transitions pending until their callbacks can be dispatched.
+			continue
+		}
+		requests, withdrawals := psc.calculateOutstandingRequests()
+		for _, ask := range withdrawals {
+			updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
+				ApplicationID: ask.GetApplicationID(),
+				AllocationKey: ask.GetAllocationKey(),
+				State:         si.UpdateContainerSchedulingStateRequest_SKIPPED,
+				Reason:        "request is no longer selected for autoscaling under current scheduling headroom",
+			})
+			ask.SetScaleUpTriggered(false)
+		}
 		noRequests = len(requests)
 		if noRequests > 0 {
 			for _, ask := range requests {
@@ -255,14 +266,12 @@ func (s *Scheduler) inspectOutstandingRequests() (int, *resources.Resource) {
 					zap.String("allocationKey", ask.GetAllocationKey()))
 				// these asks are queue outstanding requests,
 				// they can fit into the max head room, but they are pending because lack of partition resources
-				if updater := plugins.GetResourceManagerCallbackPlugin(); updater != nil {
-					updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
-						ApplicationID: ask.GetApplicationID(),
-						AllocationKey: ask.GetAllocationKey(),
-						State:         si.UpdateContainerSchedulingStateRequest_FAILED,
-						Reason:        "request is waiting for cluster resources become available",
-					})
-				}
+				updater.UpdateContainerSchedulingState(&si.UpdateContainerSchedulingStateRequest{
+					ApplicationID: ask.GetApplicationID(),
+					AllocationKey: ask.GetAllocationKey(),
+					State:         si.UpdateContainerSchedulingStateRequest_FAILED,
+					Reason:        "request is waiting for cluster resources become available",
+				})
 				total.AddTo(ask.GetAllocatedResource())
 				ask.SetScaleUpTriggered(true)
 			}

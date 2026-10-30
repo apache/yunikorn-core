@@ -874,3 +874,81 @@ func TestQuotaChangeTryPreemption_MultipleApplications(t *testing.T) {
 		})
 	}
 }
+
+func TestQueueGetPreemptableResource_WithPreemptingResource(t *testing.T) {
+	testCases := []struct {
+		name                string
+		guaranteed          *resources.Resource
+		allocated           *resources.Resource
+		preempting          *resources.Resource
+		expectedPreemptable *resources.Resource
+	}{
+		{
+			name:                "guaranteed set, effective usage exceeds guaranteed",
+			guaranteed:          resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1200}),
+			allocated:           resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1600}),
+			preempting:          resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100}),
+			expectedPreemptable: resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -300}), // 1200 - (1600 - 100)
+		},
+		{
+			name:                "guaranteed not set, returns effective used",
+			guaranteed:          nil,
+			allocated:           resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1600}),
+			preempting:          resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100}),
+			expectedPreemptable: resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), // 1600 - 100
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			queue, err := NewConfiguredQueue(configs.QueueConfig{Name: "test-queue"}, nil, false, nil)
+			assert.NilError(t, err)
+			queue.guaranteedResource = tc.guaranteed
+			queue.allocatedResource = tc.allocated
+			queue.preemptingResource = tc.preempting
+
+			result := queue.GetPreemptableResource()
+			assert.Assert(t, resources.Equals(result, tc.expectedPreemptable),
+				"expected %v, got %v", tc.expectedPreemptable, result)
+		})
+	}
+}
+
+func TestGetChildQueuesPreemptableResource_WithPreemptingResource(t *testing.T) {
+	parentConfig := configs.QueueConfig{Name: "parent", Parent: true}
+	parent, err := NewConfiguredQueue(parentConfig, nil, false, nil)
+	assert.NilError(t, err)
+
+	leaf1, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf1"}, parent, false, nil)
+	assert.NilError(t, err)
+	leaf2, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf2"}, parent, false, nil)
+	assert.NilError(t, err)
+
+	// leaf1: allocated = 100, guaranteed = 50, preempting = 50
+	// effective used = 100 - 50 = 50 == guaranteed (50) -> excess = 0
+	leaf1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+	leaf1.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	leaf1.preemptingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+
+	// leaf2: allocated = 100, guaranteed = 50, preempting = 0
+	// effective used = 100 - 0 = 100 > guaranteed (50) -> excess = 50
+	leaf2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+	leaf2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	leaf2.preemptingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+
+	parentPreemptable := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	childQueues := make(map[*Queue]*QuotaPreemptionContext)
+	getChildQueuesPreemptableResource(parent, parentPreemptable, childQueues)
+
+	// leaf1 has 0 excess above guaranteed, so it should not be assigned any preemption quota
+	if _, ok := childQueues[leaf1]; ok {
+		t.Fatalf("leaf1 has no excess usage above guaranteed, should not be selected as preemption victim queue, got: %v",
+			childQueues[leaf1].preemptableResource)
+	}
+
+	// leaf2 has all the excess usage (50), so it should receive all 50 of parent preemptable resource
+	assert.Assert(t, childQueues[leaf2] != nil, "leaf2 must be selected")
+	expectedLeaf2 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+	assert.Assert(t, resources.Equals(childQueues[leaf2].preemptableResource, expectedLeaf2),
+		"expected %v, got %v", expectedLeaf2, childQueues[leaf2].preemptableResource)
+}

@@ -164,11 +164,11 @@ func getChildQueuesPreemptableResource(queue *Queue, parentPreemptableResource *
 	// In case guaranteed not set, entire used resources is treated as preemptable resource.
 	// Total preemptable resource (sum of all children's preemptable resources) would be calculated along the way.
 	for _, child := range children {
-		allocated := child.GetAllocatedResource()
-		if allocated.IsEmpty() {
+		used := resources.SubOnlyExisting(child.GetAllocatedResource(), child.GetPreemptingResource())
+		if used.IsEmpty() {
 			continue
 		}
-		preemptableResource := resources.SubOnlyExisting(allocated, child.GetGuaranteedResource())
+		preemptableResource := resources.SubOnlyExisting(used, child.GetGuaranteedResource())
 		for resourceType, v := range preemptableResource.Resources {
 			if _, ok := parentPreemptableResource.Resources[resourceType]; !ok || v <= 0 {
 				delete(preemptableResource.Resources, resourceType)

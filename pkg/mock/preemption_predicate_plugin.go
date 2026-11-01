@@ -116,11 +116,10 @@ func (m *PreemptionPredicatePlugin) PreemptionPredicates(args *si.PreemptionPred
 		for idx, key := range preemption.expectedAllocationKeys {
 			if args.PreemptAllocationKeys[idx] != key {
 				m.errHolder.err = fmt.Errorf("unexpected preempt alloc key expected=%s, actual=%s, index=%d, allocationKey=%s",
-					args.PreemptAllocationKeys[idx], key, idx, args.AllocationKey)
+					key, args.PreemptAllocationKeys[idx], idx, args.AllocationKey)
 				return result
 			}
 		}
-		m.errHolder = &errHolder{}
 		result.Success = preemption.success
 		result.Index = preemption.index
 		return result

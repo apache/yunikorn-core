@@ -2191,7 +2191,7 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 
 // Track used and preempted resources
 func (sa *Application) trackCompletedResource(info *Allocation) {
-	// a deallocated allocation was never handed to the RM and no longer has a bind time or instance type
+	// deallocate() cleared the bind time: a zero bind time would track ~292 years of usage
 	if !info.IsAllocated() {
 		return
 	}

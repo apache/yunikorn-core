@@ -20,6 +20,7 @@ package placement
 
 import (
 	"regexp"
+	"strings"
 
 	"go.uber.org/zap"
 	"golang.org/x/exp/maps"
@@ -134,8 +135,8 @@ func newFilter(conf configs.Filter) Filter {
 		groupList: map[string]bool{},
 		empty:     true,
 	}
-	// type can only be '' , allow or deny.
-	filter.allow = conf.Type != filterDeny
+	// type can only be '' , allow or deny, case insensitive as in the config validation.
+	filter.allow = !strings.EqualFold(conf.Type, filterDeny)
 
 	var err error
 	// create the user list or regexp

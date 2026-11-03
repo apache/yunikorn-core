@@ -78,6 +78,9 @@ type PartitionContext struct {
 	// while manipulating the application.
 	// Similarly, adding, updating or removing a node or a queue should only hold the partition write lock
 	// while manipulating the partition information not while manipulating the underlying objects.
+	// Adding an application and the queue cleaner are the exception: both hold the partition write lock while
+	// they work on the queue, so the cleaner cannot remove a queue between finding or creating it and adding the
+	// application to it.
 	locking.RWMutex
 }
 

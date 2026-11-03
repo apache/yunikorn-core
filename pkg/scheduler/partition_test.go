@@ -2584,6 +2584,97 @@ func TestTryAllocateReserve(t *testing.T) {
 	}
 }
 
+// tryScheduleCycle runs the steps of ClusterContext.schedule for one partition.
+func tryScheduleCycle(pc *PartitionContext) *objects.AllocationResult {
+	result := pc.tryReservedAllocate()
+	if result == nil {
+		result = pc.tryPlaceholderAllocate()
+		if result == nil {
+			result = pc.tryAllocate()
+		}
+	}
+	return result
+}
+
+// Gangs that can never place a placeholder must not keep other asks out of the cluster forever.
+// Two nodes with 7 of 8 GPUs free, each gang asks for 2 x 8 GPU and never allocates, so its placeholder timer never starts.
+func TestReservationMaxTimeUnplaceableGangs(t *testing.T) {
+	tests := []struct {
+		name  string
+		gangs []string
+	}{
+		{name: "one gang", gangs: []string{"gang-1"}},
+		{name: "more unplaceable asks than nodes", gangs: []string{"gang-1", "gang-2"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			objects.SetReservationDelay(10 * time.Millisecond)
+			defer objects.SetReservationDelay(2 * time.Second)
+			partition, err := newPartitionContext(configs.PartitionConfig{
+				Name: "test",
+				Queues: []configs.QueueConfig{{
+					Name:      "root",
+					Parent:    true,
+					SubmitACL: "*",
+					Queues: []configs.QueueConfig{{
+						Name:       "default",
+						Properties: map[string]string{configs.ReservationMaxTime: "50ms"},
+					}},
+				}},
+			}, rmID, nil, false)
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+
+			gpu := func(num resources.Quantity) *resources.Resource {
+				return resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": num})
+			}
+			assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID1, gpu(8))))
+			assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID2, gpu(8))))
+			assert.NilError(t, partition.AddApplication(newApplication("in-use", "default", "root.default")))
+			for key, node := range map[string]string{"in-use-1": nodeID1, "in-use-2": nodeID2} {
+				_, _, err = partition.UpdateAllocation(newAllocation(key, "in-use", node, gpu(1)))
+				assert.NilError(t, err, "existing allocation should have been added")
+			}
+
+			gangs := make([]*objects.Application, 0, len(tt.gangs))
+			for _, appID := range tt.gangs {
+				gang := newApplicationTG(appID, "default", "root.default", gpu(16))
+				assert.NilError(t, partition.AddApplication(gang))
+				assert.NilError(t, gang.AddAllocationAsk(newAllocationAskTG(appID+"-ph-1", appID, "tg", gpu(8), true)))
+				assert.NilError(t, gang.AddAllocationAsk(newAllocationAskTG(appID+"-ph-2", appID, "tg", gpu(8), true)))
+				gangs = append(gangs, gang)
+			}
+			held := func() int {
+				num := 0
+				for _, gang := range gangs {
+					num += len(gang.GetReservations())
+				}
+				return num
+			}
+
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				tryScheduleCycle(partition)
+				return held() == 2
+			}), "both nodes should have been reserved")
+
+			small := newApplication("small", "default", "root.default")
+			assert.NilError(t, partition.AddApplication(small))
+			assert.NilError(t, small.AddAllocationAsk(newAllocationAsk("small-1", "small", gpu(1))))
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				result := tryScheduleCycle(partition)
+				return result != nil && result.Request.GetAllocationKey() == "small-1"
+			}), "ask that fits should be allocated once a reservation expired")
+
+			// the gangs keep their claim on the nodes and the partition counter must follow the cancellations
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				tryScheduleCycle(partition)
+				return held() == 2 && partition.getReservationCount() == 2
+			}), "nodes should be reserved again and counted once")
+		})
+	}
+}
+
 func TestTryAllocateWithReserved(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)

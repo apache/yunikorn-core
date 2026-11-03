@@ -1659,6 +1659,9 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 	// calculate the users' headroom, includes group check which requires the applicationID
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
+	reservationMaxTime := sa.queue.GetReservationMaxTime()
+	// a reservation that does not fit in the headroom cannot be allocated, so it is given up sooner
+	headRoomWaitTime := reservationMaxTime / 4
 
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
@@ -1680,16 +1683,22 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			return newUnreservedAllocationResult(reserve.nodeID, unreserveAsk)
 		}
 
-		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
-			// Cancel the reservation after wait time expires, but not for required node asks
-			if ask.GetRequiredNode() == "" && time.Since(reserve.createTime) > reservationWaitTimeout {
-				num := sa.unReserveInternal(reserve)
-				sa.queue.UnReserve(sa.ApplicationID, num)
-				log.Log(log.SchedApplication).Info("Cancelled reservation as wait time expired",
-					zap.String("reserve app", reserve.appID),
-					zap.String("reserve alloc key", reserve.allocKey),
-					zap.String("node", reserve.nodeID))
-			}
+		fitsHeadRoom := sa.checkHeadRooms(ask, userHeadroom, headRoom)
+		reservedFor := time.Since(reserve.createTime)
+		// Cancel the reservation after wait time expires, but not for required node asks
+		if ask.GetRequiredNode() == "" && (reservedFor > reservationMaxTime || (!fitsHeadRoom && reservedFor > headRoomWaitTime)) {
+			num := sa.unReserveInternal(reserve)
+			sa.queue.UnReserve(sa.ApplicationID, num)
+			sa.executeReservationReleasedCallback(num)
+			reserve.node.setReservationExpired()
+			log.Log(log.SchedApplication).Info("Cancelled reservation as wait time expired",
+				zap.String("reserve app", sa.ApplicationID),
+				zap.String("reserve alloc key", reserve.allocKey),
+				zap.String("node", reserve.nodeID),
+				zap.Duration("reserved for", reservedFor))
+			continue
+		}
+		if !fitsHeadRoom {
 			continue
 		}
 
@@ -1903,7 +1912,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 
 		// nothing allocated should we look at a reservation?
 		askAge := time.Since(ask.GetCreateTime())
-		if reserved == nil && askAge > reservationDelay {
+		if reserved == nil && askAge > reservationDelay && !node.isInReservationCooldown() {
 			log.Log(log.SchedApplication).Debug("app reservation check",
 				zap.String("allocationKey", allocKey),
 				zap.Time("createTime", ask.GetCreateTime()),

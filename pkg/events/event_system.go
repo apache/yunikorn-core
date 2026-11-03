@@ -119,18 +119,24 @@ func Init() {
 
 // EventSystemImpl main implementation of the event system which is used for history tracking.
 type EventSystemImpl struct {
-	eventSystemId string
+	eventSystemId string      // set on creation and never changed, no lock needed
 	Store         *EventStore // storing eventChannel, exported for test
-	publisher     *eventPublisher
-	eventBuffer   *eventRingBuffer
-	streaming     *EventStreaming
+	// +checklocks:RWMutex
+	publisher   *eventPublisher
+	eventBuffer *eventRingBuffer // set on creation and never changed, no lock needed
+	streaming   *EventStreaming  // set on creation and never changed, no lock needed
 
+	// +checklocks:RWMutex
 	channel chan *si.EventRecord // channelling input eventChannel
-	stop    chan struct{}        // channel to stop the system
-	stopped atomic.Bool          // whether the service is stopped
+	// +checklocks:RWMutex
+	stop    chan struct{} // channel to stop the system
+	stopped atomic.Bool   // whether the service is stopped
 
-	trackingEnabled    bool
-	requestCapacity    uint64
+	// +checklocks:RWMutex
+	trackingEnabled bool
+	// +checklocks:RWMutex
+	requestCapacity uint64
+	// +checklocks:RWMutex
 	ringBufferCapacity uint64
 
 	locking.RWMutex
@@ -228,13 +234,14 @@ func (ec *EventSystemImpl) StartServiceWithPublisher(withPublisher bool) {
 	ec.stop = make(chan struct{})
 	ec.channel = make(chan *si.EventRecord, configs.DefaultEventChannelSize)
 
+	// YUNIKORN-3412: handler reads channel fields that Stop() rewrites under the lock
 	go func() {
 		log.Log(log.Events).Info("Starting event system handler")
 		for {
 			select {
-			case <-ec.stop:
+			case <-ec.stop: // +checklocksignore
 				return
-			case event, ok := <-ec.channel:
+			case event, ok := <-ec.channel: // +checklocksignore
 				if !ok {
 					return
 				}

@@ -33,6 +33,7 @@ type TrackedResource struct {
 	// TrackedResourceMap is a two-level map for aggregated resource usage.
 	// The top-level key is the instance type, and the value is a map:
 	//   resource type (CPU, memory, etc.) -> aggregated used time (in seconds) of the resource type.
+	// +checklocks:RWMutex
 	TrackedResourceMap map[string]*Resource
 
 	locking.RWMutex
@@ -53,6 +54,8 @@ func NewTrackedResourceFromMap(m map[string]map[string]Quantity) *TrackedResourc
 	return &TrackedResource{TrackedResourceMap: trackedMap}
 }
 
+// YUNIKORN-3420: String() takes the receiver lock; formatting under the write lock self-deadlocks
+// +lockstringerignore
 func (tr *TrackedResource) String() string {
 	if tr == nil {
 		return "TrackedResource{}"
@@ -79,7 +82,8 @@ func (tr *TrackedResource) Clone() *TrackedResource {
 	tr.RLock()
 	defer tr.RUnlock()
 	for k, v := range tr.TrackedResourceMap {
-		ret.TrackedResourceMap[k] = v.Clone()
+		// the copy is local and cannot be reached by anything else yet, so no lock is taken on it
+		ret.TrackedResourceMap[k] = v.Clone() // +checklocksignore
 	}
 	return ret
 }

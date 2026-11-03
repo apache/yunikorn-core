@@ -108,15 +108,9 @@ func TestRemoveAll(t *testing.T) {
 	assert.Equal(t, 0, p.nodes.GetNodeCount())
 }
 
-// The cleaner must not remove a dynamic queue between AddApplication finding or creating it and adding the
-// application to it: the application would end up in a queue that is no longer part of the hierarchy.
-func TestCleanQueuesAddApplication(t *testing.T) {
-	setupUGM()
-	p := createPartitionContext(t, configs.PlacementRule{Name: "provided", Create: true})
-	// stop the resolver
-	defer p.userGroupCache.Stop()
-
-	// run the cleaner in a loop until the test finishes
+// runCleanQueues runs the cleaner in a loop until the test finishes.
+func runCleanQueues(t *testing.T, p *PartitionContext) {
+	t.Helper()
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -132,10 +126,20 @@ func TestCleanQueuesAddApplication(t *testing.T) {
 			}
 		}
 	}()
-	defer func() {
+	t.Cleanup(func() {
 		close(stop)
 		wg.Wait()
-	}()
+	})
+}
+
+// The cleaner must not remove a dynamic queue between AddApplication finding or creating it and adding the
+// application to it: the application would end up in a queue that is no longer part of the hierarchy.
+func TestCleanQueuesAddApplication(t *testing.T) {
+	setupUGM()
+	p := createPartitionContext(t, configs.PlacementRule{Name: "provided", Create: true})
+	// stop the resolver
+	defer p.userGroupCache.Stop()
+	runCleanQueues(t, p)
 
 	const queueName = "root.parent.leaf"
 	for i := 0; i < 1000; i++ {
@@ -143,6 +147,31 @@ func TestCleanQueuesAddApplication(t *testing.T) {
 		app := newApplication(appID, p.Name, queueName)
 		assert.NilError(t, p.AddApplication(app), "add application failed")
 		assert.Assert(t, app.GetQueue() == p.GetQueue(queueName), "application %s added to a queue that is not in the hierarchy", appID)
+		// empty the queue again so the cleaner can remove it
+		p.removeApplication(appID)
+	}
+}
+
+// The cleaner must not remove a dynamic queue between a revival finding or creating it and adding the
+// application to it: the application would end up in a queue that is no longer part of the hierarchy.
+func TestCleanQueuesReviveApplication(t *testing.T) {
+	setupUGM()
+	p := createPartitionContext(t, configs.PlacementRule{Name: "provided", Create: true})
+	// stop the resolver
+	defer p.userGroupCache.Stop()
+	runCleanQueues(t, p)
+
+	const queueName = "root.parent.leaf"
+	for i := 0; i < 1000; i++ {
+		appID := fmt.Sprintf("app-%d", i)
+		app := newApplication(appID, p.Name, queueName)
+		assert.NilError(t, p.AddApplication(app), "add application failed")
+		// completing the application empties the queue so the cleaner can remove it
+		app.SetState(objects.Completed.String())
+		p.moveTerminatedApp(appID)
+		assert.Assert(t, p.reviveCompletedApplication(appID) == app, "application %s should be revived", appID)
+		assert.Assert(t, app.GetQueue() == p.GetQueue(queueName), "application %s revived into a queue that is not in the hierarchy", appID)
+		assert.Assert(t, app.GetQueue().GetApplication(appID) == app, "application %s should be in the queue", appID)
 		// empty the queue again so the cleaner can remove it
 		p.removeApplication(appID)
 	}

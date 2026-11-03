@@ -99,7 +99,7 @@ func (manager *partitionManager) Stop() {
 
 // Remove drained managed and empty unmanaged queues. Perform the action recursively.
 // Only called internally and recursive. A removable queue is checked and removed under the partition lock:
-// adding an application holds that lock from finding or creating the queue until the application is added to it.
+// adding or reviving an application holds that lock from finding or creating the queue until the application is added to it.
 func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 	if queue == nil {
 		return

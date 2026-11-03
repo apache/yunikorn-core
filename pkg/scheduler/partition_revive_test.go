@@ -248,6 +248,20 @@ func TestResolveRevivedQueueRecreatesDynamicQueue(t *testing.T) {
 	assert.Assert(t, queue.IsLeafQueue(), "recreated queue must be a leaf")
 }
 
+// The cleaner can remove an empty queue as soon as the partition lock is released: resolveRevivedQueue
+// must have attached the app and added it to the queue before it returns.
+func TestResolveRevivedQueueAddsApplication(t *testing.T) {
+	setupUGM()
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	app := newApplication(appID1, "default", "root.recreated")
+
+	queue := partition.resolveRevivedQueue(app)
+	assert.Assert(t, queue != nil, "a dynamic leaf queue should be recreated")
+	assert.Assert(t, app.GetQueue() == queue, "app must be attached to the queue")
+	assert.Assert(t, queue.GetApplication(appID1) == app, "app must be added to the queue")
+}
+
 // A revived application that ran in the recovery queue must have it recreated through the recovery
 // queue path rather than the regular dynamic queue path.
 func TestResolveRevivedQueueRecreatesRecoveryQueue(t *testing.T) {

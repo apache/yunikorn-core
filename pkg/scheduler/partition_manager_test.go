@@ -83,6 +83,23 @@ func TestCleanQueues(t *testing.T) {
 	assert.Equal(t, 0, len(p.root.GetCopyOfChildren()))
 }
 
+// Removing the partition marks root for removal: the cleaner must remove the children but never root itself.
+func TestCleanQueuesRemovedPartition(t *testing.T) {
+	p := createPartitionContext(t)
+	// stop the resolver
+	defer p.userGroupCache.Stop()
+
+	_, err := p.createQueue("root.test", security.UserGroup{})
+	assert.NilError(t, err)
+
+	p.partitionManager.remove()
+	assert.Assert(t, p.root.IsDraining())
+
+	// must not panic on the root queue that has no parent
+	p.partitionManager.cleanQueues(p.root)
+	assert.Equal(t, 0, len(p.root.GetCopyOfChildren()))
+}
+
 func TestRemoveAll(t *testing.T) {
 	p := createPartitionContext(t)
 	// stop the resolver

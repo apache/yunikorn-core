@@ -111,7 +111,8 @@ func (manager *partitionManager) cleanQueues(queue *objects.Queue) {
 		}
 	}
 	// when we have done the children (or have none) this queue might be removable
-	if queue.IsDraining() || !queue.IsManaged() {
+	// root is never removed: it has no parent and is marked for removal when the partition is removed
+	if queue != manager.pc.root && (queue.IsDraining() || !queue.IsManaged()) {
 		log.Log(log.SchedPartition).Debug("removing queue",
 			zap.String("queueName", queue.QueuePath),
 			zap.String("partitionName", manager.pc.Name))

@@ -2596,15 +2596,18 @@ func tryScheduleCycle(pc *PartitionContext) *objects.AllocationResult {
 	return result
 }
 
-// Gangs that can never place a placeholder must not keep other asks out of the cluster forever.
-// Two nodes with 7 of 8 GPUs free, each gang asks for 2 x 8 GPU and never allocates, so its placeholder timer never starts.
-func TestReservationMaxTimeUnplaceableGangs(t *testing.T) {
+// Asks that can never be placed must not keep other asks out of the cluster forever.
+// Two nodes with 7 of 8 GPUs free, and asks for 8 GPUs that can reserve a node but never allocate.
+func TestReservationMaxTimeUnplaceableAsks(t *testing.T) {
 	tests := []struct {
-		name  string
-		gangs []string
+		name        string
+		appIDs      []string
+		placeholder bool
 	}{
-		{name: "one gang", gangs: []string{"gang-1"}},
-		{name: "more unplaceable asks than nodes", gangs: []string{"gang-1", "gang-2"}},
+		{name: "one gang", appIDs: []string{"app-a"}, placeholder: true},
+		{name: "more placeholders than nodes", appIDs: []string{"app-a", "app-b"}, placeholder: true},
+		{name: "non placeholder asks", appIDs: []string{"app-a"}},
+		{name: "more non placeholder asks than nodes", appIDs: []string{"app-a", "app-b"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2637,18 +2640,26 @@ func TestReservationMaxTimeUnplaceableGangs(t *testing.T) {
 				assert.NilError(t, err, "existing allocation should have been added")
 			}
 
-			gangs := make([]*objects.Application, 0, len(tt.gangs))
-			for _, appID := range tt.gangs {
-				gang := newApplicationTG(appID, "default", "root.default", gpu(16))
-				assert.NilError(t, partition.AddApplication(gang))
-				assert.NilError(t, gang.AddAllocationAsk(newAllocationAskTG(appID+"-ph-1", appID, "tg", gpu(8), true)))
-				assert.NilError(t, gang.AddAllocationAsk(newAllocationAskTG(appID+"-ph-2", appID, "tg", gpu(8), true)))
-				gangs = append(gangs, gang)
+			apps := make([]*objects.Application, 0, len(tt.appIDs))
+			for _, appID := range tt.appIDs {
+				app := newApplication(appID, "default", "root.default")
+				if tt.placeholder {
+					app = newApplicationTG(appID, "default", "root.default", gpu(16))
+				}
+				assert.NilError(t, partition.AddApplication(app))
+				for _, key := range []string{appID + "-1", appID + "-2"} {
+					ask := newAllocationAsk(key, appID, gpu(8))
+					if tt.placeholder {
+						ask = newAllocationAskTG(key, appID, "tg", gpu(8), true)
+					}
+					assert.NilError(t, app.AddAllocationAsk(ask))
+				}
+				apps = append(apps, app)
 			}
 			held := func() int {
 				num := 0
-				for _, gang := range gangs {
-					num += len(gang.GetReservations())
+				for _, app := range apps {
+					num += len(app.GetReservations())
 				}
 				return num
 			}
@@ -2666,7 +2677,7 @@ func TestReservationMaxTimeUnplaceableGangs(t *testing.T) {
 				return result != nil && result.Request.GetAllocationKey() == "small-1"
 			}), "ask that fits should be allocated once a reservation expired")
 
-			// the gangs keep their claim on the nodes and the partition counter must follow the cancellations
+			// the asks keep their claim on the nodes and the partition counter must follow the cancellations
 			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
 				tryScheduleCycle(partition)
 				return held() == 2 && partition.getReservationCount() == 2

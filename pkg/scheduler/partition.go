@@ -539,8 +539,8 @@ func (pc *PartitionContext) reviveCompletedApplication(appID string) *objects.Ap
 }
 
 // takeCompletedApplication selects the latest non-expired generation of appID and restores it to the
-// active list only if it is Completed. An ineligible generation is left alone without falling back
-// to an older Completed generation.
+// active list unless its state rejects new work. An ineligible generation is left alone without
+// falling back to an older Completed generation.
 func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Application {
 	pc.Lock()
 	defer pc.Unlock()
@@ -565,7 +565,7 @@ func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Appl
 		return nil
 	}
 	app := pc.completedApplications[latestKey]
-	if !app.IsCompleted() {
+	if app.IsFailing() || app.IsFailed() || app.IsRejected() || app.IsExpired() {
 		return nil
 	}
 	delete(pc.completedApplications, latestKey)

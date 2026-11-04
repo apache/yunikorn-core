@@ -2035,8 +2035,9 @@ func (sq *Queue) String() string {
 }
 
 // incRunningApps increments the number of running applications for this queue (recursively).
-// Guarded against going over the max set. Combined with the decRunningApps guard against below zero
-// this guard should allow self-heal.
+// The count is not capped at the max: an app can start running without passing canRunApp, for example when
+// its allocations are recovered after a restart. Capping would drop that app from the count and let the queue
+// run more than the max from then on.
 func (sq *Queue) incRunningApps(appID string) {
 	if sq == nil {
 		return
@@ -2048,17 +2049,10 @@ func (sq *Queue) incRunningApps(appID string) {
 	defer sq.Unlock()
 	delete(sq.allocatingAcceptedApps, appID)
 	sq.runningApps++
-	// sanity check
-	if sq.maxRunningApps > 0 && sq.runningApps > sq.maxRunningApps {
-		log.Log(log.SchedQueue).Debug("queue running apps went over maximum",
-			zap.String("queueName", sq.QueuePath))
-		sq.runningApps = sq.maxRunningApps
-	}
 }
 
 // decRunningApps decrements the number of running applications for this queue (recursively).
-// Guarded against going negative. Combined with the incRunningApps guard against below zero
-// this guard should allow self-heal.
+// Guarded against going negative.
 func (sq *Queue) decRunningApps() {
 	if sq == nil {
 		return

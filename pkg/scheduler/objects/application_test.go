@@ -316,6 +316,7 @@ func TestAppAllocReservation(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.Stop()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	if app == nil || app.ApplicationID != appID1 {
@@ -3007,6 +3008,7 @@ func TestAskEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.Stop()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
@@ -3073,6 +3075,7 @@ func TestAllocationEvents(t *testing.T) { //nolint:funlen
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.Stop()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)
@@ -3197,6 +3200,7 @@ func TestPlaceholderLargerEvent(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.Stop()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	queue, err := createRootQueue(nil)

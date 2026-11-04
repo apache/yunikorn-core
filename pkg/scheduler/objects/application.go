@@ -1652,6 +1652,17 @@ func (sa *Application) checkHeadRooms(ask *Allocation, userHeadroom *resources.R
 	return userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) && headRoom.FitInMaxUndef(ask.GetAllocatedResource())
 }
 
+// isReservationExpired returns true if a reservation has been held for longer than the queue allows.
+func (sa *Application) isReservationExpired(ask *Allocation, reservedFor time.Duration, fitsHeadRoom bool) bool {
+	maxTime := sa.queue.GetReservationMaxTime()
+	if reservedFor > maxTime {
+		return true
+	}
+	// A reservation outside the headroom cannot be allocated, so it is given up sooner. An ask that triggered
+	// preemption is the exception: its headroom only recovers when the victims exit, and it cannot preempt again.
+	return !fitsHeadRoom && !ask.HasTriggeredPreemption() && reservedFor > maxTime/4
+}
+
 // tryReservedAllocate tries allocating an outstanding reservation
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *AllocationResult {
 	sa.Lock()
@@ -1659,9 +1670,6 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 
 	// calculate the users' headroom, includes group check which requires the applicationID
 	userHeadroom := ugm.GetUserManager().Headroom(sa.queuePath, sa.ApplicationID, sa.user)
-	reservationMaxTime := sa.queue.GetReservationMaxTime()
-	// a reservation that does not fit in the headroom cannot be allocated, so it is given up sooner
-	headRoomWaitTime := reservationMaxTime / 4
 
 	// process all outstanding reservations and pick the first one that fits
 	for _, reserve := range sa.reservations {
@@ -1686,7 +1694,7 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 		fitsHeadRoom := sa.checkHeadRooms(ask, userHeadroom, headRoom)
 		reservedFor := time.Since(reserve.createTime)
 		// Cancel the reservation after wait time expires, but not for required node asks
-		if ask.GetRequiredNode() == "" && (reservedFor > reservationMaxTime || (!fitsHeadRoom && reservedFor > headRoomWaitTime)) {
+		if ask.GetRequiredNode() == "" && sa.isReservationExpired(ask, reservedFor, fitsHeadRoom) {
 			num := sa.unReserveInternal(reserve)
 			sa.queue.UnReserve(sa.ApplicationID, num)
 			sa.executeReservationReleasedCallback(num)

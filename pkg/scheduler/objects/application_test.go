@@ -3685,9 +3685,11 @@ func newReservationTestSetup(t *testing.T, requiredNode string) (*Application, *
 	node := newNodeRes(nodeID1, full)
 	node.AddAllocation(newAllocationWithKey("in-use", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})))
 	ask := newAllocationAsk(aKey, appID1, full)
-	ask.SetRequiredNode(requiredNode)
-	// keeps a required node ask out of the preemptor, not relevant for these tests
-	ask.MarkTriggeredPreemption()
+	if requiredNode != "" {
+		ask.SetRequiredNode(requiredNode)
+		// keeps a required node ask out of the preemptor, not relevant for these tests
+		ask.MarkTriggeredPreemption()
+	}
 	assert.NilError(t, app.AddAllocationAsk(ask), "ask should have been added to app")
 	assert.NilError(t, app.Reserve(node, ask), "reservation should not have failed")
 	queue.Reserve(appID1)
@@ -3696,23 +3698,29 @@ func newReservationTestSetup(t *testing.T, requiredNode string) (*Application, *
 
 func TestTryReservedAllocateMaxTime(t *testing.T) {
 	tests := []struct {
-		name         string
-		requiredNode string
-		maxTime      time.Duration
-		reservedFor  time.Duration
-		noHeadRoom   bool
-		cancelled    bool
+		name                string
+		requiredNode        string
+		maxTime             time.Duration
+		reservedFor         time.Duration
+		noHeadRoom          bool
+		triggeredPreemption bool
+		cancelled           bool
 	}{
 		{name: "younger than the max time", maxTime: time.Hour, reservedFor: 59 * time.Minute},
 		{name: "older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, cancelled: true},
 		{name: "older than a shorter max time", maxTime: time.Minute, reservedFor: 2 * time.Minute, cancelled: true},
 		{name: "no headroom younger than a quarter of the max time", maxTime: time.Hour, reservedFor: 14 * time.Minute, noHeadRoom: true},
 		{name: "no headroom older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, noHeadRoom: true, cancelled: true},
+		{name: "no headroom waiting for victims older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, noHeadRoom: true, triggeredPreemption: true},
+		{name: "no headroom waiting for victims older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, noHeadRoom: true, triggeredPreemption: true, cancelled: true},
 		{name: "required node", requiredNode: nodeID1, maxTime: time.Hour, reservedFor: 2 * time.Hour},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			app, ask, node := newReservationTestSetup(t, tt.requiredNode)
+			if tt.triggeredPreemption {
+				ask.MarkTriggeredPreemption()
+			}
 			app.queue.reservationMaxTime = tt.maxTime
 			released := make(chan int, 1)
 			app.SetReservationReleasedCallback(func(num int) { released <- num })
@@ -3742,6 +3750,16 @@ func TestTryReservedAllocateMaxTime(t *testing.T) {
 			}
 		})
 	}
+}
+
+// The queue can pass on an application with its last reservation gone and its queue detached since the lookup.
+func TestTryReservedAllocateDetachedQueue(t *testing.T) {
+	app, ask, node := newReservationTestSetup(t, "")
+	assert.Equal(t, app.UnReserve(node, ask), 1, "reservation should have been removed")
+	app.UnSetQueue()
+
+	result := app.tryReservedAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), getNodeIteratorFn(node))
+	assert.Assert(t, result == nil, "nothing to allocate without a reservation")
 }
 
 func TestTryNodesReservationCooldown(t *testing.T) {

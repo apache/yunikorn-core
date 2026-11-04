@@ -50,6 +50,9 @@ const (
 	PriorityOffset                           = "priority.offset"
 	PreemptionPolicy                         = "preemption.policy"
 	PreemptionDelay                          = "preemption.delay"
+	PreemptionVictimPolicy                   = "preemption.victim.policy"
+	PreemptionVictimDefault                  = "default"
+	PreemptionVictimQueuePriority            = "queue-priority"
 	QuotaPreemptionDelay                     = "quota.preemption.delay"
 
 	// app sort priority values
@@ -633,6 +636,10 @@ func checkNodeSortingPolicy(partition *PartitionConfig) error {
 // - queue name is alphanumeric (case ignore) with - and _
 // - queue name is maximum 64 char long
 func checkQueues(queue *QueueConfig, level int) error {
+	if value, present := queue.Properties[PreemptionVictimPolicy]; present && value != PreemptionVictimDefault && value != PreemptionVictimQueuePriority {
+		return fmt.Errorf("invalid %s value %q for queue %s", PreemptionVictimPolicy, value, queue.Name)
+	}
+
 	// check the ACLs (if defined)
 	err := checkACL(queue.AdminACL)
 	if err != nil {

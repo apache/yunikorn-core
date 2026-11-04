@@ -70,17 +70,18 @@ type PartitionContext struct {
 	appQueueMapping        *objects.AppQueueMapping        // appID mapping to queues
 
 	// The partition write lock must not be held while manipulating an application.
-	// Scheduling is running continuously as a lock free background task. Scheduling an application
-	// acquires a write lock of the application object. While holding the write lock a list of nodes is
-	// requested from the partition. This requires a read lock on the partition.
-	// If the partition write lock is held while manipulating an application a deadlock could occur.
 	// Since application objects handle their own locks there is no requirement to hold the partition lock
-	// while manipulating the application.
+	// while manipulating the application, and holding it blocks all partition access while waiting for the
+	// application lock.
+	// Code holding an application or queue lock must never wait for the partition lock: scheduling an
+	// application holds its write lock, but node lookups use the locks of the node collection and the
+	// callbacks to the partition run on their own goroutine.
 	// Similarly, adding, updating or removing a node or a queue should only hold the partition write lock
 	// while manipulating the partition information not while manipulating the underlying objects.
-	// Adding an application and the queue cleaner are the exception: both hold the partition write lock while
-	// they work on the queue, so the cleaner cannot remove a queue between finding or creating it and adding the
-	// application to it.
+	// Adding or reviving an application and the queue cleaner are the exception. Adding or reviving holds the
+	// partition write lock while it updates the application and its queue, and the cleaner holds it while it
+	// checks and removes a queue, so the cleaner cannot remove a queue between finding or creating it and adding
+	// the application to it.
 	locking.RWMutex
 }
 
@@ -567,12 +568,9 @@ func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Appl
 // the queue when it was cleaned up in the meantime. Returns false when no queue can be resolved.
 // NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) restoreAppQueue(app *objects.Application) bool {
-	queue := pc.resolveRevivedQueue(app)
-	if queue == nil {
+	if pc.resolveRevivedQueue(app) == nil {
 		return false
 	}
-	app.RestoreQueue(queue)
-	queue.AddApplication(app)
 	// A moveTerminatedApp running concurrently can file this app as completed while we revive it; put
 	// it back on the active list and drop that completed generation so the maps stay consistent.
 	pc.ensureAppActive(app)
@@ -595,8 +593,10 @@ func (pc *PartitionContext) ensureAppActive(app *objects.Application) {
 	}
 }
 
-// resolveRevivedQueue resolves (recreating when needed) the leaf queue for a reviving application and
-// records the app-to-queue mapping. Returns nil when no leaf queue can be resolved.
+// resolveRevivedQueue resolves (recreating when needed) the leaf queue for a reviving application, records
+// the app-to-queue mapping, re-attaches the queue to the application and adds the application to the queue.
+// All of this happens under the lock: the queue can be empty, so the cleaner could otherwise remove it before
+// the application is added. Returns nil when no leaf queue can be resolved.
 // NOTE: this call takes the PartitionContext lock. It must NOT be called holding the lock.
 func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) *objects.Queue {
 	pc.Lock()
@@ -627,6 +627,8 @@ func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) *objec
 		return nil
 	}
 	pc.appQueueMapping.AddAppQueueMapping(app.ApplicationID, queue)
+	app.RestoreQueue(queue)
+	queue.AddApplication(app)
 	return queue
 }
 

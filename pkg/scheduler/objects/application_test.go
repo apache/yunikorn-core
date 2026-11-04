@@ -3702,17 +3702,20 @@ func TestTryReservedAllocateMaxTime(t *testing.T) {
 		requiredNode        string
 		maxTime             time.Duration
 		reservedFor         time.Duration
-		noHeadRoom          bool
+		limit               string
 		triggeredPreemption bool
 		cancelled           bool
 	}{
 		{name: "younger than the max time", maxTime: time.Hour, reservedFor: 59 * time.Minute},
 		{name: "older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, cancelled: true},
 		{name: "older than a shorter max time", maxTime: time.Minute, reservedFor: 2 * time.Minute, cancelled: true},
-		{name: "no headroom younger than a quarter of the max time", maxTime: time.Hour, reservedFor: 14 * time.Minute, noHeadRoom: true},
-		{name: "no headroom older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, noHeadRoom: true, cancelled: true},
-		{name: "no headroom waiting for victims older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, noHeadRoom: true, triggeredPreemption: true},
-		{name: "no headroom waiting for victims older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, noHeadRoom: true, triggeredPreemption: true, cancelled: true},
+		{name: "over a queue limit younger than a quarter of the max time", maxTime: time.Hour, reservedFor: 14 * time.Minute, limit: "queue"},
+		{name: "over a queue limit older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "queue", cancelled: true},
+		{name: "over a user limit older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "user", cancelled: true},
+		{name: "full cluster older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "cluster"},
+		{name: "full cluster older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, limit: "cluster", cancelled: true},
+		{name: "over a queue limit waiting for victims older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "queue", triggeredPreemption: true},
+		{name: "over a queue limit waiting for victims older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, limit: "queue", triggeredPreemption: true, cancelled: true},
 		{name: "required node", requiredNode: nodeID1, maxTime: time.Hour, reservedFor: 2 * time.Hour},
 	}
 	for _, tt := range tests {
@@ -3721,13 +3724,29 @@ func TestTryReservedAllocateMaxTime(t *testing.T) {
 			if tt.triggeredPreemption {
 				ask.MarkTriggeredPreemption()
 			}
+			switch tt.limit {
+			case "queue":
+				limited, err := createManagedQueue(app.queue, "limited", false, map[string]string{"first": "1"})
+				assert.NilError(t, err, "queue create failed")
+				limited.Reserve(appID1)
+				app.queue = limited
+			case "user":
+				err := ugm.GetUserManager().UpdateConfig(configs.QueueConfig{
+					Name:   "root",
+					Parent: true,
+					Limits: []configs.Limit{{Limit: "user limit", Users: []string{"testuser"}, MaxResources: map[string]string{"first": "1"}}},
+				}, "root")
+				assert.NilError(t, err, "user limit update failed")
+				defer ugm.GetUserManager().ClearConfigLimits()
+				defer setupUGM()
+			}
 			app.queue.reservationMaxTime = tt.maxTime
 			released := make(chan int, 1)
 			app.SetReservationReleasedCallback(func(num int) { released <- num })
 			app.reservations[ask.allocationKey].createTime = time.Now().Add(-tt.reservedFor)
 
 			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
-			if tt.noHeadRoom {
+			if tt.limit != "" {
 				headRoom = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 			}
 			result := app.tryReservedAllocate(headRoom, getNodeIteratorFn(node))

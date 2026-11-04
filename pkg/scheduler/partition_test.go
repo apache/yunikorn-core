@@ -2686,6 +2686,72 @@ func TestReservationMaxTimeUnplaceableAsks(t *testing.T) {
 	}
 }
 
+// With no queue limit set the only limit is the cluster size. A full cluster recovers when the reserved node drains,
+// so the shorter wait for a reservation over a limit must not apply.
+func TestReservationMaxTimeFullCluster(t *testing.T) {
+	setupUGM()
+	objects.SetReservationDelay(10 * time.Millisecond)
+	defer objects.SetReservationDelay(2 * time.Second)
+	partition, err := newPartitionContext(configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{{
+			Name:      "root",
+			Parent:    true,
+			SubmitACL: "*",
+			Queues: []configs.QueueConfig{{
+				Name:       "default",
+				Properties: map[string]string{configs.ReservationMaxTime: "4s"},
+			}},
+		}},
+	}, rmID, nil, false)
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	gpu := func(num resources.Quantity) *resources.Resource {
+		return resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": num})
+	}
+	assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID1, gpu(10))))
+	assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID2, gpu(10))))
+	assert.NilError(t, partition.AddApplication(newApplication("in-use", "default", "root.default")))
+	for key, used := range map[string]resources.Quantity{nodeID1: 6, nodeID2: 7} {
+		_, _, err = partition.UpdateAllocation(newAllocation("in-use-"+key, "in-use", key, gpu(used)))
+		assert.NilError(t, err, "existing allocation should have been added")
+	}
+
+	big := newApplication("big", "default", "root.default")
+	assert.NilError(t, partition.AddApplication(big))
+	ask := newAllocationAsk("big-1", "big", gpu(5))
+	assert.NilError(t, big.AddAllocationAsk(ask))
+	assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+		tryScheduleCycle(partition)
+		return big.NodeReservedForAsk("big-1") != ""
+	}), "ask should have reserved a node")
+	reserved := big.NodeReservedForAsk("big-1")
+
+	// higher priority asks fill the other node, which leaves less free in the cluster than the reservation needs
+	others := newApplication("others", "default", "root.default")
+	assert.NilError(t, partition.AddApplication(others))
+	for i := range 20 {
+		assert.NilError(t, others.AddAllocationAsk(newAllocationAskAll("other-"+strconv.Itoa(i), "others", "", gpu(1), 10, false, nil)))
+	}
+	for start := time.Now(); time.Since(start) < 1200*time.Millisecond; time.Sleep(time.Millisecond) {
+		tryScheduleCycle(partition)
+	}
+	assert.Equal(t, big.NodeReservedForAsk("big-1"), reserved, "reservation should still be held past a quarter of the max time")
+
+	partition.removeAllocation(&si.AllocationRelease{
+		PartitionName:   "default",
+		ApplicationID:   "in-use",
+		AllocationKey:   "in-use-" + reserved,
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	})
+	assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+		tryScheduleCycle(partition)
+		return ask.IsAllocated()
+	}), "ask should have been allocated once the reserved node drained")
+	assert.Equal(t, ask.GetNodeID(), reserved, "ask should be allocated on the reserved node")
+}
+
 func TestTryAllocateWithReserved(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)

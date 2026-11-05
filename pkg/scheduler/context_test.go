@@ -35,6 +35,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
@@ -45,6 +46,8 @@ type mockEventHandler struct {
 	eventHandled    bool
 	rejectedNodes   []*si.RejectedNode
 	acceptedNodes   []*si.AcceptedNode
+	rejectedApps    []*si.RejectedApplication
+	rejectedAllocs  []*si.RejectedAllocation
 	newAllocHandler func(*rmevent.RMNewAllocationsEvent)
 	releaseHandler  func(event *rmevent.RMReleaseAllocationEvent)
 }
@@ -57,9 +60,11 @@ func TestMain(m *testing.M) {
 
 func newMockEventHandler() *mockEventHandler {
 	return &mockEventHandler{
-		eventHandled:  false,
-		rejectedNodes: make([]*si.RejectedNode, 0),
-		acceptedNodes: make([]*si.AcceptedNode, 0),
+		eventHandled:   false,
+		rejectedNodes:  make([]*si.RejectedNode, 0),
+		acceptedNodes:  make([]*si.AcceptedNode, 0),
+		rejectedApps:   make([]*si.RejectedApplication, 0),
+		rejectedAllocs: make([]*si.RejectedAllocation, 0),
 	}
 }
 
@@ -70,8 +75,16 @@ func (m *mockEventHandler) HandleEvent(ev interface{}) {
 		m.acceptedNodes = append(m.acceptedNodes, nodeEvent.AcceptedNodes...)
 	}
 
-	if allocEvent, ok := ev.(*rmevent.RMNewAllocationsEvent); ok && m.newAllocHandler != nil {
-		m.newAllocHandler(allocEvent)
+	if appEvent, ok := ev.(*rmevent.RMApplicationUpdateEvent); ok {
+		m.rejectedApps = append(m.rejectedApps, appEvent.RejectedApplications...)
+	}
+
+	if rejectedAllocEvent, ok := ev.(*rmevent.RMRejectedAllocationEvent); ok {
+		m.rejectedAllocs = append(m.rejectedAllocs, rejectedAllocEvent.RejectedAllocations...)
+	}
+
+	if newAllocEvent, ok := ev.(*rmevent.RMNewAllocationsEvent); ok && m.newAllocHandler != nil {
+		m.newAllocHandler(newAllocEvent)
 	}
 
 	if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok && m.releaseHandler != nil {
@@ -410,6 +423,129 @@ func TestContext_OnAllocationNotification(t *testing.T) {
 
 	context.handleRMUpdateAllocationEvent(&rmevent.RMUpdateAllocationEvent{Request: nonYkAllocReq})
 	assert.Assert(t, lastAllocEvent == nil, "unexpected allocation event")
+}
+
+func TestContext_AddApplicationPartitionNotFound(t *testing.T) {
+	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
+
+	eventHandler := context.rmEventHandler.(*mockEventHandler) //nolint:errcheck
+
+	appReq := &si.ApplicationRequest{
+		New: []*si.AddApplicationRequest{
+			{
+				QueueName:     defQueue,
+				PartitionName: "unknown",
+				Ugi: &si.UserGroupInformation{
+					User:   "testuser",
+					Groups: []string{"testgroup"},
+				},
+				ApplicationID: appID1,
+			},
+		},
+		RmID: "rm:123",
+	}
+	context.handleRMUpdateApplicationEvent(&rmevent.RMUpdateApplicationEvent{Request: appReq})
+	assert.Equal(t, 1, len(eventHandler.rejectedApps), "expected rejected application not found")
+	assert.Equal(t, appID1, eventHandler.rejectedApps[0].ApplicationID, "unexpected ApplicationID")
+}
+
+func TestContext_AddApplicationInvalidUsername(t *testing.T) {
+	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
+
+	eventHandler := context.rmEventHandler.(*mockEventHandler) //nolint:errcheck
+
+	appReq := &si.ApplicationRequest{
+		New: []*si.AddApplicationRequest{
+			{
+				QueueName:     defQueue,
+				PartitionName: pName,
+				Ugi: &si.UserGroupInformation{
+					User:   "123user",
+					Groups: []string{"testgroup"},
+				},
+				ApplicationID: appID1,
+			},
+		},
+		RmID: "rm:123",
+	}
+	context.handleRMUpdateApplicationEvent(&rmevent.RMUpdateApplicationEvent{Request: appReq})
+	assert.Equal(t, 1, len(eventHandler.rejectedApps), "expected rejected application not found")
+	assert.Equal(t, appID1, eventHandler.rejectedApps[0].ApplicationID, "unexpected ApplicationID")
+
+	// the rejected application must also be tracked by the partition
+	partition := context.GetPartition(pName)
+	assert.Assert(t, partition != nil, "partition not found")
+	rejectedApp := partition.getRejectedApplication(appID1)
+	assert.Assert(t, rejectedApp != nil, "rejected application not tracked in partition")
+	assert.Equal(t, objects.Rejected.String(), rejectedApp.CurrentState(), "unexpected application state")
+}
+
+func TestContext_AddAllocationPartitionNotFound(t *testing.T) {
+	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
+
+	eventHandler := context.rmEventHandler.(*mockEventHandler) //nolint:errcheck
+
+	allocReq := &si.AllocationRequest{
+		Allocations: []*si.Allocation{
+			{
+				AllocationKey: allocKey,
+				ResourcePerAlloc: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"first": {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+				NodeID:        "test-1",
+				PartitionName: "unknown",
+			},
+		},
+		RmID: "rm:123",
+	}
+	context.handleRMUpdateAllocationEvent(&rmevent.RMUpdateAllocationEvent{Request: allocReq})
+	assert.Equal(t, 1, len(eventHandler.rejectedAllocs), "expected rejected allocation not found")
+	assert.Equal(t, allocKey, eventHandler.rejectedAllocs[0].AllocationKey, "unexpected AllocationKey")
+	assert.Equal(t, appID1, eventHandler.rejectedAllocs[0].ApplicationID, "unexpected ApplicationID")
+}
+
+func TestContext_AddAllocationUnknownApplication(t *testing.T) {
+	context := createTestContext(t, pName)
+	// stop the context background processes
+	defer context.Stop()
+
+	eventHandler := context.rmEventHandler.(*mockEventHandler) //nolint:errcheck
+
+	// add the node so the unknown application is the only reason for the rejection
+	err := context.addNode(getNodeInfoForAddingNode(), true)
+	assert.NilError(t, err, "unexpected error returned from addNode")
+
+	// no application is registered, the partition must reject the allocation
+	allocReq := &si.AllocationRequest{
+		Allocations: []*si.Allocation{
+			{
+				AllocationKey: allocKey,
+				ResourcePerAlloc: &si.Resource{
+					Resources: map[string]*si.Quantity{
+						"first": {Value: 1},
+					},
+				},
+				ApplicationID: appID1,
+				NodeID:        "test-1",
+				PartitionName: pName,
+			},
+		},
+		RmID: "rm:123",
+	}
+	context.handleRMUpdateAllocationEvent(&rmevent.RMUpdateAllocationEvent{Request: allocReq})
+	assert.Equal(t, 1, len(eventHandler.rejectedAllocs), "expected rejected allocation not found")
+	assert.Equal(t, allocKey, eventHandler.rejectedAllocs[0].AllocationKey, "unexpected AllocationKey")
+	assert.Equal(t, appID1, eventHandler.rejectedAllocs[0].ApplicationID, "unexpected ApplicationID")
+	assert.Assert(t, eventHandler.rejectedAllocs[0].Reason != "", "rejection reason should not be empty")
 }
 
 func getNodeInfoForAddingNode() *si.NodeInfo {

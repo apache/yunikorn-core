@@ -4574,6 +4574,56 @@ func TestTryAllocateMaxRunningRemoveAccepted(t *testing.T) {
 	assert.Equal(t, result.Request.GetAllocationKey(), allocKey, "expected ask alloc-1 to be allocated")
 }
 
+// After a restart the shim can send an ask that gets scheduled before the allocations of an app that was
+// already running are recovered. The recovered app does not pass canRunApp but must still count against the
+// max of every queue above it.
+func TestUpdateAllocationRecoveredMaxRunning(t *testing.T) {
+	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+	parent := partition.getQueueInternal("root.parent")
+	parent.SetMaxRunningApps(1)
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// app-1 was waiting before the restart: its ask is scheduled first
+	app1 := newApplication(appID1, "default", "root.parent.sub-leaf")
+	assert.NilError(t, partition.AddApplication(app1), "failed to add app-1 to partition")
+	assert.NilError(t, app1.AddAllocationAsk(newAllocationAsk(allocKey, appID1, res)), "failed to add ask to app-1")
+	result := partition.tryAllocate()
+	assert.Assert(t, result != nil && result.Request != nil, "app-1 should have been allocated")
+	assert.Equal(t, app1.CurrentState(), objects.Running.String(), "app-1 should be running")
+
+	// app-2 was running before the restart: its allocation is recovered while the parent is at its max
+	app2 := newApplication(appID2, "default", "root.parent.sub-leaf")
+	assert.NilError(t, partition.AddApplication(app2), "failed to add app-2 to partition")
+	_, allocCreated, err := partition.UpdateAllocation(newAllocation(allocKey, appID2, nodeID1, res))
+	assert.NilError(t, err, "failed to recover allocation of app-2")
+	assert.Assert(t, allocCreated, "allocation of app-2 should have been recovered")
+	assert.Equal(t, app2.CurrentState(), objects.Running.String(), "app-2 should be running")
+	assert.Equal(t, parent.GetPartitionQueueDAOInfo(false).RunningApps, uint64(2), "parent should count both running apps")
+
+	// app-3 waits until the parent is back below its max
+	app3 := newApplication(appID3, "default", "root.parent.sub-leaf")
+	assert.NilError(t, partition.AddApplication(app3), "failed to add app-3 to partition")
+	assert.NilError(t, app3.AddAllocationAsk(newAllocationAsk(allocKey, appID3, res)), "failed to add ask to app-3")
+	release := &si.AllocationRelease{
+		PartitionName:   "default",
+		ApplicationID:   appID1,
+		AllocationKey:   allocKey,
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	}
+	partition.removeAllocation(release)
+	assert.Equal(t, app1.CurrentState(), objects.Completing.String(), "app-1 should be completing")
+	result = partition.tryAllocate()
+	assert.Assert(t, result == nil, "app-3 should not run while app-2 keeps the parent at its max")
+	release.ApplicationID = appID2
+	partition.removeAllocation(release)
+	result = partition.tryAllocate()
+	assert.Assert(t, result != nil && result.Request != nil, "app-3 should have been allocated")
+	assert.Equal(t, result.Request.GetApplicationID(), appID3, "expected app-3 to be allocated")
+}
+
 func TestNewQueueEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck

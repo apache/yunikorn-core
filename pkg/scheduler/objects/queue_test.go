@@ -3232,11 +3232,20 @@ func TestQueue_incRunningApps(t *testing.T) {
 	assert.Equal(t, root.runningApps, uint64(2), "root should have 2 apps running")
 	leaf.incRunningApps("")
 	assert.Equal(t, leaf.runningApps, uint64(2), "leaf should have 2 app running")
-	assert.Equal(t, root.runningApps, uint64(2), "root should not have changed")
+	assert.Equal(t, root.runningApps, uint64(3), "root should count apps over its max")
 
 	leaf2.incRunningApps("")
 	assert.Equal(t, leaf2.runningApps, uint64(1), "leaf2 should have 1 app running")
-	assert.Equal(t, root.runningApps, uint64(2), "root should have 1 app running")
+	assert.Equal(t, root.runningApps, uint64(4), "root should have 4 apps running")
+	assert.Assert(t, !leaf2.canRunApp("app-new"), "root over its max should not run a new app")
+
+	// running apps on root must get back below the max before a new app can run
+	leaf.decRunningApps()
+	leaf.decRunningApps()
+	assert.Equal(t, root.runningApps, uint64(2), "root should have 2 apps running")
+	assert.Assert(t, !leaf2.canRunApp("app-new"), "root at its max should not run a new app")
+	leaf2.decRunningApps()
+	assert.Assert(t, leaf2.canRunApp("app-new"), "root below its max should run a new app")
 
 	defer func() {
 		if r := recover(); r != nil {

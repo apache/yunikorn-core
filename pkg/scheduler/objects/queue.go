@@ -1255,7 +1255,8 @@ func (sq *Queue) RemoveQueue() bool {
 	}
 	log.Log(log.SchedQueue).Info("removing queue", zap.String("queue", sq.QueuePath))
 	sq.removeMetrics()
-	// root is always managed and is the only queue with a nil parent: no need to guard
+	// root is the only queue with a nil parent and can be draining once the partition is removed:
+	// the caller must not call this for root, the queue cleaner (cleanQueues) skips root
 	sq.parent.removeChildQueue(sq.Name)
 	sq.queueEvents.SendRemoveQueueEvent(sq.QueuePath, sq.isManaged)
 	return true

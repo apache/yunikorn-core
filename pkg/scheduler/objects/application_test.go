@@ -3623,7 +3623,7 @@ func TestTryAllocateWithReservedHeadRoomChecking(t *testing.T) {
 }
 
 // TestTryReservedAllocateRequiredNodeNotCancelledOnTimeout verifies that required node reservations
-// are not cancelled even if they exceed the reservationWaitTimeout.
+// are not cancelled even if they exceed the time a reservation can wait for headroom.
 func TestTryReservedAllocateRequiredNodeNotCancelledOnTimeout(t *testing.T) {
 	setupUGM()
 
@@ -3661,6 +3661,150 @@ func TestTryReservedAllocateRequiredNodeNotCancelledOnTimeout(t *testing.T) {
 	result = app.tryReservedAllocate(headRoom, iter)
 	assert.Assert(t, result == nil, "result is expected to be nil due to insufficient headroom")
 	assert.Equal(t, len(app.reservations), 1, "required node reservation must not be cancelled on timeout")
+}
+
+// A node with one unit in use, so that an ask for the whole node can reserve it but never allocate.
+func newReservationTestSetup(t *testing.T, requiredNode string) (*Application, *Allocation, *Node) {
+	t.Helper()
+	setupUGM()
+	queue, err := createRootQueue(map[string]string{"first": "100"})
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root")
+	app.queue = queue
+
+	full := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})
+	node := newNodeRes(nodeID1, full)
+	node.AddAllocation(newAllocationWithKey("in-use", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})))
+	ask := newAllocationAsk(aKey, appID1, full)
+	if requiredNode != "" {
+		ask.SetRequiredNode(requiredNode)
+		// keeps a required node ask out of the preemptor, not relevant for these tests
+		ask.MarkTriggeredPreemption()
+	}
+	assert.NilError(t, app.AddAllocationAsk(ask), "ask should have been added to app")
+	assert.NilError(t, app.Reserve(node, ask), "reservation should not have failed")
+	queue.Reserve(appID1)
+	return app, ask, node
+}
+
+func TestTryReservedAllocateMaxTime(t *testing.T) {
+	tests := []struct {
+		name                string
+		requiredNode        string
+		maxTime             time.Duration
+		reservedFor         time.Duration
+		limit               string
+		triggeredPreemption bool
+		cancelled           bool
+	}{
+		{name: "younger than the max time", maxTime: time.Hour, reservedFor: 59 * time.Minute},
+		{name: "older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, cancelled: true},
+		{name: "older than a shorter max time", maxTime: time.Minute, reservedFor: 2 * time.Minute, cancelled: true},
+		{name: "over a queue limit younger than a quarter of the max time", maxTime: time.Hour, reservedFor: 14 * time.Minute, limit: "queue"},
+		{name: "over a queue limit older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "queue", cancelled: true},
+		{name: "over a user limit older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "user", cancelled: true},
+		{name: "full cluster older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "cluster"},
+		{name: "full cluster older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, limit: "cluster", cancelled: true},
+		{name: "over a queue limit waiting for victims older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "queue", triggeredPreemption: true},
+		{name: "over a queue limit waiting for victims older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, limit: "queue", triggeredPreemption: true, cancelled: true},
+		{name: "required node", requiredNode: nodeID1, maxTime: time.Hour, reservedFor: 2 * time.Hour},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app, ask, node := newReservationTestSetup(t, tt.requiredNode)
+			if tt.triggeredPreemption {
+				ask.MarkTriggeredPreemption()
+			}
+			switch tt.limit {
+			case "queue":
+				limited, err := createManagedQueue(app.queue, "limited", false, map[string]string{"first": "1"})
+				assert.NilError(t, err, "queue create failed")
+				limited.Reserve(appID1)
+				app.queue = limited
+			case "user":
+				err := ugm.GetUserManager().UpdateConfig(configs.QueueConfig{
+					Name:   "root",
+					Parent: true,
+					Limits: []configs.Limit{{Limit: "user limit", Users: []string{"testuser"}, MaxResources: map[string]string{"first": "1"}}},
+				}, "root")
+				assert.NilError(t, err, "user limit update failed")
+				defer ugm.GetUserManager().ClearConfigLimits()
+				defer setupUGM()
+			}
+			app.queue.reservationMaxTime = tt.maxTime
+			released := make(chan int, 1)
+			app.SetReservationReleasedCallback(func(num int) { released <- num })
+			app.reservations[ask.allocationKey].createTime = time.Now().Add(-tt.reservedFor)
+
+			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+			if tt.limit != "" {
+				headRoom = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+			}
+			result := app.tryReservedAllocate(headRoom, getNodeIteratorFn(node))
+			assert.Assert(t, result == nil, "ask should not have been allocated")
+			if !tt.cancelled {
+				assert.Equal(t, len(app.reservations), 1, "reservation should have been kept")
+				assert.Assert(t, node.IsReserved(), "node should still be reserved")
+				assert.Assert(t, !node.isInReservationCooldown(), "node should not be in cooldown")
+				return
+			}
+			assert.Equal(t, len(app.reservations), 0, "reservation should have been cancelled")
+			assert.Assert(t, !node.IsReserved(), "node should no longer be reserved")
+			assert.Assert(t, node.isInReservationCooldown(), "node should be in cooldown")
+			assert.Equal(t, len(app.queue.GetReservedApps()), 0, "queue should no longer track the reservation")
+			select {
+			case num := <-released:
+				assert.Equal(t, num, 1, "partition counter should be decremented once")
+			case <-time.After(time.Second):
+				t.Fatal("reservation release was not reported to the partition")
+			}
+		})
+	}
+}
+
+// The queue can pass on an application with its last reservation gone and its queue detached since the lookup.
+func TestTryReservedAllocateDetachedQueue(t *testing.T) {
+	app, ask, node := newReservationTestSetup(t, "")
+	assert.Equal(t, app.UnReserve(node, ask), 1, "reservation should have been removed")
+	app.UnSetQueue()
+
+	result := app.tryReservedAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), getNodeIteratorFn(node))
+	assert.Assert(t, result == nil, "nothing to allocate without a reservation")
+}
+
+func TestTryNodesReservationCooldown(t *testing.T) {
+	app, ask, node := newReservationTestSetup(t, "")
+	assert.Equal(t, app.UnReserve(node, ask), 1, "reservation should have been removed")
+	ask.createTime = time.Now().Add(-time.Hour)
+
+	node.setReservationExpired()
+	assert.Assert(t, app.tryNodes(ask, getNodeIteratorFn(node)()) == nil, "node in cooldown should not be reserved")
+
+	other := newNodeRes(nodeID2, ask.GetAllocatedResource())
+	other.AddAllocation(newAllocationWithKey("in-use-2", appID2, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})))
+	result := app.tryNodes(ask, getNodeIteratorFn(node, other)())
+	assert.Assert(t, result != nil, "node outside of cooldown should be reserved")
+	assert.Equal(t, result.ResultType, Reserved)
+	assert.Equal(t, result.NodeID, nodeID2)
+
+	node.reservationExpiredTime = time.Now().Add(-reservationDelay)
+	result = app.tryNodes(ask, getNodeIteratorFn(node)())
+	assert.Assert(t, result != nil, "node should be reserved after the cooldown")
+	assert.Equal(t, result.ResultType, Reserved)
+	assert.Equal(t, result.NodeID, nodeID1)
+}
+
+func TestTryNodesAllocateDuringReservationCooldown(t *testing.T) {
+	app, ask, node := newReservationTestSetup(t, "")
+	assert.Equal(t, app.UnReserve(node, ask), 1, "reservation should have been removed")
+	node.setReservationExpired()
+
+	small := newAllocationAsk(aKey2, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+	assert.NilError(t, app.AddAllocationAsk(small), "ask should have been added to app")
+	result := app.tryNodes(small, getNodeIteratorFn(node)())
+	assert.Assert(t, result != nil, "ask that fits should be allocated on a node in cooldown")
+	assert.Equal(t, result.ResultType, Allocated)
+	assert.Equal(t, result.NodeID, nodeID1)
 }
 
 func TestUpdateRunnableStatus(t *testing.T) {

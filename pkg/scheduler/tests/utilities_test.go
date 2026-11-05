@@ -89,6 +89,13 @@ func waitForAllocatedAppResource(t *testing.T, app *objects.Application, memory 
 	assert.NilError(t, err, "Failed to wait for pending resource, expected %v, actual %v, called from: %s", memory, app.GetPendingResource().Resources[siCommon.Memory], caller())
 }
 
+func waitForAppReservations(t *testing.T, app *objects.Application, count int, timeoutMs int) {
+	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
+		return len(app.GetReservations()) == count
+	})
+	assert.NilError(t, err, "Failed to wait for reservations, expected %d, actual %v, called from: %s", count, app.GetReservations(), caller())
+}
+
 func waitForAllocatedQueueResource(t *testing.T, queue *objects.Queue, memory resources.Quantity, timeoutMs int) {
 	err := common.WaitForCondition(10*time.Millisecond, time.Duration(timeoutMs)*time.Millisecond, func() bool {
 		return queue.GetAllocatedResource().Resources[siCommon.Memory] == memory

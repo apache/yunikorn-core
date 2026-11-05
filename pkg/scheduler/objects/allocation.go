@@ -402,6 +402,7 @@ func (a *Allocation) allocate() bool {
 }
 
 // deallocate marks this request as pending and returns true if successful. A request may not be deallocated multiple times.
+// The node binding is cleared: a pending request is not bound to a node.
 func (a *Allocation) deallocate() bool {
 	a.Lock()
 	defer a.Unlock()
@@ -410,6 +411,9 @@ func (a *Allocation) deallocate() bool {
 		return false
 	}
 	a.allocated = false
+	a.nodeID = ""
+	a.bindTime = time.Time{}
+	a.instType = ""
 	return true
 }
 

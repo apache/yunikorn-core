@@ -1658,6 +1658,51 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assertPlaceholderData(t, app, tg2, 2, 2, 0, res)
 }
 
+// A real ask that is pending when the placeholder timeout fires is not a timed out placeholder, and there might not be
+// any placeholder data for its task group.
+func TestTimeoutPlaceholderRealAsk(t *testing.T) {
+	tests := []struct {
+		name      string
+		taskGroup string
+	}{
+		{"no task group", ""},
+		{"task group without placeholders", tg2},
+		{"task group with placeholders", tg1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			// create a fake queue
+			queue, err := createRootQueue(nil)
+			assert.NilError(t, err, "queue create failed")
+
+			app, _ := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 5)
+			app.gangSchedulingStyle = Soft
+			// fake the queue assignment (needed with ask)
+			app.queue = queue
+
+			res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcores": 10})
+			err = app.AddAllocationAsk(newAllocationAskTG(aKey, appID1, tg1, res))
+			assert.NilError(t, err, "placeholder ask should have been added")
+			err = app.AddAllocationAsk(newAllocationAskAll(aKey2, appID1, tt.taskGroup, res, false, 0))
+			assert.NilError(t, err, "real ask should have been added")
+			// the first placeholder allocation starts the timer
+			err = app.AddAllocation(newPlaceholderAlloc(appID1, nodeID1, res, tg1))
+			assert.NilError(t, err, "placeholder allocation should have been added")
+
+			err = common.WaitForCondition(10*time.Millisecond, 1*time.Second, func() bool {
+				return app.getPlaceholderTimer() == nil
+			})
+			assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
+			assert.Equal(t, app.CurrentState(), Resuming.String(), "Application did not progress into expected state")
+
+			// only the pending placeholder timed out
+			assertPlaceholderData(t, app, tg1, 1, 1, 0, res)
+			assert.Equal(t, len(app.placeholderData), 1, "real ask should not add placeholder data")
+		})
+	}
+}
+
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	setupUGM()
 

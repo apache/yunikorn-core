@@ -543,7 +543,10 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 					continue
 				}
 				pendingRelease = append(pendingRelease, alloc)
-				sa.placeholderData[alloc.taskGroupName].TimedOut++
+				// a real ask is not a timed out placeholder and might not have placeholder data for its task group
+				if phData, ok := sa.placeholderData[alloc.taskGroupName]; ok && alloc.IsPlaceholder() {
+					phData.TimedOut++
+				}
 			}
 		}
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing allocated and pending placeholders",

@@ -46,35 +46,40 @@ func TestQuotaChangeGetPreemptableResource(t *testing.T) {
 	assert.NilError(t, err)
 
 	testCases := []struct {
-		name             string
-		queue            *Queue
-		parentGuaranteed *resources.Resource
-		maxResource      *resources.Resource
-		usedResource     *resources.Resource
-		preemptable      *resources.Resource
+		name               string
+		queue              *Queue
+		parentGuaranteed   *resources.Resource
+		maxResource        *resources.Resource
+		usedResource       *resources.Resource
+		preemptingResource *resources.Resource
+		preemptable        *resources.Resource
 	}{
-		{"nil max and nil used", leaf, nil, nil, nil, nil},
-		{"nil max", leaf, nil, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil},
-		{"nil used", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil, nil},
-		{"used below max", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500}), nil},
-		{"used above max", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
-		{"used above max, below max, equals max in specific res type and also with extra res types", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 10, "gpu": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
-		{"used res type but max undefined", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 150}), nil},
-		{"parent guaranteed set, lower than leaf's preemptable resources", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1200}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300})},
-		{"parent guaranteed set, lower than leaf's preemptable resources - extra res types ", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1200}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300})},
-		{"parent guaranteed set, higher than leaf's preemptable resources", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 900}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
-		{"parent guaranteed set, higher than leaf's preemptable resources - extra res types", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 900}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"nil max and nil used", leaf, nil, nil, nil, nil, nil},
+		{"nil max", leaf, nil, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil, nil},
+		{"nil used", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), nil, nil, nil},
+		{"used below max", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500}), nil, nil},
+		{"used above max", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"used above max, below max, equals max in specific res type and also with extra res types", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "cpu": 10, "gpu": 10}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"used res type but max undefined", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"cpu": 150}), nil, nil},
+		{"parent guaranteed set, lower than leaf's preemptable resources", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1200}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300})},
+		{"parent guaranteed set, lower than leaf's preemptable resources - extra res types ", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1200}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300})},
+		{"parent guaranteed set, higher than leaf's preemptable resources", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 900}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500}), nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"parent guaranteed set, higher than leaf's preemptable resources - extra res types", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 900}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1500, "cpu": 10, "gpu": 9}), nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 500})},
+		{"parent guaranteed set, preempting resource accounted", leaf, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1200}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1600}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300})},
+		{"parent guaranteed not set, preempting resource accounted", leaf, nil, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1600}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200}), resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 400})},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			tc.queue.parent.guaranteedResource = tc.parentGuaranteed
 			tc.queue.maxResource = tc.maxResource
 			tc.queue.IncAllocatedResource(tc.usedResource, false)
+			tc.queue.IncPreemptingResource(tc.preemptingResource)
 			preemptor := NewQuotaPreemptor(tc.queue)
 			preemptor.setPreemptableResources()
 			assert.Equal(t, resources.Equals(preemptor.preemptableResource, tc.preemptable), true)
 
 			// reset
+			tc.queue.DecPreemptingResource(tc.preemptingResource)
 			err = tc.queue.DecAllocatedResource(tc.usedResource)
 			assert.NilError(t, err)
 		})
@@ -439,6 +444,39 @@ func TestQuotaChangeGetChildQueuesPreemptableResource(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("child queue preempting resources", func(t *testing.T) {
+		pConfig := configs.QueueConfig{Name: "parent", Parent: true}
+		p, err := NewConfiguredQueue(pConfig, nil, false, nil)
+		assert.NilError(t, err)
+
+		leaf1, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf1"}, p, false, nil)
+		assert.NilError(t, err)
+		leaf2, err := NewConfiguredQueue(configs.QueueConfig{Name: "leaf2"}, p, false, nil)
+		assert.NilError(t, err)
+
+		leaf1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+		leaf1.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+		leaf1.preemptingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+
+		leaf2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+		leaf2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+		leaf2.preemptingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+
+		parentPreemptable := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+		childQueues := make(map[*Queue]*QuotaPreemptionContext)
+		getChildQueuesPreemptableResource(p, parentPreemptable, childQueues)
+
+		if _, ok := childQueues[leaf1]; ok {
+			t.Fatalf("leaf1 has no excess usage above guaranteed, should not be selected as preemption victim queue, got: %v",
+				childQueues[leaf1].preemptableResource)
+		}
+
+		assert.Assert(t, childQueues[leaf2] != nil, "leaf2 must be selected")
+		expectedLeaf2 := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 50})
+		assert.Assert(t, resources.Equals(childQueues[leaf2].preemptableResource, expectedLeaf2),
+			"expected %v, got %v", expectedLeaf2, childQueues[leaf2].preemptableResource)
+	})
 }
 
 // TestQuotaChangeGetChildQueuesPreemptableResourceWithDifferentResTypes Test child queues distribution from parent's preemptable resources under different circumstances with different resource types

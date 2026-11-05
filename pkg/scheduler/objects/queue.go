@@ -875,10 +875,11 @@ func (sq *Queue) GetPreemptableResource() *resources.Resource {
 	defer sq.RUnlock()
 
 	var preemptable *resources.Resource
+	used := resources.SubOnlyExisting(sq.allocatedResource, sq.preemptingResource)
 	if sq.guaranteedResource == nil {
-		preemptable = sq.allocatedResource.Clone()
+		preemptable = used
 	} else {
-		preemptable = resources.SubOnlyExisting(sq.guaranteedResource, sq.allocatedResource.Clone())
+		preemptable = resources.SubOnlyExisting(sq.guaranteedResource, used)
 	}
 	return resources.ComponentWiseMin(preemptable, parentPreemptable)
 }

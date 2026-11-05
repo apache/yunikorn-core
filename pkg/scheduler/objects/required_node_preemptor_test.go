@@ -123,11 +123,9 @@ func TestFilterAllocations(t *testing.T) {
 
 func TestGetVictims(t *testing.T) {
 	node := NewNode(&si.NodeInfo{
-		NodeID:     "node",
-		Attributes: nil,
-		SchedulableResource: &si.Resource{
-			Resources: map[string]*si.Quantity{"first": {Value: 76}},
-		},
+		NodeID:              "node",
+		Attributes:          nil,
+		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 76}}},
 	})
 
 	rootQ, err := createRootQueue(map[string]string{"first": "100"})
@@ -138,83 +136,109 @@ func TestGetVictims(t *testing.T) {
 	app := newApplication("app1", "default", "root.default")
 	app.SetQueue(defaultQ)
 
-	// case 1: victims are available and its resources are matching with ds request ask
-	requiredAsk := createAllocationAsk("ask11", "app1", true, true, 20,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25}))
+	t.Run("victims are available and matching ask", func(t *testing.T) {
+		requiredAsk := createAllocationAsk("ask11", "app1", true, true, 20,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25}))
 
-	p := NewRequiredNodePreemptor(node, requiredAsk, app)
-	asks := prepareAllocationAsks(t, node)
-	p.filterAllocations()
-	p.sortAllocations()
-	prunedVictims := p.pruneVictims(p.allocations)
-	assert.Equal(t, len(prunedVictims), 4)
-	assert.Equal(t, prunedVictims[0].GetAllocationKey(), "ask5")
-	assert.Equal(t, resources.Equals(prunedVictims[0].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
-	assert.Equal(t, prunedVictims[1].GetAllocationKey(), "ask4")
-	assert.Equal(t, resources.Equals(prunedVictims[1].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
-	assert.Equal(t, prunedVictims[2].GetAllocationKey(), "ask2")
-	assert.Equal(t, resources.Equals(prunedVictims[2].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})), true)
-	assert.Equal(t, prunedVictims[3].GetAllocationKey(), "ask1")
-	assert.Equal(t, resources.Equals(prunedVictims[3].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})), true)
-	removeAllocationAsks(node, asks)
-
-	// case 2: victims are available and its resources are matching with ds request ask (but with different quantity)
-	requiredAsk2 := createAllocationAsk("ask13", "app1", true, true, 20,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
-	p2 := NewRequiredNodePreemptor(node, requiredAsk2, app)
-	asks = prepareAllocationAsks(t, node)
-	p2.filterAllocations()
-	p2.sortAllocations()
-	prunedVictims2 := p2.pruneVictims(p2.allocations)
-	assert.Equal(t, len(prunedVictims2), 1)
-	removeAllocationAsks(node, asks)
-
-	// case 3: allocations are available and its resources are matching partially with ds request ask (because of different resource types), hence no victims
-	requiredAsk3 := createAllocationAsk("ask13", "app1", true, true, 20,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5}))
-	p3 := NewRequiredNodePreemptor(node, requiredAsk3, app)
-	asks = prepareAllocationAsks(t, node)
-	p3.filterAllocations()
-	filteredAllocations := p3.getAllocations()
-
-	// allocations are considered as there is partial match
-	assert.Equal(t, len(filteredAllocations), 10)
-	p3.sortAllocations()
-
-	// allocations are available but no exact match for choosing victims
-	prunedVictims3 := p3.pruneVictims(p3.allocations)
-	assert.Equal(t, len(prunedVictims3), 0)
-	removeAllocationAsks(node, asks)
-
-	// case 4: victim chosen earlier released in the meantime
-	requiredAsk4 := createAllocationAsk("ask14", "app1", true, true, 20,
-		resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25}))
-	p4 := NewRequiredNodePreemptor(node, requiredAsk4, app)
-	asks = prepareAllocationAsks(t, node)
-	p4.filterAllocations()
-	p4.sortAllocations()
-	err = asks[1].SetReleased(true)
-	assert.NilError(t, err)
-	prunedVictims4 := p4.pruneVictims(p4.allocations)
-	assert.Equal(t, len(prunedVictims4), 4)
-	removeAllocationAsks(node, asks)
-
-	// case 5: node already has partial available resource (24 free out of 100), so asking for 25 only requires 1 victim (ask5: 5) instead of 4
-	nodeWithAvail := NewNode(&si.NodeInfo{
-		NodeID:     "node-avail",
-		Attributes: nil,
-		SchedulableResource: &si.Resource{
-			Resources: map[string]*si.Quantity{"first": {Value: 100}},
-		},
+		p := NewRequiredNodePreemptor(node, requiredAsk, app)
+		asks := prepareAllocationAsks(t, node)
+		defer removeAllocationAsks(node, asks)
+		p.filterAllocations()
+		p.sortAllocations()
+		prunedVictims := p.pruneVictims(p.allocations)
+		assert.Equal(t, len(prunedVictims), 4)
+		assert.Equal(t, prunedVictims[0].GetAllocationKey(), "ask5")
+		assert.Equal(t, resources.Equals(prunedVictims[0].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
+		assert.Equal(t, prunedVictims[1].GetAllocationKey(), "ask4")
+		assert.Equal(t, resources.Equals(prunedVictims[1].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})), true)
+		assert.Equal(t, prunedVictims[2].GetAllocationKey(), "ask2")
+		assert.Equal(t, resources.Equals(prunedVictims[2].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})), true)
+		assert.Equal(t, prunedVictims[3].GetAllocationKey(), "ask1")
+		assert.Equal(t, resources.Equals(prunedVictims[3].GetAllocatedResource(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})), true)
 	})
-	p5 := NewRequiredNodePreemptor(nodeWithAvail, requiredAsk, app)
-	asks = prepareAllocationAsks(t, nodeWithAvail)
-	p5.filterAllocations()
-	p5.sortAllocations()
-	victims5 := p5.pruneVictims(p5.allocations)
-	assert.Equal(t, len(victims5), 1)
-	assert.Equal(t, victims5[0].GetAllocationKey(), "ask5")
-	removeAllocationAsks(nodeWithAvail, asks)
+
+	t.Run("victims are available with different quantity", func(t *testing.T) {
+		requiredAsk := createAllocationAsk("ask13", "app1", true, true, 20,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+		p := NewRequiredNodePreemptor(node, requiredAsk, app)
+		asks := prepareAllocationAsks(t, node)
+		defer removeAllocationAsks(node, asks)
+		p.filterAllocations()
+		p.sortAllocations()
+		prunedVictims := p.pruneVictims(p.allocations)
+		assert.Equal(t, len(prunedVictims), 1)
+	})
+
+	t.Run("allocations match partially with ds request ask, hence no victims", func(t *testing.T) {
+		requiredAsk := createAllocationAsk("ask13", "app1", true, true, 20,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5}))
+		p := NewRequiredNodePreemptor(node, requiredAsk, app)
+		asks := prepareAllocationAsks(t, node)
+		defer removeAllocationAsks(node, asks)
+		p.filterAllocations()
+		filteredAllocations := p.getAllocations()
+		assert.Equal(t, len(filteredAllocations), 10)
+		p.sortAllocations()
+		prunedVictims := p.pruneVictims(p.allocations)
+		assert.Equal(t, len(prunedVictims), 0)
+	})
+
+	t.Run("victim chosen earlier released in the meantime", func(t *testing.T) {
+		requiredAsk := createAllocationAsk("ask14", "app1", true, true, 20,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25}))
+		p := NewRequiredNodePreemptor(node, requiredAsk, app)
+		asks := prepareAllocationAsks(t, node)
+		defer removeAllocationAsks(node, asks)
+		p.filterAllocations()
+		p.sortAllocations()
+		err := asks[1].SetReleased(true)
+		assert.NilError(t, err)
+		prunedVictims := p.pruneVictims(p.allocations)
+		assert.Equal(t, len(prunedVictims), 4)
+	})
+
+	t.Run("node already has partial available resource", func(t *testing.T) {
+		nodeWithAvail := NewNode(&si.NodeInfo{
+			NodeID:              "node-avail",
+			Attributes:          nil,
+			SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 100}}},
+		})
+		requiredAsk := createAllocationAsk("ask11", "app1", true, true, 20,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 25}))
+		p := NewRequiredNodePreemptor(nodeWithAvail, requiredAsk, app)
+		asks := prepareAllocationAsks(t, nodeWithAvail)
+		defer removeAllocationAsks(nodeWithAvail, asks)
+		p.filterAllocations()
+		p.sortAllocations()
+		victims := p.pruneVictims(p.allocations)
+		assert.Equal(t, len(victims), 1)
+		assert.Equal(t, victims[0].GetAllocationKey(), "ask5")
+	})
+
+	t.Run("skip allocations not contributing to remaining shortfall in multi-resource preemption", func(t *testing.T) {
+		nodeMulti := NewNode(&si.NodeInfo{
+			NodeID:              "node-multi",
+			SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}, "second": {Value: 5}}},
+		})
+		alloc1 := createAllocation("alloc1", "app1", nodeMulti.NodeID, true, false, 1, false,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+		alloc2 := createAllocation("alloc2", "app1", nodeMulti.NodeID, true, false, 2, false,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+		alloc3 := createAllocation("alloc3", "app1", nodeMulti.NodeID, true, false, 3, false,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5}))
+		for _, alloc := range []*Allocation{alloc1, alloc2, alloc3} {
+			assert.Assert(t, nodeMulti.TryAddAllocation(alloc))
+		}
+		requiredAsk := createAllocationAsk("ask16", "app1", true, true, 20,
+			resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5, "second": 5}))
+		p := NewRequiredNodePreemptor(nodeMulti, requiredAsk, app)
+		p.filterAllocations()
+		p.sortAllocations()
+		victims := p.pruneVictims(p.allocations)
+		assert.Equal(t, len(victims), 2)
+		assert.Equal(t, victims[0].GetAllocationKey(), "alloc1")
+		assert.Equal(t, victims[1].GetAllocationKey(), "alloc3")
+	})
 }
 
 func TestSortAllocations(t *testing.T) {

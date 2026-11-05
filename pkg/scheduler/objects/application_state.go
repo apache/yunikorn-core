@@ -26,6 +26,7 @@ import (
 	"github.com/looplab/fsm"
 	"go.uber.org/zap"
 
+	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/log"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -45,6 +46,7 @@ const (
 	FailApplication
 	ExpireApplication
 	ResumeApplication
+	RollbackApplication
 )
 
 const (
@@ -52,7 +54,7 @@ const (
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication", "resumeApplication"}[ae]
+	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication", "resumeApplication", "rollbackApplication"}[ae]
 }
 
 // ----------------------------------
@@ -131,6 +133,10 @@ func eventDesc() fsm.Events {
 			Src:  []string{New.String(), Accepted.String()},
 			Dst:  Resuming.String(),
 		}, {
+			Name: RollbackApplication.String(),
+			Src:  []string{Running.String()},
+			Dst:  Accepted.String(),
+		}, {
 			Name: ExpireApplication.String(),
 			Src:  []string{Completed.String(), Failed.String(), Rejected.String()},
 			Dst:  Expired.String(),
@@ -183,7 +189,10 @@ func callbacks() fsm.Callbacks {
 		fmt.Sprintf("enter_%s", Accepted.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
 			metrics.GetQueueMetrics(app.queuePath).IncQueueApplicationsAccepted()
-			metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
+			// a rollback returns an application that was already counted as accepted
+			if event.Event != RollbackApplication.String() {
+				metrics.GetSchedulerMetrics().IncTotalApplicationsAccepted()
+			}
 		},
 		fmt.Sprintf("leave_%s", Accepted.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
@@ -216,6 +225,11 @@ func callbacks() fsm.Callbacks {
 		fmt.Sprintf("leave_%s", Running.String()): func(_ context.Context, event *fsm.Event) {
 			if event.Dst != Running.String() {
 				app := event.Args[0].(*Application) //nolint:errcheck
+				// an application back in Accepted that still holds placeholders is counted as running, like before it
+				// went Running: add it before the running count drops so that its slot is never free in between
+				if event.Dst == Accepted.String() && !resources.IsZero(app.allocatedPlaceholder) {
+					app.queue.setAllocatingAccepted(app.ApplicationID)
+				}
 				app.queue.decRunningApps()
 				metrics.GetQueueMetrics(app.queuePath).DecQueueApplicationsRunning()
 				metrics.GetSchedulerMetrics().DecTotalApplicationsRunning()

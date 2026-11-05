@@ -210,6 +210,36 @@ func TestFailedStateTransition(t *testing.T) {
 	assert.NilError(t, err, "App should be in Failed state")
 }
 
+func TestRollbackStateTransition(t *testing.T) {
+	queue := createQueue(t, "rollback")
+	metrics.GetSchedulerMetrics().Reset()
+	metrics.GetQueueMetrics("root.rollback").Reset()
+	app := newApplication("app-00001", "default", "root.rollback")
+	app.SetQueue(queue)
+
+	err := app.HandleApplicationEvent(RunApplication)
+	assertState(t, app, err, Accepted.String())
+	err = app.HandleApplicationEvent(RollbackApplication)
+	assert.Assert(t, err != nil, "error expected accepted to accepted (rollback test)")
+	assert.Equal(t, app.CurrentState(), Accepted.String())
+
+	err = app.HandleApplicationEvent(RunApplication)
+	assertState(t, app, err, Running.String())
+	err = app.HandleApplicationEvent(RollbackApplication)
+	assertState(t, app, err, Accepted.String())
+	assertTotalAppsAcceptedMetrics(t, 1)
+	assertTotalAppsRunningMetrics(t, 0)
+	assertQueueRunningApps(t, app, 0)
+	assertQueueApplicationsRunningMetrics(t, app, 0)
+	assertQueueApplicationsAcceptedMetrics(t, app, 1)
+
+	err = app.HandleApplicationEvent(RunApplication)
+	assertState(t, app, err, Running.String())
+	assertTotalAppsRunningMetrics(t, 1)
+	assertQueueRunningApps(t, app, 1)
+	assertQueueApplicationsAcceptedMetrics(t, app, 0)
+}
+
 func TestAppStateTransitionEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck

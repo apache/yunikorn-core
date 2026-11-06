@@ -97,7 +97,7 @@ func TestFilterAllocationsForeign(t *testing.T) {
 			result := p.filterAllocations()
 
 			tc.expected.totalAllocations = 1
-			assert.DeepEqual(t, result, tc.expected)
+			assert.Equal(t, result, tc.expected)
 			if tc.eligible {
 				assert.Equal(t, len(p.allocations), 1)
 				assert.Assert(t, p.allocations[0] == allocation)

@@ -41,7 +41,7 @@ type filteringResult struct {
 	totalAllocations            int // total number of allocations
 	requiredNodeAllocations     int // number of requiredNode (daemon set) allocations that cannot be preempted
 	atLeastOneResNotMatched     int // number of allocations where there's no single resource type that would match
-	higherPriorityAllocations   int // number of allocations with higher priority
+	higherPriorityAllocations   int // number of allocations with higher priority or foreign allocations with equal priority
 	alreadyPreemptedAllocations int // number of allocations already preempted
 	releasedPhAllocations       int // number of ph allocations released
 }
@@ -94,15 +94,17 @@ func (p *PreemptionContext) tryPreemption() {
 				zap.String("allocationKey", victim.GetAllocationKey()))
 			continue
 		}
-		if victimQueue := p.application.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
-			victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
-		} else {
-			log.Log(log.SchedRequiredNodePreemption).Warn("BUG: Queue not found for daemon set preemption victim",
-				zap.String("queue", p.application.queue.Name),
-				zap.String("victimApplicationID", victim.GetApplicationID()),
-				zap.String("victimAllocationKey", victim.GetAllocationKey()))
+		if !victim.IsForeign() {
+			if victimQueue := p.application.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
+				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
+			} else {
+				log.Log(log.SchedRequiredNodePreemption).Warn("BUG: Queue not found for daemon set preemption victim",
+					zap.String("queue", p.application.queue.Name),
+					zap.String("victimApplicationID", victim.GetApplicationID()),
+					zap.String("victimAllocationKey", victim.GetAllocationKey()))
+			}
+			victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
 		}
-		victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
 	}
 	p.requiredAsk.MarkTriggeredPreemption()
 	p.application.notifyRMAllocationReleased(finalVictims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
@@ -111,17 +113,22 @@ func (p *PreemptionContext) tryPreemption() {
 
 func (p *PreemptionContext) filterAllocations() filteringResult {
 	var result filteringResult
-	yunikornAllocations := p.node.GetYunikornAllocations()
-	result.totalAllocations = len(yunikornAllocations)
+	allocations := append(p.node.GetYunikornAllocations(), p.node.GetForeignAllocations()...)
+	result.totalAllocations = len(allocations)
 
-	for _, allocation := range yunikornAllocations {
-		// skip daemon set pods and higher priority allocation
+	for _, allocation := range allocations {
+		if !allocation.IsPreemptable() {
+			continue
+		}
+
+		// skip daemon set pods
 		if allocation.GetRequiredNode() != "" {
 			result.requiredNodeAllocations++
 			continue
 		}
 
-		if allocation.GetPriority() > p.requiredAsk.GetPriority() {
+		if allocation.GetPriority() > p.requiredAsk.GetPriority() ||
+			(allocation.IsForeign() && allocation.GetPriority() == p.requiredAsk.GetPriority()) {
 			result.higherPriorityAllocations++
 			continue
 		}

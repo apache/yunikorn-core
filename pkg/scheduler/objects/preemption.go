@@ -202,8 +202,7 @@ func (p *Preemptor) initWorkingState() int {
 
 // checkPreemptionQueueGuarantees verifies that it's possible to free enough resources to fit the given ask
 func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
-	// Without a guarantee on the ask queue path the remaining guarantee is always nil and this check cannot pass.
-	// Return before walking the victim queues, which read-locks their applications while the ask's application is locked.
+	// without a guarantee on the path this check cannot pass: skip the victim walk and its app locks
 	if !p.queue.hasGuaranteeOnPath() {
 		return false
 	}

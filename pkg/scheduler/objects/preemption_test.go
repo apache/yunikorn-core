@@ -308,6 +308,7 @@ func TestCheckPreemptionQueueGuaranteesWithNoGuaranteedResources(t *testing.T) {
 				assert.Equal(t, result == nil, true, "unexpected resultType")
 				assert.Equal(t, len(ask3.GetAllocationLog()), 1)
 				assertAllocationLog(t, ask3, []string{common.PreemptionDoesNotGuarantee})
+				assert.Assert(t, preemptor.allocationsByQueue == nil, "victim queues should not be walked")
 			}
 		})
 	}

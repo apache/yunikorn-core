@@ -202,6 +202,10 @@ func (p *Preemptor) initWorkingState() int {
 
 // checkPreemptionQueueGuarantees verifies that it's possible to free enough resources to fit the given ask
 func (p *Preemptor) checkPreemptionQueueGuarantees() bool {
+	// without a guarantee on the path this check cannot pass: skip the victim walk and its app locks
+	if !p.queue.hasGuaranteeOnPath() {
+		return false
+	}
 	p.initQueueSnapshots()
 
 	queues := p.duplicateQueueSnapshots()

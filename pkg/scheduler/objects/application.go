@@ -2191,10 +2191,6 @@ func (sa *Application) decUserResourceUsage(resource *resources.Resource, remove
 
 // Track used and preempted resources
 func (sa *Application) trackCompletedResource(info *Allocation) {
-	// deallocate() cleared the bind time: a zero bind time would track ~292 years of usage
-	if !info.IsAllocated() {
-		return
-	}
 	switch {
 	case info.IsPreempted():
 		sa.updatePreemptedResource(info)

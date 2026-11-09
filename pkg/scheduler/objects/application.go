@@ -444,7 +444,7 @@ func (sa *Application) clearStateTimer() {
 }
 
 func (sa *Application) initPlaceholderTimer() {
-	if sa.placeholderTimer != nil || !sa.IsAccepted() || sa.execTimeout <= 0 {
+	if sa.placeholderTimer != nil || (!sa.IsAccepted() && !sa.IsRunning()) || sa.execTimeout <= 0 {
 		return
 	}
 	log.Log(log.SchedApplication).Debug("Application placeholder timer initiated",

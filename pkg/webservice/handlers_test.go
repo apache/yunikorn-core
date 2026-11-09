@@ -2116,6 +2116,7 @@ func TestValidateQueue(t *testing.T) {
 }
 
 func TestFullStateDumpPath(t *testing.T) {
+	defer ResetIMHistory()
 	original := configs.GetConfigMap()
 	defer func() {
 		configs.SetConfigMap(original)
@@ -2433,6 +2434,8 @@ func TestGetStream(t *testing.T) {
 }
 
 func TestGetStream_StreamClosedByProducer(t *testing.T) {
+	setup(t, configDefault, 1)
+	defer func() { schedulerContext.Load().Stop() }()
 	ev, req := initEventsAndCreateRequest(t)
 	defer ev.Stop()
 	resp := NewResponseRecorderWithDeadline() // MockResponseWriter does not implement http.Flusher
@@ -2589,6 +2592,8 @@ func TestGetStream_SetReadDeadlineFails(t *testing.T) {
 }
 
 func TestGetStream_Limit(t *testing.T) {
+	setup(t, configDefault, 1)
+	defer func() { schedulerContext.Load().Stop() }()
 	current := configs.GetConfigMap()
 	defer func() {
 		configs.SetConfigMap(current)

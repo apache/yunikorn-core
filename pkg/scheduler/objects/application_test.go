@@ -1776,6 +1776,47 @@ func TestTimeoutPlaceholderRunning(t *testing.T) {
 	assert.Assert(t, app.IsRunning(), "App should still be running after the placeholder timeout")
 }
 
+// A timer that fired while the last placeholder was being replaced must not fail the application, or release its
+// allocations and asks.
+func TestTimeoutPlaceholderStale(t *testing.T) {
+	for _, style := range []string{Hard, Soft} {
+		t.Run(style, func(t *testing.T) {
+			setupUGM()
+			app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+			app.gangSchedulingStyle = style
+			app.SetState(Accepted.String())
+			queue, err := createRootQueue(nil)
+			assert.NilError(t, err)
+			app.queue = queue
+			res, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+			assert.NilError(t, err)
+			assert.NilError(t, app.AddAllocation(newAllocation(appID1, nodeID1, res)))
+			ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+			app.addPlaceholderDataWithLocking(ph)
+			assert.NilError(t, app.AddAllocation(ph))
+			assert.NilError(t, app.AddAllocationAsk(newAllocationAskAll("ask", appID1, tg1, res, false, 0)))
+			assert.Assert(t, app.IsRunning(), "App should be running")
+
+			// link the placeholder and its replacement as tryPlaceholderAllocate does
+			replacement := newAllocation(appID1, nodeID1, res)
+			ph.SetRelease(replacement)
+			replacement.SetRelease(ph)
+			assert.NilError(t, ph.SetReleased(true))
+			assert.Assert(t, app.ReplaceAllocation(ph.allocationKey) != nil)
+			// the timer fired before the replacement, so it runs once the lock is free
+			app.timeoutPlaceholderProcessing()
+
+			assert.Assert(t, app.IsRunning(), "App should still be running, is %s", app.CurrentState())
+			assert.Assert(t, app.GetAllocationAsk("ask") != nil, "ask removed by the stale timer")
+			for _, event := range testHandler.GetEvents() {
+				if release, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+					assert.Equal(t, len(release.ReleasedAllocations), 0, "allocations released by the stale timer")
+				}
+			}
+		})
+	}
+}
+
 func TestTimeoutPlaceholderProcessingDoesNotWaitForRMReply(t *testing.T) {
 	setupUGM()
 	app := newApplication(appID1, "default", "root.a")

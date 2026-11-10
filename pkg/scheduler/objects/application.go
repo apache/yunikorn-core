@@ -472,8 +472,9 @@ func (sa *Application) clearPlaceholderTimer() {
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
-	if (sa.IsRunning() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder) {
-		// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
+	if sa.IsRunning() || sa.IsCompleting() {
+		// the application has started, so only release its unused placeholders. There may be none left: the timer
+		// can fire while the last one is being replaced.
 		var toRelease []*Allocation
 		replacing := 0
 		preempted := 0
@@ -505,7 +506,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			"releasing allocated placeholders on placeholder timeout",
 		)
 	} else {
-		// Case 2: in every other case progress the application, and notify the context about the expired placeholders
+		// in every other case progress the application, and notify the context about the expired placeholders
 		// change the status of the app based on gang style: soft resume normal allocations, hard fail the app
 		event := ResumeApplication
 		if sa.gangSchedulingStyle == Hard {

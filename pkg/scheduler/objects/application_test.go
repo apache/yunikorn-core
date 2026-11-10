@@ -1734,7 +1734,8 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 }
 
-// A placeholder allocated after the application runs, as on recovery, is still released on timeout.
+// Placeholders allocated after the application runs, as on recovery, are still released on timeout, also one allocated
+// after the timer fired.
 func TestTimeoutPlaceholderRunning(t *testing.T) {
 	setupUGM()
 
@@ -1750,19 +1751,28 @@ func TestTimeoutPlaceholderRunning(t *testing.T) {
 	assert.Assert(t, app.IsRunning(), "App should be running after the first allocation")
 	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should not be set without placeholders")
 
+	released := func(ph *Allocation) error {
+		return common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
+			for _, event := range testHandler.GetEvents() {
+				if release, ok := event.(*rmevent.RMReleaseAllocationEvent); ok && len(release.ReleasedAllocations) == 1 &&
+					release.ReleasedAllocations[0].AllocationKey == ph.allocationKey &&
+					release.ReleasedAllocations[0].TerminationType == si.TerminationType_TIMEOUT {
+					return true
+				}
+			}
+			return false
+		})
+	}
 	ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
 	assert.NilError(t, app.AddAllocation(ph))
 	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated for a running application")
-	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
-		for _, event := range testHandler.GetEvents() {
-			if release, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
-				return len(release.ReleasedAllocations) == 1 && release.ReleasedAllocations[0].AllocationKey == ph.allocationKey &&
-					release.ReleasedAllocations[0].TerminationType == si.TerminationType_TIMEOUT
-			}
-		}
-		return false
-	})
-	assert.NilError(t, err, "placeholder not released on timeout")
+	assert.NilError(t, released(ph), "placeholder not released on timeout")
+
+	// the released placeholder still counts until the RM confirms the release
+	late := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+	assert.NilError(t, app.AddAllocation(late))
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the timer fired")
+	assert.NilError(t, released(late), "late placeholder not released on timeout")
 	assert.Assert(t, app.IsRunning(), "App should still be running after the placeholder timeout")
 }
 

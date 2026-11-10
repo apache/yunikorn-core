@@ -2134,8 +2134,9 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		// impact on what is happening until this point
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.hasPlaceholderAlloc = true
-			sa.initPlaceholderTimer()
 		}
+		// also after the timer fired: the placeholders it released count until the RM confirms the release
+		sa.initPlaceholderTimer()
 		// User resource usage needs to be updated even during resource allocation happen for ph's itself even though state change would happen only after all ph allocation completes.
 		sa.incUserResourceUsage(alloc.GetAllocatedResource())
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, alloc.GetAllocatedResource())

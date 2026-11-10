@@ -33,10 +33,12 @@ import (
 var idGen atomic.Uint64
 
 // StreamingLimiter tracks the concurrent streaming connections.
+// +checklocksguardedby:Mutex
 type StreamingLimiter struct {
 	perHostStreams map[string]uint64 // number of connections per host
 	streams        uint64            // number of connections (total)
-	id             string            // unique name for configmap callback
+	// +checklocksunguarded
+	id string // unique name for configmap callback
 
 	maxStreams        uint64 // maximum number of event streams
 	maxPerHostStreams uint64 // maximum number of event streams per host

@@ -24,10 +24,9 @@ import (
 	"strconv"
 	"testing"
 	"time"
+	"uuid"
 
 	"gotest.tools/v3/assert"
-
-	"github.com/google/uuid"
 
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -399,8 +398,14 @@ func TestZeroTimeInUnixNano(t *testing.T) {
 
 func TestGetNewUUID(t *testing.T) {
 	newUUID := GetNewUUID()
-	if _, err := uuid.Parse(newUUID); err != nil {
-		t.Errorf("Generated UUID is not valid: %s", newUUID)
+
+	parsed, err := uuid.Parse(newUUID)
+	if err != nil {
+		t.Fatalf("Generated UUID is not valid: %s, error: %v", newUUID, err)
+	}
+
+	if version := parsed[6] >> 4; version != 4 {
+		t.Errorf("Expected UUID version 4, got version %d", version)
 	}
 }
 

@@ -1487,23 +1487,20 @@ func (sq *Queue) sortQueues() []*Queue {
 		return nil
 	}
 	// Create a list of the queues with pending resources
-	sortedQueues := make([]*Queue, 0)
-	sortedMaxFairResources := make([]*resources.Resource, 0)
-	for _, child := range sq.GetCopyOfChildren() {
+	children := sq.GetCopyOfChildren()
+	sortedQueues := make([]queueFairMax, 0, len(children))
+	for _, child := range children {
 		// a stopped queue cannot be scheduled
 		if child.IsStopped() {
 			continue
 		}
 		// queue must have pending resources to be considered for scheduling
 		if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
-			sortedQueues = append(sortedQueues, child)
-			sortedMaxFairResources = append(sortedMaxFairResources, child.GetFairMaxResource())
+			sortedQueues = append(sortedQueues, queueFairMax{queue: child, fairMax: child.GetFairMaxResource()})
 		}
 	}
 	// Sort the queues
-	sortQueue(sortedQueues, sortedMaxFairResources, sq.getSortType(), sq.IsPrioritySortEnabled())
-
-	return sortedQueues
+	return sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
 }
 
 // getHeadRoom returns the headroom for the queue. This can never be more than the headroom for the parent.

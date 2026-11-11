@@ -840,6 +840,88 @@ func TestSortQueue(t *testing.T) {
 	}
 }
 
+// sortQueues pairs each child with its own fair max: check that the fair max of a child is not
+// used for one of its siblings. Parent queues sort on fairness with the priority sort either way.
+func TestSortQueuesFairMaxFollowsQueue(t *testing.T) {
+	// the max of a leaf overrides the max of the root, so the shares are 6/10000, 20/40000 and 24/80000
+	usage := map[string]resources.Quantity{"10": 6, "40": 20, "80": 24}
+
+	tests := []struct {
+		name  string
+		props map[string]string
+	}{
+		{"priority sort enabled", map[string]string{configs.ApplicationSortPriority: configs.ApplicationSortPriorityEnabled}},
+		{"priority sort disabled", map[string]string{configs.ApplicationSortPriority: configs.ApplicationSortPriorityDisabled}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parent := parentWithFairMaxLeaves(t, "1000", usage, tt.props)
+			// the leaves have no application, so they all sit at the same priority and both
+			// comparators fall through to the share: the setting itself is checked in
+			// TestSortQueuesPrioritySortDispatch.
+			// the input order comes from the children map, so this covers one order per run: the
+			// deterministic cover of every order is TestSortQueuesFairMaxInputOrder
+			assert.Equal(t, "leaf-80,leaf-40,leaf-10", queueNames(parent.sortQueues()), "lowest share must be first")
+		})
+	}
+}
+
+// the priority sort setting of the parent picks the comparator, so it must reach sortQueue: with the
+// priority compared first the order follows the priority, with the share first it follows the share.
+func TestSortQueuesPrioritySortDispatch(t *testing.T) {
+	// the shares are 6/10000, 20/40000 and 24/80000 while the priorities run the other way
+	usage := map[string]resources.Quantity{"10": 6, "40": 20, "80": 24}
+	priority := map[string]int32{"leaf-10": 3, "leaf-40": 1, "leaf-80": 2}
+
+	tests := []struct {
+		name     string
+		props    map[string]string
+		expected string
+	}{
+		{"priority first", map[string]string{configs.ApplicationSortPriority: configs.ApplicationSortPriorityEnabled}, "leaf-10,leaf-80,leaf-40"},
+		{"share first", map[string]string{configs.ApplicationSortPriority: configs.ApplicationSortPriorityDisabled}, "leaf-80,leaf-40,leaf-10"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			parent := parentWithFairMaxLeaves(t, "1000", usage, tt.props)
+			for _, child := range parent.GetCopyOfChildren() {
+				child.currentPriority = priority[child.Name]
+			}
+			// both the priorities and the shares are distinct, so neither order depends on the
+			// input order the children map hands over
+			assert.Equal(t, tt.expected, queueNames(parent.sortQueues()), "sorted on the wrong key")
+		})
+	}
+}
+
+// the fair max of a queue takes the max of a child over the max of the root while the max of that
+// child is capped by the root: sortQueues must pass the fair max, not the max.
+func TestSortQueuesFairMaxNotCappedMax(t *testing.T) {
+	// on the fair max leaf-1000 has the lowest share, 70/1000000, on the capped max the highest, 70/100000
+	parent := parentWithFairMaxLeaves(t, "100", map[string]resources.Quantity{"10": 6, "1000": 70}, nil)
+	assert.Equal(t, "leaf-1000,leaf-10", queueNames(parent.sortQueues()), "lowest share must be first")
+}
+
+// create a parent under a root with rootMax, holding a leaf per entry in usage named leaf-<max>. The
+// max comes from the config in vcore while the usage is set in the internal milli unit, so a usage
+// of 6 under a max of 10 is a share of 6/10000.
+func parentWithFairMaxLeaves(t *testing.T, rootMax string, usage map[string]resources.Quantity, props map[string]string) *Queue {
+	root, err := createRootQueue(map[string]string{"vcore": rootMax})
+	assert.NilError(t, err, "queue create failed")
+	var parent *Queue
+	parent, err = createManagedQueueWithProps(root, "parent", true, nil, props)
+	assert.NilError(t, err, "failed to create parent queue")
+	for leafMax, used := range usage {
+		var leaf *Queue
+		leaf, err = createManagedQueue(parent, "leaf-"+leafMax, false, map[string]string{"vcore": leafMax})
+		assert.NilError(t, err, "failed to create leaf queue")
+		leaf.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": used})
+		// a leaf needs a pending resource to be part of the list, see TestSortQueue
+		leaf.incPendingResource(resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 1}))
+	}
+	return parent
+}
+
 func TestHeadroom(t *testing.T) {
 	// create the root: nil test
 	root, err := createRootQueue(nil)

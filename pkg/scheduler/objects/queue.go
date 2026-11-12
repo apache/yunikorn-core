@@ -94,6 +94,7 @@ type Queue struct {
 	isQuotaPreemptionRunning bool
 	unschedAskBackoff        uint64
 	askBackoffDelay          time.Duration
+	reservationMaxTime       time.Duration // maximum time an ask can keep a node reserved
 
 	locking.RWMutex
 }
@@ -119,6 +120,7 @@ func newBlankQueue() *Queue {
 		quotaPreemptionDelay:     0,
 		quotaPreemptionStartTime: time.Time{},
 		askBackoffDelay:          configs.DefaultAskBackOffDelay,
+		reservationMaxTime:       configs.DefaultReservationMaxTime,
 	}
 }
 
@@ -689,6 +691,7 @@ func (sq *Queue) resetProperties() {
 	sq.unschedAskBackoff = 0
 	sq.askBackoffDelay = configs.DefaultAskBackOffDelay
 	sq.quotaPreemptionDelay = configs.DefaultQuotaPreemptionDelay
+	sq.reservationMaxTime = configs.DefaultReservationMaxTime
 }
 
 // UpdateQueueProperties updates the queue properties defined as text
@@ -766,6 +769,12 @@ func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 			sq.quotaPreemptionDelay, err = convertDelay(value, configs.DefaultQuotaPreemptionDelay)
 			if err != nil {
 				log.Log(log.SchedQueue).Debug("quota preemption delay configuration error",
+					zap.Error(err))
+			}
+		case configs.ReservationMaxTime:
+			sq.reservationMaxTime, err = convertDelay(value, configs.DefaultReservationMaxTime)
+			if err != nil {
+				log.Log(log.SchedQueue).Debug("reservation max time configuration error",
 					zap.Error(err))
 			}
 		default:
@@ -1487,23 +1496,20 @@ func (sq *Queue) sortQueues() []*Queue {
 		return nil
 	}
 	// Create a list of the queues with pending resources
-	sortedQueues := make([]*Queue, 0)
-	sortedMaxFairResources := make([]*resources.Resource, 0)
-	for _, child := range sq.GetCopyOfChildren() {
+	children := sq.GetCopyOfChildren()
+	sortedQueues := make([]queueFairMax, 0, len(children))
+	for _, child := range children {
 		// a stopped queue cannot be scheduled
 		if child.IsStopped() {
 			continue
 		}
 		// queue must have pending resources to be considered for scheduling
 		if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
-			sortedQueues = append(sortedQueues, child)
-			sortedMaxFairResources = append(sortedMaxFairResources, child.GetFairMaxResource())
+			sortedQueues = append(sortedQueues, queueFairMax{queue: child, fairMax: child.GetFairMaxResource()})
 		}
 	}
 	// Sort the queues
-	sortQueue(sortedQueues, sortedMaxFairResources, sq.getSortType(), sq.IsPrioritySortEnabled())
-
-	return sortedQueues
+	return sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
 }
 
 // getHeadRoom returns the headroom for the queue. This can never be more than the headroom for the parent.
@@ -2430,4 +2436,11 @@ func (sq *Queue) GetBackoffDelay() time.Duration {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.askBackoffDelay
+}
+
+// GetReservationMaxTime returns the maximum time an ask in this queue can keep a node reserved.
+func (sq *Queue) GetReservationMaxTime() time.Duration {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.reservationMaxTime
 }

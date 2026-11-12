@@ -445,7 +445,7 @@ func (sa *Application) clearStateTimer() {
 }
 
 func (sa *Application) initPlaceholderTimer() {
-	if sa.placeholderTimer != nil || !sa.IsAccepted() || sa.execTimeout <= 0 {
+	if sa.placeholderTimer != nil || (!sa.IsAccepted() && !sa.IsRunning()) || sa.execTimeout <= 0 {
 		return
 	}
 	log.Log(log.SchedApplication).Debug("Application placeholder timer initiated",
@@ -473,8 +473,9 @@ func (sa *Application) clearPlaceholderTimer() {
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
-	if (sa.IsRunning() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder) {
-		// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
+	if sa.IsRunning() || sa.IsCompleting() {
+		// the application has started, so only release its unused placeholders. There may be none left: the timer
+		// can fire while the last one is being replaced.
 		var toRelease []*Allocation
 		replacing := 0
 		preempted := 0
@@ -506,7 +507,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			"releasing allocated placeholders on placeholder timeout",
 		)
 	} else {
-		// Case 2: in every other case progress the application, and notify the context about the expired placeholders
+		// in every other case progress the application, and notify the context about the expired placeholders
 		// change the status of the app based on gang style: soft resume normal allocations, hard fail the app
 		event := ResumeApplication
 		if sa.gangSchedulingStyle == Hard {
@@ -1678,6 +1679,21 @@ func (sa *Application) checkHeadRooms(ask *Allocation, userHeadroom *resources.R
 	return userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) && headRoom.FitInMaxUndef(ask.GetAllocatedResource())
 }
 
+// isReservationExpired returns true if a reservation has been held for longer than the queue allows.
+func (sa *Application) isReservationExpired(ask *Allocation, reservedFor time.Duration, userHeadroom *resources.Resource) bool {
+	maxTime := sa.queue.GetReservationMaxTime()
+	if reservedFor > maxTime {
+		return true
+	}
+	// A reservation over a queue or user limit cannot be allocated, so it is given up sooner. The cluster size is not
+	// such a limit: a full cluster recovers when the reserved node drains. An ask that triggered preemption is the
+	// exception: its headroom only recovers when the victims exit, and it cannot preempt again.
+	if reservedFor <= maxTime/4 || ask.HasTriggeredPreemption() {
+		return false
+	}
+	return !sa.checkHeadRooms(ask, userHeadroom, sa.queue.getMaxHeadRoom())
+}
+
 // tryReservedAllocate tries allocating an outstanding reservation
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *AllocationResult {
 	sa.Lock()
@@ -1706,16 +1722,22 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			return newUnreservedAllocationResult(reserve.nodeID, unreserveAsk)
 		}
 
-		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
-			// Cancel the reservation after wait time expires, but not for required node asks
-			if ask.GetRequiredNode() == "" && time.Since(reserve.createTime) > reservationWaitTimeout {
-				num := sa.unReserveInternal(reserve)
-				sa.queue.UnReserve(sa.ApplicationID, num)
-				log.Log(log.SchedApplication).Info("Cancelled reservation as wait time expired",
-					zap.String("reserve app", reserve.appID),
-					zap.String("reserve alloc key", reserve.allocKey),
-					zap.String("node", reserve.nodeID))
-			}
+		fitsHeadRoom := sa.checkHeadRooms(ask, userHeadroom, headRoom)
+		reservedFor := time.Since(reserve.createTime)
+		// Cancel the reservation after wait time expires, but not for required node asks
+		if ask.GetRequiredNode() == "" && sa.isReservationExpired(ask, reservedFor, userHeadroom) {
+			num := sa.unReserveInternal(reserve)
+			sa.queue.UnReserve(sa.ApplicationID, num)
+			sa.executeReservationReleasedCallback(num)
+			reserve.node.setReservationExpired()
+			log.Log(log.SchedApplication).Info("Cancelled reservation as wait time expired",
+				zap.String("reserve app", sa.ApplicationID),
+				zap.String("reserve alloc key", reserve.allocKey),
+				zap.String("node", reserve.nodeID),
+				zap.Duration("reserved for", reservedFor))
+			continue
+		}
+		if !fitsHeadRoom {
 			continue
 		}
 
@@ -1929,7 +1951,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 
 		// nothing allocated should we look at a reservation?
 		askAge := time.Since(ask.GetCreateTime())
-		if reserved == nil && askAge > reservationDelay {
+		if reserved == nil && askAge > reservationDelay && !node.isInReservationCooldown() {
 			log.Log(log.SchedApplication).Debug("app reservation check",
 				zap.String("allocationKey", allocKey),
 				zap.Time("createTime", ask.GetCreateTime()),
@@ -2160,8 +2182,9 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		// impact on what is happening until this point
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.hasPlaceholderAlloc = true
-			sa.initPlaceholderTimer()
 		}
+		// also after the timer fired: the placeholders it released count until the RM confirms the release
+		sa.initPlaceholderTimer()
 		// User resource usage needs to be updated even during resource allocation happen for ph's itself even though state change would happen only after all ph allocation completes.
 		sa.incUserResourceUsage(alloc.GetAllocatedResource())
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, alloc.GetAllocatedResource())

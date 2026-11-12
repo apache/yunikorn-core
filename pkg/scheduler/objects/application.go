@@ -567,6 +567,19 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			si.TerminationType_TIMEOUT,
 			"releasing pending placeholders on placeholder timeout",
 		)
+		// without allocated placeholders no release confirmation will move the state on
+		if resources.IsZero(sa.allocatedPlaceholder) && (sa.IsResuming() || sa.IsFailing()) {
+			next := RunApplication
+			if sa.IsFailing() {
+				next = FailApplication
+			}
+			if err := sa.HandleApplicationEvent(next); err != nil {
+				log.Log(log.SchedApplication).Warn("Application state not changed on placeholder timeout",
+					zap.String("currentState", sa.CurrentState()),
+					zap.Stringer("event", next),
+					zap.Error(err))
+			}
+		}
 	}
 	sa.clearPlaceholderTimer()
 }
@@ -994,8 +1007,8 @@ func (sa *Application) RollbackAllocation(allocKey string) (*Allocation, error) 
 	if ask.IsPlaceholder() {
 		sa.allocatedPlaceholder = resources.Sub(sa.allocatedPlaceholder, res)
 		sa.allocatedPlaceholder.Prune()
+		// keep the placeholder timer running: its timeout covers the whole placeholder lifecycle, rollbacks included
 		if resources.IsZero(sa.allocatedPlaceholder) {
-			sa.clearPlaceholderTimer()
 			sa.hasPlaceholderAlloc = false
 		}
 		// without real allocations the gang is still forming: placeholder usage only grew, so the peak includes this

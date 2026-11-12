@@ -5173,7 +5173,7 @@ func TestRollbackAllocationPartial(t *testing.T) {
 }
 
 // TestRollbackAllocationPlaceholder verifies that a placeholder rollback reverts the placeholder tracking and peak,
-// moves the application back to Accepted, and clears the placeholder timer once no placeholder is left allocated.
+// moves the application back to Accepted, and keeps the placeholder timer running.
 func TestRollbackAllocationPlaceholder(t *testing.T) {
 	setupUGM()
 	queue, err := createRootQueue(nil)
@@ -5202,7 +5202,7 @@ func TestRollbackAllocationPlaceholder(t *testing.T) {
 	assert.Assert(t, app.IsAccepted(), "app should remain in Accepted state, got state %s", app.CurrentState())
 	assert.Assert(t, resources.IsZero(app.GetPlaceholderResource()), "placeholder resource should be zero after rollback, got %v", app.GetPlaceholderResource())
 	assert.Assert(t, resources.IsZero(app.GetMaxAllocatedResource()), "peak should be zero after rollback, got %v", app.GetMaxAllocatedResource())
-	assert.Assert(t, app.getPlaceholderTimer() == nil, "placeholder timer should be cleared when no placeholder is allocated")
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "placeholder timer should keep running after the last placeholder is rolled back")
 	assert.Assert(t, !app.HasPlaceholderAllocation(), "app should not report a placeholder allocation after rollback")
 	assert.Assert(t, resources.IsZero(app.GetAllocatedResource()), "allocated resource should be zero after rollback, got %v", app.GetAllocatedResource())
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), resources.Multiply(res, 2)), "pending resource should be restored after rollback, got %v", app.GetPendingResource())
@@ -5230,16 +5230,15 @@ func TestRollbackAllocationPlaceholderWithRealAllocation(t *testing.T) {
 }
 
 // TestRollbackAllocationPlaceholderRunningSlot verifies that an application moved back to Accepted keeps its running
-// application slot in the queue only while it still holds placeholders.
+// application slot in the queue, also when no placeholder is left.
 func TestRollbackAllocationPlaceholderRunningSlot(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	tests := []struct {
 		name         string
 		placeholders int
-		slotKept     bool
 	}{
-		{"placeholder left", 2, true},
-		{"no placeholder left", 1, false},
+		{"placeholder left", 2},
+		{"no placeholder left", 1},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -5259,7 +5258,7 @@ func TestRollbackAllocationPlaceholderRunningSlot(t *testing.T) {
 			_, err = app.RollbackAllocation(keys[len(keys)-1])
 			assert.NilError(t, err, "rollback should succeed")
 			assert.Assert(t, app.IsAccepted(), "app should move back to Accepted state, got state %s", app.CurrentState())
-			assert.Equal(t, queue.canRunApp(appID2), !tt.slotKept, "unexpected slot for another application")
+			assert.Assert(t, !queue.canRunApp(appID2), "another application should not get the slot")
 		})
 	}
 }
@@ -5281,6 +5280,36 @@ func TestTimeoutPlaceholderAfterRollback(t *testing.T) {
 	app.timeoutPlaceholderProcessing()
 	assert.Assert(t, app.IsResuming(), "soft gang should resume on timeout, got state %s", app.CurrentState())
 	assert.Equal(t, len(app.getAllRequestsInternal()), 0, "placeholder asks should be removed on timeout")
+}
+
+// TestTimeoutPlaceholderNoneAllocated verifies that a timeout after the last placeholder was rolled back moves the
+// application on, as there is no placeholder release to confirm.
+func TestTimeoutPlaceholderNoneAllocated(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	tests := []struct {
+		style    string
+		expected string
+	}{
+		{Soft, Accepted.String()},
+		{Hard, Failed.String()},
+	}
+	for _, tt := range tests {
+		t.Run(tt.style, func(t *testing.T) {
+			setupUGM()
+			queue, err := createRootQueue(nil)
+			assert.NilError(t, err, "queue create failed")
+			app := newApplicationTG(appID1, "default", "root.unknown", res)
+			app.queue = queue
+			app.gangSchedulingStyle = tt.style
+			allocateAndAdd(t, app, newAllocationAskTG(aKey, appID1, tg1, res))
+			_, err = app.RollbackAllocation(aKey)
+			assert.NilError(t, err, "rollback should succeed")
+
+			app.timeoutPlaceholderProcessing()
+			assert.Equal(t, app.CurrentState(), tt.expected, "unexpected state after the placeholder timeout")
+			assert.Equal(t, len(app.getAllRequestsInternal()), 0, "placeholder asks should be removed on timeout")
+		})
+	}
 }
 
 func TestApplicationBackoff(t *testing.T) {

@@ -325,14 +325,10 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 			// sa.requests at all. That "ghost" state IS reachable in production: sa.allocations is
 			// only cleaned up once the shim confirms the release, so every path that drops asks while
 			// leaving sa.allocations behind opens a window for a SCHEDULING_FAILED_ON_RM release to
-			// still route to RollbackAllocation - RemoveAllocationAsk on an allocated key, or
-			// removeAsksInternal("") from timeoutPlaceholderProcessing case 2, which is reached from
-			// Running for a soft gang whose ResumeApplication transition is rejected (that event is
-			// only valid from New/Accepted, application_state.go ~line 125) so the app stays Running
-			// and remains rollback-eligible. Since YUNIKORN-3360, RollbackAllocation rejects such a
-			// ghost before touching anything (application.go ~line 885: the ask has to be in
-			// sa.requests), so the fuzzer asserts that rejection below, and the reference model
-			// leaves the step as the no-op it now is.
+			// still route to RollbackAllocation - RemoveAllocationAsk on an allocated key. Since
+			// YUNIKORN-3360, RollbackAllocation rejects such a ghost before touching anything
+			// (application.go ~line 885: the ask has to be in sa.requests), so the fuzzer asserts
+			// that rejection below, and the reference model leaves the step as the no-op it now is.
 			// The only combination excluded is a confirmed key that is still tracked but already
 			// pending (deallocated without being removed): ask.deallocate() rejects that outright, so
 			// picking it would only ever burn a step.

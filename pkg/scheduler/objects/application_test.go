@@ -1734,6 +1734,89 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 }
 
+// Placeholders allocated after the application runs, as on recovery, are still released on timeout, also one allocated
+// after the timer fired.
+func TestTimeoutPlaceholderRunning(t *testing.T) {
+	setupUGM()
+
+	originalPhTimeout := defaultPlaceholderTimeout
+	defaultPlaceholderTimeout = 100 * time.Millisecond
+	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
+
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	app.SetState(Accepted.String())
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+	assert.NilError(t, err)
+	assert.NilError(t, app.AddAllocation(newAllocation(appID1, nodeID1, res)))
+	assert.Assert(t, app.IsRunning(), "App should be running after the first allocation")
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should not be set without placeholders")
+
+	released := func(ph *Allocation) error {
+		return common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
+			for _, event := range testHandler.GetEvents() {
+				if release, ok := event.(*rmevent.RMReleaseAllocationEvent); ok && len(release.ReleasedAllocations) == 1 &&
+					release.ReleasedAllocations[0].AllocationKey == ph.allocationKey &&
+					release.ReleasedAllocations[0].TerminationType == si.TerminationType_TIMEOUT {
+					return true
+				}
+			}
+			return false
+		})
+	}
+	ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+	assert.NilError(t, app.AddAllocation(ph))
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated for a running application")
+	assert.NilError(t, released(ph), "placeholder not released on timeout")
+
+	// the released placeholder still counts until the RM confirms the release
+	late := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+	assert.NilError(t, app.AddAllocation(late))
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the timer fired")
+	assert.NilError(t, released(late), "late placeholder not released on timeout")
+	assert.Assert(t, app.IsRunning(), "App should still be running after the placeholder timeout")
+}
+
+// A timer that fired while the last placeholder was being replaced must not fail the application, or release its
+// allocations and asks.
+func TestTimeoutPlaceholderStale(t *testing.T) {
+	for _, style := range []string{Hard, Soft} {
+		t.Run(style, func(t *testing.T) {
+			setupUGM()
+			app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+			app.gangSchedulingStyle = style
+			app.SetState(Accepted.String())
+			queue, err := createRootQueue(nil)
+			assert.NilError(t, err)
+			app.queue = queue
+			res, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+			assert.NilError(t, err)
+			assert.NilError(t, app.AddAllocation(newAllocation(appID1, nodeID1, res)))
+			ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+			app.addPlaceholderDataWithLocking(ph)
+			assert.NilError(t, app.AddAllocation(ph))
+			assert.NilError(t, app.AddAllocationAsk(newAllocationAskAll("ask", appID1, tg1, res, false, 0)))
+			assert.Assert(t, app.IsRunning(), "App should be running")
+
+			// link the placeholder and its replacement as tryPlaceholderAllocate does
+			replacement := newAllocation(appID1, nodeID1, res)
+			ph.SetRelease(replacement)
+			replacement.SetRelease(ph)
+			assert.NilError(t, ph.SetReleased(true))
+			assert.Assert(t, app.ReplaceAllocation(ph.allocationKey) != nil)
+			// the timer fired before the replacement, so it runs once the lock is free
+			app.timeoutPlaceholderProcessing()
+
+			assert.Assert(t, app.IsRunning(), "App should still be running, is %s", app.CurrentState())
+			assert.Assert(t, app.GetAllocationAsk("ask") != nil, "ask removed by the stale timer")
+			for _, event := range testHandler.GetEvents() {
+				if release, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+					assert.Equal(t, len(release.ReleasedAllocations), 0, "allocations released by the stale timer")
+				}
+			}
+		})
+	}
+}
+
 func TestTimeoutPlaceholderProcessingDoesNotWaitForRMReply(t *testing.T) {
 	setupUGM()
 	app := newApplication(appID1, "default", "root.a")

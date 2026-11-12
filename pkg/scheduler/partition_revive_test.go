@@ -378,6 +378,7 @@ func TestResolveRevivedQueueAddsApplication(t *testing.T) {
 	setupUGM()
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
 	app := newApplication(appID1, "default", "root.recreated")
 
 	queue := partition.resolveRevivedQueue(app)

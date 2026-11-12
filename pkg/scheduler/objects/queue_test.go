@@ -3680,6 +3680,32 @@ func TestQueueBackoffProperties(t *testing.T) {
 	assert.Equal(t, 30*time.Second, leaf3.GetBackoffDelay())
 }
 
+func TestReservationMaxTimeProperty(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+
+	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	assert.Equal(t, configs.DefaultReservationMaxTime, leaf.GetReservationMaxTime())
+
+	parent, err := createManagedQueueWithProps(root, "parent", true, nil, map[string]string{configs.ReservationMaxTime: "10m"})
+	assert.NilError(t, err, "failed to create parent queue")
+	inherited, err := createManagedQueue(parent, "inherited", false, nil)
+	assert.NilError(t, err, "failed to create inheriting leaf queue")
+	assert.Equal(t, 10*time.Minute, inherited.GetReservationMaxTime())
+
+	for _, value := range []string{"xyz", "-1m", "0s"} {
+		var invalid *Queue
+		invalid, err = createManagedQueueWithProps(root, "invalid", false, nil, map[string]string{configs.ReservationMaxTime: value})
+		assert.NilError(t, err, "failed to create leaf queue")
+		assert.Equal(t, configs.DefaultReservationMaxTime, invalid.GetReservationMaxTime(), "value %s should fall back to the default", value)
+	}
+
+	inherited.properties = map[string]string{}
+	inherited.UpdateQueueProperties(nil)
+	assert.Equal(t, configs.DefaultReservationMaxTime, inherited.GetReservationMaxTime())
+}
+
 func TestUpdateQueuePropertiesReset(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create basic root queue")

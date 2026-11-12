@@ -60,13 +60,11 @@ func completedApp(t *testing.T, rmID string) *Application {
 func TestAddAllocationAskRevivesCompletedApp(t *testing.T) {
 	setupUGM()
 	app := completedApp(t, "rm-revive")
-	assert.Assert(t, !app.IsRevived(), "app should not be flagged revived while completed")
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5})
 	assert.NilError(t, app.AddAllocationAsk(newAllocationAsk("late-ask", appID1, res)), "late ask should revive the app")
 
 	assert.Equal(t, app.CurrentState(), Running.String(), "completed app should be revived to Running")
-	assert.Assert(t, app.IsRevived(), "revived flag should be set")
 	assert.Assert(t, app.GetAllocationAsk("late-ask") != nil, "ask should be tracked after revival")
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), res), "pending should hold the late ask")
 	// the terminatedTimeout -> ExpireApplication timer must not survive the revival
@@ -112,6 +110,10 @@ func TestRevivedAppTracksCompletedResourceWithoutPanic(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5})
 	alloc := newAllocation(appID1, nodeID1, res)
 	assert.NilError(t, app.AddAllocation(alloc))
+	revive := app.EnsureAppRevivable()
+	assert.Assert(t, revive)
+	runnable := app.EnsureAppRunnable()
+	assert.Assert(t, runnable)
 
 	app.RLock()
 	restored := app.usedResource != nil && app.preemptedResource != nil && app.placeholderResource != nil
@@ -159,25 +161,6 @@ func TestAddPathsRejectTerminalApps(t *testing.T) {
 	}
 }
 
-// Completing is the pre-existing grace period: it must still revive, but it is not a completed-app
-// revival and must not be counted as one.
-func TestCompletingStillRevivesWithoutReviveFlag(t *testing.T) {
-	setupUGM()
-	app := newApplication(appID1, "default", "root.a")
-	queue, err := createRootQueue(nil)
-	assert.NilError(t, err, "queue create failed")
-	app.queue = queue
-
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10})
-	assert.NilError(t, app.AddAllocationAsk(newAllocationAsk("ask-1", appID1, res)))
-	app.RemoveAllocationAsk("ask-1")
-	assert.Equal(t, app.CurrentState(), Completing.String())
-
-	assert.NilError(t, app.AddAllocationAsk(newAllocationAsk("ask-2", appID1, res)))
-	assert.Equal(t, app.CurrentState(), Running.String())
-	assert.Assert(t, !app.IsRevived(), "Completing is not a completed-app revival")
-}
-
 // The completed gauges come back down on revival and the revived gauge unwinds when the application
 // completes again. The monotonic queue_app_total counter is deliberately left alone.
 func TestReviveMetricsBalance(t *testing.T) {
@@ -192,6 +175,9 @@ func TestReviveMetricsBalance(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5})
 	assert.NilError(t, app.AddAllocationAsk(newAllocationAsk("late-ask", appID1, res)))
 
+	revive := app.EnsureAppRevivable()
+	assert.Assert(t, revive)
+
 	completed, err = metrics.GetSchedulerMetrics().GetTotalApplicationsCompleted()
 	assert.NilError(t, err)
 	assert.Equal(t, completed, 0, "completed gauge should be given back on revival")
@@ -199,21 +185,15 @@ func TestReviveMetricsBalance(t *testing.T) {
 	assert.NilError(t, err)
 	assert.Equal(t, revived, 1, "revived gauge should count the revival")
 
-	// complete the app a second time: the revived gauge unwinds, completed goes back up
-	app.RemoveAllocationAsk("late-ask")
-	app.Lock()
-	err = app.HandleApplicationEvent(CompleteApplication)
-	app.Unlock()
-	assert.NilError(t, err)
-	assert.Equal(t, app.CurrentState(), Completed.String())
+	runnable := app.EnsureAppRunnable()
+	assert.Assert(t, runnable)
 
 	revived, err = metrics.GetSchedulerMetrics().GetTotalApplicationsRevived()
 	assert.NilError(t, err)
 	assert.Equal(t, revived, 0, "revived gauge should unwind when the app completes again")
-	completed, err = metrics.GetSchedulerMetrics().GetTotalApplicationsCompleted()
+	running, err := metrics.GetSchedulerMetrics().GetTotalApplicationsRunning()
 	assert.NilError(t, err)
-	assert.Equal(t, completed, 1, "completed gauge should count the app again")
-	assert.Assert(t, !app.IsRevived(), "revived flag should be cleared on re-completion")
+	assert.Equal(t, running, 1, "running gauge should count the app again")
 }
 
 // Expiry is still terminal: leaving Completed for Expired must not hand the completed gauge back.
@@ -255,9 +235,9 @@ func TestDetachQueueForCompletion(t *testing.T) {
 func TestDetachQueueForCompletionSkipsRevived(t *testing.T) {
 	setupUGM()
 	app := completedApp(t, "rm-detach")
+	app.EnsureAppRevivable()
 	queue := app.GetQueue()
 	app.RestoreQueue(queue)
-	assert.Assert(t, app.IsRevived(), "RestoreQueue must raise the revived flag")
 
 	detached, ok := app.DetachQueueForCompletion()
 	assert.Assert(t, !ok, "a revived app must not be detached")

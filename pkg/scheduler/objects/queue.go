@@ -846,8 +846,8 @@ func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 	return sq.guaranteedResource.Clone()
 }
 
-// hasGuaranteeOnPath returns true if this queue or any parent has a guarantee set.
-func (sq *Queue) hasGuaranteeOnPath() bool {
+// hasGuaranteed returns true if this queue or any parent has a guarantee set.
+func (sq *Queue) hasGuaranteed() bool {
 	for q := sq; q != nil; q = q.parent {
 		if !q.GetGuaranteedResource().IsEmpty() {
 			return true

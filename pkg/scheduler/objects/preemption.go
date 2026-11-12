@@ -118,7 +118,7 @@ func CheckPreconditions(ask *Allocation, queue *Queue, preemptionDelay time.Dura
 	}
 
 	// skip if no queue on the path has a guarantee: the guarantee check cannot pass and the victim walk locks other apps
-	if !queue.hasGuaranteeOnPath() {
+	if !queue.hasGuaranteed() {
 		return false
 	}
 

@@ -36,6 +36,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/plugins"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
 )
 
@@ -363,21 +364,27 @@ func TestIsVictimQueueOverGuaranteed(t *testing.T) {
 
 func TestSortVictimsForPreemption(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	regularLowOlder := createAllocation("regularLowOlder", "app1", nodeID1, true, false, 5, false, res)
+	regularLowOlder.createTime = testBaseTime
+	regularLowNewer := createAllocation("regularLowNewer", "app1", nodeID1, true, false, 5, false, res)
+	regularLowNewer.createTime = testBaseTime.Add(time.Minute)
 	regularPod := createAllocation("regularPod", "app1", nodeID1, true, false, 10, false, res)
 	originatorPod := createAllocation("originatorPod", "app1", nodeID1, true, true, 10, false, res)
 	optedOutPod := createAllocation("optedOutPod", "app1", nodeID1, false, false, 10, false, res)
 	optedOutOriginatorPod := createAllocation("optedOutOriginatorPod", "app1", nodeID1, false, true, 10, false, res)
 
 	allocationsByNode := map[string][]*Allocation{
-		nodeID1: {optedOutPod, originatorPod, regularPod, optedOutOriginatorPod},
+		nodeID1: {optedOutPod, originatorPod, regularPod, regularLowOlder, regularLowNewer, optedOutOriginatorPod},
 	}
 	sortVictimsForPreemption(allocationsByNode)
 
 	allocations := allocationsByNode[nodeID1]
-	assert.Equal(t, allocations[0].GetAllocationKey(), "regularPod")
-	assert.Equal(t, allocations[1].GetAllocationKey(), "optedOutPod")
-	assert.Equal(t, allocations[2].GetAllocationKey(), "originatorPod")
-	assert.Equal(t, allocations[3].GetAllocationKey(), "optedOutOriginatorPod")
+	assert.Equal(t, allocations[0].GetAllocationKey(), "regularLowNewer")
+	assert.Equal(t, allocations[1].GetAllocationKey(), "regularLowOlder")
+	assert.Equal(t, allocations[2].GetAllocationKey(), "regularPod")
+	assert.Equal(t, allocations[3].GetAllocationKey(), "optedOutPod")
+	assert.Equal(t, allocations[4].GetAllocationKey(), "originatorPod")
+	assert.Equal(t, allocations[5].GetAllocationKey(), "optedOutOriginatorPod")
 }
 
 func TestTryPreemption(t *testing.T) {
@@ -3489,6 +3496,22 @@ func TestPreemptor_hasPreemptionShortfall(t *testing.T) {
 			headRoom:             resources.NewResourceFromMap(map[string]resources.Quantity{"unrelated_resource_type": 10}),
 			expectedShortfall:    false,
 		},
+		{
+			name:                 "foreign victim only with sufficient queue headroom",
+			nodeAvail:            resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4}),
+			nodeVictimsResource:  resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			totalVictimsResource: resources.NewResource(),
+			headRoom:             resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}),
+			expectedShortfall:    false,
+		},
+		{
+			name:                 "foreign victim only with insufficient queue headroom",
+			nodeAvail:            resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4}),
+			nodeVictimsResource:  resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}),
+			totalVictimsResource: resources.NewResource(),
+			headRoom:             resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}),
+			expectedShortfall:    true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -3503,4 +3526,159 @@ func TestPreemptor_hasPreemptionShortfall(t *testing.T) {
 			assert.Equal(t, p.hasPreemptionShortfall(nodeID, tc.nodeVictimsResource, tc.totalVictimsResource), tc.expectedShortfall)
 		})
 	}
+}
+
+func createForeignAllocation(allocKey, nodeID string, res *resources.Resource, priority int32, allowPreemptSelf, staticPod, daemonSet bool) *Allocation {
+	foreignType := siCommon.AllocTypeDefault
+	if staticPod {
+		foreignType = siCommon.AllocTypeStatic
+	}
+	tags := map[string]string{
+		siCommon.Foreign: foreignType,
+	}
+	if daemonSet {
+		tags[siCommon.DomainYuniKorn+siCommon.KeyRequiredNode] = nodeID
+	}
+	return NewAllocationFromSI(&si.Allocation{
+		AllocationKey:    allocKey,
+		AllocationTags:   tags,
+		ResourcePerAlloc: res.ToProto(),
+		Priority:         priority,
+		NodeID:           nodeID,
+		PreemptionPolicy: &si.PreemptionPolicy{
+			AllowPreemptSelf:  allowPreemptSelf,
+			AllowPreemptOther: false,
+		},
+	})
+}
+
+func TestInitWorkingState_ForeignVictims(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 100, "second": 100})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "100", "second": "100"})
+	assert.NilError(t, err)
+	childQ, err := createManagedQueueGuaranteed(rootQ, "child", false, map[string]string{"first": "100"}, map[string]string{"first": "50"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	resMatch := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
+	resNoMatch := resources.NewResourceFromMap(map[string]resources.Quantity{"second": 5})
+
+	staticForeign := createForeignAllocation("foreign-static", nodeID1, resMatch, 1, false, true, false)
+	dsForeign := createForeignAllocation("foreign-ds", nodeID1, resMatch, 1, false, false, true)
+	preemptedForeign := createForeignAllocation("foreign-preempted", nodeID1, resMatch, 1, true, false, false)
+	assert.NilError(t, preemptedForeign.MarkPreempted())
+	releasedForeign := createForeignAllocation("foreign-released", nodeID1, resMatch, 1, true, false, false)
+	assert.NilError(t, releasedForeign.SetReleased(true))
+	noMatchForeign := createForeignAllocation("foreign-nomatch", nodeID1, resNoMatch, 1, true, false, false)
+	equalPrioForeign := createForeignAllocation("foreign-equal-prio", nodeID1, resMatch, 10, true, false, false)
+	higherPrioForeign := createForeignAllocation("foreign-higher-prio", nodeID1, resMatch, 20, true, false, false)
+	eligibleOptedOut := createForeignAllocation("foreign-opted-out", nodeID1, resMatch, 1, false, false, false)
+	eligibleLowPrio := createForeignAllocation("foreign-low-prio", nodeID1, resMatch, 2, true, false, false)
+	eligibleMidPrio := createForeignAllocation("foreign-mid-prio", nodeID1, resMatch, 5, true, false, false)
+
+	for _, fAlloc := range []*Allocation{
+		staticForeign, dsForeign, preemptedForeign, releasedForeign,
+		noMatchForeign, equalPrioForeign, higherPrioForeign,
+		eligibleOptedOut, eligibleMidPrio, eligibleLowPrio,
+	} {
+		assert.Check(t, node.TryAddAllocation(fAlloc), "failed to add %s", fAlloc.GetAllocationKey())
+	}
+
+	app := newApplication(appID1, "default", childQ.QueuePath)
+	app.SetQueue(childQ)
+	childQ.AddApplication(app)
+	appQueueMapping.AddAppQueueMapping(app.ApplicationID, childQ)
+
+	ask := newAllocationAskPriority("ask-preemptor", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10}), 10)
+	assert.NilError(t, app.AddAllocationAsk(ask))
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+	preemptor := NewPreemptor(app, headRoom, 30*time.Second, ask, iterator(), false)
+	preemptor.initWorkingState()
+
+	nodeVictims := preemptor.allocationsByNode[nodeID1]
+	assert.Equal(t, len(nodeVictims), 3)
+	assert.Equal(t, nodeVictims[0].GetAllocationKey(), "foreign-low-prio")
+	assert.Equal(t, nodeVictims[1].GetAllocationKey(), "foreign-mid-prio")
+	assert.Equal(t, nodeVictims[2].GetAllocationKey(), "foreign-opted-out")
+	for _, v := range nodeVictims {
+		_, inQueueMap := preemptor.queueByAlloc[v.GetAllocationKey()]
+		assert.Assert(t, !inQueueMap, "foreign allocation should not be in queueByAlloc")
+	}
+}
+
+func TestTryPreemption_ForeignVictimOnNode(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "10"})
+	assert.NilError(t, err)
+	childQ, err := createManagedQueueGuaranteed(rootQ, "child", false, map[string]string{"first": "10"}, map[string]string{"first": "5"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	// Two foreign allocations occupy the node: foreign1 (5) reduces shortfall to 0, foreign2 (5) goes to tail in Pass 1
+	foreign1 := createForeignAllocation("foreign-1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 1, true, false, false)
+	foreign2 := createForeignAllocation("foreign-2", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}), 5, true, false, false)
+	assert.Check(t, node.TryAddAllocation(foreign1))
+	assert.Check(t, node.TryAddAllocation(foreign2))
+
+	eventSystem := evtMock.NewEventSystem()
+	foreign1.askEvents = schedEvt.NewAskEvents(eventSystem)
+
+	app, ask, err := creatApp2(childQ, map[string]resources.Quantity{"first": 5}, "ask-1", appQueueMapping)
+	assert.NilError(t, err)
+	ask.priority = 10
+
+	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
+			releaseReceived <- releaseEvent
+		}
+	}}
+
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	preemptor := NewPreemptor(app, headRoom, 30*time.Second, ask, iterator(), false)
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, ok, "expected preemption of foreign victim to succeed")
+	assert.Assert(t, result != nil)
+	assert.Equal(t, result.NodeID, nodeID1)
+	assert.Equal(t, result.Request.GetAllocationKey(), "ask-1")
+	assert.Check(t, foreign1.IsPreempted(), "foreign-1 should be preempted")
+	assert.Check(t, !foreign2.IsPreempted(), "foreign-2 in tail should be spared")
+	assert.Assert(t, resources.IsZero(childQ.GetPreemptingResource()), "queue preempting resource should not be incremented for foreign victim")
+	assert.Equal(t, len(eventSystem.Events), 0, "no scheduler event should be sent for foreign victim")
+
+	releaseEvent := waitForRMReleaseEvent(t, releaseReceived)
+	assert.Equal(t, len(releaseEvent.ReleasedAllocations), 1)
+	assert.Equal(t, releaseEvent.ReleasedAllocations[0].AllocationKey, "foreign-1")
+	assert.Equal(t, releaseEvent.ReleasedAllocations[0].TerminationType, si.TerminationType_PREEMPTED_BY_SCHEDULER)
+}
+
+func TestTryPreemption_ForeignVictimDoesNotFreeQueueHeadroom(t *testing.T) {
+	appQueueMapping := NewAppQueueMapping()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10})
+	iterator := getNodeIteratorFn(node)
+	rootQ, err := createRootQueue(map[string]string{"first": "10"})
+	assert.NilError(t, err)
+	childQ, err := createManagedQueueGuaranteed(rootQ, "child", false, map[string]string{"first": "10"}, map[string]string{"first": "5"}, appQueueMapping)
+	assert.NilError(t, err)
+
+	foreign1 := createForeignAllocation("foreign-1", nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 6}), 1, true, false, false)
+	assert.Check(t, node.TryAddAllocation(foreign1))
+
+	app, ask, err := creatApp2(childQ, map[string]resources.Quantity{"first": 5}, "ask-1", appQueueMapping)
+	assert.NilError(t, err)
+	ask.priority = 10
+
+	// Queue headroom is 0 (blocked on queue quota), so preempting a foreign pod cannot help satisfy queue headroom
+	headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 0})
+	preemptor := NewPreemptor(app, headRoom, 30*time.Second, ask, iterator(), false)
+
+	result, ok := preemptor.TryPreemption()
+	assert.Assert(t, !ok, "preemption should fail when queue headroom is insufficient and only foreign victim is available")
+	assert.Assert(t, result == nil)
+	assert.Check(t, !foreign1.IsPreempted(), "foreign-1 should not be preempted")
+	assertAllocationLog(t, ask, []string{common.PreemptionShortfall})
 }

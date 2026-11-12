@@ -187,6 +187,18 @@ func (p *Preemptor) initWorkingState() int {
 		} else {
 			// track allocated and available resources
 			nodeAvailableMap[node.NodeID] = node.GetAvailableResource()
+			for _, alloc := range node.GetForeignAllocations() {
+				if !alloc.IsPreemptable() || alloc.GetRequiredNode() != "" || alloc.IsPreempted() || alloc.IsReleased() {
+					continue
+				}
+				if !p.ask.GetAllocatedResource().MatchAny(alloc.GetAllocatedResource()) {
+					continue
+				}
+				if alloc.GetPriority() >= p.ask.GetPriority() {
+					continue
+				}
+				allocationsByNode[node.NodeID] = append(allocationsByNode[node.NodeID], alloc)
+			}
 		}
 		return true
 	})
@@ -257,6 +269,18 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 	head := make([]*Allocation, 0)
 	tail := make([]*Allocation, 0)
 	for _, victim := range potentialVictims {
+		if victim.IsForeign() {
+			shortfall := resources.SubEliminateNegative(p.ask.GetAllocatedResource(), nodeCurrentAvailable)
+			newAvailable := resources.Add(nodeCurrentAvailable, victim.GetAllocatedResource())
+			newShortfall := resources.SubEliminateNegative(p.ask.GetAllocatedResource(), newAvailable)
+			if resources.EqualsOrEmpty(shortfall, newShortfall) {
+				tail = append(tail, victim)
+			} else {
+				nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
+				head = append(head, victim)
+			}
+			continue
+		}
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
@@ -314,6 +338,14 @@ func (p *Preemptor) calculateVictimsByNode(nodeAvailable *resources.Resource, po
 	results := make([]*Allocation, 0)
 	index := -1
 	for _, victim := range head {
+		if victim.IsForeign() {
+			nodeCurrentAvailable.AddTo(victim.GetAllocatedResource())
+			if nodeCurrentAvailable.FitIn(p.ask.GetAllocatedResource()) && index < 0 {
+				index = len(results)
+			}
+			results = append(results, victim)
+			continue
+		}
 		// check to see if removing this task will keep queue above guaranteed amount; if not, skip to the next one
 		if qv, ok := p.queueByAlloc[victim.GetAllocationKey()]; ok {
 			if queueSnapshot, ok2 := allocationsByQueueSnap[qv.QueuePath]; ok2 {
@@ -613,7 +645,9 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 	for _, victim := range nodeVictims {
 		finalVictims = append(finalVictims, victim)
 		allocRes := victim.GetAllocatedResource()
-		totalVictimsResource.AddTo(allocRes)
+		if !victim.IsForeign() {
+			totalVictimsResource.AddTo(allocRes)
+		}
 		nodeVictimsResource.AddTo(allocRes)
 	}
 
@@ -674,24 +708,26 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 
 	// preempt the victims
 	for _, victim := range finalVictims {
-		if victimQueue := p.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
-			victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
-			log.Log(log.SchedPreemption).Info("Preempting task",
-				zap.String("askApplicationID", p.ask.applicationID),
-				zap.String("askAllocationKey", p.ask.allocationKey),
-				zap.String("victimQueue", p.queue.Name),
-				zap.String("victimApplicationID", victim.GetApplicationID()),
-				zap.String("victimAllocationKey", victim.GetAllocationKey()),
-				zap.Stringer("victimAllocatedResource", victim.GetAllocatedResource()),
-				zap.String("victimNodeID", victim.GetNodeID()),
-				zap.String("victimQueue", victimQueue.Name),
-			)
-			victim.SendPreemptedBySchedulerEvent(p.ask.allocationKey, p.ask.applicationID, p.application.queuePath)
-		} else {
-			log.Log(log.SchedPreemption).Warn("BUG: Queue not found for preemption victim",
-				zap.String("queue", p.queue.Name),
-				zap.String("victimApplicationID", victim.GetApplicationID()),
-				zap.String("victimAllocationKey", victim.GetAllocationKey()))
+		if !victim.IsForeign() {
+			if victimQueue := p.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
+				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
+				log.Log(log.SchedPreemption).Info("Preempting task",
+					zap.String("askApplicationID", p.ask.applicationID),
+					zap.String("askAllocationKey", p.ask.allocationKey),
+					zap.String("victimQueue", p.queue.Name),
+					zap.String("victimApplicationID", victim.GetApplicationID()),
+					zap.String("victimAllocationKey", victim.GetAllocationKey()),
+					zap.Stringer("victimAllocatedResource", victim.GetAllocatedResource()),
+					zap.String("victimNodeID", victim.GetNodeID()),
+					zap.String("victimQueue", victimQueue.Name),
+				)
+				victim.SendPreemptedBySchedulerEvent(p.ask.allocationKey, p.ask.applicationID, p.application.queuePath)
+			} else {
+				log.Log(log.SchedPreemption).Warn("BUG: Queue not found for preemption victim",
+					zap.String("queue", p.queue.Name),
+					zap.String("victimApplicationID", victim.GetApplicationID()),
+					zap.String("victimAllocationKey", victim.GetAllocationKey()))
+			}
 		}
 	}
 
@@ -712,7 +748,7 @@ func (p *Preemptor) TryPreemption() (*AllocationResult, bool) {
 }
 
 func (p *Preemptor) hasPreemptionShortfall(nodeID string, nodeVictimsResource *resources.Resource, totalVictimsResource *resources.Resource) bool {
-	if totalVictimsResource.IsEmpty() {
+	if nodeVictimsResource.IsEmpty() && totalVictimsResource.IsEmpty() {
 		return true
 	}
 	for k, needVal := range p.ask.GetAllocatedResource().Resources {
@@ -876,7 +912,7 @@ func (qps *QueuePreemptionSnapshot) RemoveAllocation(alloc *resources.Resource) 
 }
 
 // sortVictimsForPreemption sorts allocations on each node, preferring those that are not originating tasks for an
-// application, those that have opted-in to preemption, and newest first
+// application, those that have opted-in to preemption, lower priority, and newest first
 func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 	for _, allocations := range allocationsByNode {
 		sort.SliceStable(allocations, func(i, j int) bool {
@@ -897,6 +933,11 @@ func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 			}
 			if rightAsk.IsAllowPreemptSelf() && !leftAsk.IsAllowPreemptSelf() {
 				return false
+			}
+
+			// next sort by priority ascending
+			if leftAsk.GetPriority() != rightAsk.GetPriority() {
+				return leftAsk.GetPriority() < rightAsk.GetPriority()
 			}
 
 			// finally sort by creation time descending

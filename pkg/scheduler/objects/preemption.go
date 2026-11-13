@@ -89,7 +89,7 @@ func NewPreemptor(application *Application, headRoom *resources.Resource, preemp
 
 // CheckPreconditions performs simple sanity checks designed to determine if preemption should be attempted
 // for an ask. If checks succeed, updates the ask preemption check time.
-func CheckPreconditions(ask *Allocation, preemptionDelay time.Duration) bool {
+func CheckPreconditions(ask *Allocation, queue *Queue, preemptionDelay time.Duration) bool {
 	now := time.Now()
 
 	// skip if ask is not allowed to preempt other tasks
@@ -114,6 +114,11 @@ func CheckPreconditions(ask *Allocation, preemptionDelay time.Duration) bool {
 
 	// skip if attempt frequency hasn't been reached again
 	if now.Before(ask.GetPreemptCheckTime().Add(preemptAttemptFrequency)) {
+		return false
+	}
+
+	// skip if no queue on the path has a guarantee: the guarantee check cannot pass and the victim walk locks other apps
+	if !queue.hasGuaranteed() {
 		return false
 	}
 

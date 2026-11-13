@@ -855,6 +855,16 @@ func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 	return sq.guaranteedResource.Clone()
 }
 
+// hasGuaranteed returns true if this queue or any parent has a guarantee set.
+func (sq *Queue) hasGuaranteed() bool {
+	for q := sq; q != nil; q = q.parent {
+		if !q.GetGuaranteedResource().IsEmpty() {
+			return true
+		}
+	}
+	return false
+}
+
 // GetMaxApps returns the maximum number of applications that can run in this queue.
 func (sq *Queue) GetMaxApps() uint64 {
 	sq.RLock()

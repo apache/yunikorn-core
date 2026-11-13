@@ -1813,7 +1813,7 @@ func (sa *Application) tryPreemption(headRoom *resources.Resource, preemptionDel
 		return nil, false
 	}
 	// validate prerequisites for preemption of an ask and mark ask for preemption if successful
-	if !CheckPreconditions(ask, preemptionDelay) {
+	if !CheckPreconditions(ask, sa.queue, preemptionDelay) {
 		ask.LogAllocationFailure(common.PreemptionPreconditionsFailed, true)
 		return nil, false
 	}

@@ -4036,9 +4036,7 @@ func TestUpdateAllocation(t *testing.T) {
 	assert.NilError(t, err, "nil alloc should not return an error")
 	assert.Check(t, !allocCreated, "alloc should not have been created")
 	_, allocCreated, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&si.Allocation{}))
-	if err == nil {
-		t.Fatal("empty alloc should have returned application not found error")
-	}
+	assert.Error(t, err, "allocation contains no resources")
 	assert.Check(t, !allocCreated, "alloc should not have been created")
 
 	// add the app to add an ask to
@@ -4233,9 +4231,7 @@ func TestUpdateAllocationWithAsk(t *testing.T) {
 	assert.NilError(t, err, "nil ask should not return an error")
 	assert.Check(t, !askCreated, "ask should not have been created")
 	askCreated, _, err = partition.UpdateAllocation(objects.NewAllocationFromSI(&si.Allocation{}))
-	if err == nil {
-		t.Fatal("empty ask should have returned application not found error")
-	}
+	assert.Error(t, err, "allocation contains no resources")
 	assert.Check(t, !askCreated, "ask should not have been creatd")
 
 	// add the app to add an ask to

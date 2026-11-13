@@ -1342,13 +1342,6 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (bool, b
 		return pc.handleForeignAllocation(allocationKey, applicationID, nodeID, node, alloc)
 	}
 
-	// find application, reviving it if the shim sent work after the core completed it
-	app := pc.getOrReviveApplication(applicationID)
-	if app == nil {
-		metrics.GetSchedulerMetrics().IncSchedulingError()
-		return false, false, fmt.Errorf("failed to find application %s", applicationID)
-	}
-
 	// find node if one is specified
 	allocated := alloc.IsAllocated()
 	if allocated {
@@ -1366,6 +1359,13 @@ func (pc *PartitionContext) UpdateAllocation(alloc *objects.Allocation) (bool, b
 	if !resources.StrictlyGreaterThanZero(res) {
 		metrics.GetSchedulerMetrics().IncSchedulingError()
 		return false, false, fmt.Errorf("allocation contains negative resources")
+	}
+
+	// Validate incoming work before lookup: reviving an application restores ownership and its queue.
+	app := pc.getOrReviveApplication(applicationID)
+	if app == nil {
+		metrics.GetSchedulerMetrics().IncSchedulingError()
+		return false, false, fmt.Errorf("failed to find application %s", applicationID)
 	}
 
 	// check to see if allocation exists already on app

@@ -25,6 +25,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
 )
 
@@ -42,6 +43,85 @@ func completedPartitionApp(t *testing.T, partition *PartitionContext) *objects.A
 	assert.Assert(t, app.GetQueue() == nil, "app should have lost its queue")
 	assert.Equal(t, len(partition.GetCompletedApplications()), 1)
 	return app
+}
+
+func TestUpdateAllocationRejectsInvalidWorkWithoutReviving(t *testing.T) {
+	positive := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+	negative := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -1, "vcores": 1})
+	for _, tc := range []struct {
+		name   string
+		nodeID string
+		res    *resources.Resource
+		err    string
+	}{
+		{"unknown node", "missing", positive, "failed to find node missing"},
+		{"zero pending", "", resources.NewResource(), "allocation contains no resources"},
+		{"zero assigned", nodeID1, resources.NewResource(), "allocation contains no resources"},
+		{"negative pending", "", negative, "allocation contains negative resources"},
+		{"negative assigned", nodeID1, negative, "allocation contains negative resources"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err)
+			defer partition.userGroupCache.Stop()
+			node := newNodeMaxResource(nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10}))
+			assert.NilError(t, partition.AddNode(node))
+
+			// Use real terminal cleanup synchronously, without starting an expiry timer.
+			app := completedPartitionApp(t, partition)
+			queue := partition.GetQueue(defQueue)
+			assert.Assert(t, queue != nil)
+			assert.Assert(t, app.IsCompleted())
+			assert.Assert(t, queue.GetCopyOfApps()[appID1] == nil, "completed app must be off the queue")
+			assert.Assert(t, !app.IsRevived(), "completed app must not be marked revived")
+			finishedTime := app.FinishedTime()
+			assert.Assert(t, !finishedTime.IsZero(), "cleanup must record the finished time")
+			var completedKey string
+			for key, completed := range partition.completedApplications {
+				assert.Assert(t, completed == app)
+				completedKey = key
+			}
+			errorsBefore, err := metrics.GetSchedulerMetrics().GetSchedulingErrors()
+			assert.NilError(t, err)
+
+			// The SI constructor treats an empty NodeID as a pending ask.
+			askCreated, allocCreated, err := partition.UpdateAllocation(newAllocation("invalid-late-work", appID1, tc.nodeID, tc.res))
+			assert.Error(t, err, tc.err)
+			assert.Check(t, !askCreated && !allocCreated, "rejected work must not be created")
+			assert.Check(t, partition.getApplication(appID1) == nil, "rejected work must not restore active ownership")
+			assert.Check(t, partition.completedApplications[completedKey] == app, "rejected work must retain the original historical entry")
+			assert.Check(t, len(partition.GetCompletedApplications()) == 1, "historical membership must be unchanged")
+			assert.Check(t, app.IsCompleted(), "rejected work must leave the app Completed")
+			assert.Check(t, app.GetQueue() == nil, "rejected work must leave the app detached")
+			assert.Check(t, queue.GetCopyOfApps()[appID1] == nil, "rejected work must not restore queue membership")
+			assert.Check(t, app.FinishedTime().Equal(finishedTime), "rejected work must preserve the finished time")
+			assert.Check(t, !app.IsRevived(), "rejected work must not set the revived flag")
+			assert.Check(t, len(app.GetAllRequests()) == 0, "rejected work must not add an ask")
+			assert.Check(t, len(app.GetAllAllocations()) == 0, "rejected work must not add an allocation")
+			assert.Check(t, resources.IsZero(app.GetPendingResource()), "application pending resources must stay zero")
+			assert.Check(t, resources.IsZero(app.GetAllocatedResource()), "application allocated resources must stay zero")
+			assert.Check(t, resources.IsZero(queue.GetPendingResource()), "queue pending resources must stay zero")
+			assert.Check(t, resources.IsZero(queue.GetAllocatedResource()), "queue allocated resources must stay zero")
+			assert.Check(t, resources.IsZero(node.GetAllocatedResource()), "node allocated resources must stay zero")
+			assert.Check(t, node.GetAllocation("invalid-late-work") == nil, "node must not track rejected work")
+			assert.Check(t, partition.GetTotalAllocationCount() == 0, "partition allocation count must stay zero")
+			assertLimits(t, getTestUserGroup(), nil)
+			errorsAfter, err := metrics.GetSchedulerMetrics().GetSchedulingErrors()
+			assert.NilError(t, err)
+			assert.Equal(t, errorsAfter, errorsBefore+1, "rejection must count one scheduling error")
+
+			fresh := newApplication(appID1, "default", defQueue)
+			assert.Assert(t, fresh != app, "same-ID admission must use a distinct application")
+			err = partition.AddApplication(fresh)
+			assert.Check(t, err == nil, "fresh same-ID admission must succeed: %v", err)
+			assert.Check(t, partition.getApplication(appID1) == fresh, "active ownership must belong to the fresh app")
+			assert.Check(t, fresh.GetQueue() == queue, "fresh app must be attached to its queue")
+			assert.Check(t, queue.GetCopyOfApps()[appID1] == fresh, "queue ownership must belong to the fresh app")
+			assert.Check(t, partition.completedApplications[completedKey] == app, "old app must remain historical after same-ID admission")
+			assert.Check(t, app.GetQueue() == nil, "old app must remain detached after same-ID admission")
+		})
+	}
 }
 
 func TestUpdateAllocationRevivesCompletedApplication(t *testing.T) {
@@ -111,13 +191,78 @@ func TestUpdateAllocationRestoresQueueForUnqueuedApp(t *testing.T) {
 }
 
 func TestUpdateAllocationUnknownAppStillFails(t *testing.T) {
-	setupUGM()
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
+	positive := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+	negative := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": -1})
+	for _, tc := range []struct {
+		name   string
+		nodeID string
+		res    *resources.Resource
+		err    string
+	}{
+		{"valid pending", "", positive, "failed to find application no-such-app"},
+		{"valid assigned", nodeID1, positive, "failed to find application no-such-app"},
+		{"unknown node", "missing", positive, "failed to find node missing"},
+		{"unknown node and zero resources", "missing", resources.NewResource(), "failed to find node missing"},
+		{"zero pending", "", resources.NewResource(), "allocation contains no resources"},
+		{"zero assigned", nodeID1, resources.NewResource(), "allocation contains no resources"},
+		{"negative pending", "", negative, "allocation contains negative resources"},
+		{"negative assigned", nodeID1, negative, "allocation contains negative resources"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err)
+			defer partition.userGroupCache.Stop()
+			assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID1, positive)))
+			errorsBefore, err := metrics.GetSchedulerMetrics().GetSchedulingErrors()
+			assert.NilError(t, err)
 
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
-	_, _, err = partition.UpdateAllocation(newAllocationAsk("ask", "no-such-app", res))
-	assert.ErrorContains(t, err, "failed to find application", "an unknown app must still be rejected")
+			// Malformed work fails validation before the application lookup; valid work still fails lookup.
+			askCreated, allocCreated, err := partition.UpdateAllocation(newAllocation("ask", "no-such-app", tc.nodeID, tc.res))
+			assert.Error(t, err, tc.err)
+			assert.Assert(t, !askCreated && !allocCreated)
+			assert.Equal(t, len(partition.GetApplications()), 0)
+			errorsAfter, err := metrics.GetSchedulerMetrics().GetSchedulingErrors()
+			assert.NilError(t, err)
+			assert.Equal(t, errorsAfter, errorsBefore+1)
+		})
+	}
+}
+
+func TestUpdateAllocationValidWorkRecoversRunningHistoricalApplication(t *testing.T) {
+	for _, nodeID := range []string{"", nodeID1} {
+		t.Run("node="+nodeID, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err)
+			defer partition.userGroupCache.Stop()
+			res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
+			assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID1, res)))
+			app := completedPartitionApp(t, partition)
+
+			// A retained pointer can leave Completed after terminal cleanup has filed the app.
+			app.Lock()
+			err = app.HandleApplicationEvent(objects.RunApplication)
+			app.Unlock()
+			assert.NilError(t, err)
+			assert.Assert(t, app.IsRunning())
+			assert.Assert(t, app.GetQueue() == nil)
+			assert.Assert(t, partition.getApplication(appID1) == nil)
+			assert.Assert(t, partition.GetCompletedApplications()[0] == app)
+
+			askCreated, allocCreated, err := partition.UpdateAllocation(newAllocation("late-work", appID1, nodeID, res))
+			assert.NilError(t, err)
+			assert.Equal(t, askCreated, nodeID == "")
+			assert.Equal(t, allocCreated, nodeID != "")
+			assert.Assert(t, partition.getApplication(appID1) == app)
+			assert.Equal(t, len(partition.GetCompletedApplications()), 0)
+			queue := partition.GetQueue(defQueue)
+			assert.Assert(t, app.GetQueue() == queue)
+			assert.Assert(t, queue.GetCopyOfApps()[appID1] == app)
+			assert.Assert(t, app.IsRunning() && app.IsRevived())
+			assert.Assert(t, app.GetAllocationAsk("late-work") != nil)
+		})
+	}
 }
 
 // An expired application is past the point of no return and must not be revived.

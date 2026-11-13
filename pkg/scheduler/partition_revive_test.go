@@ -26,6 +26,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/scheduler/objects"
+	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 )
 
 // completedPartitionApp adds an application and drives it through moveTerminatedApp, so it is off
@@ -273,6 +274,52 @@ func TestResolveRevivedQueueRecreatesRecoveryQueue(t *testing.T) {
 	queue := partition.resolveRevivedQueue(app)
 	assert.Assert(t, queue != nil, "the recovery queue should be recreated")
 	assert.Assert(t, queue.IsLeafQueue(), "recovery queue must be a leaf")
+}
+
+// resolveRevivedQueue sets the limits from the application tags only on a queue it recreates. An existing
+// queue keeps its limits, and the recovery queue never gets them.
+func TestResolveRevivedQueueLimitsFromTags(t *testing.T) {
+	tags := map[string]string{
+		siCommon.AppTagNamespaceResourceGuaranteed: "{\"resources\":{\"vcore\":{\"value\":111}}}",
+		siCommon.AppTagNamespaceResourceQuota:      "{\"resources\":{\"vcore\":{\"value\":2222}}}",
+		siCommon.AppTagNamespaceResourceMaxApps:    "3",
+	}
+	tagGuaranteed := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 111})
+	tagMax := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 2222})
+	ownMax := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 5})
+	tests := []struct {
+		name           string
+		queuePath      string
+		existing       bool // the queue exists with its own limits
+		wantGuaranteed *resources.Resource
+		wantMax        *resources.Resource
+		wantMaxApps    uint64
+	}{
+		{"recreated queue gets the tag limits", "root.recreated", false, tagGuaranteed, tagMax, 3},
+		{"existing queue keeps its limits", "root.existing", true, nil, ownMax, 1},
+		{"recreated recovery queue ignores the tags", common.RecoveryQueueFull, false, nil, nil, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			partition, err := newBasePartition()
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+			app := newApplicationTags(appID1, "default", tt.queuePath, tags)
+			if tt.existing {
+				existing, err := partition.createQueue(tt.queuePath, app.GetUser())
+				assert.NilError(t, err, "queue create failed")
+				existing.SetResources(nil, ownMax)
+				existing.SetMaxRunningApps(1)
+			}
+
+			queue := partition.resolveRevivedQueue(app)
+			assert.Assert(t, queue != nil, "queue should be resolved")
+			assert.Assert(t, resources.Equals(queue.GetGuaranteedResource(), tt.wantGuaranteed), "unexpected guaranteed resource")
+			assert.Assert(t, resources.Equals(queue.GetMaxResource(), tt.wantMax), "unexpected max resource")
+			assert.Equal(t, queue.GetMaxApps(), tt.wantMaxApps, "unexpected max apps")
+		})
+	}
 }
 
 // The queue can no longer be recreated (its parent is now a leaf): resolveRevivedQueue must give up.

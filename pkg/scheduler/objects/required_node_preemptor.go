@@ -39,6 +39,7 @@ type PreemptionContext struct {
 
 type filteringResult struct {
 	totalAllocations            int // total number of allocations
+	nonPreemptableAllocations   int // number of allocations that are not preemptable (e.g. static pods)
 	requiredNodeAllocations     int // number of requiredNode (daemon set) allocations that cannot be preempted
 	atLeastOneResNotMatched     int // number of allocations where there's no single resource type that would match
 	higherPriorityAllocations   int // number of allocations with higher priority or foreign allocations with equal priority
@@ -80,6 +81,7 @@ func (p *PreemptionContext) tryPreemption() {
 			zap.String("allocationName", p.requiredAsk.GetAllocationName()),
 			zap.String("node", p.node.NodeID),
 			zap.Int("total allocations", result.totalAllocations),
+			zap.Int("non-preemptable allocations", result.nonPreemptableAllocations),
 			zap.Int("requiredNode allocations", result.requiredNodeAllocations),
 			zap.Int("allocations already preempted", result.alreadyPreemptedAllocations),
 			zap.Int("higher priority allocations", result.higherPriorityAllocations),
@@ -118,6 +120,7 @@ func (p *PreemptionContext) filterAllocations() filteringResult {
 
 	for _, allocation := range allocations {
 		if !allocation.IsPreemptable() {
+			result.nonPreemptableAllocations++
 			continue
 		}
 

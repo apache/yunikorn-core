@@ -31,7 +31,7 @@ func init() {
 
 // RegisterSchedulerPlugin registers the plugin based on the interfaces(s) it implements.
 // The known interfaces are defined in yunikorn-scheduler-interface/lib/go/api
-func RegisterSchedulerPlugin(plugin interface{}) {
+func RegisterSchedulerPlugin(plugin any) {
 	plugins.Lock()
 	defer plugins.Unlock()
 	if rmc, ok := plugin.(api.ResourceManagerCallback); ok {

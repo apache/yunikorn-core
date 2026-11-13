@@ -21,6 +21,7 @@ package tests
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"reflect"
 	"strconv"
@@ -385,9 +386,7 @@ func warnLogging() {
 func useWarnLogging(t *testing.T) {
 	t.Helper()
 	before := make(map[string]string)
-	for key, value := range configs.GetConfigMap() {
-		before[key] = value
-	}
+	maps.Copy(before, configs.GetConfigMap())
 	t.Cleanup(func() {
 		log.UpdateLoggingConfig(before)
 	})
@@ -542,7 +541,7 @@ func (p *traceProbe) endPhase(phase string, n int) {
 // situation than the one the phase is named for, and regenerating from it produces a green golden that
 // pins the wrong experiment. Those are asserted with assert.Assert instead, so that they fail in both
 // modes; see the capacity-ledger check and the two headroom checks in phases 4 and 5.
-func (p *traceProbe) pin(ok bool, format string, args ...interface{}) {
+func (p *traceProbe) pin(ok bool, format string, args ...any) {
 	p.t.Helper()
 	if ok {
 		return
@@ -1053,10 +1052,7 @@ func traceMismatch(path string, golden, trace []traceEntry, marks []traceMark) s
 	fmt.Fprintf(&sb, "  golden file: %s (%d entries)\n", path, len(golden))
 	fmt.Fprintf(&sb, "  this run:    %d entries\n\n", len(trace))
 
-	length := len(golden)
-	if len(trace) > length {
-		length = len(trace)
-	}
+	length := max(len(trace), len(golden))
 	// the phase column is only present for the shared trace, which is the only one long enough for
 	// the attribution to be worth anything.
 	phases := make([]string, length)
@@ -1075,7 +1071,7 @@ func traceMismatch(path string, golden, trace []traceEntry, marks []traceMark) s
 		phaseWidth = max(phaseWidth, len(phases[i]))
 		expectedWidth = max(expectedWidth, len(expected[i]))
 	}
-	for i := 0; i < length; i++ {
+	for i := range length {
 		// a phase that produced no decisions owns no row, so it is named at its boundary instead -
 		// without it a phase can only ever be mentioned here by the phases either side of it.
 		for _, mark := range marks {

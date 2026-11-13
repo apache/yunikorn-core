@@ -188,7 +188,7 @@ func compressResponse(next http.Handler) http.Handler {
 // as an acceptable content encoding. The q=0 case (gzip explicitly excluded) is
 // handled so that "gzip;q=0" correctly returns false.
 func clientAcceptsGzip(r *http.Request) bool {
-	for _, token := range strings.Split(r.Header.Get("Accept-Encoding"), ",") {
+	for token := range strings.SplitSeq(r.Header.Get("Accept-Encoding"), ",") {
 		token = strings.TrimSpace(token)
 		parts := strings.SplitN(token, ";", 2)
 		if strings.ToLower(strings.TrimSpace(parts[0])) != "gzip" {

@@ -311,7 +311,7 @@ func TestGetRecentEvents(t *testing.T) {
 }
 
 func populate(buffer *eventRingBuffer, count int) {
-	for i := 0; i < count; i++ {
+	for i := range count {
 		buffer.Add(&si.EventRecord{
 			TimestampNano: int64(i),
 		})

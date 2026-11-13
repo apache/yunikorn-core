@@ -77,7 +77,7 @@ func (c *RClient) newRequest(method, path string) (*http.Request, error) {
 	return req, nil
 }
 
-func (c *RClient) do(req *http.Request, v interface{}) (*http.Response, error) {
+func (c *RClient) do(req *http.Request, v any) (*http.Response, error) {
 	//nolint:gosec // safe to ignore, this is a test client and the URL is hardcoded to localhost
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {

@@ -88,8 +88,8 @@ func (pr *providedRule) placeApplication(app *objects.Application, queueFn func(
 
 	// fully qualified queue, do not run the parent rule
 	if strings.HasPrefix(queueName, configs.RootQueue+configs.DOT) {
-		parts := strings.Split(queueName, configs.DOT)
-		for _, part := range parts {
+		parts := strings.SplitSeq(queueName, configs.DOT)
+		for part := range parts {
 			if err = configs.IsQueueNameValid(part); err != nil {
 				return "", err
 			}

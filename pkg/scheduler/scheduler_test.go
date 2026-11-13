@@ -184,7 +184,7 @@ func TestTriggerQuotaPreemption(t *testing.T) {
 func TestHandleEventRouting(t *testing.T) {
 	scheduler := NewScheduler()
 
-	allocCases := []interface{}{
+	allocCases := []any{
 		&rmevent.RMUpdateAllocationEvent{Request: &si.AllocationRequest{}},
 		&rmevent.RMUpdateApplicationEvent{Request: &si.ApplicationRequest{}},
 	}
@@ -195,7 +195,7 @@ func TestHandleEventRouting(t *testing.T) {
 	assert.Equal(t, len(scheduler.pendingInfraEvents), 0, "expected 0 events on pendingInfraEvents")
 	assert.Equal(t, len(scheduler.pendingNodeEvents), 0, "expected 0 events on pendingNodeEvents")
 
-	infraCases := []interface{}{
+	infraCases := []any{
 		&rmevent.RMRegistrationEvent{Channel: make(chan *rmevent.Result, 1)},
 		&rmevent.RMConfigUpdateEvent{Channel: make(chan *rmevent.Result, 1)},
 		&rmevent.RMPartitionsRemoveEvent{Channel: make(chan *rmevent.Result, 1)},

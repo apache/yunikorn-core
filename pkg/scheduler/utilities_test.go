@@ -775,9 +775,9 @@ func getTestUserGroup() security.UserGroup {
 }
 
 func assertLimits(t *testing.T, userGroup security.UserGroup, expected *resources.Resource) {
-	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
-	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.default"] = make(map[string]interface{})
+	expectedQueuesMaxLimits := make(map[string]map[string]any)
+	expectedQueuesMaxLimits["root"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.default"] = make(map[string]any)
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.default"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
@@ -785,7 +785,7 @@ func assertLimits(t *testing.T, userGroup security.UserGroup, expected *resource
 	assertUserGroupResourceMaxLimits(t, userGroup, expected, expectedQueuesMaxLimits)
 }
 
-func assertUserGroupResourceMaxLimits(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, expectedQueuesMaxLimits map[string]map[string]interface{}) {
+func assertUserGroupResourceMaxLimits(t *testing.T, userGroup security.UserGroup, expected *resources.Resource, expectedQueuesMaxLimits map[string]map[string]any) {
 	manager := ugm.GetUserManager()
 	userResource := manager.GetUserResources(userGroup.User)
 	groupResource := manager.GetGroupResources(userGroup.Groups[0])

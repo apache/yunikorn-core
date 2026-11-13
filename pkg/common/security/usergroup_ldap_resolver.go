@@ -75,7 +75,7 @@ func (configReaderImpl) ReadLdapConfig() (*LdapConfig, error) {
 	}
 
 	secretCount := 0
-	validSecrets := make(map[string]interface{})
+	validSecrets := make(map[string]any)
 
 	// Iterate over all secret files in the secrets directory
 	for _, file := range files {

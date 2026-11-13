@@ -148,7 +148,7 @@ func (m *mockScheduler) removeApp(appID, partition string) error {
 
 func (m *mockScheduler) addAppRequest(appID, allocKeyPrefix string, resource *si.Resource, repeat int) error {
 	asks := make([]*si.Allocation, repeat)
-	for i := 0; i < repeat; i++ {
+	for i := range repeat {
 		asks[i] = &si.Allocation{
 			AllocationKey:    fmt.Sprintf("%s-%d", allocKeyPrefix, i),
 			ApplicationID:    appID,

@@ -34,12 +34,12 @@ import (
 
 // Scheduler service that starts the needed sub services
 type Scheduler struct {
-	clusterContext     *ClusterContext  // main context
-	pendingAllocEvents chan interface{} // queue for allocation and application events
-	pendingInfraEvents chan interface{} // queue for config and registration events
-	pendingNodeEvents  chan interface{} // queue for node events
-	activityPending    chan bool        // activity pending channel
-	stop               chan struct{}    // channel to signal stop request
+	clusterContext     *ClusterContext // main context
+	pendingAllocEvents chan any        // queue for allocation and application events
+	pendingInfraEvents chan any        // queue for config and registration events
+	pendingNodeEvents  chan any        // queue for node events
+	activityPending    chan bool       // activity pending channel
+	stop               chan struct{}   // channel to signal stop request
 	healthChecker      *HealthChecker
 	nodesMonitor       *nodesResourceUsageMonitor
 }
@@ -50,11 +50,11 @@ func NewScheduler() *Scheduler {
 	// Creating 3 channels for different types of events, the buffer size is set based on the expected event volume and processing speed.
 	// This can help to smooth out the event processing and avoid blocking the RM proxy when there is a sudden burst of events.
 	// A cluster can have hundreds of thousands of allocations, and each allocation can trigger multiple events, so the buffer size for pendingAllocEvents is set to 1 million.
-	m.pendingAllocEvents = make(chan interface{}, 1024*1024)
+	m.pendingAllocEvents = make(chan any, 1024*1024)
 	// There can be thousands of infra events in a cluster, so the buffer size for pendingInfraEvents is set to 1000.
-	m.pendingInfraEvents = make(chan interface{}, 1000)
+	m.pendingInfraEvents = make(chan any, 1000)
 	// There can be tens of thousands of nodes in a cluster, so the buffer size for pendingNodeEvents is set to 100 thousand.
-	m.pendingNodeEvents = make(chan interface{}, 100*1000)
+	m.pendingNodeEvents = make(chan any, 100*1000)
 	m.activityPending = make(chan bool, 1)
 	m.stop = make(chan struct{})
 	return m
@@ -130,7 +130,7 @@ func (s *Scheduler) internalQuotaPreemption() {
 }
 
 // HandleEvent is the main entry for handling events from RM proxy, it will dispatch events to different queues based on event type.
-func (s *Scheduler) HandleEvent(ev interface{}) {
+func (s *Scheduler) HandleEvent(ev any) {
 	switch ev.(type) {
 	case *rmevent.RMUpdateAllocationEvent, *rmevent.RMUpdateApplicationEvent:
 		enqueueAndCheckFull(s.pendingAllocEvents, ev)
@@ -141,7 +141,7 @@ func (s *Scheduler) HandleEvent(ev interface{}) {
 	}
 }
 
-func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
+func enqueueAndCheckFull(queue chan any, ev any) {
 	select {
 	case queue <- ev:
 		log.Log(log.Scheduler).Debug("enqueued event",
@@ -279,7 +279,7 @@ func (s *Scheduler) GetClusterContext() *ClusterContext {
 // The scheduler for testing which runs nAlloc times the normal schedule routine.
 // Visible by tests
 func (s *Scheduler) MultiStepSchedule(nAlloc int) {
-	for i := 0; i < nAlloc; i++ {
+	for i := range nAlloc {
 		log.Log(log.Scheduler).Debug("Scheduler manual stepping",
 			zap.Int("count", i))
 		s.clusterContext.schedule()

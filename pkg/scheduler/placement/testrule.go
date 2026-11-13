@@ -71,8 +71,8 @@ func (tr *testRule) placeApplication(app *objects.Application, queueFn func(stri
 		return "", fmt.Errorf("nil app passed in")
 	}
 	if queuePath := app.GetQueuePath(); queuePath != "" {
-		parts := strings.Split(queuePath, configs.DOT)
-		for _, part := range parts {
+		parts := strings.SplitSeq(queuePath, configs.DOT)
+		for part := range parts {
 			if err := configs.IsQueueNameValid(part); err != nil {
 				return "", err
 			}

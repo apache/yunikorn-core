@@ -63,7 +63,7 @@ func newMockEventHandler() *mockEventHandler {
 	}
 }
 
-func (m *mockEventHandler) HandleEvent(ev interface{}) {
+func (m *mockEventHandler) HandleEvent(ev any) {
 	if nodeEvent, ok := ev.(*rmevent.RMNodeUpdateEvent); ok {
 		m.eventHandled = true
 		m.rejectedNodes = append(m.rejectedNodes, nodeEvent.RejectedNodes...)

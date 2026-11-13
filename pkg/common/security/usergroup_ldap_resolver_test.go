@@ -270,13 +270,13 @@ func TestLdapLookups(t *testing.T) {
 		name     string
 		testType string
 		id       string
-		validate func(t *testing.T, result interface{}, err error)
+		validate func(t *testing.T, result any, err error)
 	}{
 		{
 			name:     "Lookup user",
 			testType: "user",
 			id:       "testuser",
-			validate: func(t *testing.T, result interface{}, err error) {
+			validate: func(t *testing.T, result any, err error) {
 				assert.NilError(t, err)
 				u, ok := result.(*user.User)
 				assert.Assert(t, ok, "invalid result type")
@@ -289,7 +289,7 @@ func TestLdapLookups(t *testing.T) {
 			name:     "Lookup group",
 			testType: "group",
 			id:       "testgroup",
-			validate: func(t *testing.T, result interface{}, err error) {
+			validate: func(t *testing.T, result any, err error) {
 				assert.NilError(t, err)
 				g, ok := result.(*user.Group)
 				assert.Assert(t, ok, "invalid result type")

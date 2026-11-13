@@ -43,7 +43,7 @@ type RMProxy struct {
 	stop                  chan struct{}
 
 	// Internal fields
-	pendingRMEvents chan interface{}
+	pendingRMEvents chan any
 
 	rmIDToCallback map[string]api.ResourceManagerCallback
 
@@ -54,7 +54,7 @@ func (rmp *RMProxy) GetRMEventHandler() handler.EventHandler {
 	return rmp
 }
 
-func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
+func enqueueAndCheckFull(queue chan any, ev any) {
 	select {
 	case queue <- ev:
 		log.Log(log.RMProxy).Debug("enqueue event",
@@ -67,14 +67,14 @@ func enqueueAndCheckFull(queue chan interface{}, ev interface{}) {
 	}
 }
 
-func (rmp *RMProxy) HandleEvent(ev interface{}) {
+func (rmp *RMProxy) HandleEvent(ev any) {
 	enqueueAndCheckFull(rmp.pendingRMEvents, ev)
 }
 
 func NewRMProxy(schedulerEventHandler handler.EventHandler) *RMProxy {
 	rm := &RMProxy{
 		rmIDToCallback:        make(map[string]api.ResourceManagerCallback),
-		pendingRMEvents:       make(chan interface{}, 1024*1024),
+		pendingRMEvents:       make(chan any, 1024*1024),
 		stop:                  make(chan struct{}),
 		schedulerEventHandler: schedulerEventHandler,
 	}

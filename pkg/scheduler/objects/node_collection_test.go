@@ -163,7 +163,7 @@ func TestSetNodeSortingPolicy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			nc := NewNodeCollection("test")
-			for id := 0; id < len(nodesInfo); id++ {
+			for id := range nodesInfo {
 				node := newNode(nodesInfo[id].nodeID, map[string]resources.Quantity{"vcore": resources.Quantity(defaultCapicity[0]), "memory": resources.Quantity(defaultCapicity[1])})
 				res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(nodesInfo[id].allocatedVcore), "memory": resources.Quantity(nodesInfo[id].allocatedMem)})
 				alloc := newAllocation(fmt.Sprintf("test-app-%d", id+1), fmt.Sprintf("test-%d", id+1), res)
@@ -382,7 +382,7 @@ func TestGetNodeIterator(t *testing.T) {
 func TestNodeIteratorReserveUpdate(t *testing.T) {
 	nc := NewNodeCollection("test")
 	count := 3
-	for i := 0; i < count; i++ {
+	for i := range count {
 		node := newNode(fmt.Sprintf("node-%d", i), map[string]resources.Quantity{"some": resources.Quantity(10)})
 		assert.NilError(t, nc.AddNode(node), "Adding another node into BC failed.")
 	}

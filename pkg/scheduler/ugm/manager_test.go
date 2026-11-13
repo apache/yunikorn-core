@@ -349,7 +349,7 @@ func TestUseWildCard(t *testing.T) {
 	assert.Assert(t, !manager.GetUserTracker(user2.User).queueTracker.childQueueTrackers["parent"].useWildCard)
 	assert.Assert(t, !manager.GetUserTracker(user2.User).queueTracker.childQueueTrackers["parent"].childQueueTrackers["child1"].useWildCard)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		// should run as user has already fallen back on wild card user limit set on "root.parent" map[memory:50 vcores:50]
 		manager.IncreaseTrackedResource(queuePath1, TestApp1, usage, user1)
 	}
@@ -2053,7 +2053,7 @@ func TestEnsureGroupTrackerForAppConcurrentRace(t *testing.T) {
 		var wg sync.WaitGroup
 		start := make(chan struct{})
 
-		for i := 0; i < numApps; i++ {
+		for i := range numApps {
 			wg.Add(1)
 			go func(appIndex int) {
 				defer wg.Done()
@@ -2117,9 +2117,7 @@ func TestResetGroupEarlierUsageConcurrent(t *testing.T) {
 	usage := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1})
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -2129,8 +2127,8 @@ func TestResetGroupEarlierUsageConcurrent(t *testing.T) {
 				ut.getGroupForApp(TestApp1)
 			}
 		}
-	}()
-	for i := 0; i < 100; i++ {
+	})
+	for range 100 {
 		ut.setGroupForApp(TestApp1, gt)
 		gt.increaseTrackedResource(queuePathLeaf, TestApp1, usage, "user1")
 		manager.Lock()
@@ -2156,19 +2154,17 @@ func TestManagerResourceSnapshotsConcurrent(t *testing.T) {
 	gt.increaseTrackedResource(queuePathLeaf, TestApp1, usage, "user1")
 	var wg sync.WaitGroup
 	start := make(chan struct{})
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		<-start
-		for i := 0; i < 1000; i++ {
+		for range 1000 {
 			ut.increaseTrackedResource(queuePathLeaf, TestApp1, usage, nil)
 			ut.decreaseTrackedResource(queuePathLeaf, TestApp1, usage, false)
 			gt.increaseTrackedResource(queuePathLeaf, TestApp1, usage, "user1")
 			gt.decreaseTrackedResource(queuePathLeaf, TestApp1, usage, false)
 		}
-	}()
+	})
 	close(start)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		for _, snapshot := range []*resources.Resource{manager.GetUserResources("user1"), manager.GetGroupResources("group1")} {
 			memory := snapshot.Resources["memory"]
 			assert.Check(t, memory == 1 || memory == 2)

@@ -51,7 +51,7 @@ func TestInsertRemove(t *testing.T) {
 	assert.Equal(t, "alloc-1", sorted[2].allocationKey)
 
 	sorted = sortedRequests{}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		j := i * 3
 		ask := getAllocationAsk(j)
 		sorted.insert(ask)

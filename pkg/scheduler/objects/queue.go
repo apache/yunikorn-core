@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -252,9 +253,7 @@ func (sq *Queue) getProperties() map[string]string {
 	}
 	sq.RLock()
 	defer sq.RUnlock()
-	for key, value := range sq.properties {
-		props[key] = value
-	}
+	maps.Copy(props, sq.properties)
 	return props
 }
 
@@ -285,9 +284,7 @@ func (sq *Queue) mergeProperties(parent map[string]string) {
 	for key, value := range parent {
 		parent[key] = filterParentProperty(key, value)
 	}
-	for key, value := range config {
-		parent[key] = value
-	}
+	maps.Copy(parent, config)
 	sq.properties = parent
 }
 
@@ -983,9 +980,7 @@ func (sq *Queue) GetPartitionQueueDAOInfo(include bool) dao.PartitionQueueDAOInf
 	queueInfo.UnschedAskBackoff = sq.unschedAskBackoff
 	queueInfo.AskBackoffDelay = sq.askBackoffDelay.String()
 	queueInfo.Properties = make(map[string]string)
-	for k, v := range sq.properties {
-		queueInfo.Properties[k] = v
-	}
+	maps.Copy(queueInfo.Properties, sq.properties)
 	if sq.parent == nil {
 		queueInfo.Parent = ""
 	} else {
@@ -1132,9 +1127,7 @@ func (sq *Queue) GetCopyOfApps() map[string]*Application {
 	sq.RLock()
 	defer sq.RUnlock()
 	appsCopy := make(map[string]*Application, len(sq.applications))
-	for appID, app := range sq.applications {
-		appsCopy[appID] = app
-	}
+	maps.Copy(appsCopy, sq.applications)
 	return appsCopy
 }
 
@@ -1146,9 +1139,7 @@ func (sq *Queue) GetCopyOfChildren() map[string]*Queue {
 	sq.RLock()
 	defer sq.RUnlock()
 	childCopy := make(map[string]*Queue)
-	for k, v := range sq.children {
-		childCopy[k] = v
-	}
+	maps.Copy(childCopy, sq.children)
 	return childCopy
 }
 
@@ -1618,9 +1609,7 @@ func (sq *Queue) internalGetFairMaxResource(limit *resources.Resource) *resource
 	}
 
 	// perform merge. child wins every resources collision
-	for k, v := range sq.maxResource.Resources {
-		out.Resources[k] = v
-	}
+	maps.Copy(out.Resources, sq.maxResource.Resources)
 
 	return out
 }
@@ -1930,9 +1919,7 @@ func (sq *Queue) GetReservedApps() map[string]int {
 	defer sq.RUnlock()
 
 	copied := make(map[string]int)
-	for appID, numRes := range sq.reservedApps {
-		copied[appID] = numRes
-	}
+	maps.Copy(copied, sq.reservedApps)
 	// increase the number of reservations for this app
 	return copied
 }

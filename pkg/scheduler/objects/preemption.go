@@ -411,11 +411,9 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 		results := make([]*predicateCheckResult, len(batch))
 		for i, args := range batch {
 			// add goroutine for checking preemption
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				results[i] = runPredicateChecks(plugin, args)
-			}()
+			})
 		}
 		wg.Wait()
 		for _, result := range results {

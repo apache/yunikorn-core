@@ -1685,9 +1685,9 @@ func TestTryAllocate(t *testing.T) {
 	err = app.AddAllocationAsk(newAllocationAskPriority(allocKey, appID2, res, 2))
 	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
 
-	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
-	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.leaf"] = make(map[string]interface{})
+	expectedQueuesMaxLimits := make(map[string]map[string]any)
+	expectedQueuesMaxLimits["root"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.leaf"] = make(map[string]any)
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
@@ -2235,11 +2235,11 @@ func TestPreemptionForRequiredNodeMultipleAttemptsAvoided(t *testing.T) {
 	assert.Equal(t, true, alloc.IsPreempted())
 }
 
-func getExpectedQueuesLimitsForPreemption() map[string]map[string]interface{} {
-	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
-	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.parent"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.parent.leaf1"] = make(map[string]interface{})
+func getExpectedQueuesLimitsForPreemption() map[string]map[string]any {
+	expectedQueuesMaxLimits := make(map[string]map[string]any)
+	expectedQueuesMaxLimits["root"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.parent"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.parent.leaf1"] = make(map[string]any)
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.parent"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root.parent.leaf1"][maxresources] = expectedQueuesMaxLimits["root.parent"][maxresources]
@@ -2249,12 +2249,12 @@ func getExpectedQueuesLimitsForPreemption() map[string]map[string]interface{} {
 	return expectedQueuesMaxLimits
 }
 
-func getExpectedQueuesLimitsForPreemptionWithRequiredNode() map[string]map[string]interface{} {
-	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
-	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.leaf"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.parent"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.parent.sub-leaf"] = make(map[string]interface{})
+func getExpectedQueuesLimitsForPreemptionWithRequiredNode() map[string]map[string]any {
+	expectedQueuesMaxLimits := make(map[string]map[string]any)
+	expectedQueuesMaxLimits["root"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.leaf"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.parent"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.parent.sub-leaf"] = make(map[string]any)
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root.parent"][maxresources] = expectedQueuesMaxLimits["root.leaf"][maxresources]
@@ -3109,12 +3109,12 @@ func TestAddRejectedApplicationConcurrent(t *testing.T) {
 	start := make(chan struct{})
 
 	// Concurrent Writers
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 			<-start
-			for j := 0; j < appsPerGoroutine; j++ {
+			for j := range appsPerGoroutine {
 				appID := fmt.Sprintf("app-%d-%d", workerID, j)
 				app := newApplication(appID, "default", defQueue)
 				partition.AddRejectedApplication(app, "rejected reason")
@@ -3123,12 +3123,12 @@ func TestAddRejectedApplicationConcurrent(t *testing.T) {
 	}
 
 	// Concurrent Readers
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 			<-start
-			for j := 0; j < appsPerGoroutine; j++ {
+			for j := range appsPerGoroutine {
 				_ = partition.GetRejectedApplications()
 				appID := fmt.Sprintf("app-%d-%d", workerID, j)
 				_ = partition.getRejectedApplication(appID)
@@ -3153,12 +3153,12 @@ func TestAddRejectedApplicationConcurrentWithCleanup(t *testing.T) {
 	start := make(chan struct{})
 
 	// Concurrent Writers
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 			<-start
-			for j := 0; j < appsPerGoroutine; j++ {
+			for j := range appsPerGoroutine {
 				appID := fmt.Sprintf("cleanup-app-%d-%d", workerID, j)
 				app := newApplication(appID, "default", defQueue)
 				partition.AddRejectedApplication(app, "rejected reason")
@@ -3170,18 +3170,16 @@ func TestAddRejectedApplicationConcurrentWithCleanup(t *testing.T) {
 	}
 
 	// Concurrent Cleaners and Readers
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			<-start
-			for j := 0; j < appsPerGoroutine; j++ {
+			for range appsPerGoroutine {
 				partition.cleanupExpiredApps()
 				_ = partition.GetRejectedApplications()
 				_ = partition.getRejectedAppsByState(objects.Expired.String())
 				_ = partition.getRejectedAppsByState(objects.Rejected.String())
 			}
-		}()
+		})
 	}
 
 	close(start)
@@ -3200,14 +3198,12 @@ func TestAddRejectedApplicationDuplicate(t *testing.T) {
 	appID := "duplicate-app"
 	start := make(chan struct{})
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			<-start
 			app := newApplication(appID, "default", defQueue)
 			partition.AddRejectedApplication(app, "duplicate rejected reason")
-		}()
+		})
 	}
 
 	close(start)
@@ -3490,7 +3486,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	phs := make(map[string]*objects.Allocation, phCount)
-	for i := 0; i < phCount; i++ {
+	for i := range phCount {
 		// add an ask for a placeholder and allocate
 		id := "ph-" + strconv.Itoa(i)
 		ask := newAllocationAskTG(id, appID1, taskGroup, phRes, true)

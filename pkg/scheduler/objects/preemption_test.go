@@ -380,6 +380,35 @@ func TestSortVictimsForPreemption(t *testing.T) {
 	assert.Equal(t, allocations[3].GetAllocationKey(), "optedOutOriginatorPod")
 }
 
+func TestSortVictimsForPreemptionTieBreak(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	createTime := time.Unix(1700000000, 0)
+	allocA := createAllocation("alloc-a", "app1", nodeID1, true, false, 10, false, res)
+	allocA.createTime = createTime
+	allocB := createAllocation("alloc-b", "app1", nodeID1, true, false, 10, false, res)
+	allocB.createTime = createTime
+	allocC := createAllocation("alloc-c", "app1", nodeID1, true, false, 10, false, res)
+	allocC.createTime = createTime
+	allocZ := createAllocation("alloc-z", "app1", nodeID1, true, false, 10, false, res)
+	allocZ.createTime = createTime.Add(time.Second)
+
+	for _, input := range [][]*Allocation{
+		{allocC, allocZ, allocA, allocB},
+		{allocB, allocC, allocA, allocZ},
+	} {
+		allocationsByNode := map[string][]*Allocation{
+			nodeID1: input,
+		}
+		sortVictimsForPreemption(allocationsByNode)
+
+		allocations := allocationsByNode[nodeID1]
+		assert.Equal(t, allocations[0].GetAllocationKey(), "alloc-z")
+		assert.Equal(t, allocations[1].GetAllocationKey(), "alloc-a")
+		assert.Equal(t, allocations[2].GetAllocationKey(), "alloc-b")
+		assert.Equal(t, allocations[3].GetAllocationKey(), "alloc-c")
+	}
+}
+
 func TestTryPreemption(t *testing.T) {
 	appQueueMapping := NewAppQueueMapping()
 	node := newNode(nodeID1, map[string]resources.Quantity{"first": 10, "pods": 5})

@@ -876,7 +876,7 @@ func (qps *QueuePreemptionSnapshot) RemoveAllocation(alloc *resources.Resource) 
 }
 
 // sortVictimsForPreemption sorts allocations on each node, preferring those that are not originating tasks for an
-// application, those that have opted-in to preemption, and newest first
+// application, those that have opted-in to preemption, newest first, and finally the allocation key
 func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 	for _, allocations := range allocationsByNode {
 		sort.SliceStable(allocations, func(i, j int) bool {
@@ -899,8 +899,13 @@ func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 				return false
 			}
 
-			// finally sort by creation time descending
-			return leftAsk.GetCreateTime().After(rightAsk.GetCreateTime())
+			// next sort by creation time descending
+			if !leftAsk.GetCreateTime().Equal(rightAsk.GetCreateTime()) {
+				return leftAsk.GetCreateTime().After(rightAsk.GetCreateTime())
+			}
+
+			// creation times from the shim are whole seconds, break the tie so the order does not depend on map iteration
+			return leftAsk.GetAllocationKey() < rightAsk.GetAllocationKey()
 		})
 	}
 }

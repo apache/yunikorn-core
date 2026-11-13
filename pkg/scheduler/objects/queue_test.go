@@ -859,8 +859,6 @@ func TestSortQueuesFairMaxFollowsQueue(t *testing.T) {
 			// the leaves have no application, so they all sit at the same priority and both
 			// comparators fall through to the share: the setting itself is checked in
 			// TestSortQueuesPrioritySortDispatch.
-			// the input order comes from the children map, so this covers one order per run: the
-			// deterministic cover of every order is TestSortQueuesFairMaxInputOrder
 			assert.Equal(t, "leaf-80,leaf-40,leaf-10", queueNames(parent.sortQueues()), "lowest share must be first")
 		})
 	}
@@ -887,8 +885,7 @@ func TestSortQueuesPrioritySortDispatch(t *testing.T) {
 			for _, child := range parent.GetCopyOfChildren() {
 				child.currentPriority = priority[child.Name]
 			}
-			// both the priorities and the shares are distinct, so neither order depends on the
-			// input order the children map hands over
+			// both the priorities and the shares are distinct, so neither order depends on the input order
 			assert.Equal(t, tt.expected, queueNames(parent.sortQueues()), "sorted on the wrong key")
 		})
 	}
@@ -900,6 +897,31 @@ func TestSortQueuesFairMaxNotCappedMax(t *testing.T) {
 	// on the fair max leaf-1000 has the lowest share, 70/1000000, on the capped max the highest, 70/100000
 	parent := parentWithFairMaxLeaves(t, "100", map[string]resources.Quantity{"10": 6, "1000": 70}, nil)
 	assert.Equal(t, "leaf-1000,leaf-10", queueNames(parent.sortQueues()), "lowest share must be first")
+}
+
+// children tied on priority and share with pending no queue dominates must sort the same on every call
+func TestSortQueuesTieOrder(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var parent *Queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+
+	pending := map[string]map[string]resources.Quantity{
+		"leaf-a": {"first": 2, "second": 2},
+		"leaf-b": {"first": 1, "second": 10},
+		"leaf-c": {"first": 3, "second": 3},
+	}
+	for name, res := range pending {
+		var leaf *Queue
+		leaf, err = createManagedQueue(parent, name, false, nil)
+		assert.NilError(t, err, "failed to create leaf queue")
+		leaf.incPendingResource(resources.NewResourceFromMap(res))
+	}
+
+	for i := 0; i < 100; i++ {
+		assert.Equal(t, "leaf-a,leaf-b,leaf-c", queueNames(parent.sortQueues()), "queue order changed between calls")
+	}
 }
 
 // create a parent under a root with rootMax, holding a leaf per entry in usage named leaf-<max>. The

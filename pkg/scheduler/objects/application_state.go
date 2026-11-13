@@ -45,6 +45,7 @@ const (
 	FailApplication
 	ExpireApplication
 	ResumeApplication
+	ReviveApplication
 )
 
 const (
@@ -52,7 +53,7 @@ const (
 )
 
 func (ae applicationEvent) String() string {
-	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication", "resumeApplication"}[ae]
+	return [...]string{"runApplication", "rejectApplication", "completeApplication", "failApplication", "expireApplication", "resumeApplication", "reviveApplication"}[ae]
 }
 
 // ----------------------------------
@@ -72,6 +73,7 @@ const (
 	Failed
 	Expired
 	Resuming
+	Reviving
 )
 
 var stateEvents = map[string]si.EventRecord_ChangeDetail{
@@ -85,10 +87,11 @@ var stateEvents = map[string]si.EventRecord_ChangeDetail{
 	Failed.String():     si.EventRecord_APP_FAILED,
 	Resuming.String():   si.EventRecord_APP_RESUMING,
 	Expired.String():    si.EventRecord_APP_EXPIRED,
+	Reviving.String():   si.EventRecord_APP_REVIVING,
 }
 
 func (as applicationState) String() string {
-	return [...]string{"New", "Accepted", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming"}[as]
+	return [...]string{"New", "Accepted", "Running", "Rejected", "Completing", "Completed", "Failing", "Failed", "Expired", "Resuming", "Reviving"}[as]
 }
 
 func eventDesc() fsm.Events {
@@ -103,7 +106,7 @@ func eventDesc() fsm.Events {
 			Dst:  Accepted.String(),
 		}, {
 			Name: RunApplication.String(),
-			Src:  []string{Accepted.String(), Running.String(), Completing.String()},
+			Src:  []string{Accepted.String(), Running.String(), Completing.String(), Reviving.String()},
 			Dst:  Running.String(),
 		}, {
 			// revival: the shim sent new work for an application the core had already completed
@@ -116,7 +119,7 @@ func eventDesc() fsm.Events {
 			Dst:  Completing.String(),
 		}, {
 			Name: CompleteApplication.String(),
-			Src:  []string{Completing.String()},
+			Src:  []string{Completing.String(), Reviving.String()},
 			Dst:  Completed.String(),
 		}, {
 			Name: FailApplication.String(),
@@ -134,6 +137,11 @@ func eventDesc() fsm.Events {
 			Name: ExpireApplication.String(),
 			Src:  []string{Completed.String(), Failed.String(), Rejected.String()},
 			Dst:  Expired.String(),
+		},
+		{
+			Name: ReviveApplication.String(),
+			Src:  []string{Completing.String(), Completed.String(), Running.String()},
+			Dst:  Reviving.String(),
 		},
 	}
 }
@@ -258,11 +266,6 @@ func callbacks() fsm.Callbacks {
 			qm := metrics.GetQueueMetrics(app.queuePath)
 			qm.IncQueueApplicationsCompleted()
 			qm.IncQueueApplicationsCompletedTotal()
-			if app.revived.Load() {
-				app.revived.Store(false)
-				qm.DecQueueApplicationsRevived()
-				metrics.GetSchedulerMetrics().DecTotalApplicationsRevived()
-			}
 			app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 			app.executeTerminatedCallback()
 			app.clearPlaceholderTimer()
@@ -278,10 +281,6 @@ func callbacks() fsm.Callbacks {
 			qm := metrics.GetQueueMetrics(app.queuePath)
 			qm.DecQueueApplicationsCompleted()
 			metrics.GetSchedulerMetrics().DecTotalApplicationsCompleted()
-			app.revived.Store(true)
-			qm.IncQueueApplicationsRevived()
-			metrics.GetSchedulerMetrics().IncTotalApplicationsRevived()
-			app.restoreAfterCompletion()
 		},
 		fmt.Sprintf("enter_%s", Failed.String()): func(_ context.Context, event *fsm.Event) {
 			app := event.Args[0].(*Application) //nolint:errcheck
@@ -292,6 +291,19 @@ func callbacks() fsm.Callbacks {
 			app.setStateTimer(terminatedTimeout, app.stateMachine.Current(), ExpireApplication)
 			app.executeTerminatedCallback()
 			app.cleanupAsks()
+		},
+		fmt.Sprintf("enter_%s", Reviving.String()): func(_ context.Context, event *fsm.Event) {
+			app := event.Args[0].(*Application) //nolint:errcheck
+			qm := metrics.GetQueueMetrics(app.queuePath)
+			qm.IncQueueApplicationsRevived()
+			metrics.GetSchedulerMetrics().IncTotalApplicationsRevived()
+		},
+		fmt.Sprintf("leave_%s", Reviving.String()): func(_ context.Context, event *fsm.Event) {
+			app := event.Args[0].(*Application) //nolint:errcheck
+			qm := metrics.GetQueueMetrics(app.queuePath)
+			qm.DecQueueApplicationsRevived()
+			metrics.GetSchedulerMetrics().DecTotalApplicationsRevived()
+			app.restoreAfterCompletion()
 		},
 	}
 }

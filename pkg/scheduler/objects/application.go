@@ -26,7 +26,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/looplab/fsm"
@@ -123,7 +122,6 @@ type Application struct {
 	runnableInQueue      bool                        // whether the application is runnable/schedulable in the queue. Default is true.
 	runnableByUserLimit  bool                        // whether the application is runnable/schedulable based on user/group quota. Default is true.
 	backoffDeadline      time.Time                   // no scheduling from this application until this deadline
-	revived              atomic.Bool                 // brought back out of Completed and not completed again since (read lock free)
 
 	rmEventHandler              handler.EventHandler
 	rmID                        string
@@ -262,10 +260,8 @@ func (sa *Application) IsResuming() bool {
 	return sa.stateMachine.Is(Resuming.String())
 }
 
-// IsRevived returns true if the application was brought back out of Completed and has not completed
-// again since. The flag is read lock free so it can be consulted while the partition lock is held.
-func (sa *Application) IsRevived() bool {
-	return sa.revived.Load()
+func (sa *Application) IsReviving() bool {
+	return sa.stateMachine.Is(Reviving.String())
 }
 
 // IsTerminated returns true if the application is in a state it can only leave by being revived.
@@ -327,6 +323,42 @@ func (sa *Application) HandleApplicationEvent(event applicationEvent) error {
 		return nil
 	}
 	return err
+}
+
+func (sa *Application) EnsureAppRevivable() bool {
+	err := sa.HandleApplicationEvent(ReviveApplication)
+	if err != nil {
+		log.Log(log.SchedPartition).Warn("Application state not changed to Reviving while reviving application",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("currentState", sa.CurrentState()),
+			zap.Error(err))
+		return false
+	}
+	return true
+}
+
+func (sa *Application) EnsureAppCompleted() bool {
+	err := sa.HandleApplicationEvent(CompleteApplication)
+	if err != nil {
+		log.Log(log.SchedPartition).Warn("Application state not changed to Completed while reviving application",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("currentState", sa.CurrentState()),
+			zap.Error(err))
+		return false
+	}
+	return true
+}
+
+func (sa *Application) EnsureAppRunnable() bool {
+	err := sa.HandleApplicationEvent(RunApplication)
+	if err != nil {
+		log.Log(log.SchedPartition).Warn("Application state not changed to Running while reviving application",
+			zap.String("appID", sa.ApplicationID),
+			zap.String("currentState", sa.CurrentState()),
+			zap.Error(err))
+		return false
+	}
+	return true
 }
 
 // HandleApplicationEventWithInfo handles the state event for the application with associated info object.
@@ -2087,7 +2119,6 @@ func (sa *Application) RestoreQueue(queue *Queue) {
 	defer sa.Unlock()
 	sa.queue = queue
 	sa.finishedTime = time.Time{}
-	sa.revived.Store(true)
 }
 
 // DetachQueueForCompletion clears the queue link for an application that is being moved to the
@@ -2098,7 +2129,7 @@ func (sa *Application) RestoreQueue(queue *Queue) {
 func (sa *Application) DetachQueueForCompletion() (*Queue, bool) {
 	sa.Lock()
 	defer sa.Unlock()
-	if sa.revived.Load() || !sa.IsTerminated() {
+	if sa.IsReviving() || !sa.IsTerminated() {
 		return nil, false
 	}
 	queue := sa.queue

@@ -1018,8 +1018,8 @@ func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error)
 	// the ask just left the pending set
 	sa.removeFromPriorities(ask.GetPriority())
 	// keep sortedRequests limited to pending asks only: remove on allocate, re-insert on
-	// deallocate. Callers that iterate sa.sortedRequests while calling allocateAsk (tryAllocate,
-	// tryPlaceholderAllocate) range over a snapshot so the removal cannot disturb the loop.
+	// deallocate. tryAllocate returns right after calling this, and tryPlaceholderAllocate ranges
+	// over a snapshot, so the removal cannot disturb either loop.
 	sa.sortedRequests.remove(ask)
 
 	delta := ask.GetAllocatedResource()
@@ -1264,9 +1264,15 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	// constant for the cycle: hoisted out of the loop below. Safe to call unconditionally here
 	// because the len check above guarantees at least one iteration would occur.
 	backoffThreshold := sa.queue.GetMaxAppUnschedAskBackoff()
-	// get all the requests from the app sorted in order
-	// iterate over a snapshot: allocateAsk and the ghost repair below remove from sa.sortedRequests
-	for _, request := range slices.Clone(sa.sortedRequests) {
+	// every path that allocates returns at once, so the live slice is safe to range over;
+	// ghosts found on the way are removed once the loop is done
+	var ghosts []*Allocation
+	defer func() {
+		for _, ghost := range ghosts {
+			sa.sortedRequests.remove(ghost)
+		}
+	}()
+	for _, request := range sa.sortedRequests {
 		if backoffThreshold > 0 && unschedulable >= backoffThreshold {
 			log.Log(log.SchedApplication).Info("too many unschedulable asks in the application, waiting",
 				zap.String("application ID", sa.ApplicationID),
@@ -1286,7 +1292,7 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			log.Log(log.SchedApplication).DPanic("allocated ask found in pending-only sortedRequests",
 				zap.String("appID", sa.ApplicationID),
 				zap.String("allocationKey", request.GetAllocationKey()))
-			sa.sortedRequests.remove(request)
+			ghosts = append(ghosts, request)
 			continue
 		}
 		// check if there is a replacement possible

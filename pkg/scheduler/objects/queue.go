@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1518,6 +1519,8 @@ func (sq *Queue) sortQueues() []*Queue {
 			sortedQueues = append(sortedQueues, queueFairMax{queue: child, fairMax: child.GetFairMaxResource()})
 		}
 	}
+	// the children map hands over a random order: sort on name to give the stable sort a fixed input
+	slices.SortFunc(sortedQueues, func(l, r queueFairMax) int { return strings.Compare(l.queue.Name, r.queue.Name) })
 	// Sort the queues
 	return sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
 }

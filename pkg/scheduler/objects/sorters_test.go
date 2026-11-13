@@ -176,8 +176,8 @@ func TestSortQueuesNoGuarantees(t *testing.T) {
 	assert.Equal(t, queueNames(sorted), queueNames([]*Queue{q3, q2, q0, q1}), "fair no limit second - priority")
 }
 
-// sortQueues builds the list from a map, so the input order of the sort changes per run. Sort a
-// fixed list in every order to make sure each queue is compared against its own fair max.
+// sortQueue must compare each queue against its own fair max whatever the input order. Sort a
+// fixed list in every order to cover them all.
 func TestSortQueuesFairMaxInputOrder(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")

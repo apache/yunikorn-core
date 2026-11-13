@@ -37,7 +37,7 @@ func TestFormatMetricName(t *testing.T) {
 	}
 	numRandomTestStrings := 1000
 	randomTestStrings := make([]string, numRandomTestStrings)
-	for i := 0; i < numRandomTestStrings; i++ {
+	for i := range numRandomTestStrings {
 		randomTestStrings[i] = generateRandomString(100)
 	}
 	for _, testString := range randomTestStrings {

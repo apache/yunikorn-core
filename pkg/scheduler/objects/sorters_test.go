@@ -180,7 +180,7 @@ func TestSortAppsNoPending(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
 	input := make(map[string]*Application, 4)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
@@ -220,7 +220,7 @@ func TestSortAppsFifo(t *testing.T) {
 		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
 	input := make(map[string]*Application, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
@@ -254,7 +254,7 @@ func TestSortAppsPriorityFifo(t *testing.T) {
 		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
 	input := make(map[string]*Application, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
@@ -279,7 +279,7 @@ func TestSortAppsFair(t *testing.T) {
 		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
 	input := make(map[string]*Application, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
@@ -332,7 +332,7 @@ func TestSortAppsPriorityFair(t *testing.T) {
 		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
 	input := make(map[string]*Application, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
@@ -404,7 +404,7 @@ func TestSortBySubmissionTime(t *testing.T) {
 	baseline := time.Now()
 	// setup to sort descending: all apps have pending resource
 	input := make(map[string]*Application, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")

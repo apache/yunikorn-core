@@ -63,9 +63,9 @@ type PartitionConfig struct {
 	Queues            []QueueConfig
 	PlacementRules    []PlacementRule           `yaml:",omitempty" json:",omitempty"`
 	Limits            []Limit                   `yaml:",omitempty" json:",omitempty"`
-	Preemption        PartitionPreemptionConfig `yaml:",omitempty" json:",omitempty"`
-	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty" json:",omitempty"`
-	UserGroupResolver UserGroupResolver         `yaml:",omitempty" json:",omitempty"`
+	Preemption        PartitionPreemptionConfig `yaml:",omitempty"`
+	NodeSortPolicy    NodeSortingPolicy         `yaml:",omitempty"`
+	UserGroupResolver UserGroupResolver         `yaml:",omitempty"`
 }
 
 type UserGroupResolver struct {
@@ -89,12 +89,12 @@ type PartitionPreemptionConfig struct {
 type QueueConfig struct {
 	Name            string
 	Parent          bool              `yaml:",omitempty" json:",omitempty"`
-	Resources       Resources         `yaml:",omitempty" json:",omitempty"`
+	Resources       Resources         `yaml:",omitempty"`
 	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
 	Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
 	AdminACL        string            `yaml:",omitempty" json:",omitempty"`
 	SubmitACL       string            `yaml:",omitempty" json:",omitempty"`
-	ChildTemplate   ChildTemplate     `yaml:",omitempty" json:",omitempty"`
+	ChildTemplate   ChildTemplate     `yaml:",omitempty"`
 	Queues          []QueueConfig     `yaml:",omitempty" json:",omitempty"`
 	Limits          []Limit           `yaml:",omitempty" json:",omitempty"`
 }
@@ -103,7 +103,7 @@ type QueueConfig struct {
 type ChildTemplate struct {
 	MaxApplications uint64            `yaml:",omitempty" json:",omitempty"`
 	Properties      map[string]string `yaml:",omitempty" json:",omitempty"`
-	Resources       Resources         `yaml:",omitempty" json:",omitempty"`
+	Resources       Resources         `yaml:",omitempty"`
 }
 
 // The Resources limit to apply on the queue. The definition allows for an unlimited number of types to be used.
@@ -125,7 +125,7 @@ type Resources struct {
 type PlacementRule struct {
 	Name   string
 	Create bool           `yaml:",omitempty" json:",omitempty"`
-	Filter Filter         `yaml:",omitempty" json:",omitempty"`
+	Filter Filter         `yaml:",omitempty"`
 	Parent *PlacementRule `yaml:",omitempty" json:",omitempty"`
 	Value  string         `yaml:",omitempty" json:",omitempty"`
 }

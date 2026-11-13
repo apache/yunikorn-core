@@ -46,7 +46,7 @@ type AggregatedStateInfo struct {
 	ClusterInfo      []*dao.ClusterDAOInfo            `json:"clusterInfo,omitempty"`
 	ContainerHistory []*dao.ContainerHistoryDAOInfo   `json:"containerHistory,omitempty"`
 	Queues           []dao.PartitionQueueDAOInfo      `json:"queues,omitempty"`
-	RMDiagnostics    map[string]interface{}           `json:"rmDiagnostics,omitempty"`
+	RMDiagnostics    map[string]any                   `json:"rmDiagnostics,omitempty"`
 	LogLevel         string                           `json:"logLevel,omitempty"`
 	Config           *dao.ConfigDAOInfo               `json:"config,omitempty"`
 	PlacementRules   []*dao.RuleDAOInfo               `json:"placementRules,omitempty"`

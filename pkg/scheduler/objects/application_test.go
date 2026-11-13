@@ -1747,7 +1747,7 @@ func TestTimeoutPlaceholderProcessingDoesNotWaitForRMReply(t *testing.T) {
 
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
 	app.rmEventHandler = &mockAppEventHandler{
-		callback: func(ev interface{}) {
+		callback: func(ev any) {
 			if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				releaseReceived <- releaseEvent
 			}
@@ -1785,7 +1785,7 @@ func TestTimeoutStateTimerDoesNotWaitForRMReply(t *testing.T) {
 	app.SetState(Completing.String())
 
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
-	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev any) {
 		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 			releaseReceived <- releaseEvent
 		}
@@ -3804,7 +3804,7 @@ func TestRequiredNodePreemption(t *testing.T) {
 	var releaseEvents []*rmevent.RMReleaseAllocationEvent
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
 	app.rmEventHandler = &mockAppEventHandler{
-		callback: func(ev interface{}) {
+		callback: func(ev any) {
 			if rmEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				releaseEvents = append(releaseEvents, rmEvent)
 				releaseReceived <- rmEvent
@@ -4022,7 +4022,7 @@ func TestRequiredNodePreemptionFailed(t *testing.T) {
 	app := newApplication(appID0, "default", "root.default")
 	var releaseEvents []*rmevent.RMReleaseAllocationEvent
 	app.rmEventHandler = &mockAppEventHandler{
-		callback: func(ev interface{}) {
+		callback: func(ev any) {
 			if rmEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				releaseEvents = append(releaseEvents, rmEvent)
 			}
@@ -4212,10 +4212,10 @@ func TestGetUint64Tag(t *testing.T) {
 }
 
 type mockAppEventHandler struct {
-	callback func(ev interface{})
+	callback func(ev any)
 }
 
-func (m mockAppEventHandler) HandleEvent(ev interface{}) {
+func (m mockAppEventHandler) HandleEvent(ev any) {
 	m.callback(ev)
 }
 
@@ -4239,7 +4239,7 @@ func TestNotifyRMAllocationReleasedDoesNotWaitForReply(t *testing.T) {
 
 	received := make(chan *rmevent.RMReleaseAllocationEvent, 1)
 	app.rmEventHandler = &mockAppEventHandler{
-		callback: func(ev interface{}) {
+		callback: func(ev any) {
 			if event, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				received <- event
 			}
@@ -4372,7 +4372,7 @@ func TestTryPlaceHolderAllocateLargerRequest(t *testing.T) {
 
 	app := newApplication(appID0, "default", "root.default")
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
-	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev any) {
 		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 			releaseReceived <- releaseEvent
 		}

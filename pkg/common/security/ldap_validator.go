@@ -279,7 +279,7 @@ func hasBalancedParentheses(s string) bool {
 }
 
 // ValidateSecretValue validates a single secret value based on its key
-func ValidateSecretValue(key, value string) (interface{}, error) {
+func ValidateSecretValue(key, value string) (any, error) {
 	switch key {
 	case common.LdapHost:
 		return validateHostValue(value)

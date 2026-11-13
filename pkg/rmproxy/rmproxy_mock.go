@@ -26,7 +26,7 @@ import (
 // MockedRMProxy Implements RMProxy Mock Event Handler for testing
 type MockedRMProxy struct {
 	handled bool
-	events  []interface{}
+	events  []any
 	locking.RWMutex
 }
 
@@ -35,11 +35,11 @@ func NewMockedRMProxy() *MockedRMProxy {
 }
 
 // HandleEvent implements event handling for a limited set of events for testing
-func (rmp *MockedRMProxy) HandleEvent(ev interface{}) {
+func (rmp *MockedRMProxy) HandleEvent(ev any) {
 	rmp.Lock()
 	defer rmp.Unlock()
 	if rmp.events == nil {
-		rmp.events = make([]interface{}, 0)
+		rmp.events = make([]any, 0)
 	}
 	rmp.events = append(rmp.events, ev)
 	var c chan *rmevent.Result
@@ -66,7 +66,7 @@ func (rmp *MockedRMProxy) IsHandled() bool {
 }
 
 // GetEvents return the list of events processed by the handler and reset
-func (rmp *MockedRMProxy) GetEvents() []interface{} {
+func (rmp *MockedRMProxy) GetEvents() []any {
 	rmp.RLock()
 	defer rmp.RUnlock()
 	return rmp.events

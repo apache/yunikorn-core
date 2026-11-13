@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -704,13 +705,13 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 	log.Log(log.SchedPartition).Debug("Creating queue(s)",
 		zap.String("parent", current),
 		zap.String("fullPath", name))
-	for i := len(toCreate) - 1; i >= 0; i-- {
+	for i, queueName := range slices.Backward(toCreate) {
 		// everything is checked and there should be no errors
 		var err error
-		queue, err = objects.NewDynamicQueue(toCreate[i], i == 0, queue, pc.appQueueMapping)
+		queue, err = objects.NewDynamicQueue(queueName, i == 0, queue, pc.appQueueMapping)
 		if err != nil {
 			log.Log(log.SchedPartition).Warn("Queue auto create failed unexpected",
-				zap.String("queueName", toCreate[i]),
+				zap.String("queueName", queueName),
 				zap.Error(err))
 			return nil, err
 		}

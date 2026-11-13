@@ -555,7 +555,7 @@ func TestGetChildQueueInfo(t *testing.T) {
 	var parent *Queue
 	parent, err = createManagedQueue(root, "parent-man", true, nil)
 	assert.NilError(t, err, "failed to create managed parent queue")
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, err = createManagedQueue(parent, "leaf-man"+strconv.Itoa(i), false, nil)
 		if err != nil {
 			t.Errorf("failed to create managed queue: %v", err)
@@ -567,7 +567,7 @@ func TestGetChildQueueInfo(t *testing.T) {
 
 	parent, err = createDynamicQueue(root, "parent-un", true, nil)
 	assert.NilError(t, err, "failed to create dynamic parent queue")
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		_, err = createDynamicQueue(parent, "leaf-un-"+strconv.Itoa(i), false, nil)
 		if err != nil {
 			t.Errorf("failed to create dynamic queue: %v", err)
@@ -1464,7 +1464,7 @@ func testOutstanding(t *testing.T, allocMap, usedMap map[string]string) {
 	app1 := newApplication(appID1, "default", "root.queue1")
 	app1.queue = queue1
 	queue1.AddApplication(app1)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, allocRes)
 		ask.SetSchedulingAttempted(true)
 		err = app1.AddAllocationAsk(ask)
@@ -1474,7 +1474,7 @@ func testOutstanding(t *testing.T, allocMap, usedMap map[string]string) {
 	app2 := newApplication(appID2, "default", "root.queue2")
 	app2.queue = queue2
 	queue2.AddApplication(app2)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, allocRes)
 		ask.SetSchedulingAttempted(true)
 		err = app2.AddAllocationAsk(ask)
@@ -1547,7 +1547,7 @@ func TestGetOutstandingOnlyUntracked(t *testing.T) {
 	app1 := newApplication(appID1, "default", "root.queue1")
 	app1.queue = queue1
 	queue1.AddApplication(app1)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, alloc)
 		ask.SetSchedulingAttempted(true)
 		err = app1.AddAllocationAsk(ask)
@@ -1594,7 +1594,7 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 	var res *resources.Resource
 	res, err = resources.NewResourceFromConf(map[string]string{"cpu": "1"})
 	assert.NilError(t, err, "failed to create basic resource")
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID1, res)
 		ask.SetSchedulingAttempted(true)
 		err = app1.AddAllocationAsk(ask)
@@ -1604,7 +1604,7 @@ func TestGetOutstandingRequestNoMax(t *testing.T) {
 	app2 := newApplication(appID2, "default", "root.queue2")
 	app2.queue = queue2
 	queue2.AddApplication(app2)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		ask := newAllocationAsk(fmt.Sprintf("alloc-%d", i), appID2, res)
 		ask.SetSchedulingAttempted(true)
 		err = app2.AddAllocationAsk(ask)
@@ -1642,7 +1642,7 @@ func TestOutstandingMultipleApps(t *testing.T) {
 
 	appRes, err := resources.NewResourceFromConf(map[string]string{"memory": "1"})
 	assert.NilError(t, err, "failed to create request resource")
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		appID := "app-" + strconv.Itoa(i)
 		app := newApplication(appID, "default", "root.leaf")
 		app.queue = leaf

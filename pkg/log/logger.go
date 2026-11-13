@@ -287,7 +287,7 @@ func initLoggingConfig(config map[string]string) {
 	}
 
 	// create each configured logger and initialize the overall configuration
-	for i := 0; i < len(loggers); i++ {
+	for i := range loggers {
 		zapLoggers[i] = createLogger(levelMap, loggers[i].name)
 	}
 	newLoggerConfig := loggerConfig{loggers: zapLoggers}

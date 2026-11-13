@@ -21,6 +21,7 @@ package scheduler
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"time"
 
@@ -436,9 +437,7 @@ func (cc *ClusterContext) GetRMInfoMapClone() map[string]*RMInformation {
 	defer cc.RUnlock()
 
 	newMap := make(map[string]*RMInformation)
-	for k, v := range cc.rmInfo {
-		newMap[k] = v
-	}
+	maps.Copy(newMap, cc.rmInfo)
 	return newMap
 }
 
@@ -447,9 +446,7 @@ func (cc *ClusterContext) GetPartitionMapClone() map[string]*PartitionContext {
 	defer cc.RUnlock()
 
 	newMap := make(map[string]*PartitionContext)
-	for k, v := range cc.partitions {
-		newMap[k] = v
-	}
+	maps.Copy(newMap, cc.partitions)
 	return newMap
 }
 
@@ -865,9 +862,7 @@ func (cc *ClusterContext) SetRMInfo(rmID string, rmBuildInformation map[string]s
 		cc.rmInfo = make(map[string]*RMInformation)
 	}
 	buildInfo := make(map[string]string)
-	for k, v := range rmBuildInformation {
-		buildInfo[k] = v
-	}
+	maps.Copy(buildInfo, rmBuildInformation)
 	buildInfo["rmId"] = rmID
 	cc.rmInfo[rmID] = &RMInformation{
 		RMBuildInformation: buildInfo,

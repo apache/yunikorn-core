@@ -723,7 +723,7 @@ func TestGetClusterUtilJSON(t *testing.T) {
 	assert.Equal(t, ContainsObj(result, utilCore), true)
 }
 
-func ContainsObj(slice interface{}, contains interface{}) bool {
+func ContainsObj(slice any, contains any) bool {
 	value := reflect.ValueOf(slice)
 	for i := 0; i < value.Len(); i++ {
 		if value.Index(i).Interface() == contains {
@@ -2620,7 +2620,7 @@ func TestGetStream_Limit(t *testing.T) {
 	assertGetStreamError(t, false, req, resp, http.StatusServiceUnavailable, "Too many streaming connections")
 }
 
-func assertGetStreamError(t *testing.T, withUUID bool, req *http.Request, resp interface{}, statusCode int, expectedMsg string) {
+func assertGetStreamError(t *testing.T, withUUID bool, req *http.Request, resp any, statusCode int, expectedMsg string) {
 	t.Helper()
 	var response *http.Response
 
@@ -2779,7 +2779,7 @@ func checkAllEvents(t *testing.T, events []*si.EventRecord) {
 	assert.NilError(t, err)
 	eventDao := getEventRecordDao(t, req)
 
-	for i := 0; i < len(events); i++ {
+	for i := range events {
 		compareEvents(t, events[i], eventDao.EventRecords[i])
 	}
 }

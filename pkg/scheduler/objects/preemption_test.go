@@ -532,7 +532,7 @@ func TestTryAllocateDoesNotWaitForPreemptionRMReply(t *testing.T) {
 	defer plugins.UnregisterSchedulerPlugins()
 
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
-	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev any) {
 		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 			releaseReceived <- releaseEvent
 		}

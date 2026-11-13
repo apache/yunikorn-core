@@ -19,13 +19,12 @@
 package objects
 
 import (
-	"strconv"
 	"testing"
-	"time"
 
 	"github.com/tidwall/btree"
 	"gotest.tools/v3/assert"
 
+	"github.com/apache/yunikorn-core/pkg/common"
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/common/security"
@@ -225,7 +224,7 @@ func newProto(nodeID string, totalResource *resources.Resource, attributes map[s
 
 // Create a new Allocation with a random allocation key
 func newAllocation(appID, nodeID string, res *resources.Resource) *Allocation {
-	allocKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
+	allocKey := common.GetNewUUID()
 	return newAllocationAll(allocKey, appID, nodeID, "", res, false, 0)
 }
 
@@ -248,7 +247,7 @@ func newForeignAllocation(allocKey, nodeID string, res *resources.Resource) *All
 
 // Create a new Allocation with a random ask key
 func newPlaceholderAlloc(appID, nodeID string, res *resources.Resource, taskGroup string) *Allocation {
-	allocKey := strconv.FormatInt((time.Now()).UnixNano(), 10)
+	allocKey := common.GetNewUUID()
 	return newAllocationAll(allocKey, appID, nodeID, taskGroup, res, true, 0)
 }
 

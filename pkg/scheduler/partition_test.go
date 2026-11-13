@@ -2584,6 +2584,174 @@ func TestTryAllocateReserve(t *testing.T) {
 	}
 }
 
+// tryScheduleCycle runs the steps of ClusterContext.schedule for one partition.
+func tryScheduleCycle(pc *PartitionContext) *objects.AllocationResult {
+	result := pc.tryReservedAllocate()
+	if result == nil {
+		result = pc.tryPlaceholderAllocate()
+		if result == nil {
+			result = pc.tryAllocate()
+		}
+	}
+	return result
+}
+
+// Asks that can never be placed must not keep other asks out of the cluster forever.
+// Two nodes with 7 of 8 GPUs free, and asks for 8 GPUs that can reserve a node but never allocate.
+func TestReservationMaxTimeUnplaceableAsks(t *testing.T) {
+	tests := []struct {
+		name        string
+		appIDs      []string
+		placeholder bool
+	}{
+		{name: "one gang", appIDs: []string{"app-a"}, placeholder: true},
+		{name: "more placeholders than nodes", appIDs: []string{"app-a", "app-b"}, placeholder: true},
+		{name: "non placeholder asks", appIDs: []string{"app-a"}},
+		{name: "more non placeholder asks than nodes", appIDs: []string{"app-a", "app-b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			objects.SetReservationDelay(10 * time.Millisecond)
+			defer objects.SetReservationDelay(2 * time.Second)
+			partition, err := newPartitionContext(configs.PartitionConfig{
+				Name: "test",
+				Queues: []configs.QueueConfig{{
+					Name:      "root",
+					Parent:    true,
+					SubmitACL: "*",
+					Queues: []configs.QueueConfig{{
+						Name:       "default",
+						Properties: map[string]string{configs.ReservationMaxTime: "50ms"},
+					}},
+				}},
+			}, rmID, nil, false)
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+
+			gpu := func(num resources.Quantity) *resources.Resource {
+				return resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": num})
+			}
+			assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID1, gpu(8))))
+			assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID2, gpu(8))))
+			assert.NilError(t, partition.AddApplication(newApplication("in-use", "default", "root.default")))
+			for key, node := range map[string]string{"in-use-1": nodeID1, "in-use-2": nodeID2} {
+				_, _, err = partition.UpdateAllocation(newAllocation(key, "in-use", node, gpu(1)))
+				assert.NilError(t, err, "existing allocation should have been added")
+			}
+
+			apps := make([]*objects.Application, 0, len(tt.appIDs))
+			for _, appID := range tt.appIDs {
+				app := newApplication(appID, "default", "root.default")
+				if tt.placeholder {
+					app = newApplicationTG(appID, "default", "root.default", gpu(16))
+				}
+				assert.NilError(t, partition.AddApplication(app))
+				for _, key := range []string{appID + "-1", appID + "-2"} {
+					ask := newAllocationAsk(key, appID, gpu(8))
+					if tt.placeholder {
+						ask = newAllocationAskTG(key, appID, "tg", gpu(8), true)
+					}
+					assert.NilError(t, app.AddAllocationAsk(ask))
+				}
+				apps = append(apps, app)
+			}
+			held := func() int {
+				num := 0
+				for _, app := range apps {
+					num += len(app.GetReservations())
+				}
+				return num
+			}
+
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				tryScheduleCycle(partition)
+				return held() == 2
+			}), "both nodes should have been reserved")
+
+			small := newApplication("small", "default", "root.default")
+			assert.NilError(t, partition.AddApplication(small))
+			assert.NilError(t, small.AddAllocationAsk(newAllocationAsk("small-1", "small", gpu(1))))
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				result := tryScheduleCycle(partition)
+				return result != nil && result.Request.GetAllocationKey() == "small-1"
+			}), "ask that fits should be allocated once a reservation expired")
+
+			// the asks keep their claim on the nodes and the partition counter must follow the cancellations
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				tryScheduleCycle(partition)
+				return held() == 2 && partition.getReservationCount() == 2
+			}), "nodes should be reserved again and counted once")
+		})
+	}
+}
+
+// With no queue limit set the only limit is the cluster size. A full cluster recovers when the reserved node drains,
+// so the shorter wait for a reservation over a limit must not apply.
+func TestReservationMaxTimeFullCluster(t *testing.T) {
+	setupUGM()
+	objects.SetReservationDelay(10 * time.Millisecond)
+	defer objects.SetReservationDelay(2 * time.Second)
+	partition, err := newPartitionContext(configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{{
+			Name:      "root",
+			Parent:    true,
+			SubmitACL: "*",
+			Queues: []configs.QueueConfig{{
+				Name:       "default",
+				Properties: map[string]string{configs.ReservationMaxTime: "4s"},
+			}},
+		}},
+	}, rmID, nil, false)
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	gpu := func(num resources.Quantity) *resources.Resource {
+		return resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": num})
+	}
+	assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID1, gpu(10))))
+	assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID2, gpu(10))))
+	assert.NilError(t, partition.AddApplication(newApplication("in-use", "default", "root.default")))
+	for key, used := range map[string]resources.Quantity{nodeID1: 6, nodeID2: 7} {
+		_, _, err = partition.UpdateAllocation(newAllocation("in-use-"+key, "in-use", key, gpu(used)))
+		assert.NilError(t, err, "existing allocation should have been added")
+	}
+
+	big := newApplication("big", "default", "root.default")
+	assert.NilError(t, partition.AddApplication(big))
+	ask := newAllocationAsk("big-1", "big", gpu(5))
+	assert.NilError(t, big.AddAllocationAsk(ask))
+	assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+		tryScheduleCycle(partition)
+		return big.NodeReservedForAsk("big-1") != ""
+	}), "ask should have reserved a node")
+	reserved := big.NodeReservedForAsk("big-1")
+
+	// higher priority asks fill the other node, which leaves less free in the cluster than the reservation needs
+	others := newApplication("others", "default", "root.default")
+	assert.NilError(t, partition.AddApplication(others))
+	for i := range 20 {
+		assert.NilError(t, others.AddAllocationAsk(newAllocationAskAll("other-"+strconv.Itoa(i), "others", "", gpu(1), 10, false, nil)))
+	}
+	for start := time.Now(); time.Since(start) < 1200*time.Millisecond; time.Sleep(time.Millisecond) {
+		tryScheduleCycle(partition)
+	}
+	assert.Equal(t, big.NodeReservedForAsk("big-1"), reserved, "reservation should still be held past a quarter of the max time")
+
+	partition.removeAllocation(&si.AllocationRelease{
+		PartitionName:   "default",
+		ApplicationID:   "in-use",
+		AllocationKey:   "in-use-" + reserved,
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	})
+	assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+		tryScheduleCycle(partition)
+		return ask.IsAllocated()
+	}), "ask should have been allocated once the reserved node drained")
+	assert.Equal(t, ask.GetNodeID(), reserved, "ask should be allocated on the reserved node")
+}
+
 func TestTryAllocateWithReserved(t *testing.T) {
 	setupUGM()
 	partition := createQueuesNodes(t)
@@ -4570,6 +4738,56 @@ func TestTryAllocateMaxRunningRemoveAccepted(t *testing.T) {
 	assert.Equal(t, result.Request.GetAllocationKey(), allocKey, "expected ask alloc-1 to be allocated")
 }
 
+// After a restart the shim can send an ask that gets scheduled before the allocations of an app that was
+// already running are recovered. The recovered app does not pass canRunApp but must still count against the
+// max of every queue above it.
+func TestUpdateAllocationRecoveredMaxRunning(t *testing.T) {
+	partition := createQueuesNodes(t)
+	assert.Assert(t, partition != nil, "partition create failed")
+	defer partition.userGroupCache.Stop()
+	parent := partition.getQueueInternal("root.parent")
+	parent.SetMaxRunningApps(1)
+	res, err := resources.NewResourceFromConf(map[string]string{"vcore": "1"})
+	assert.NilError(t, err, "failed to create resource")
+
+	// app-1 was waiting before the restart: its ask is scheduled first
+	app1 := newApplication(appID1, "default", "root.parent.sub-leaf")
+	assert.NilError(t, partition.AddApplication(app1), "failed to add app-1 to partition")
+	assert.NilError(t, app1.AddAllocationAsk(newAllocationAsk(allocKey, appID1, res)), "failed to add ask to app-1")
+	result := partition.tryAllocate()
+	assert.Assert(t, result != nil && result.Request != nil, "app-1 should have been allocated")
+	assert.Equal(t, app1.CurrentState(), objects.Running.String(), "app-1 should be running")
+
+	// app-2 was running before the restart: its allocation is recovered while the parent is at its max
+	app2 := newApplication(appID2, "default", "root.parent.sub-leaf")
+	assert.NilError(t, partition.AddApplication(app2), "failed to add app-2 to partition")
+	_, allocCreated, err := partition.UpdateAllocation(newAllocation(allocKey, appID2, nodeID1, res))
+	assert.NilError(t, err, "failed to recover allocation of app-2")
+	assert.Assert(t, allocCreated, "allocation of app-2 should have been recovered")
+	assert.Equal(t, app2.CurrentState(), objects.Running.String(), "app-2 should be running")
+	assert.Equal(t, parent.GetPartitionQueueDAOInfo(false).RunningApps, uint64(2), "parent should count both running apps")
+
+	// app-3 waits until the parent is back below its max
+	app3 := newApplication(appID3, "default", "root.parent.sub-leaf")
+	assert.NilError(t, partition.AddApplication(app3), "failed to add app-3 to partition")
+	assert.NilError(t, app3.AddAllocationAsk(newAllocationAsk(allocKey, appID3, res)), "failed to add ask to app-3")
+	release := &si.AllocationRelease{
+		PartitionName:   "default",
+		ApplicationID:   appID1,
+		AllocationKey:   allocKey,
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	}
+	partition.removeAllocation(release)
+	assert.Equal(t, app1.CurrentState(), objects.Completing.String(), "app-1 should be completing")
+	result = partition.tryAllocate()
+	assert.Assert(t, result == nil, "app-3 should not run while app-2 keeps the parent at its max")
+	release.ApplicationID = appID2
+	partition.removeAllocation(release)
+	result = partition.tryAllocate()
+	assert.Assert(t, result != nil && result.Request != nil, "app-3 should have been allocated")
+	assert.Equal(t, result.Request.GetApplicationID(), appID3, "expected app-3 to be allocated")
+}
+
 func TestNewQueueEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
@@ -4582,13 +4800,17 @@ func TestNewQueueEvents(t *testing.T) {
 		User: "test",
 	})
 	assert.NilError(t, err)
-	noEvents := uint64(0)
+	// skip USERGROUP events, they only reach this store if the UGM was created after events.Init()
+	var records []*si.EventRecord
 	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
-		noEvents = eventSystem.Store.CountStoredEvents()
-		return noEvents == 3
+		for _, record := range eventSystem.Store.CollectEvents() {
+			if record.Type != si.EventRecord_USERGROUP {
+				records = append(records, record)
+			}
+		}
+		return len(records) == 3
 	})
-	assert.NilError(t, err, "expected 3 events, got %d", noEvents)
-	records := eventSystem.Store.CollectEvents()
+	assert.NilError(t, err, "expected 3 events, got %d", len(records))
 	assert.Equal(t, si.EventRecord_QUEUE, records[0].Type)
 	assert.Equal(t, si.EventRecord_ADD, records[0].EventChangeType)
 	assert.Equal(t, si.EventRecord_DETAILS_NONE, records[0].EventChangeDetail)

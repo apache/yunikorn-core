@@ -22,6 +22,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -93,7 +94,7 @@ type Application struct {
 	pending           *resources.Resource     // pending resources from asks for the app
 	reservations      map[string]*reservation // a map of reservations
 	requests          map[string]*Allocation  // a map of allocations, pending or satisfied
-	sortedRequests    sortedRequests          // list of requests pre-sorted
+	sortedRequests    sortedRequests          // pending asks only, sorted by priority then age
 	user              security.UserGroup      // owner of the application
 	allocatedResource *resources.Resource     // total allocated resources
 	submissionTime    time.Time               // time application was submitted (based on the first ask)
@@ -444,7 +445,7 @@ func (sa *Application) clearStateTimer() {
 }
 
 func (sa *Application) initPlaceholderTimer() {
-	if sa.placeholderTimer != nil || !sa.IsAccepted() || sa.execTimeout <= 0 {
+	if sa.placeholderTimer != nil || (!sa.IsAccepted() && !sa.IsRunning()) || sa.execTimeout <= 0 {
 		return
 	}
 	log.Log(log.SchedApplication).Debug("Application placeholder timer initiated",
@@ -472,8 +473,9 @@ func (sa *Application) clearPlaceholderTimer() {
 func (sa *Application) timeoutPlaceholderProcessing() {
 	sa.Lock()
 	defer sa.Unlock()
-	if (sa.IsRunning() || sa.IsCompleting()) && !resources.IsZero(sa.allocatedPlaceholder) {
-		// Case 1: if all app's placeholders are allocated, only part of them gets replaced, just delete the remaining placeholders
+	if sa.IsRunning() || sa.IsCompleting() {
+		// the application has started, so only release its unused placeholders. There may be none left: the timer
+		// can fire while the last one is being replaced.
 		var toRelease []*Allocation
 		replacing := 0
 		preempted := 0
@@ -505,7 +507,7 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			"releasing allocated placeholders on placeholder timeout",
 		)
 	} else {
-		// Case 2: in every other case progress the application, and notify the context about the expired placeholders
+		// in every other case progress the application, and notify the context about the expired placeholders
 		// change the status of the app based on gang style: soft resume normal allocations, hard fail the app
 		event := ResumeApplication
 		if sa.gangSchedulingStyle == Hard {
@@ -543,7 +545,10 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 					continue
 				}
 				pendingRelease = append(pendingRelease, alloc)
-				sa.placeholderData[alloc.taskGroupName].TimedOut++
+				// a real ask is not a timed out placeholder and might not have placeholder data for its task group
+				if phData, ok := sa.placeholderData[alloc.taskGroupName]; ok && alloc.IsPlaceholder() {
+					phData.TimedOut++
+				}
 			}
 		}
 		log.Log(log.SchedApplication).Info("Placeholder timeout, releasing allocated and pending placeholders",
@@ -689,11 +694,13 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 				deltaPendingResource = ask.GetAllocatedResource()
 				sa.pending = resources.Sub(sa.pending, deltaPendingResource)
 				sa.pending.Prune()
-				// the removed ask was pending: drop it from the priority histogram
+				// the removed ask was pending: drop it from the priority histogram and from
+				// sortedRequests. An allocated ask needs neither: it left the slice at allocateAsk
+				// time, so scanning for it here would only ever be a guaranteed full-slice miss.
 				sa.removeFromPriorities(ask.GetPriority())
+				sa.sortedRequests.remove(ask)
 			}
 			delete(sa.requests, allocKey)
-			sa.sortedRequests.remove(ask)
 			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.GetAllocatedResource(), detail)
 		}
 	}
@@ -921,7 +928,7 @@ func (sa *Application) setAskMaxPriority(v int32) {
 // is applied blind - the priority histogram and the placeholder count here, sa.pending and the
 // sortedRequests insert in AddAllocationAsk - so a second add for a live key would count it twice
 // in each of them and strand the ask it displaced in sortedRequests, which only ever drops the
-// first entry matching a key. Both entry points (AddAllocationAsk and RecoverAllocationAsk) are
+// entry that is the passed object. Both entry points (AddAllocationAsk and RecoverAllocationAsk) are
 // reached from PartitionContext.UpdateAllocation only after it has found GetAllocationAsk nil for
 // the key, and those calls all run on the single goroutine draining pendingAllocEvents
 // (Scheduler.handleAllocEvent), so nothing can insert the key between that check and this call.
@@ -1010,6 +1017,10 @@ func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error)
 
 	// the ask just left the pending set
 	sa.removeFromPriorities(ask.GetPriority())
+	// keep sortedRequests limited to pending asks only: remove on allocate, re-insert on
+	// deallocate. Callers that iterate sa.sortedRequests while calling allocateAsk (tryAllocate,
+	// tryPlaceholderAllocate) range over a snapshot so the removal cannot disturb the loop.
+	sa.sortedRequests.remove(ask)
 
 	delta := ask.GetAllocatedResource()
 	sa.pending = resources.Sub(sa.pending, delta)
@@ -1026,18 +1037,21 @@ func (sa *Application) deallocateAsk(ask *Allocation) (*resources.Resource, erro
 	}
 
 	// The ask returns to the pending set, but only if it still IS this application's ask: an ask that
-	// has already been dropped from sa.requests must not be counted again. That is reachable today:
-	// removeAsksInternal("") wipes sa.requests while leaving sa.allocations intact until the shim
-	// confirms the releases, and a release arriving in that window reaches RollbackAllocation, which
-	// finds the entry in sa.allocations and deallocates it. The identity comparison (not just a
+	// has already been dropped from sa.requests must not be counted again or resurrected as a ghost
+	// that tryAllocate would then try to schedule. The callers either resolve the ask out of
+	// sa.requests (DeallocateAsk) or pass back the ask they just allocated (the
+	// tryPlaceholderAllocate reverts), and since YUNIKORN-3360 RollbackAllocation rejects a key that
+	// sa.requests does not hold, so this is defence-in-depth. The identity comparison (not just a
 	// presence check) also covers a stale ask object that has since been replaced by a new ask under
 	// the same key.
 	// This matches the converged behaviour of the full rescan this change replaced:
 	// updateAskMaxPriority derived the max by scanning sa.requests, so an ask absent from sa.requests
-	// never influenced it. Without the guard that pre-existing accounting drift would turn into a
-	// permanent leak in the incremental histogram instead.
+	// never influenced it.
 	if sa.requests[ask.GetAllocationKey()] == ask {
 		sa.addToPriorities(ask.GetPriority())
+		// the ask is pending again: re-insert it at the head of its (priority, createTime)
+		// tie-group so the next cycle retries it before the peers it was already tried ahead of
+		sa.sortedRequests.reinsert(ask)
 	}
 
 	delta := ask.GetAllocatedResource()
@@ -1251,7 +1265,8 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 	// because the len check above guarantees at least one iteration would occur.
 	backoffThreshold := sa.queue.GetMaxAppUnschedAskBackoff()
 	// get all the requests from the app sorted in order
-	for _, request := range sa.sortedRequests {
+	// iterate over a snapshot: allocateAsk and the ghost repair below remove from sa.sortedRequests
+	for _, request := range slices.Clone(sa.sortedRequests) {
 		if backoffThreshold > 0 && unschedulable >= backoffThreshold {
 			log.Log(log.SchedApplication).Info("too many unschedulable asks in the application, waiting",
 				zap.String("application ID", sa.ApplicationID),
@@ -1261,6 +1276,17 @@ func (sa *Application) tryAllocate(headRoom *resources.Resource, allowPreemption
 			return nil
 		}
 		if request.IsAllocated() {
+			// sortedRequests holds pending asks only, so reaching an allocated one means the
+			// remove-on-allocate pairing has been broken and this entry is a ghost that nothing
+			// else will clean up: every other removal path skips allocated asks precisely because
+			// they cannot be in the slice. Scream, then repair - drop the ghost and carry on with
+			// the next ask, so a broken pairing is a hard failure in tests and a single logged
+			// self-heal in production, rather than the same entry being re-detected every cycle
+			// forever.
+			log.Log(log.SchedApplication).DPanic("allocated ask found in pending-only sortedRequests",
+				zap.String("appID", sa.ApplicationID),
+				zap.String("allocationKey", request.GetAllocationKey()))
+			sa.sortedRequests.remove(request)
 			continue
 		}
 		// check if there is a replacement possible
@@ -1448,7 +1474,11 @@ func (sa *Application) tryPlaceholderAllocate(nodeIterator func() NodeIterator, 
 	var phFit *Allocation
 	var reqFit *Allocation
 	// get all the requests from the app sorted in order
-	for _, request := range sa.sortedRequests {
+	// NOTE: iterate over a snapshot, not sa.sortedRequests directly. The revert path below calls
+	// sa.deallocateAsk(request), which re-inserts the ask into sa.sortedRequests mid-range - mutating
+	// the live slice while ranging over it would skip/revisit entries. allocateAsk/deallocateAsk keep
+	// only pending asks in sortedRequests.
+	for _, request := range slices.Clone(sa.sortedRequests) {
 		// skip placeholders they follow standard allocation
 		// this should also be part of a task group just make sure it is
 		if request.IsPlaceholder() || request.GetTaskGroup() == "" || request.IsAllocated() {
@@ -1652,6 +1682,21 @@ func (sa *Application) checkHeadRooms(ask *Allocation, userHeadroom *resources.R
 	return userHeadroom.FitInMaxUndef(ask.GetAllocatedResource()) && headRoom.FitInMaxUndef(ask.GetAllocatedResource())
 }
 
+// isReservationExpired returns true if a reservation has been held for longer than the queue allows.
+func (sa *Application) isReservationExpired(ask *Allocation, reservedFor time.Duration, userHeadroom *resources.Resource) bool {
+	maxTime := sa.queue.GetReservationMaxTime()
+	if reservedFor > maxTime {
+		return true
+	}
+	// A reservation over a queue or user limit cannot be allocated, so it is given up sooner. The cluster size is not
+	// such a limit: a full cluster recovers when the reserved node drains. An ask that triggered preemption is the
+	// exception: its headroom only recovers when the victims exit, and it cannot preempt again.
+	if reservedFor <= maxTime/4 || ask.HasTriggeredPreemption() {
+		return false
+	}
+	return !sa.checkHeadRooms(ask, userHeadroom, sa.queue.getMaxHeadRoom())
+}
+
 // tryReservedAllocate tries allocating an outstanding reservation
 func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIterator func() NodeIterator) *AllocationResult {
 	sa.Lock()
@@ -1680,16 +1725,22 @@ func (sa *Application) tryReservedAllocate(headRoom *resources.Resource, nodeIte
 			return newUnreservedAllocationResult(reserve.nodeID, unreserveAsk)
 		}
 
-		if !sa.checkHeadRooms(ask, userHeadroom, headRoom) {
-			// Cancel the reservation after wait time expires, but not for required node asks
-			if ask.GetRequiredNode() == "" && time.Since(reserve.createTime) > reservationWaitTimeout {
-				num := sa.unReserveInternal(reserve)
-				sa.queue.UnReserve(sa.ApplicationID, num)
-				log.Log(log.SchedApplication).Info("Cancelled reservation as wait time expired",
-					zap.String("reserve app", reserve.appID),
-					zap.String("reserve alloc key", reserve.allocKey),
-					zap.String("node", reserve.nodeID))
-			}
+		fitsHeadRoom := sa.checkHeadRooms(ask, userHeadroom, headRoom)
+		reservedFor := time.Since(reserve.createTime)
+		// Cancel the reservation after wait time expires, but not for required node asks
+		if ask.GetRequiredNode() == "" && sa.isReservationExpired(ask, reservedFor, userHeadroom) {
+			num := sa.unReserveInternal(reserve)
+			sa.queue.UnReserve(sa.ApplicationID, num)
+			sa.executeReservationReleasedCallback(num)
+			reserve.node.setReservationExpired()
+			log.Log(log.SchedApplication).Info("Cancelled reservation as wait time expired",
+				zap.String("reserve app", sa.ApplicationID),
+				zap.String("reserve alloc key", reserve.allocKey),
+				zap.String("node", reserve.nodeID),
+				zap.Duration("reserved for", reservedFor))
+			continue
+		}
+		if !fitsHeadRoom {
 			continue
 		}
 
@@ -1903,7 +1954,7 @@ func (sa *Application) tryNodes(ask *Allocation, iterator NodeIterator) *Allocat
 
 		// nothing allocated should we look at a reservation?
 		askAge := time.Since(ask.GetCreateTime())
-		if reserved == nil && askAge > reservationDelay {
+		if reserved == nil && askAge > reservationDelay && !node.isInReservationCooldown() {
 			log.Log(log.SchedApplication).Debug("app reservation check",
 				zap.String("allocationKey", allocKey),
 				zap.Time("createTime", ask.GetCreateTime()),
@@ -2134,8 +2185,9 @@ func (sa *Application) addAllocationInternal(allocType AllocationResultType, all
 		// impact on what is happening until this point
 		if resources.IsZero(sa.allocatedPlaceholder) {
 			sa.hasPlaceholderAlloc = true
-			sa.initPlaceholderTimer()
 		}
+		// also after the timer fired: the placeholders it released count until the RM confirms the release
+		sa.initPlaceholderTimer()
 		// User resource usage needs to be updated even during resource allocation happen for ph's itself even though state change would happen only after all ph allocation completes.
 		sa.incUserResourceUsage(alloc.GetAllocatedResource())
 		sa.allocatedPlaceholder = resources.Add(sa.allocatedPlaceholder, alloc.GetAllocatedResource())
@@ -2507,12 +2559,14 @@ func (sa *Application) addPlaceholderData(ask *Allocation) {
 	sa.placeholderData[taskGroupName].Count++
 }
 
+// GetAllPlaceholderData returns a copy of the placeholder data of all task groups of the application
 func (sa *Application) GetAllPlaceholderData() []*PlaceholderData {
 	sa.RLock()
 	defer sa.RUnlock()
 	var placeholders []*PlaceholderData
 	for _, taskGroup := range sa.placeholderData {
-		placeholders = append(placeholders, taskGroup)
+		phData := *taskGroup
+		placeholders = append(placeholders, &phData)
 	}
 	return placeholders
 }

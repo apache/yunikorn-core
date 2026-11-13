@@ -531,6 +531,47 @@ func TestAllowNoLists(t *testing.T) {
 	}
 }
 
+// test the filter type is case insensitive, the config validation accepts any case
+func TestNewFilterTypeCase(t *testing.T) {
+	// user objects to test with
+	user1Obj := security.UserGroup{
+		User:   "user1",
+		Groups: nil,
+	}
+	user2Obj := security.UserGroup{
+		User:   "user2",
+		Groups: nil,
+	}
+	tests := []struct {
+		name       string
+		filterType string
+		allow      bool
+	}{
+		{"empty", "", true},
+		{"allow", "allow", true},
+		{"Allow", "Allow", true},
+		{"ALLOW", "ALLOW", true},
+		{"deny", "deny", false},
+		{"Deny", "Deny", false},
+		{"DENY", "DENY", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			conf := configs.Filter{}
+			conf.Type = tt.filterType
+			conf.Users = []string{user1Obj.User}
+
+			filter := newFilter(conf)
+			if filter.allowUser(user1Obj) != tt.allow {
+				t.Errorf("filter type %q: user 'user1' in list allowed = %v, want %v", tt.filterType, !tt.allow, tt.allow)
+			}
+			if filter.allowUser(user2Obj) == tt.allow {
+				t.Errorf("filter type %q: user 'user2' not in list allowed = %v, want %v", tt.filterType, tt.allow, !tt.allow)
+			}
+		})
+	}
+}
+
 func TestFilter_filterDAO(t *testing.T) {
 	// filters are tested also from each rule in different combinations
 	// this does the outliers and cases that should not happen

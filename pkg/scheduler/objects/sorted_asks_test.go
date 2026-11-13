@@ -157,6 +157,72 @@ func TestRemoveWithSamePriorityAndTime(t *testing.T) {
 	assert.Assert(t, !askPresent(alloc3, sorted), "alloc3 should be removed")
 }
 
+// TestReinsertHeadOfTieGroup pins the placement contract of reinsert: an ask returning to the
+// pending set (allocate followed by deallocate) is placed at the HEAD of its
+// (priority, createTime) tie-group, so the next scheduling cycle retries it before the peers it
+// had already been tried ahead of. insert makes no such promise for ties between newly arriving
+// asks: the append fast path lands behind the tie-group while the binary search lands in front of
+// it, and nothing in the scheduler depends on which of the two a new tied ask gets.
+func TestReinsertHeadOfTieGroup(t *testing.T) {
+	baseTime := time.Now()
+	alloc1 := &Allocation{
+		createTime:    baseTime,
+		priority:      10,
+		allocationKey: "alloc-1",
+	}
+	alloc2 := &Allocation{
+		createTime:    baseTime,
+		priority:      10,
+		allocationKey: "alloc-2",
+	}
+	alloc3 := &Allocation{
+		createTime:    baseTime,
+		priority:      10,
+		allocationKey: "alloc-3",
+	}
+	lower := &Allocation{
+		createTime:    baseTime,
+		priority:      1,
+		allocationKey: "alloc-low",
+	}
+
+	sorted := sortedRequests{}
+	// an in-order burst of tied asks hits the append fast path: arrival order front to back
+	sorted.insert(alloc1)
+	sorted.insert(alloc2)
+	sorted.insert(alloc3)
+	assert.Equal(t, 3, len(sorted))
+	assert.Equal(t, "alloc-1", sorted[0].allocationKey, "expected arrival order front to back")
+	assert.Equal(t, "alloc-2", sorted[1].allocationKey, "expected arrival order front to back")
+	assert.Equal(t, "alloc-3", sorted[2].allocationKey, "expected arrival order front to back")
+
+	// allocate/deallocate cycle for the middle ask: it must come back at the head of the group
+	sorted.remove(alloc2)
+	assert.Equal(t, 2, len(sorted))
+	sorted.reinsert(alloc2)
+	assert.Equal(t, 3, len(sorted))
+	assert.Equal(t, "alloc-2", sorted[0].allocationKey, "a returning ask must head its tie-group")
+	assert.Equal(t, "alloc-1", sorted[1].allocationKey)
+	assert.Equal(t, "alloc-3", sorted[2].allocationKey)
+
+	// same with a lower-priority ask sitting behind the tie-group
+	sorted.insert(lower)
+	assert.Equal(t, "alloc-low", sorted[3].allocationKey, "lower priority sorts after the group")
+	sorted.remove(alloc3)
+	sorted.reinsert(alloc3)
+	assert.Equal(t, 4, len(sorted))
+	assert.Equal(t, "alloc-3", sorted[0].allocationKey, "a returning ask must head its tie-group")
+	assert.Equal(t, "alloc-2", sorted[1].allocationKey)
+	assert.Equal(t, "alloc-1", sorted[2].allocationKey)
+	assert.Equal(t, "alloc-low", sorted[3].allocationKey, "lower priority must stay behind the group")
+
+	// a returning ask with nothing sorting after it goes to the very end, not the front
+	sorted.remove(lower)
+	sorted.reinsert(lower)
+	assert.Equal(t, 4, len(sorted))
+	assert.Equal(t, "alloc-low", sorted[3].allocationKey, "sole member of the last tie-group returns to the end")
+}
+
 func askPresent(ask *Allocation, asks []*Allocation) bool {
 	for _, a := range asks {
 		if a.allocationKey == ask.allocationKey {

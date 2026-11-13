@@ -721,6 +721,40 @@ func createQueueWithMaxApplication(maxApplication [4]uint64) QueueConfig {
 	return root
 }
 
+func TestFilterType(t *testing.T) {
+	allowedTypes := []string{
+		"allow",
+		"Allow",
+		"ALLOW",
+		"deny",
+		"Deny",
+		"DENY",
+	}
+	for _, allowed := range allowedTypes {
+		t.Run(allowed, func(t *testing.T) {
+			filter := Filter{
+				Type: allowed,
+			}
+			assert.NilError(t, checkPlacementFilter(filter))
+		})
+	}
+
+	rejectedTypes := []string{
+		"allowed",
+		"denied",
+		" deny",
+		"reject",
+	}
+	for _, rejected := range rejectedTypes {
+		t.Run(rejected, func(t *testing.T) {
+			filter := Filter{
+				Type: rejected,
+			}
+			assert.ErrorContains(t, checkPlacementFilter(filter), "invalid rule filter type")
+		})
+	}
+}
+
 func TestUserName(t *testing.T) {
 	allowedUserNames := []string{
 		"username-allowed_99",

@@ -77,6 +77,19 @@ partitions:
     preemption:
       enabled: false
 `
+	reservationMaxTimeConfig = `
+partitions:
+  - name: default
+    queues:
+      - name: root
+        submitacl: "*"
+        queues:
+          - name: leaf-1
+            properties:
+              reservation.max.time: 500ms
+    preemption:
+      enabled: false
+`
 	queueName = "root.leaf-1"
 )
 
@@ -441,6 +454,60 @@ func TestUnReservationAndDeletion(t *testing.T) {
 	if !resources.Equals(nodeRes, ms.getNode(nodes[1]).GetAvailableResource()) {
 		t.Fatalf("available resources not alll resources: expected %s, got %s", nodeRes, ms.getNode(nodes[1]).GetAvailableResource())
 	}
+}
+
+// A gang that can never place its placeholders on the free capacity reserves all nodes.
+// Runs the scheduling loop on its own: nothing is sent to the scheduler after the small ask has been added.
+func TestReservationMaxTimeInSchedulingLoop(t *testing.T) {
+	ms := &mockScheduler{}
+	defer ms.Stop()
+	err := ms.Init(reservationMaxTimeConfig, true, false)
+	assert.NilError(t, err, "RegisterResourceManager failed")
+
+	memory := func(value int64) *si.Resource {
+		return &si.Resource{Resources: map[string]*si.Quantity{common.Memory: {Value: value}}}
+	}
+	nodes := []string{"node-1", "node-2"}
+	inUse := make([]*si.Allocation, 0, len(nodes))
+	for _, node := range nodes {
+		assert.NilError(t, ms.addNode(node, memory(8)), "adding node to scheduler failed")
+		inUse = append(inUse, &si.Allocation{AllocationKey: "in-use-" + node, ApplicationID: appID1, PartitionName: "default", NodeID: node, ResourcePerAlloc: memory(1)})
+	}
+	ms.mockRM.waitForMinAcceptedNodes(t, len(nodes), 1000)
+	assert.NilError(t, ms.addApp(appID1, queueName, "default"), "adding app to scheduler failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID1, 1000)
+	assert.NilError(t, ms.proxy.UpdateAllocation(&si.AllocationRequest{Allocations: inUse, RmID: ms.rmID}), "adding allocations failed")
+	waitForAllocatedAppResource(t, ms.getApplication(appID1), 2, 1000)
+
+	err = ms.proxy.UpdateApplication(&si.ApplicationRequest{
+		New: []*si.AddApplicationRequest{{
+			ApplicationID:  appID2,
+			QueueName:      queueName,
+			PartitionName:  "default",
+			Ugi:            &si.UserGroupInformation{User: "testuser"},
+			PlaceholderAsk: memory(16),
+		}},
+		RmID: ms.rmID,
+	})
+	assert.NilError(t, err, "adding gang app to scheduler failed")
+	ms.mockRM.waitForAcceptedApplication(t, appID2, 1000)
+	// older than the reservation delay, to not wait for that delay before the nodes get reserved
+	created := map[string]string{common.CreationTime: strconv.FormatInt(time.Now().Add(-time.Hour).Unix(), 10)}
+	placeholders := make([]*si.Allocation, 0, len(nodes))
+	for _, node := range nodes {
+		placeholders = append(placeholders, &si.Allocation{AllocationKey: "ph-" + node, ApplicationID: appID2, PartitionName: "default", ResourcePerAlloc: memory(8), Placeholder: true, TaskGroupName: "tg", AllocationTags: created})
+	}
+	assert.NilError(t, ms.proxy.UpdateAllocation(&si.AllocationRequest{Allocations: placeholders, RmID: ms.rmID}), "adding placeholders failed")
+	gang := ms.getApplication(appID2)
+	waitForAppReservations(t, gang, len(nodes), 2000)
+
+	const smallAppID = "app-3"
+	assert.NilError(t, ms.addApp(smallAppID, queueName, "default"), "adding small app to scheduler failed")
+	ms.mockRM.waitForAcceptedApplication(t, smallAppID, 1000)
+	assert.NilError(t, ms.addAppRequest(smallAppID, "small", memory(1), 1), "adding small ask failed")
+	waitForAllocatedAppResource(t, ms.getApplication(smallAppID), 1, 5000)
+
+	waitForAppReservations(t, gang, len(nodes), 10000)
 }
 
 func createNodes(t *testing.T, ms *mockScheduler, count int, mem int64, vcore int64) []string {

@@ -20,7 +20,6 @@ package scheduler
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"testing"
 	"testing/synctest"
@@ -28,7 +27,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
-	godeadlock "github.com/sasha-s/go-deadlock"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
@@ -47,12 +45,6 @@ type mockEventHandler struct {
 	acceptedNodes   []*si.AcceptedNode
 	newAllocHandler func(*rmevent.RMNewAllocationsEvent)
 	releaseHandler  func(event *rmevent.RMReleaseAllocationEvent)
-}
-
-func TestMain(m *testing.M) {
-	// Pooled deadlock timers cannot be reused across synctest bubbles.
-	godeadlock.Opts.TimerPool = godeadlock.TimerPoolDisabled
-	os.Exit(m.Run())
 }
 
 func newMockEventHandler() *mockEventHandler {

@@ -615,7 +615,7 @@ func internalGetShares(res, total *Resource) ([]float64, map[string]float64) {
 }
 
 // Calculate share for left of total and right of total.
-// This returns the same value as compareShares does:
+// This returns the same value as CompareShares does:
 // 0 for equal shares
 // 1 if the left share is larger
 // -1 if the right share is larger
@@ -623,11 +623,11 @@ func CompUsageRatio(left, right, total *Resource) int {
 	lshares := GetShares(left, total)
 	rshares := GetShares(right, total)
 
-	return compareShares(lshares, rshares)
+	return CompareShares(lshares, rshares)
 }
 
 // Calculate share for left of total and right of total separately.
-// This returns the same value as compareShares does:
+// This returns the same value as CompareShares does:
 // 0 for equal shares
 // 1 if the left share is larger
 // -1 if the right share is larger
@@ -671,11 +671,9 @@ func FairnessRatio(left, right, total *Resource) float64 {
 	return ratio
 }
 
-// Compare the shares and return the compared value
-// 0 for equal shares
-// 1 if the left share is larger
-// -1 if the right share is larger
-func compareShares(lshares, rshares []float64) int {
+// CompareShares compares two share lists built by GetShares, which must be sorted ascending.
+// It returns 0 for equal shares, 1 if the left share is larger and -1 if the right share is larger.
+func CompareShares(lshares, rshares []float64) int {
 	// get the length of the shares: a nil or empty share list gives -1
 	lIdx := len(lshares) - 1
 	rIdx := len(rshares) - 1
@@ -1248,7 +1246,7 @@ func CompUsageRatioSpecificTypes(left, right, total, specificTypes *Resource) in
 		}
 		sort.Float64s(lShare)
 		sort.Float64s(rShare)
-		return compareShares(lShare, rShare)
+		return CompareShares(lShare, rShare)
 	} else {
 		// fall back to usual way of comparing usage shares.
 		return CompUsageRatio(left, right, total)

@@ -1880,7 +1880,7 @@ func TestCompareShares(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.message, func(t *testing.T) {
-			comp := compareShares(tc.left, tc.right)
+			comp := CompareShares(tc.left, tc.right)
 			if comp != tc.expected {
 				t.Errorf("incorrect comparison for %s: expected %d got: %d", tc.message, tc.expected, comp)
 			}

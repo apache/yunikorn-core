@@ -19,6 +19,8 @@
 package objects
 
 import (
+	"cmp"
+	"slices"
 	"sort"
 	"time"
 
@@ -110,83 +112,81 @@ func sortQueuesByFairnessAndPriority(queues []queueFairMax) {
 	})
 }
 
+// appSortKey ties an application to the sort inputs read from it. The sort moves the app and its
+// own inputs as one element, an index into a second list does not follow a swap.
+type appSortKey struct {
+	app    *Application
+	shares []float64
+	// a higher priority sorts first, so every compare on priority is reversed
+	priority       int32
+	submissionTime time.Time
+}
+
 func sortApplications(apps map[string]*Application, sortType policies.SortPolicy, considerPriority bool, globalResource *resources.Resource) []*Application {
 	sortingStart := time.Now()
-	sortedApps := filterOnPendingResources(apps)
-	switch sortType {
-	case policies.FairSortPolicy:
-		if considerPriority {
-			sortApplicationsByPriorityAndFairness(sortedApps, globalResource)
-		} else {
-			sortApplicationsByFairnessAndPriority(sortedApps, globalResource)
-		}
-	case policies.FifoSortPolicy:
-		if considerPriority {
-			sortApplicationsByPriorityAndSubmissionTime(sortedApps)
-		} else {
-			sortApplicationsBySubmissionTimeAndPriority(sortedApps)
-		}
-	}
+	sortedApps := sortFilteredApplications(filterOnPendingResources(apps), sortType, considerPriority, globalResource)
 	metrics.GetSchedulerMetrics().ObserveAppSortingLatency(sortingStart)
 	return sortedApps
 }
 
-func sortApplicationsByFairnessAndPriority(sortedApps []*Application, globalResource *resources.Resource) {
-	sort.SliceStable(sortedApps, func(i, j int) bool {
-		l := sortedApps[i]
-		r := sortedApps[j]
-		if comp := resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource); comp != 0 {
-			return comp < 0
+// sortFilteredApplications sorts the applications in the order the policy asks for. Each app is
+// read once into a key, the keys are sorted, so a comparison never locks an app.
+func sortFilteredApplications(apps []*Application, sortType policies.SortPolicy, considerPriority bool, globalResource *resources.Resource) []*Application {
+	fair := sortType == policies.FairSortPolicy
+	keys := make([]appSortKey, 0, len(apps))
+	for _, app := range apps {
+		keys = append(keys, app.sortKey(globalResource, fair))
+	}
+	switch {
+	case sortType == policies.FairSortPolicy && considerPriority:
+		sortApplicationsByPriorityAndFairness(keys)
+	case sortType == policies.FairSortPolicy:
+		sortApplicationsByFairnessAndPriority(keys)
+	case sortType == policies.FifoSortPolicy && considerPriority:
+		sortApplicationsByPriorityAndSubmissionTime(keys)
+	case sortType == policies.FifoSortPolicy:
+		sortApplicationsBySubmissionTimeAndPriority(keys)
+	}
+	sorted := make([]*Application, 0, len(keys))
+	for _, key := range keys {
+		sorted = append(sorted, key.app)
+	}
+	return sorted
+}
+
+func sortApplicationsByFairnessAndPriority(keys []appSortKey) {
+	slices.SortStableFunc(keys, func(l, r appSortKey) int {
+		if comp := resources.CompareShares(l.shares, r.shares); comp != 0 {
+			return comp
 		}
-		return l.GetAskMaxPriority() > r.GetAskMaxPriority()
+		return cmp.Compare(r.priority, l.priority)
 	})
 }
 
-func sortApplicationsByPriorityAndFairness(sortedApps []*Application, globalResource *resources.Resource) {
-	sort.SliceStable(sortedApps, func(i, j int) bool {
-		l := sortedApps[i]
-		r := sortedApps[j]
-		leftPriority := l.GetAskMaxPriority()
-		rightPriority := r.GetAskMaxPriority()
-		if leftPriority > rightPriority {
-			return true
+func sortApplicationsByPriorityAndFairness(keys []appSortKey) {
+	slices.SortStableFunc(keys, func(l, r appSortKey) int {
+		if comp := cmp.Compare(r.priority, l.priority); comp != 0 {
+			return comp
 		}
-		if leftPriority < rightPriority {
-			return false
-		}
-		return resources.CompUsageRatio(l.GetAllocatedResource(), r.GetAllocatedResource(), globalResource) < 0
+		return resources.CompareShares(l.shares, r.shares)
 	})
 }
 
-func sortApplicationsBySubmissionTimeAndPriority(sortedApps []*Application) {
-	sort.SliceStable(sortedApps, func(i, j int) bool {
-		l := sortedApps[i]
-		r := sortedApps[j]
-		lSubTime := l.GetSubmissionTime()
-		rSubTime := r.GetSubmissionTime()
-		if lSubTime.Before(rSubTime) {
-			return true
+func sortApplicationsBySubmissionTimeAndPriority(keys []appSortKey) {
+	slices.SortStableFunc(keys, func(l, r appSortKey) int {
+		if comp := l.submissionTime.Compare(r.submissionTime); comp != 0 {
+			return comp
 		}
-		if rSubTime.Before(lSubTime) {
-			return false
-		}
-		return l.GetAskMaxPriority() > r.GetAskMaxPriority()
+		return cmp.Compare(r.priority, l.priority)
 	})
 }
 
-func sortApplicationsByPriorityAndSubmissionTime(sortedApps []*Application) {
-	sort.SliceStable(sortedApps, func(i, j int) bool {
-		l := sortedApps[i]
-		r := sortedApps[j]
-		leftPriority := l.GetAskMaxPriority()
-		rightPriority := r.GetAskMaxPriority()
-		if leftPriority > rightPriority {
-			return true
+func sortApplicationsByPriorityAndSubmissionTime(keys []appSortKey) {
+	slices.SortStableFunc(keys, func(l, r appSortKey) int {
+		if comp := cmp.Compare(r.priority, l.priority); comp != 0 {
+			return comp
 		}
-		if leftPriority < rightPriority {
-			return false
-		}
-		return l.GetSubmissionTime().Before(r.GetSubmissionTime())
+		return l.submissionTime.Compare(r.submissionTime)
 	})
 }
 

@@ -33,6 +33,7 @@ import (
 
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
+	"github.com/apache/yunikorn-core/pkg/events"
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
@@ -162,33 +163,61 @@ func TestContext_UpdateNode(t *testing.T) {
 }
 
 func TestContext_AddNode(t *testing.T) {
-	context := createTestContext(t, pName)
-	// stop the context background processes
-	defer context.Stop()
+	synctest.Test(t, func(t *testing.T) {
+		// the nodes that addNode creates use the global event system
+		events.Init()
+		eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+		eventSystem.StartServiceWithPublisher(false)
+		defer eventSystem.Stop()
 
-	n := &si.NodeInfo{
-		NodeID:              "test-1",
-		Action:              si.NodeInfo_CREATE,
-		Attributes:          map[string]string{"si/node-partition": "unknown"},
-		SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
-	}
-	err := context.addNode(n, true)
-	if err == nil {
-		t.Fatalf("unknown node partition should have failed the node add")
-	}
-	n.Attributes = map[string]string{"si/node-partition": pName}
-	err = context.addNode(n, true)
-	assert.NilError(t, err, "unexpected error returned adding node")
-	partition := context.GetPartition(pName)
-	if partition == nil {
-		t.Fatalf("partition should have been found")
-	}
-	assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
-	// add same node again should show an error
-	err = context.addNode(n, true)
-	if err == nil {
-		t.Fatalf("existing node addition should have failed")
-	}
+		context := createTestContext(t, pName)
+		// stop the context background processes
+		defer context.Stop()
+
+		n := &si.NodeInfo{
+			NodeID:              "test-1",
+			Action:              si.NodeInfo_CREATE,
+			Attributes:          map[string]string{"si/node-partition": "unknown"},
+			SchedulableResource: &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 10}}},
+		}
+		err := context.addNode(n, true)
+		if err == nil {
+			t.Fatalf("unknown node partition should have failed the node add")
+		}
+		n.Attributes = map[string]string{"si/node-partition": pName}
+		err = context.addNode(n, true)
+		assert.NilError(t, err, "unexpected error returned adding node")
+		partition := context.GetPartition(pName)
+		if partition == nil {
+			t.Fatalf("partition should have been found")
+		}
+		assert.Equal(t, 1, len(partition.GetNodes()), "expected node not found on partition")
+		// add same node again, with another capacity, should show an error
+		n.SchedulableResource = &si.Resource{Resources: map[string]*si.Quantity{"first": {Value: 99}}}
+		err = context.addNode(n, true)
+		if err == nil {
+			t.Fatalf("existing node addition should have failed")
+		}
+		registered := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+		node := partition.GetNode(n.NodeID)
+		assert.Assert(t, node != nil, "node not found on partition")
+		assert.Assert(t, resources.Equals(registered, node.GetCapacity()), "capacity of the registered node changed")
+
+		// only the accepted add may generate a node added event: synctest.Wait returns
+		// after the event system has drained the events into the store
+		synctest.Wait()
+		var added []*si.EventRecord
+		for _, record := range eventSystem.Store.CollectEvents() {
+			if record.Type == si.EventRecord_NODE && record.EventChangeType == si.EventRecord_ADD &&
+				record.EventChangeDetail == si.EventRecord_DETAILS_NONE {
+				added = append(added, record)
+			}
+		}
+		assert.Equal(t, 1, len(added), "expected one node added event")
+		assert.Equal(t, n.NodeID, added[0].ObjectID, "node added event for an unexpected node")
+		assert.Assert(t, resources.Equals(registered, resources.NewResourceFromProto(added[0].Resource)),
+			"node added event with an unexpected capacity")
+	})
 }
 
 func TestContext_AddNodeDrained(t *testing.T) {

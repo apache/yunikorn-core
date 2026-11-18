@@ -622,7 +622,6 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 	}
 
 	err := partition.AddNode(sn)
-	sn.SendNodeAddedEvent()
 	if err != nil {
 		wrapped := errors.Join(errors.New("failure while adding new node, node rejected with error: "), err)
 		log.Log(log.SchedContext).Error("Failed to add node to partition (rejected)",
@@ -631,6 +630,7 @@ func (cc *ClusterContext) addNode(nodeInfo *si.NodeInfo, schedulable bool) error
 			zap.Error(err))
 		return wrapped
 	}
+	sn.SendNodeAddedEvent()
 
 	if !sn.IsSchedulable() {
 		metrics.GetSchedulerMetrics().IncDrainingNodes()

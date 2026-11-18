@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"strconv"
@@ -139,9 +140,7 @@ func (r *Resource) Clone() *Resource {
 		return nil
 	}
 	ret := NewResource()
-	for k, v := range r.Resources {
-		ret.Resources[k] = v
-	}
+	maps.Copy(ret.Resources, r.Resources)
 	return ret
 }
 

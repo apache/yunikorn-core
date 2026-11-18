@@ -113,9 +113,7 @@ func runCleanQueues(t *testing.T, p *PartitionContext) {
 	t.Helper()
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		for {
 			select {
 			case <-stop:
@@ -125,7 +123,7 @@ func runCleanQueues(t *testing.T, p *PartitionContext) {
 				runtime.Gosched()
 			}
 		}
-	}()
+	})
 	t.Cleanup(func() {
 		close(stop)
 		wg.Wait()
@@ -142,7 +140,7 @@ func TestCleanQueuesAddApplication(t *testing.T) {
 	runCleanQueues(t, p)
 
 	const queueName = "root.parent.leaf"
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		appID := fmt.Sprintf("app-%d", i)
 		app := newApplication(appID, p.Name, queueName)
 		assert.NilError(t, p.AddApplication(app), "add application failed")
@@ -162,7 +160,7 @@ func TestCleanQueuesReviveApplication(t *testing.T) {
 	runCleanQueues(t, p)
 
 	const queueName = "root.parent.leaf"
-	for i := 0; i < 1000; i++ {
+	for i := range 1000 {
 		appID := fmt.Sprintf("app-%d", i)
 		app := newApplication(appID, p.Name, queueName)
 		assert.NilError(t, p.AddApplication(app), "add application failed")

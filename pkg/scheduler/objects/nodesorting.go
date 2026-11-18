@@ -19,6 +19,7 @@
 package objects
 
 import (
+	"maps"
 	"math"
 
 	"go.uber.org/zap"
@@ -88,9 +89,7 @@ func (p fairnessNodeSortingPolicy) ScoreNode(node *Node) float64 {
 
 func cloneWeights(source map[string]float64) map[string]float64 {
 	weights := make(map[string]float64, len(source))
-	for k, v := range source {
-		weights[k] = v
-	}
+	maps.Copy(weights, source)
 	return weights
 }
 

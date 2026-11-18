@@ -19,6 +19,7 @@
 package tests
 
 import (
+	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -239,9 +240,7 @@ func (m *mockRMCallback) getAllocations() map[string]*si.Allocation {
 	defer m.RUnlock()
 
 	allocations := make(map[string]*si.Allocation)
-	for key, value := range m.Allocations {
-		allocations[key] = value
-	}
+	maps.Copy(allocations, m.Allocations)
 	return allocations
 }
 

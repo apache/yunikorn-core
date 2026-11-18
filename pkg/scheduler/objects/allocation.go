@@ -21,6 +21,7 @@ package objects
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"time"
 
@@ -383,9 +384,7 @@ func (a *Allocation) IsPreempted() bool {
 // CloneAllocationTags clones a tag map for safe copying.
 func CloneAllocationTags(tags map[string]string) map[string]string {
 	result := make(map[string]string)
-	for k, v := range tags {
-		result[k] = v
-	}
+	maps.Copy(result, tags)
 	return result
 }
 

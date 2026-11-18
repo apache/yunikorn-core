@@ -19,6 +19,8 @@
 package template
 
 import (
+	"maps"
+
 	"github.com/apache/yunikorn-core/pkg/common/configs"
 	"github.com/apache/yunikorn-core/pkg/common/resources"
 	"github.com/apache/yunikorn-core/pkg/webservice/dao"
@@ -101,9 +103,7 @@ func (t *Template) GetMaxApplications() uint64 {
 // GetProperties returns a copy of properties. An empty map replaces the null value
 func (t *Template) GetProperties() map[string]string {
 	props := make(map[string]string)
-	for k, v := range t.properties {
-		props[k] = v
-	}
+	maps.Copy(props, t.properties)
 	return props
 }
 

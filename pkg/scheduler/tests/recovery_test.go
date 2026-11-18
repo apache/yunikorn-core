@@ -103,7 +103,7 @@ func TestSchedulerRecovery(t *testing.T) {
 	// ask for 4 more allocations
 	asks := make([]*si.Allocation, 4)
 	mem := [4]int64{50, 100, 50, 100}
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		asks[i] = createAllocation(fmt.Sprintf("alloc-%d", i+2), "", appID1, int(mem[i]), 5, "", false)
 	}
 	err = ms.proxy.UpdateAllocation(&si.AllocationRequest{

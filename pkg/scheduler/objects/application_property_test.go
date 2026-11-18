@@ -20,6 +20,7 @@ package objects
 
 import (
 	"fmt"
+	"maps"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -59,7 +60,7 @@ func TestApplicationPropertyFuzzHistogram(t *testing.T) {
 	// reaching the state at all. Whether each individual attempt is correctly rejected is asserted in
 	// case 7 itself, not here.
 	totalGhostRollbackAttempts := 0
-	for seed := int64(0); seed < 20; seed++ {
+	for seed := range int64(20) {
 		t.Run(fmt.Sprintf("seed-%d", seed), func(t *testing.T) {
 			totalGhostRollbackAttempts += runPropertyFuzz(t, seed)
 		})
@@ -149,7 +150,7 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	rejectedDuplicateAdds := 0
 
 	const steps = 5000
-	for i := 0; i < steps; i++ {
+	for i := range steps {
 		switch rng.Intn(9) {
 		case 0: // AddAllocationAsk
 			key := fmt.Sprintf("ask-%d-%d", seed, nextKey)
@@ -543,9 +544,7 @@ func assertFuzzInvariants(t *testing.T, app *Application, keyPriority map[string
 	app.RLock()
 	gotMax := app.askMaxPriority
 	gotHistogram := make(map[int32]int, len(app.pendingPriorities))
-	for p, c := range app.pendingPriorities {
-		gotHistogram[p] = c
-	}
+	maps.Copy(gotHistogram, app.pendingPriorities)
 	gotSorted := make([]*Allocation, len(app.sortedRequests))
 	copy(gotSorted, app.sortedRequests)
 	app.RUnlock()

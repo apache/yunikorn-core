@@ -464,7 +464,7 @@ func TestBasicSchedulerAutoAllocation(t *testing.T) {
 	ms.mockRM.waitForAcceptedNode(t, "node-2:1234", 1000)
 
 	asks := make([]*si.Allocation, 20)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
 			ResourcePerAlloc: &si.Resource{
@@ -576,7 +576,7 @@ partitions:
 
 	asks := make([]*si.Allocation, 40)
 	appIDs := []string{app1ID, app2ID}
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
 			ResourcePerAlloc: &si.Resource{
@@ -688,7 +688,7 @@ partitions:
 
 	asks := make([]*si.Allocation, 40)
 	appIDs := []string{app1ID, app2ID}
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
 			ResourcePerAlloc: &si.Resource{
@@ -1129,7 +1129,7 @@ partitions:
 
 	asks := make([]*si.Allocation, 40)
 	appIDs := []string{app1ID, app2ID}
-	for i := 0; i < 40; i++ {
+	for i := range 40 {
 		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
 			ResourcePerAlloc: &si.Resource{
@@ -1194,7 +1194,7 @@ partitions:
 
 	// Register 10 nodes, and add applications
 	nodes := make([]*si.NodeInfo, 0)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		nodeID := "node-" + strconv.Itoa(i)
 		nodes = append(nodes, &si.NodeInfo{
 			NodeID:     nodeID + ":1234",
@@ -1239,7 +1239,7 @@ partitions:
 
 	// Request 20 allocations
 	asks := make([]*si.Allocation, 20)
-	for i := 0; i < 20; i++ {
+	for i := range 20 {
 		asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-%d", i),
 			ResourcePerAlloc: &si.Resource{

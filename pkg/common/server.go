@@ -84,7 +84,7 @@ func ParseEndpoint(ep string) (string, string, error) {
 }
 
 // Logging unary interceptor function to log every RPC call
-func logGRPC(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+func logGRPC(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 	log.Log(log.RPC).Debug("GPRC call",
 		zap.String("method", info.FullMethod))
 	log.Log(log.RPC).Debug("GPRC request",

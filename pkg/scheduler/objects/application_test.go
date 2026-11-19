@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -5386,15 +5387,16 @@ func TestTimeoutPlaceholderAfterRollback(t *testing.T) {
 }
 
 // TestTimeoutPlaceholderNoneAllocated verifies that a timeout after the last placeholder was rolled back moves the
-// application on, as there is no placeholder release to confirm.
+// application on, as there is no placeholder release to confirm, and that a failed application leaves the user tracker.
 func TestTimeoutPlaceholderNoneAllocated(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5})
 	tests := []struct {
 		style    string
 		expected string
+		tracked  bool
 	}{
-		{Soft, Accepted.String()},
-		{Hard, Failed.String()},
+		{Soft, Accepted.String(), true},
+		{Hard, Failed.String(), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.style, func(t *testing.T) {
@@ -5411,6 +5413,9 @@ func TestTimeoutPlaceholderNoneAllocated(t *testing.T) {
 			app.timeoutPlaceholderProcessing()
 			assert.Equal(t, app.CurrentState(), tt.expected, "unexpected state after the placeholder timeout")
 			assert.Equal(t, len(app.getAllRequestsInternal()), 0, "placeholder asks should be removed on timeout")
+			tracker := ugm.GetUserManager().GetUserTracker(getTestUserGroup().User)
+			tracked := tracker != nil && slices.Contains(tracker.GetResourceUsageDAOInfo().Queues.RunningApplications, appID1)
+			assert.Equal(t, tracked, tt.tracked, "unexpected user tracking of the application after the placeholder timeout")
 		})
 	}
 }

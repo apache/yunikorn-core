@@ -576,6 +576,10 @@ func (sa *Application) timeoutPlaceholderProcessing() {
 			next := RunApplication
 			if sa.IsFailing() {
 				next = FailApplication
+				// no allocation removal is left to drop the application from the user/group tracker
+				if ugm.GetUserManager().GetUserTracker(sa.user.User) != nil {
+					sa.decUserResourceUsage(resources.NewResource(), true)
+				}
 			}
 			if err := sa.HandleApplicationEvent(next); err != nil {
 				log.Log(log.SchedApplication).Warn("Application state not changed on placeholder timeout",

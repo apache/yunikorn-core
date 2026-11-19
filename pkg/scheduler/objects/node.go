@@ -21,6 +21,7 @@ package objects
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -56,9 +57,10 @@ type Node struct {
 	allocations       map[string]*Allocation
 	schedulable       bool
 
-	reservations map[string]*reservation // a map of reservations
-	listeners    []NodeListener          // a list of node listeners
-	nodeEvents   *schedEvt.NodeEvents
+	reservations           map[string]*reservation // a map of reservations
+	reservationExpiredTime time.Time               // last time a reservation on this node was cancelled as it expired
+	listeners              []NodeListener          // a list of node listeners
+	nodeEvents             *schedEvt.NodeEvents
 
 	locking.RWMutex
 }
@@ -653,6 +655,22 @@ func (sn *Node) unReserve(alloc *Allocation) int {
 		zap.String("alloc", alloc.GetAllocationKey()),
 		zap.String("appID", alloc.GetApplicationID()))
 	return 0
+}
+
+// setReservationExpired records that a reservation on this node has just been cancelled because it expired.
+func (sn *Node) setReservationExpired() {
+	sn.Lock()
+	defer sn.Unlock()
+	sn.reservationExpiredTime = time.Now()
+}
+
+// isInReservationCooldown returns true if a reservation on this node expired less than the reservation delay ago.
+// Tracked on the node and not on the ask: with more unplaceable asks than nodes, the next ask in line would otherwise
+// take over the released node and asks that fit never get to use it.
+func (sn *Node) isInReservationCooldown() bool {
+	sn.RLock()
+	defer sn.RUnlock()
+	return time.Since(sn.reservationExpiredTime) < reservationDelay
 }
 
 // GetReservations returns all reservation made on this node

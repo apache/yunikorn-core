@@ -127,7 +127,7 @@ func TestPredicateFailedEvents(t *testing.T) {
 		"error#2": 44,
 	}
 	// only the first event is expected to be emitted due to rate limiting
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		events.SendPredicatesFailed("alloc-0", "app-0", errors, resource)
 	}
 	assert.Equal(t, 1, len(eventSystem.Events))
@@ -157,7 +157,7 @@ func TestRequiredNodePreemptionFailedEvents(t *testing.T) {
 	eventSystem = mock.NewEventSystem()
 	events = newAskEventsWithRate(eventSystem, 50*time.Millisecond, 1)
 	// only the first event is expected to be emitted due to rate limiting
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		events.SendRequiredNodePreemptionFailed("alloc-0", "app-0", nodeID1, resource)
 	}
 	assert.Equal(t, 1, len(eventSystem.Events))

@@ -68,8 +68,8 @@ func (fr *fixedRule) initialise(conf configs.PlacementRule) error {
 	if fr.queue == "" {
 		return fmt.Errorf("a fixed queue rule must have a queue name set")
 	}
-	parts := strings.Split(fr.queue, configs.DOT)
-	for _, part := range parts {
+	parts := strings.SplitSeq(fr.queue, configs.DOT)
+	for part := range parts {
 		if err := configs.IsQueueNameValid(part); err != nil {
 			return err
 		}

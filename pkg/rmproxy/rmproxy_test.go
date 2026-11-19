@@ -207,16 +207,16 @@ func TestRMProxy_ProcessesEventAfterRelease(t *testing.T) {
 }
 
 type infraReplyHandler struct {
-	events chan interface{}
+	events chan any
 }
 
-func (h *infraReplyHandler) HandleEvent(event interface{}) { h.events <- event }
+func (h *infraReplyHandler) HandleEvent(event any) { h.events <- event }
 
 func TestRMProxyInfraRepliesBuffered(t *testing.T) {
 	for _, name := range []string{"registration", "reregistration", "config"} {
 		t.Run(name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				handler := &infraReplyHandler{events: make(chan interface{})}
+				handler := &infraReplyHandler{events: make(chan any)}
 				rmp := NewRMProxy(handler)
 				if name == "reregistration" {
 					rmp.rmIDToCallback["test"] = &mock.ResourceManagerCallback{}

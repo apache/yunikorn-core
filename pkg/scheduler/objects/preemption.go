@@ -89,7 +89,7 @@ func NewPreemptor(application *Application, headRoom *resources.Resource, preemp
 
 // CheckPreconditions performs simple sanity checks designed to determine if preemption should be attempted
 // for an ask. If checks succeed, updates the ask preemption check time.
-func CheckPreconditions(ask *Allocation, preemptionDelay time.Duration) bool {
+func CheckPreconditions(ask *Allocation, queue *Queue, preemptionDelay time.Duration) bool {
 	now := time.Now()
 
 	// skip if ask is not allowed to preempt other tasks
@@ -114,6 +114,11 @@ func CheckPreconditions(ask *Allocation, preemptionDelay time.Duration) bool {
 
 	// skip if attempt frequency hasn't been reached again
 	if now.Before(ask.GetPreemptCheckTime().Add(preemptAttemptFrequency)) {
+		return false
+	}
+
+	// skip if no queue on the path has a guarantee: the guarantee check cannot pass and the victim walk locks other apps
+	if !queue.hasGuaranteed() {
 		return false
 	}
 
@@ -438,11 +443,9 @@ func (p *Preemptor) checkPreemptionPredicates(predicateChecks []*si.PreemptionPr
 		results := make([]*predicateCheckResult, len(batch))
 		for i, args := range batch {
 			// add goroutine for checking preemption
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				results[i] = runPredicateChecks(plugin, args)
-			}()
+			})
 		}
 		wg.Wait()
 		for _, result := range results {
@@ -912,7 +915,7 @@ func (qps *QueuePreemptionSnapshot) RemoveAllocation(alloc *resources.Resource) 
 }
 
 // sortVictimsForPreemption sorts allocations on each node, preferring those that are not originating tasks for an
-// application, those that have opted-in to preemption, lower priority, and newest first
+// application, those that have opted-in to preemption, lower priotity, newest first, and finally the allocation key
 func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 	for _, allocations := range allocationsByNode {
 		sort.SliceStable(allocations, func(i, j int) bool {
@@ -940,8 +943,13 @@ func sortVictimsForPreemption(allocationsByNode map[string][]*Allocation) {
 				return leftAsk.GetPriority() < rightAsk.GetPriority()
 			}
 
-			// finally sort by creation time descending
-			return leftAsk.GetCreateTime().After(rightAsk.GetCreateTime())
+			// next sort by creation time descending
+			if !leftAsk.GetCreateTime().Equal(rightAsk.GetCreateTime()) {
+				return leftAsk.GetCreateTime().After(rightAsk.GetCreateTime())
+			}
+
+			// creation times from the shim are whole seconds, break the tie so the order does not depend on map iteration
+			return leftAsk.GetAllocationKey() < rightAsk.GetAllocationKey()
 		})
 	}
 }

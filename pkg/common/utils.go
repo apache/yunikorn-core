@@ -25,8 +25,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 
 	"github.com/apache/yunikorn-core/pkg/log"
@@ -71,7 +71,7 @@ func GetPartitionNameWithoutClusterID(partitionName string) string {
 // Generate a new uuid. The chance that we generate a collision is really small.
 // As long as we check the UUID before we communicate it back to the RM we can still replace it without a problem.
 func GetNewUUID() string {
-	return uuid.NewString()
+	return uuid.NewV4().String()
 }
 
 func GetBoolEnvVar(key string, defaultVal bool) bool {

@@ -51,28 +51,24 @@ func TestWildCardConfigReloadDuringScheduling(t *testing.T) {
 	// the configuration reload: replaces the limit maps under the manager lock.
 	// assert must not run here: it calls FailNow, which is only valid on the test goroutine.
 	var reloadErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < iterations; i++ {
+	wg.Go(func() {
+		for range iterations {
 			if err := manager.UpdateConfig(conf.Queues[0], "root"); err != nil {
 				reloadErr = err
 				return
 			}
 		}
-	}()
+	})
 
 	// the scheduling hot path: a queue path that has no tracker yet on every iteration, so the
 	// walk has to create the queue trackers as it descends
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < iterations; i++ {
+	wg.Go(func() {
+		for i := range iterations {
 			queuePath := "root.parent.child" + strconv.Itoa(i)
 			manager.Headroom(queuePath, "app-"+strconv.Itoa(i), user)
 			manager.CanRunApp(queuePath, "app-"+strconv.Itoa(i), user)
 		}
-	}()
+	})
 
 	wg.Wait()
 	assert.NilError(t, reloadErr)
@@ -92,25 +88,21 @@ func TestWildCardConfigReloadDuringIncrease(t *testing.T) {
 
 	// see TestWildCardConfigReloadDuringScheduling: the error is carried out to the test goroutine
 	var reloadErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < iterations; i++ {
+	wg.Go(func() {
+		for range iterations {
 			if err := manager.UpdateConfig(conf.Queues[0], "root"); err != nil {
 				reloadErr = err
 				return
 			}
 		}
-	}()
+	})
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		for i := 0; i < iterations; i++ {
+	wg.Go(func() {
+		for i := range iterations {
 			queuePath := "root.parent.increase" + strconv.Itoa(i)
 			manager.IncreaseTrackedResource(queuePath, "app-"+strconv.Itoa(i), usage, user)
 		}
-	}()
+	})
 
 	wg.Wait()
 	assert.NilError(t, reloadErr)

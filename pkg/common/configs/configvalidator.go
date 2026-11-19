@@ -20,6 +20,7 @@ package configs
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"reflect"
 	"regexp"
@@ -51,6 +52,7 @@ const (
 	PreemptionPolicy                         = "preemption.policy"
 	PreemptionDelay                          = "preemption.delay"
 	QuotaPreemptionDelay                     = "quota.preemption.delay"
+	ReservationMaxTime                       = "reservation.max.time"
 
 	// app sort priority values
 	ApplicationSortPriorityEnabled  = "enabled"
@@ -74,6 +76,9 @@ var DefaultQuotaPreemptionDelay time.Duration = 0
 // DefaultPreemptionDelay is 30 seconds, guaranteed resources must be set to trigger preemption
 var DefaultPreemptionDelay = 30 * time.Second
 var DefaultAskBackOffDelay = 30 * time.Second
+
+// DefaultReservationMaxTime is 60 minutes, a reservation that has not led to an allocation by then is cancelled
+var DefaultReservationMaxTime = 60 * time.Minute
 
 // QueueNameRegExp to validate the name of a queue.
 // A queue can be a username with the dot replaced. Most systems allow a 32 character username.
@@ -157,12 +162,8 @@ func checkLimitResource(cur QueueConfig, parentUserLimits, parentGroupLimits map
 	curGroupLimits := make(map[string]*resources.Resource, len(parentGroupLimits))
 
 	// Carry forward (populate) the parent limit settings to the next level
-	for u, v := range parentUserLimits {
-		curUserLimits[u] = v
-	}
-	for g, v := range parentGroupLimits {
-		curGroupLimits[g] = v
-	}
+	maps.Copy(curUserLimits, parentUserLimits)
+	maps.Copy(curGroupLimits, parentGroupLimits)
 
 	// compare user & group limit setting between the current queue and parent queue
 	for _, limit := range cur.Limits {
@@ -240,12 +241,8 @@ func checkLimitMaxApplications(cur QueueConfig, parentUserLimits, parentGroupLim
 	curGroupLimits := make(map[string]uint64, len(parentGroupLimits))
 
 	// Carry forward (populate) the parent limit settings to the next level
-	for u, maxapplications := range parentUserLimits {
-		curUserLimits[u] = maxapplications
-	}
-	for g, maxapplications := range parentGroupLimits {
-		curGroupLimits[g] = maxapplications
-	}
+	maps.Copy(curUserLimits, parentUserLimits)
+	maps.Copy(curGroupLimits, parentGroupLimits)
 
 	// compare user & group limit setting between the current queue and parent queue
 	for _, limit := range cur.Limits {
@@ -375,7 +372,6 @@ func checkQueueHierarchyForPlacement(path []string, create, hasDynamicPart bool,
 
 	var queueConf *QueueConfig
 	for _, queue := range conf {
-		queue := queue
 		if queue.Name == queueName {
 			queueConf = &queue
 			break

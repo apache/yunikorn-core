@@ -108,11 +108,11 @@ func TestEventStreaming_TwoConsumers(t *testing.T) {
 
 	es1 := streaming.CreateEventStream("stream1", defaultCount)
 	es2 := streaming.CreateEventStream("stream2", defaultCount)
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		streaming.PublishEvent(&si.EventRecord{TimestampNano: int64(i)})
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		assert.Equal(t, int64(i), receive(t, es1.Events).TimestampNano)
 		assert.Equal(t, int64(i), receive(t, es2.Events).TimestampNano)
 	}
@@ -132,7 +132,7 @@ func TestEventStreaming_SlowConsumer(t *testing.T) {
 	defer streaming.Close()
 	streaming.CreateEventStream("test", 10000)
 
-	for i := 0; i < 2500; i++ {
+	for i := range 2500 {
 		streaming.PublishEvent(&si.EventRecord{TimestampNano: int64(i)})
 	}
 
@@ -164,7 +164,7 @@ func TestGetEventStreams(t *testing.T) {
 
 func TestEventStreaming_HistoryReplay_SlowConsumer(t *testing.T) {
 	buffer := newEventRingBuffer(1500)
-	for i := 0; i < 1500; i++ {
+	for i := range 1500 {
 		buffer.Add(&si.EventRecord{TimestampNano: int64(i)})
 	}
 	streaming := NewEventStreaming(buffer)

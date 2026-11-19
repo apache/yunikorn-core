@@ -39,9 +39,10 @@ type PreemptionContext struct {
 
 type filteringResult struct {
 	totalAllocations            int // total number of allocations
+	nonPreemptableAllocations   int // number of allocations that are not preemptable (e.g. static pods)
 	requiredNodeAllocations     int // number of requiredNode (daemon set) allocations that cannot be preempted
 	atLeastOneResNotMatched     int // number of allocations where there's no single resource type that would match
-	higherPriorityAllocations   int // number of allocations with higher priority
+	higherPriorityAllocations   int // number of allocations with higher priority or foreign allocations with equal priority
 	alreadyPreemptedAllocations int // number of allocations already preempted
 	releasedPhAllocations       int // number of ph allocations released
 }
@@ -80,6 +81,7 @@ func (p *PreemptionContext) tryPreemption() {
 			zap.String("allocationName", p.requiredAsk.GetAllocationName()),
 			zap.String("node", p.node.NodeID),
 			zap.Int("total allocations", result.totalAllocations),
+			zap.Int("non-preemptable allocations", result.nonPreemptableAllocations),
 			zap.Int("requiredNode allocations", result.requiredNodeAllocations),
 			zap.Int("allocations already preempted", result.alreadyPreemptedAllocations),
 			zap.Int("higher priority allocations", result.higherPriorityAllocations),
@@ -94,15 +96,17 @@ func (p *PreemptionContext) tryPreemption() {
 				zap.String("allocationKey", victim.GetAllocationKey()))
 			continue
 		}
-		if victimQueue := p.application.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
-			victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
-		} else {
-			log.Log(log.SchedRequiredNodePreemption).Warn("BUG: Queue not found for daemon set preemption victim",
-				zap.String("queue", p.application.queue.Name),
-				zap.String("victimApplicationID", victim.GetApplicationID()),
-				zap.String("victimAllocationKey", victim.GetAllocationKey()))
+		if !victim.IsForeign() {
+			if victimQueue := p.application.queue.GetQueueByAppID(victim.GetApplicationID()); victimQueue != nil {
+				victimQueue.IncPreemptingResource(victim.GetAllocatedResource())
+			} else {
+				log.Log(log.SchedRequiredNodePreemption).Warn("BUG: Queue not found for daemon set preemption victim",
+					zap.String("queue", p.application.queue.Name),
+					zap.String("victimApplicationID", victim.GetApplicationID()),
+					zap.String("victimAllocationKey", victim.GetAllocationKey()))
+			}
+			victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
 		}
-		victim.SendPreemptedBySchedulerEvent(p.requiredAsk.GetAllocationKey(), p.requiredAsk.GetApplicationID(), p.application.queuePath)
 	}
 	p.requiredAsk.MarkTriggeredPreemption()
 	p.application.notifyRMAllocationReleased(finalVictims, si.TerminationType_PREEMPTED_BY_SCHEDULER,
@@ -111,17 +115,23 @@ func (p *PreemptionContext) tryPreemption() {
 
 func (p *PreemptionContext) filterAllocations() filteringResult {
 	var result filteringResult
-	yunikornAllocations := p.node.GetYunikornAllocations()
-	result.totalAllocations = len(yunikornAllocations)
+	allocations := append(p.node.GetYunikornAllocations(), p.node.GetForeignAllocations()...)
+	result.totalAllocations = len(allocations)
 
-	for _, allocation := range yunikornAllocations {
-		// skip daemon set pods and higher priority allocation
+	for _, allocation := range allocations {
+		if !allocation.IsPreemptable() {
+			result.nonPreemptableAllocations++
+			continue
+		}
+
+		// skip daemon set pods
 		if allocation.GetRequiredNode() != "" {
 			result.requiredNodeAllocations++
 			continue
 		}
 
-		if allocation.GetPriority() > p.requiredAsk.GetPriority() {
+		if allocation.GetPriority() > p.requiredAsk.GetPriority() ||
+			(allocation.IsForeign() && allocation.GetPriority() == p.requiredAsk.GetPriority()) {
 			result.higherPriorityAllocations++
 			continue
 		}
@@ -162,6 +172,9 @@ func (p *PreemptionContext) pruneVictims(victims []*Allocation) []*Allocation {
 	currentResource.AddTo(p.node.GetAvailableResource())
 	for _, allocation := range victims {
 		if !resources.StrictlyGreaterThanOrEquals(currentResource, p.requiredAsk.GetAllocatedResource()) {
+			if !p.isHelpfulVictim(allocation, currentResource) {
+				continue
+			}
 			currentResource.AddTo(allocation.GetAllocatedResource())
 			prunedVictims = append(prunedVictims, allocation)
 		} else {
@@ -175,6 +188,16 @@ func (p *PreemptionContext) pruneVictims(victims []*Allocation) []*Allocation {
 		return prunedVictims
 	}
 	return nil
+}
+
+func (p *PreemptionContext) isHelpfulVictim(allocation *Allocation, currentResource *resources.Resource) bool {
+	allocResource := allocation.GetAllocatedResource()
+	for resourceType, needVal := range p.requiredAsk.GetAllocatedResource().Resources {
+		if currentResource.Resources[resourceType] < needVal && allocResource.Resources[resourceType] > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // runPredicates Run Predicate checks to confirm whether collected victims from the required node is

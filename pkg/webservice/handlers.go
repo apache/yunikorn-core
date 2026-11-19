@@ -138,8 +138,7 @@ func getClusterInfo(w http.ResponseWriter, r *http.Request) {
 
 func validateQueue(queuePath string) error {
 	if queuePath != "" {
-		queueNameArr := strings.Split(queuePath, ".")
-		for _, name := range queueNameArr {
+		for name := range strings.SplitSeq(queuePath, ".") {
 			if err := configs.IsQueueNameValid(name); err != nil {
 				return err
 			}
@@ -491,7 +490,7 @@ func getPartitionNodesUtilJSON(partition *scheduler.PartitionContext) *dao.Parti
 	var nodesUtilList []*dao.NodesUtilDAOInfo
 	for resourceType, bucket := range resourceBuckets {
 		var nodesUtil []*dao.NodeUtilDAOInfo
-		for k := 0; k < 10; k++ {
+		for k := range 10 {
 			util := &dao.NodeUtilDAOInfo{
 				BucketName: fmt.Sprintf("%d", k*10) + "-" + fmt.Sprintf("%d", (k+1)*10) + "%",
 				NumOfNodes: int64(bucket.NodeCount[k]),
@@ -1078,8 +1077,8 @@ func getRMBuildInformation(lists map[string]*scheduler.RMInformation) []map[stri
 	return result
 }
 
-func getResourceManagerDiagnostics() map[string]interface{} {
-	result := make(map[string]interface{})
+func getResourceManagerDiagnostics() map[string]any {
+	result := make(map[string]any)
 
 	// if the RM has not registered state dump the plugin will be nil
 	plugin := plugins.GetStateDumpPlugin()

@@ -1685,9 +1685,9 @@ func TestTryAllocate(t *testing.T) {
 	err = app.AddAllocationAsk(newAllocationAskPriority(allocKey, appID2, res, 2))
 	assert.NilError(t, err, "failed to add ask alloc-1 to app-2")
 
-	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
-	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.leaf"] = make(map[string]interface{})
+	expectedQueuesMaxLimits := make(map[string]map[string]any)
+	expectedQueuesMaxLimits["root"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.leaf"] = make(map[string]any)
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root"][maxapplications] = uint64(10)
@@ -2235,11 +2235,11 @@ func TestPreemptionForRequiredNodeMultipleAttemptsAvoided(t *testing.T) {
 	assert.Equal(t, true, alloc.IsPreempted())
 }
 
-func getExpectedQueuesLimitsForPreemption() map[string]map[string]interface{} {
-	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
-	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.parent"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.parent.leaf1"] = make(map[string]interface{})
+func getExpectedQueuesLimitsForPreemption() map[string]map[string]any {
+	expectedQueuesMaxLimits := make(map[string]map[string]any)
+	expectedQueuesMaxLimits["root"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.parent"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.parent.leaf1"] = make(map[string]any)
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.parent"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root.parent.leaf1"][maxresources] = expectedQueuesMaxLimits["root.parent"][maxresources]
@@ -2249,12 +2249,12 @@ func getExpectedQueuesLimitsForPreemption() map[string]map[string]interface{} {
 	return expectedQueuesMaxLimits
 }
 
-func getExpectedQueuesLimitsForPreemptionWithRequiredNode() map[string]map[string]interface{} {
-	expectedQueuesMaxLimits := make(map[string]map[string]interface{})
-	expectedQueuesMaxLimits["root"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.leaf"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.parent"] = make(map[string]interface{})
-	expectedQueuesMaxLimits["root.parent.sub-leaf"] = make(map[string]interface{})
+func getExpectedQueuesLimitsForPreemptionWithRequiredNode() map[string]map[string]any {
+	expectedQueuesMaxLimits := make(map[string]map[string]any)
+	expectedQueuesMaxLimits["root"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.leaf"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.parent"] = make(map[string]any)
+	expectedQueuesMaxLimits["root.parent.sub-leaf"] = make(map[string]any)
 	expectedQueuesMaxLimits["root"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 10, "vcores": 10})
 	expectedQueuesMaxLimits["root.leaf"][maxresources] = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 5, "vcores": 5})
 	expectedQueuesMaxLimits["root.parent"][maxresources] = expectedQueuesMaxLimits["root.leaf"][maxresources]
@@ -2582,6 +2582,174 @@ func TestTryAllocateReserve(t *testing.T) {
 	if !resources.IsZero(partition.root.GetPendingResource()) {
 		t.Fatalf("pending allocations should be set to zero")
 	}
+}
+
+// tryScheduleCycle runs the steps of ClusterContext.schedule for one partition.
+func tryScheduleCycle(pc *PartitionContext) *objects.AllocationResult {
+	result := pc.tryReservedAllocate()
+	if result == nil {
+		result = pc.tryPlaceholderAllocate()
+		if result == nil {
+			result = pc.tryAllocate()
+		}
+	}
+	return result
+}
+
+// Asks that can never be placed must not keep other asks out of the cluster forever.
+// Two nodes with 7 of 8 GPUs free, and asks for 8 GPUs that can reserve a node but never allocate.
+func TestReservationMaxTimeUnplaceableAsks(t *testing.T) {
+	tests := []struct {
+		name        string
+		appIDs      []string
+		placeholder bool
+	}{
+		{name: "one gang", appIDs: []string{"app-a"}, placeholder: true},
+		{name: "more placeholders than nodes", appIDs: []string{"app-a", "app-b"}, placeholder: true},
+		{name: "non placeholder asks", appIDs: []string{"app-a"}},
+		{name: "more non placeholder asks than nodes", appIDs: []string{"app-a", "app-b"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			objects.SetReservationDelay(10 * time.Millisecond)
+			defer objects.SetReservationDelay(2 * time.Second)
+			partition, err := newPartitionContext(configs.PartitionConfig{
+				Name: "test",
+				Queues: []configs.QueueConfig{{
+					Name:      "root",
+					Parent:    true,
+					SubmitACL: "*",
+					Queues: []configs.QueueConfig{{
+						Name:       "default",
+						Properties: map[string]string{configs.ReservationMaxTime: "50ms"},
+					}},
+				}},
+			}, rmID, nil, false)
+			assert.NilError(t, err, "partition create failed")
+			defer partition.userGroupCache.Stop()
+
+			gpu := func(num resources.Quantity) *resources.Resource {
+				return resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": num})
+			}
+			assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID1, gpu(8))))
+			assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID2, gpu(8))))
+			assert.NilError(t, partition.AddApplication(newApplication("in-use", "default", "root.default")))
+			for key, node := range map[string]string{"in-use-1": nodeID1, "in-use-2": nodeID2} {
+				_, _, err = partition.UpdateAllocation(newAllocation(key, "in-use", node, gpu(1)))
+				assert.NilError(t, err, "existing allocation should have been added")
+			}
+
+			apps := make([]*objects.Application, 0, len(tt.appIDs))
+			for _, appID := range tt.appIDs {
+				app := newApplication(appID, "default", "root.default")
+				if tt.placeholder {
+					app = newApplicationTG(appID, "default", "root.default", gpu(16))
+				}
+				assert.NilError(t, partition.AddApplication(app))
+				for _, key := range []string{appID + "-1", appID + "-2"} {
+					ask := newAllocationAsk(key, appID, gpu(8))
+					if tt.placeholder {
+						ask = newAllocationAskTG(key, appID, "tg", gpu(8), true)
+					}
+					assert.NilError(t, app.AddAllocationAsk(ask))
+				}
+				apps = append(apps, app)
+			}
+			held := func() int {
+				num := 0
+				for _, app := range apps {
+					num += len(app.GetReservations())
+				}
+				return num
+			}
+
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				tryScheduleCycle(partition)
+				return held() == 2
+			}), "both nodes should have been reserved")
+
+			small := newApplication("small", "default", "root.default")
+			assert.NilError(t, partition.AddApplication(small))
+			assert.NilError(t, small.AddAllocationAsk(newAllocationAsk("small-1", "small", gpu(1))))
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				result := tryScheduleCycle(partition)
+				return result != nil && result.Request.GetAllocationKey() == "small-1"
+			}), "ask that fits should be allocated once a reservation expired")
+
+			// the asks keep their claim on the nodes and the partition counter must follow the cancellations
+			assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+				tryScheduleCycle(partition)
+				return held() == 2 && partition.getReservationCount() == 2
+			}), "nodes should be reserved again and counted once")
+		})
+	}
+}
+
+// With no queue limit set the only limit is the cluster size. A full cluster recovers when the reserved node drains,
+// so the shorter wait for a reservation over a limit must not apply.
+func TestReservationMaxTimeFullCluster(t *testing.T) {
+	setupUGM()
+	objects.SetReservationDelay(10 * time.Millisecond)
+	defer objects.SetReservationDelay(2 * time.Second)
+	partition, err := newPartitionContext(configs.PartitionConfig{
+		Name: "test",
+		Queues: []configs.QueueConfig{{
+			Name:      "root",
+			Parent:    true,
+			SubmitACL: "*",
+			Queues: []configs.QueueConfig{{
+				Name:       "default",
+				Properties: map[string]string{configs.ReservationMaxTime: "4s"},
+			}},
+		}},
+	}, rmID, nil, false)
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	gpu := func(num resources.Quantity) *resources.Resource {
+		return resources.NewResourceFromMap(map[string]resources.Quantity{"gpu": num})
+	}
+	assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID1, gpu(10))))
+	assert.NilError(t, partition.AddNode(newNodeMaxResource(nodeID2, gpu(10))))
+	assert.NilError(t, partition.AddApplication(newApplication("in-use", "default", "root.default")))
+	for key, used := range map[string]resources.Quantity{nodeID1: 6, nodeID2: 7} {
+		_, _, err = partition.UpdateAllocation(newAllocation("in-use-"+key, "in-use", key, gpu(used)))
+		assert.NilError(t, err, "existing allocation should have been added")
+	}
+
+	big := newApplication("big", "default", "root.default")
+	assert.NilError(t, partition.AddApplication(big))
+	ask := newAllocationAsk("big-1", "big", gpu(5))
+	assert.NilError(t, big.AddAllocationAsk(ask))
+	assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+		tryScheduleCycle(partition)
+		return big.NodeReservedForAsk("big-1") != ""
+	}), "ask should have reserved a node")
+	reserved := big.NodeReservedForAsk("big-1")
+
+	// higher priority asks fill the other node, which leaves less free in the cluster than the reservation needs
+	others := newApplication("others", "default", "root.default")
+	assert.NilError(t, partition.AddApplication(others))
+	for i := range 20 {
+		assert.NilError(t, others.AddAllocationAsk(newAllocationAskAll("other-"+strconv.Itoa(i), "others", "", gpu(1), 10, false, nil)))
+	}
+	for start := time.Now(); time.Since(start) < 1200*time.Millisecond; time.Sleep(time.Millisecond) {
+		tryScheduleCycle(partition)
+	}
+	assert.Equal(t, big.NodeReservedForAsk("big-1"), reserved, "reservation should still be held past a quarter of the max time")
+
+	partition.removeAllocation(&si.AllocationRelease{
+		PartitionName:   "default",
+		ApplicationID:   "in-use",
+		AllocationKey:   "in-use-" + reserved,
+		TerminationType: si.TerminationType_STOPPED_BY_RM,
+	})
+	assert.NilError(t, common.WaitForCondition(time.Millisecond, 5*time.Second, func() bool {
+		tryScheduleCycle(partition)
+		return ask.IsAllocated()
+	}), "ask should have been allocated once the reserved node drained")
+	assert.Equal(t, ask.GetNodeID(), reserved, "ask should be allocated on the reserved node")
 }
 
 func TestTryAllocateWithReserved(t *testing.T) {
@@ -2941,12 +3109,12 @@ func TestAddRejectedApplicationConcurrent(t *testing.T) {
 	start := make(chan struct{})
 
 	// Concurrent Writers
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 			<-start
-			for j := 0; j < appsPerGoroutine; j++ {
+			for j := range appsPerGoroutine {
 				appID := fmt.Sprintf("app-%d-%d", workerID, j)
 				app := newApplication(appID, "default", defQueue)
 				partition.AddRejectedApplication(app, "rejected reason")
@@ -2955,12 +3123,12 @@ func TestAddRejectedApplicationConcurrent(t *testing.T) {
 	}
 
 	// Concurrent Readers
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 			<-start
-			for j := 0; j < appsPerGoroutine; j++ {
+			for j := range appsPerGoroutine {
 				_ = partition.GetRejectedApplications()
 				appID := fmt.Sprintf("app-%d-%d", workerID, j)
 				_ = partition.getRejectedApplication(appID)
@@ -2985,12 +3153,12 @@ func TestAddRejectedApplicationConcurrentWithCleanup(t *testing.T) {
 	start := make(chan struct{})
 
 	// Concurrent Writers
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
 			<-start
-			for j := 0; j < appsPerGoroutine; j++ {
+			for j := range appsPerGoroutine {
 				appID := fmt.Sprintf("cleanup-app-%d-%d", workerID, j)
 				app := newApplication(appID, "default", defQueue)
 				partition.AddRejectedApplication(app, "rejected reason")
@@ -3002,18 +3170,16 @@ func TestAddRejectedApplicationConcurrentWithCleanup(t *testing.T) {
 	}
 
 	// Concurrent Cleaners and Readers
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			<-start
-			for j := 0; j < appsPerGoroutine; j++ {
+			for range appsPerGoroutine {
 				partition.cleanupExpiredApps()
 				_ = partition.GetRejectedApplications()
 				_ = partition.getRejectedAppsByState(objects.Expired.String())
 				_ = partition.getRejectedAppsByState(objects.Rejected.String())
 			}
-		}()
+		})
 	}
 
 	close(start)
@@ -3032,14 +3198,12 @@ func TestAddRejectedApplicationDuplicate(t *testing.T) {
 	appID := "duplicate-app"
 	start := make(chan struct{})
 
-	for i := 0; i < numGoroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numGoroutines {
+		wg.Go(func() {
 			<-start
 			app := newApplication(appID, "default", defQueue)
 			partition.AddRejectedApplication(app, "duplicate rejected reason")
-		}()
+		})
 	}
 
 	close(start)
@@ -3322,7 +3486,7 @@ func TestPlaceholderSmallerMulti(t *testing.T) {
 	err = partition.AddApplication(app)
 	assert.NilError(t, err, "app-1 should have been added to the partition")
 	phs := make(map[string]*objects.Allocation, phCount)
-	for i := 0; i < phCount; i++ {
+	for i := range phCount {
 		// add an ask for a placeholder and allocate
 		id := "ph-" + strconv.Itoa(i)
 		ask := newAllocationAskTG(id, appID1, taskGroup, phRes, true)

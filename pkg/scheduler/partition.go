@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -380,20 +381,7 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 		return fmt.Errorf("failed to find queue %s for application %s", queueName, appID)
 	}
 
-	guaranteedRes := app.GetGuaranteedResource()
-	maxRes := app.GetMaxResource()
-	maxApps := app.GetMaxApps()
-	if !isRecoveryQueue && (guaranteedRes != nil || maxRes != nil || maxApps != 0) {
-		// set resources based on tags, but only if the queue is dynamic (unmanaged)
-		if !queue.IsManaged() {
-			if maxApps != 0 {
-				queue.SetMaxRunningApps(maxApps)
-			}
-			if guaranteedRes != nil || maxRes != nil {
-				queue.SetResources(guaranteedRes, maxRes)
-			}
-		}
-	}
+	setQueueLimitsFromTags(queue, app)
 
 	// check only for gang request
 	// - make sure the taskgroup request fits in the maximum set for the queue hierarchy
@@ -419,6 +407,25 @@ func (pc *PartitionContext) AddApplication(app *objects.Application) error {
 	pc.appQueueMapping.AddAppQueueMapping(appID, queue)
 
 	return nil
+}
+
+// setQueueLimitsFromTags sets the limits from the application tags on the queue. The recovery queue and
+// managed queues are not changed.
+func setQueueLimitsFromTags(queue *objects.Queue, app *objects.Application) {
+	guaranteedRes := app.GetGuaranteedResource()
+	maxRes := app.GetMaxResource()
+	maxApps := app.GetMaxApps()
+	if !common.IsRecoveryQueue(queue.QueuePath) && (guaranteedRes != nil || maxRes != nil || maxApps != 0) {
+		// set resources based on tags, but only if the queue is dynamic (unmanaged)
+		if !queue.IsManaged() {
+			if maxApps != 0 {
+				queue.SetMaxRunningApps(maxApps)
+			}
+			if guaranteedRes != nil || maxRes != nil {
+				queue.SetResources(guaranteedRes, maxRes)
+			}
+		}
+	}
 }
 
 // Remove the application from the partition.
@@ -596,7 +603,8 @@ func (pc *PartitionContext) ensureAppActive(app *objects.Application) {
 // resolveRevivedQueue resolves (recreating when needed) the leaf queue for a reviving application, records
 // the app-to-queue mapping, re-attaches the queue to the application and adds the application to the queue.
 // All of this happens under the lock: the queue can be empty, so the cleaner could otherwise remove it before
-// the application is added. Returns nil when no leaf queue can be resolved.
+// the application is added. A recreated queue gets the limits from the application tags back, an existing
+// queue keeps its limits. Returns nil when no leaf queue can be resolved.
 // NOTE: this call takes the PartitionContext lock. It must NOT be called holding the lock.
 func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) *objects.Queue {
 	pc.Lock()
@@ -618,6 +626,7 @@ func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) *objec
 				zap.Error(err))
 			return nil
 		}
+		setQueueLimitsFromTags(queue, app)
 	}
 	if !queue.IsLeafQueue() {
 		log.Log(log.SchedPartition).Warn("queue is no longer a leaf while reviving application",
@@ -709,13 +718,13 @@ func (pc *PartitionContext) createQueue(name string, user security.UserGroup) (*
 	log.Log(log.SchedPartition).Debug("Creating queue(s)",
 		zap.String("parent", current),
 		zap.String("fullPath", name))
-	for i := len(toCreate) - 1; i >= 0; i-- {
+	for i, queueName := range slices.Backward(toCreate) {
 		// everything is checked and there should be no errors
 		var err error
-		queue, err = objects.NewDynamicQueue(toCreate[i], i == 0, queue, pc.appQueueMapping)
+		queue, err = objects.NewDynamicQueue(queueName, i == 0, queue, pc.appQueueMapping)
 		if err != nil {
 			log.Log(log.SchedPartition).Warn("Queue auto create failed unexpected",
-				zap.String("queueName", toCreate[i]),
+				zap.String("queueName", queueName),
 				zap.Error(err))
 			return nil, err
 		}

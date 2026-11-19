@@ -1658,6 +1658,51 @@ func runTimeoutPlaceholderTest(t *testing.T, expectedState string, gangSchedulin
 	assertPlaceholderData(t, app, tg2, 2, 2, 0, res)
 }
 
+// A real ask that is pending when the placeholder timeout fires is not a timed out placeholder, and there might not be
+// any placeholder data for its task group.
+func TestTimeoutPlaceholderRealAsk(t *testing.T) {
+	tests := []struct {
+		name      string
+		taskGroup string
+	}{
+		{"no task group", ""},
+		{"task group without placeholders", tg2},
+		{"task group with placeholders", tg1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setupUGM()
+			// create a fake queue
+			queue, err := createRootQueue(nil)
+			assert.NilError(t, err, "queue create failed")
+
+			app, _ := newApplicationWithPlaceholderTimeout(appID1, "default", "root.a", 5)
+			app.gangSchedulingStyle = Soft
+			// fake the queue assignment (needed with ask)
+			app.queue = queue
+
+			res := resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 100, "vcores": 10})
+			err = app.AddAllocationAsk(newAllocationAskTG(aKey, appID1, tg1, res))
+			assert.NilError(t, err, "placeholder ask should have been added")
+			err = app.AddAllocationAsk(newAllocationAskAll(aKey2, appID1, tt.taskGroup, res, false, 0))
+			assert.NilError(t, err, "real ask should have been added")
+			// the first placeholder allocation starts the timer
+			err = app.AddAllocation(newPlaceholderAlloc(appID1, nodeID1, res, tg1))
+			assert.NilError(t, err, "placeholder allocation should have been added")
+
+			err = common.WaitForCondition(10*time.Millisecond, 1*time.Second, func() bool {
+				return app.getPlaceholderTimer() == nil
+			})
+			assert.NilError(t, err, "Placeholder timeout cleanup did not trigger unexpectedly")
+			assert.Equal(t, app.CurrentState(), Resuming.String(), "Application did not progress into expected state")
+
+			// only the pending placeholder timed out
+			assertPlaceholderData(t, app, tg1, 1, 1, 0, res)
+			assert.Equal(t, len(app.placeholderData), 1, "real ask should not add placeholder data")
+		})
+	}
+}
+
 func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	setupUGM()
 
@@ -1734,6 +1779,89 @@ func TestTimeoutPlaceholderAllocReleased(t *testing.T) {
 	assertUserGroupResource(t, getTestUserGroup(), res)
 }
 
+// Placeholders allocated after the application runs, as on recovery, are still released on timeout, also one allocated
+// after the timer fired.
+func TestTimeoutPlaceholderRunning(t *testing.T) {
+	setupUGM()
+
+	originalPhTimeout := defaultPlaceholderTimeout
+	defaultPlaceholderTimeout = 100 * time.Millisecond
+	defer func() { defaultPlaceholderTimeout = originalPhTimeout }()
+
+	app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+	app.SetState(Accepted.String())
+	res, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+	assert.NilError(t, err)
+	assert.NilError(t, app.AddAllocation(newAllocation(appID1, nodeID1, res)))
+	assert.Assert(t, app.IsRunning(), "App should be running after the first allocation")
+	assert.Assert(t, app.getPlaceholderTimer() == nil, "Placeholder timer should not be set without placeholders")
+
+	released := func(ph *Allocation) error {
+		return common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
+			for _, event := range testHandler.GetEvents() {
+				if release, ok := event.(*rmevent.RMReleaseAllocationEvent); ok && len(release.ReleasedAllocations) == 1 &&
+					release.ReleasedAllocations[0].AllocationKey == ph.allocationKey &&
+					release.ReleasedAllocations[0].TerminationType == si.TerminationType_TIMEOUT {
+					return true
+				}
+			}
+			return false
+		})
+	}
+	ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+	assert.NilError(t, app.AddAllocation(ph))
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated for a running application")
+	assert.NilError(t, released(ph), "placeholder not released on timeout")
+
+	// the released placeholder still counts until the RM confirms the release
+	late := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+	assert.NilError(t, app.AddAllocation(late))
+	assert.Assert(t, app.getPlaceholderTimer() != nil, "Placeholder timer should be initiated after the timer fired")
+	assert.NilError(t, released(late), "late placeholder not released on timeout")
+	assert.Assert(t, app.IsRunning(), "App should still be running after the placeholder timeout")
+}
+
+// A timer that fired while the last placeholder was being replaced must not fail the application, or release its
+// allocations and asks.
+func TestTimeoutPlaceholderStale(t *testing.T) {
+	for _, style := range []string{Hard, Soft} {
+		t.Run(style, func(t *testing.T) {
+			setupUGM()
+			app, testHandler := newApplicationWithHandler(appID1, "default", "root.a")
+			app.gangSchedulingStyle = style
+			app.SetState(Accepted.String())
+			queue, err := createRootQueue(nil)
+			assert.NilError(t, err)
+			app.queue = queue
+			res, err := resources.NewResourceFromConf(map[string]string{"memory": "100", "vcores": "10"})
+			assert.NilError(t, err)
+			assert.NilError(t, app.AddAllocation(newAllocation(appID1, nodeID1, res)))
+			ph := newPlaceholderAlloc(appID1, nodeID1, res, tg1)
+			app.addPlaceholderDataWithLocking(ph)
+			assert.NilError(t, app.AddAllocation(ph))
+			assert.NilError(t, app.AddAllocationAsk(newAllocationAskAll("ask", appID1, tg1, res, false, 0)))
+			assert.Assert(t, app.IsRunning(), "App should be running")
+
+			// link the placeholder and its replacement as tryPlaceholderAllocate does
+			replacement := newAllocation(appID1, nodeID1, res)
+			ph.SetRelease(replacement)
+			replacement.SetRelease(ph)
+			assert.NilError(t, ph.SetReleased(true))
+			assert.Assert(t, app.ReplaceAllocation(ph.allocationKey) != nil)
+			// the timer fired before the replacement, so it runs once the lock is free
+			app.timeoutPlaceholderProcessing()
+
+			assert.Assert(t, app.IsRunning(), "App should still be running, is %s", app.CurrentState())
+			assert.Assert(t, app.GetAllocationAsk("ask") != nil, "ask removed by the stale timer")
+			for _, event := range testHandler.GetEvents() {
+				if release, ok := event.(*rmevent.RMReleaseAllocationEvent); ok {
+					assert.Equal(t, len(release.ReleasedAllocations), 0, "allocations released by the stale timer")
+				}
+			}
+		})
+	}
+}
+
 func TestTimeoutPlaceholderProcessingDoesNotWaitForRMReply(t *testing.T) {
 	setupUGM()
 	app := newApplication(appID1, "default", "root.a")
@@ -1748,7 +1876,7 @@ func TestTimeoutPlaceholderProcessingDoesNotWaitForRMReply(t *testing.T) {
 
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
 	app.rmEventHandler = &mockAppEventHandler{
-		callback: func(ev interface{}) {
+		callback: func(ev any) {
 			if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				releaseReceived <- releaseEvent
 			}
@@ -1786,7 +1914,7 @@ func TestTimeoutStateTimerDoesNotWaitForRMReply(t *testing.T) {
 	app.SetState(Completing.String())
 
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
-	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev any) {
 		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 			releaseReceived <- releaseEvent
 		}
@@ -2494,6 +2622,47 @@ func TestTryAllocateFit(t *testing.T) {
 	assert.Equal(t, "node1", result.NodeID, "wrong node")
 }
 
+// TestTryAllocateAllocatedAskInSortedRequests pins the scream-then-repair guard that backs the
+// pending-only invariant of sortedRequests: an allocated ask can only still be in the slice if the
+// remove-on-allocate pairing has been broken. The guard uses DPanic, which panics under the
+// development logger the tests run with, so a broken pairing fails hard here while production only
+// logs and self-heals.
+func TestTryAllocateAllocatedAskInSortedRequests(t *testing.T) {
+	setupUGM()
+	node := newNode(nodeID1, map[string]resources.Quantity{"first": 5})
+	nodeMap := map[string]*Node{nodeID1: node}
+	iterator := getNodeIteratorFn(node)
+	getNode := func(nodeID string) *Node {
+		return nodeMap[nodeID]
+	}
+
+	queue, err := createRootQueue(map[string]string{"first": "5"})
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root")
+	app.queue = queue
+	ask := newAllocationAsk(aKey, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 5}))
+	err = app.AddAllocationAsk(ask)
+	assert.NilError(t, err, "ask should have been added to app")
+
+	// build the ghost white-box: allocateAsk marks the ask allocated and drops it from the
+	// pending-only slice, putting it straight back is exactly the broken pairing under test
+	_, err = app.allocateAsk(ask)
+	assert.NilError(t, err, "ask should have been allocated")
+	app.sortedRequests.insert(ask)
+	assert.Assert(t, ask.IsAllocated(), "ask should be allocated")
+	assert.Equal(t, len(app.sortedRequests), 1, "ghost ask should be in sortedRequests")
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("tryAllocate should have panicked on an allocated ask in sortedRequests")
+		}
+		assert.Assert(t, strings.Contains(fmt.Sprint(r), "allocated ask found in pending-only sortedRequests"), "unexpected panic: %v", r)
+	}()
+	preemptionAttemptsRemaining := 0
+	app.tryAllocate(node.GetAvailableResource(), true, 30*time.Second, &preemptionAttemptsRemaining, iterator, iterator, getNode)
+}
+
 func TestTryAllocatePreemptQueue(t *testing.T) {
 	node := newNode("node1", map[string]resources.Quantity{"first": 20})
 	nodeMap := map[string]*Node{"node1": node}
@@ -2822,17 +2991,33 @@ func assertMaxPriorityConsistent(t *testing.T, app *Application) {
 	defer app.RUnlock()
 	wantMax := configs.MinPriority
 	wantHistogram := make(map[int32]int)
+	wantSorted := make(map[string]bool)
 	for _, req := range app.requests {
 		if req.IsAllocated() {
 			continue
 		}
 		wantMax = max(wantMax, req.GetPriority())
 		wantHistogram[req.GetPriority()]++
+		wantSorted[req.GetAllocationKey()] = true
 	}
 	assert.Equal(t, app.askMaxPriority, wantMax, "askMaxPriority inconsistent with full scan over requests")
 	assert.Equal(t, len(app.pendingPriorities), len(wantHistogram), "pendingPriorities histogram size mismatch")
 	for p, count := range wantHistogram {
 		assert.Equal(t, app.pendingPriorities[p], count, "pendingPriorities count mismatch for priority %d", p)
+	}
+	// every non-allocated ask in app.requests must appear exactly once in app.sortedRequests: no extras, no duplicates.
+	assert.Equal(t, len(app.sortedRequests), len(wantSorted), "sortedRequests size mismatch against non-allocated requests")
+	seen := make(map[string]bool)
+	for i, req := range app.sortedRequests {
+		key := req.GetAllocationKey()
+		assert.Assert(t, !seen[key], "duplicate allocationKey %s found in sortedRequests", key)
+		seen[key] = true
+		assert.Assert(t, wantSorted[key], "sortedRequests contains allocationKey %s not present in non-allocated requests", key)
+		if i > 0 {
+			// comparator-validity only: adjacent entries must be tie-or-after, no assertion on
+			// tie-break order (mirrors the check in assertFuzzInvariants)
+			assert.Assert(t, app.sortedRequests[i].LessThan(app.sortedRequests[i-1]), "sortedRequests out of order at index %d", i)
+		}
 	}
 }
 
@@ -2952,7 +3137,7 @@ func TestAddAllocationAskDuplicateKeyRejected(t *testing.T) {
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "rejected add must not change the pending resource")
 	app.RLock()
 	assert.Equal(t, len(app.pendingPriorities), 0, "rejected add must not change the pending histogram")
-	assert.Equal(t, len(app.sortedRequests), 1, "rejected add must not insert into sortedRequests")
+	assert.Equal(t, len(app.sortedRequests), 0, "allocated ask must have left sortedRequests and the rejected add must not re-insert it")
 	app.RUnlock()
 	assert.Equal(t, app.GetAskMaxPriority(), configs.MinPriority, "rejected add must not change askMaxPriority")
 	assertMaxPriorityConsistent(t, app)
@@ -2994,6 +3179,7 @@ func TestRollbackAllocationAskNotTracked(t *testing.T) {
 
 	app.RLock()
 	assert.Assert(t, app.allocations[aKey] == ask, "rejected rollback must leave the confirmed allocation in place")
+	assert.Equal(t, len(app.sortedRequests), 0, "rejected rollback must not insert into sortedRequests")
 	assert.Equal(t, len(app.pendingPriorities), 0, "rejected rollback must not change the pending histogram")
 	app.RUnlock()
 	assert.Assert(t, resources.Equals(app.GetAllocatedResource(), res), "rejected rollback must not change the allocated resource")
@@ -3623,7 +3809,7 @@ func TestTryAllocateWithReservedHeadRoomChecking(t *testing.T) {
 }
 
 // TestTryReservedAllocateRequiredNodeNotCancelledOnTimeout verifies that required node reservations
-// are not cancelled even if they exceed the reservationWaitTimeout.
+// are not cancelled even if they exceed the time a reservation can wait for headroom.
 func TestTryReservedAllocateRequiredNodeNotCancelledOnTimeout(t *testing.T) {
 	setupUGM()
 
@@ -3661,6 +3847,150 @@ func TestTryReservedAllocateRequiredNodeNotCancelledOnTimeout(t *testing.T) {
 	result = app.tryReservedAllocate(headRoom, iter)
 	assert.Assert(t, result == nil, "result is expected to be nil due to insufficient headroom")
 	assert.Equal(t, len(app.reservations), 1, "required node reservation must not be cancelled on timeout")
+}
+
+// A node with one unit in use, so that an ask for the whole node can reserve it but never allocate.
+func newReservationTestSetup(t *testing.T, requiredNode string) (*Application, *Allocation, *Node) {
+	t.Helper()
+	setupUGM()
+	queue, err := createRootQueue(map[string]string{"first": "100"})
+	assert.NilError(t, err, "queue create failed")
+	app := newApplication(appID1, "default", "root")
+	app.queue = queue
+
+	full := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})
+	node := newNodeRes(nodeID1, full)
+	node.AddAllocation(newAllocationWithKey("in-use", appID2, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})))
+	ask := newAllocationAsk(aKey, appID1, full)
+	if requiredNode != "" {
+		ask.SetRequiredNode(requiredNode)
+		// keeps a required node ask out of the preemptor, not relevant for these tests
+		ask.MarkTriggeredPreemption()
+	}
+	assert.NilError(t, app.AddAllocationAsk(ask), "ask should have been added to app")
+	assert.NilError(t, app.Reserve(node, ask), "reservation should not have failed")
+	queue.Reserve(appID1)
+	return app, ask, node
+}
+
+func TestTryReservedAllocateMaxTime(t *testing.T) {
+	tests := []struct {
+		name                string
+		requiredNode        string
+		maxTime             time.Duration
+		reservedFor         time.Duration
+		limit               string
+		triggeredPreemption bool
+		cancelled           bool
+	}{
+		{name: "younger than the max time", maxTime: time.Hour, reservedFor: 59 * time.Minute},
+		{name: "older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, cancelled: true},
+		{name: "older than a shorter max time", maxTime: time.Minute, reservedFor: 2 * time.Minute, cancelled: true},
+		{name: "over a queue limit younger than a quarter of the max time", maxTime: time.Hour, reservedFor: 14 * time.Minute, limit: "queue"},
+		{name: "over a queue limit older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "queue", cancelled: true},
+		{name: "over a user limit older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "user", cancelled: true},
+		{name: "full cluster older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "cluster"},
+		{name: "full cluster older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, limit: "cluster", cancelled: true},
+		{name: "over a queue limit waiting for victims older than a quarter of the max time", maxTime: time.Hour, reservedFor: 16 * time.Minute, limit: "queue", triggeredPreemption: true},
+		{name: "over a queue limit waiting for victims older than the max time", maxTime: time.Hour, reservedFor: 61 * time.Minute, limit: "queue", triggeredPreemption: true, cancelled: true},
+		{name: "required node", requiredNode: nodeID1, maxTime: time.Hour, reservedFor: 2 * time.Hour},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app, ask, node := newReservationTestSetup(t, tt.requiredNode)
+			if tt.triggeredPreemption {
+				ask.MarkTriggeredPreemption()
+			}
+			switch tt.limit {
+			case "queue":
+				limited, err := createManagedQueue(app.queue, "limited", false, map[string]string{"first": "1"})
+				assert.NilError(t, err, "queue create failed")
+				limited.Reserve(appID1)
+				app.queue = limited
+			case "user":
+				err := ugm.GetUserManager().UpdateConfig(configs.QueueConfig{
+					Name:   "root",
+					Parent: true,
+					Limits: []configs.Limit{{Limit: "user limit", Users: []string{"testuser"}, MaxResources: map[string]string{"first": "1"}}},
+				}, "root")
+				assert.NilError(t, err, "user limit update failed")
+				defer ugm.GetUserManager().ClearConfigLimits()
+				defer setupUGM()
+			}
+			app.queue.reservationMaxTime = tt.maxTime
+			released := make(chan int, 1)
+			app.SetReservationReleasedCallback(func(num int) { released <- num })
+			app.reservations[ask.allocationKey].createTime = time.Now().Add(-tt.reservedFor)
+
+			headRoom := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100})
+			if tt.limit != "" {
+				headRoom = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+			}
+			result := app.tryReservedAllocate(headRoom, getNodeIteratorFn(node))
+			assert.Assert(t, result == nil, "ask should not have been allocated")
+			if !tt.cancelled {
+				assert.Equal(t, len(app.reservations), 1, "reservation should have been kept")
+				assert.Assert(t, node.IsReserved(), "node should still be reserved")
+				assert.Assert(t, !node.isInReservationCooldown(), "node should not be in cooldown")
+				return
+			}
+			assert.Equal(t, len(app.reservations), 0, "reservation should have been cancelled")
+			assert.Assert(t, !node.IsReserved(), "node should no longer be reserved")
+			assert.Assert(t, node.isInReservationCooldown(), "node should be in cooldown")
+			assert.Equal(t, len(app.queue.GetReservedApps()), 0, "queue should no longer track the reservation")
+			select {
+			case num := <-released:
+				assert.Equal(t, num, 1, "partition counter should be decremented once")
+			case <-time.After(time.Second):
+				t.Fatal("reservation release was not reported to the partition")
+			}
+		})
+	}
+}
+
+// The queue can pass on an application with its last reservation gone and its queue detached since the lookup.
+func TestTryReservedAllocateDetachedQueue(t *testing.T) {
+	app, ask, node := newReservationTestSetup(t, "")
+	assert.Equal(t, app.UnReserve(node, ask), 1, "reservation should have been removed")
+	app.UnSetQueue()
+
+	result := app.tryReservedAllocate(resources.NewResourceFromMap(map[string]resources.Quantity{"first": 100}), getNodeIteratorFn(node))
+	assert.Assert(t, result == nil, "nothing to allocate without a reservation")
+}
+
+func TestTryNodesReservationCooldown(t *testing.T) {
+	app, ask, node := newReservationTestSetup(t, "")
+	assert.Equal(t, app.UnReserve(node, ask), 1, "reservation should have been removed")
+	ask.createTime = time.Now().Add(-time.Hour)
+
+	node.setReservationExpired()
+	assert.Assert(t, app.tryNodes(ask, getNodeIteratorFn(node)()) == nil, "node in cooldown should not be reserved")
+
+	other := newNodeRes(nodeID2, ask.GetAllocatedResource())
+	other.AddAllocation(newAllocationWithKey("in-use-2", appID2, nodeID2, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})))
+	result := app.tryNodes(ask, getNodeIteratorFn(node, other)())
+	assert.Assert(t, result != nil, "node outside of cooldown should be reserved")
+	assert.Equal(t, result.ResultType, Reserved)
+	assert.Equal(t, result.NodeID, nodeID2)
+
+	node.reservationExpiredTime = time.Now().Add(-reservationDelay)
+	result = app.tryNodes(ask, getNodeIteratorFn(node)())
+	assert.Assert(t, result != nil, "node should be reserved after the cooldown")
+	assert.Equal(t, result.ResultType, Reserved)
+	assert.Equal(t, result.NodeID, nodeID1)
+}
+
+func TestTryNodesAllocateDuringReservationCooldown(t *testing.T) {
+	app, ask, node := newReservationTestSetup(t, "")
+	assert.Equal(t, app.UnReserve(node, ask), 1, "reservation should have been removed")
+	node.setReservationExpired()
+
+	small := newAllocationAsk(aKey2, appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}))
+	assert.NilError(t, app.AddAllocationAsk(small), "ask should have been added to app")
+	result := app.tryNodes(small, getNodeIteratorFn(node)())
+	assert.Assert(t, result != nil, "ask that fits should be allocated on a node in cooldown")
+	assert.Equal(t, result.ResultType, Allocated)
+	assert.Equal(t, result.NodeID, nodeID1)
 }
 
 func TestUpdateRunnableStatus(t *testing.T) {
@@ -3796,7 +4126,7 @@ func TestRequiredNodePreemption(t *testing.T) {
 	var releaseEvents []*rmevent.RMReleaseAllocationEvent
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
 	app.rmEventHandler = &mockAppEventHandler{
-		callback: func(ev interface{}) {
+		callback: func(ev any) {
 			if rmEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				releaseEvents = append(releaseEvents, rmEvent)
 				releaseReceived <- rmEvent
@@ -4014,7 +4344,7 @@ func TestRequiredNodePreemptionFailed(t *testing.T) {
 	app := newApplication(appID0, "default", "root.default")
 	var releaseEvents []*rmevent.RMReleaseAllocationEvent
 	app.rmEventHandler = &mockAppEventHandler{
-		callback: func(ev interface{}) {
+		callback: func(ev any) {
 			if rmEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				releaseEvents = append(releaseEvents, rmEvent)
 			}
@@ -4204,10 +4534,10 @@ func TestGetUint64Tag(t *testing.T) {
 }
 
 type mockAppEventHandler struct {
-	callback func(ev interface{})
+	callback func(ev any)
 }
 
-func (m mockAppEventHandler) HandleEvent(ev interface{}) {
+func (m mockAppEventHandler) HandleEvent(ev any) {
 	m.callback(ev)
 }
 
@@ -4231,7 +4561,7 @@ func TestNotifyRMAllocationReleasedDoesNotWaitForReply(t *testing.T) {
 
 	received := make(chan *rmevent.RMReleaseAllocationEvent, 1)
 	app.rmEventHandler = &mockAppEventHandler{
-		callback: func(ev interface{}) {
+		callback: func(ev any) {
 			if event, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 				received <- event
 			}
@@ -4364,7 +4694,7 @@ func TestTryPlaceHolderAllocateLargerRequest(t *testing.T) {
 
 	app := newApplication(appID0, "default", "root.default")
 	releaseReceived := make(chan *rmevent.RMReleaseAllocationEvent, 1)
-	app.rmEventHandler = &mockAppEventHandler{callback: func(ev interface{}) {
+	app.rmEventHandler = &mockAppEventHandler{callback: func(ev any) {
 		if releaseEvent, ok := ev.(*rmevent.RMReleaseAllocationEvent); ok {
 			releaseReceived <- releaseEvent
 		}

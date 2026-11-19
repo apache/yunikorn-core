@@ -98,7 +98,7 @@ partitions:
 
 	// Register nodes
 	var newNodes []*si.NodeInfo
-	for i := 0; i < numNodes; i++ {
+	for i := range numNodes {
 		nodeName := "node-" + strconv.Itoa(i)
 		node := &si.NodeInfo{
 			NodeID:     nodeName + ":1234",
@@ -127,7 +127,7 @@ partitions:
 	// Request pods
 	app1NumPods := numPods / 2
 	app1Asks := make([]*si.Allocation, app1NumPods)
-	for i := 0; i < app1NumPods; i++ {
+	for i := range app1NumPods {
 		app1Asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-1-%d", i),
 			ResourcePerAlloc: &si.Resource{
@@ -142,7 +142,7 @@ partitions:
 
 	app2NumPods := numPods - app1NumPods
 	app2Asks := make([]*si.Allocation, app2NumPods)
-	for i := 0; i < app2NumPods; i++ {
+	for i := range app2NumPods {
 		app2Asks[i] = &si.Allocation{
 			AllocationKey: fmt.Sprintf("alloc-2-%d", i),
 			ResourcePerAlloc: &si.Resource{

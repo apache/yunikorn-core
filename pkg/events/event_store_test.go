@@ -75,7 +75,7 @@ func TestStoreAndRetrieve(t *testing.T) {
 func TestStoreWithLimitedSize(t *testing.T) {
 	store := newEventStore(3)
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		event := &si.EventRecord{
 			Type:        si.EventRecord_REQUEST,
 			ObjectID:    "alloc-" + strconv.Itoa(i),
@@ -98,7 +98,7 @@ func TestSetStoreSize(t *testing.T) {
 	assert.Check(t, oldSliceData == newSliceData)
 
 	// store 5 events
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		store.Store(&si.EventRecord{
 			Type:              si.EventRecord_REQUEST,
 			EventChangeDetail: si.EventRecord_DETAILS_NONE,

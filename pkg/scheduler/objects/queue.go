@@ -22,6 +22,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -94,6 +95,7 @@ type Queue struct {
 	isQuotaPreemptionRunning bool
 	unschedAskBackoff        uint64
 	askBackoffDelay          time.Duration
+	reservationMaxTime       time.Duration // maximum time an ask can keep a node reserved
 
 	locking.RWMutex
 }
@@ -119,6 +121,7 @@ func newBlankQueue() *Queue {
 		quotaPreemptionDelay:     0,
 		quotaPreemptionStartTime: time.Time{},
 		askBackoffDelay:          configs.DefaultAskBackOffDelay,
+		reservationMaxTime:       configs.DefaultReservationMaxTime,
 	}
 }
 
@@ -250,9 +253,7 @@ func (sq *Queue) getProperties() map[string]string {
 	}
 	sq.RLock()
 	defer sq.RUnlock()
-	for key, value := range sq.properties {
-		props[key] = value
-	}
+	maps.Copy(props, sq.properties)
 	return props
 }
 
@@ -283,9 +284,7 @@ func (sq *Queue) mergeProperties(parent map[string]string) {
 	for key, value := range parent {
 		parent[key] = filterParentProperty(key, value)
 	}
-	for key, value := range config {
-		parent[key] = value
-	}
+	maps.Copy(parent, config)
 	sq.properties = parent
 }
 
@@ -689,6 +688,7 @@ func (sq *Queue) resetProperties() {
 	sq.unschedAskBackoff = 0
 	sq.askBackoffDelay = configs.DefaultAskBackOffDelay
 	sq.quotaPreemptionDelay = configs.DefaultQuotaPreemptionDelay
+	sq.reservationMaxTime = configs.DefaultReservationMaxTime
 }
 
 // UpdateQueueProperties updates the queue properties defined as text
@@ -768,6 +768,12 @@ func (sq *Queue) UpdateQueueProperties(oldMaxResource *resources.Resource) {
 				log.Log(log.SchedQueue).Debug("quota preemption delay configuration error",
 					zap.Error(err))
 			}
+		case configs.ReservationMaxTime:
+			sq.reservationMaxTime, err = convertDelay(value, configs.DefaultReservationMaxTime)
+			if err != nil {
+				log.Log(log.SchedQueue).Debug("reservation max time configuration error",
+					zap.Error(err))
+			}
 		default:
 			// skip unknown properties just log them
 			log.Log(log.SchedQueue).Debug("queue property skipped",
@@ -844,6 +850,16 @@ func (sq *Queue) GetGuaranteedResource() *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.guaranteedResource.Clone()
+}
+
+// hasGuaranteed returns true if this queue or any parent has a guarantee set.
+func (sq *Queue) hasGuaranteed() bool {
+	for q := sq; q != nil; q = q.parent {
+		if !q.GetGuaranteedResource().IsEmpty() {
+			return true
+		}
+	}
+	return false
 }
 
 // GetMaxApps returns the maximum number of applications that can run in this queue.
@@ -964,9 +980,7 @@ func (sq *Queue) GetPartitionQueueDAOInfo(include bool) dao.PartitionQueueDAOInf
 	queueInfo.UnschedAskBackoff = sq.unschedAskBackoff
 	queueInfo.AskBackoffDelay = sq.askBackoffDelay.String()
 	queueInfo.Properties = make(map[string]string)
-	for k, v := range sq.properties {
-		queueInfo.Properties[k] = v
-	}
+	maps.Copy(queueInfo.Properties, sq.properties)
 	if sq.parent == nil {
 		queueInfo.Parent = ""
 	} else {
@@ -1113,9 +1127,7 @@ func (sq *Queue) GetCopyOfApps() map[string]*Application {
 	sq.RLock()
 	defer sq.RUnlock()
 	appsCopy := make(map[string]*Application, len(sq.applications))
-	for appID, app := range sq.applications {
-		appsCopy[appID] = app
-	}
+	maps.Copy(appsCopy, sq.applications)
 	return appsCopy
 }
 
@@ -1127,9 +1139,7 @@ func (sq *Queue) GetCopyOfChildren() map[string]*Queue {
 	sq.RLock()
 	defer sq.RUnlock()
 	childCopy := make(map[string]*Queue)
-	for k, v := range sq.children {
-		childCopy[k] = v
-	}
+	maps.Copy(childCopy, sq.children)
 	return childCopy
 }
 
@@ -1487,23 +1497,20 @@ func (sq *Queue) sortQueues() []*Queue {
 		return nil
 	}
 	// Create a list of the queues with pending resources
-	sortedQueues := make([]*Queue, 0)
-	sortedMaxFairResources := make([]*resources.Resource, 0)
-	for _, child := range sq.GetCopyOfChildren() {
+	children := sq.GetCopyOfChildren()
+	sortedQueues := make([]queueFairMax, 0, len(children))
+	for _, child := range children {
 		// a stopped queue cannot be scheduled
 		if child.IsStopped() {
 			continue
 		}
 		// queue must have pending resources to be considered for scheduling
 		if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
-			sortedQueues = append(sortedQueues, child)
-			sortedMaxFairResources = append(sortedMaxFairResources, child.GetFairMaxResource())
+			sortedQueues = append(sortedQueues, queueFairMax{queue: child, fairMax: child.GetFairMaxResource()})
 		}
 	}
 	// Sort the queues
-	sortQueue(sortedQueues, sortedMaxFairResources, sq.getSortType(), sq.IsPrioritySortEnabled())
-
-	return sortedQueues
+	return sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
 }
 
 // getHeadRoom returns the headroom for the queue. This can never be more than the headroom for the parent.
@@ -1602,9 +1609,7 @@ func (sq *Queue) internalGetFairMaxResource(limit *resources.Resource) *resource
 	}
 
 	// perform merge. child wins every resources collision
-	for k, v := range sq.maxResource.Resources {
-		out.Resources[k] = v
-	}
+	maps.Copy(out.Resources, sq.maxResource.Resources)
 
 	return out
 }
@@ -1914,9 +1919,7 @@ func (sq *Queue) GetReservedApps() map[string]int {
 	defer sq.RUnlock()
 
 	copied := make(map[string]int)
-	for appID, numRes := range sq.reservedApps {
-		copied[appID] = numRes
-	}
+	maps.Copy(copied, sq.reservedApps)
 	// increase the number of reservations for this app
 	return copied
 }
@@ -2430,4 +2433,11 @@ func (sq *Queue) GetBackoffDelay() time.Duration {
 	sq.RLock()
 	defer sq.RUnlock()
 	return sq.askBackoffDelay
+}
+
+// GetReservationMaxTime returns the maximum time an ask in this queue can keep a node reserved.
+func (sq *Queue) GetReservationMaxTime() time.Duration {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.reservationMaxTime
 }

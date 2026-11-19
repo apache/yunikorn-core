@@ -61,8 +61,14 @@ func TestAskAllocateDeallocate(t *testing.T) {
 	assert.Assert(t, ask.allocate(), "attempt to allocate pending ask should not fail")
 	assert.Assert(t, ask.IsAllocated(), "allocated ask should return true for IsAllocated()")
 	assert.Assert(t, !ask.allocate(), "attempt to allocate previously allocated ask should fail")
+	ask.SetNodeID("node-1")
+	ask.SetBindTime(time.Now())
+	ask.SetInstanceType("itype-1")
 	assert.Assert(t, ask.deallocate(), "deallocating previously allocated ask should succeed")
 	assert.Assert(t, !ask.IsAllocated(), "deallocated ask should return false for IsAllocated()")
+	assert.Equal(t, ask.GetNodeID(), "", "deallocated ask should not have a node ID")
+	assert.Assert(t, ask.GetBindTime().IsZero(), "deallocated ask should not have a bind time")
+	assert.Equal(t, ask.GetInstanceType(), "", "deallocated ask should not have an instance type")
 }
 
 // the create time should not be manipulated but we need it for reservation testing

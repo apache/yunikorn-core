@@ -2016,6 +2016,42 @@ func TestMaxResource(t *testing.T) {
 	}
 }
 
+// The root max follows the nodes in the partition: the QUEUE_MAX event must carry the new max.
+func TestMaxResourceEvent(t *testing.T) {
+	events.Init()
+	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
+	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.Stop()
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "failed to create basic root queue")
+	small, err := resources.NewResourceFromConf(map[string]string{"first": "10"})
+	assert.NilError(t, err, "failed to create basic resource")
+	large, err := resources.NewResourceFromConf(map[string]string{"first": "20"})
+	assert.NilError(t, err, "failed to create basic resource")
+
+	expected := []*resources.Resource{small, large, resources.NewResource()}
+	for _, res := range expected {
+		root.SetMaxResource(res)
+	}
+	noEvents := uint64(0)
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
+		noEvents = eventSystem.Store.CountStoredEvents()
+		return noEvents == 4
+	})
+	assert.NilError(t, err, "expected 4 events, got %d", noEvents)
+	records := eventSystem.Store.CollectEvents()
+	assert.Equal(t, 4, len(records), "number of events")
+	// the first event is the new queue event
+	for i, res := range expected {
+		record := records[i+1]
+		assert.Equal(t, "root", record.ObjectID)
+		assert.Equal(t, si.EventRecord_QUEUE, record.Type)
+		assert.Equal(t, si.EventRecord_SET, record.EventChangeType)
+		assert.Equal(t, si.EventRecord_QUEUE_MAX, record.EventChangeDetail)
+		assert.Assert(t, resources.Equals(res, resources.NewResourceFromProto(record.Resource)), "event %d: expected max %v, got %v", i, res, record.Resource)
+	}
+}
+
 func TestSupportTaskGroup(t *testing.T) {
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create basic root queue: %v", err)

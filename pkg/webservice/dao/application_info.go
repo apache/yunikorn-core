@@ -44,7 +44,7 @@ type ApplicationDAOInfo struct {
 	Reservations            []string                `json:"reservations,omitempty"`
 	MaxRequestPriority      int32                   `json:"maxRequestPriority,omitempty"`
 	StartTime               int64                   `json:"startTime,omitempty"`
-	ResourceHistory         ResourceHistory         `json:"resourceHistory,omitempty"`
+	ResourceHistory         ResourceHistory         `json:"resourceHistory"`
 	BackoffDeadline         *int64                  `json:"backoffDeadline,omitempty"`
 }
 

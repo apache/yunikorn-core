@@ -19,7 +19,7 @@
 package handler
 
 type EventHandler interface {
-	HandleEvent(ev interface{})
+	HandleEvent(ev any)
 }
 
 type EventHandlers struct {

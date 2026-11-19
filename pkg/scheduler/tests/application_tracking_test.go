@@ -213,7 +213,7 @@ func readLinesFromStream(stream io.ReadCloser, numLines int) ([]string, error) {
 		scanner := bufio.NewScanner(reader)
 		scanner.Split(bufio.ScanLines)
 
-		for i := 0; i < numLines; i++ {
+		for range numLines {
 			if !scanner.Scan() {
 				resp <- scanResult{nil, scanner.Err()}
 				return

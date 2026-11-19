@@ -21,6 +21,7 @@ package ugm
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
@@ -276,13 +277,11 @@ func (m *Manager) ensureGroup(user security.UserGroup, queuePath string) string 
 func (m *Manager) ensureGroupInternal(userGroups []string, queuePath string) string {
 	if configGroups, ok := m.configuredGroups[queuePath]; ok {
 		for _, configGroup := range configGroups {
-			for _, g := range userGroups {
-				if configGroup == g {
-					log.Log(log.SchedUGM).Debug("Found matching group for user",
-						zap.String("queue path", queuePath),
-						zap.String("matched group", configGroup))
-					return configGroup
-				}
+			if slices.Contains(userGroups, configGroup) {
+				log.Log(log.SchedUGM).Debug("Found matching group for user",
+					zap.String("queue path", queuePath),
+					zap.String("matched group", configGroup))
+				return configGroup
 			}
 		}
 	}

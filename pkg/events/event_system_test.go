@@ -99,7 +99,7 @@ func TestGetEvents(t *testing.T) {
 	eventSystem.StartServiceWithPublisher(false)
 	defer eventSystem.Stop()
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		event := &si.EventRecord{
 			Type:        si.EventRecord_REQUEST,
 			ObjectID:    "alloc1",
@@ -275,7 +275,7 @@ func TestAddEventConcurrentStop(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 10000; i++ {
+		for i := range 10000 {
 			eventSystem.AddEvent(&si.EventRecord{
 				Type:    si.EventRecord_REQUEST,
 				Message: strconv.Itoa(i),

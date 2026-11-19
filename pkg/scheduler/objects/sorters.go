@@ -129,8 +129,9 @@ func sortApplications(apps map[string]*Application, sortType policies.SortPolicy
 	return sortedApps
 }
 
-// sortFilteredApplications sorts the applications in the order the policy asks for. Each app is
-// read once into a key, the keys are sorted, so a comparison never locks an app.
+// sortFilteredApplications reads each app once into a key and sorts the keys, so a comparison never
+// locks an app. Each policy also compares submission time and ends on the application ID, so tied
+// applications do not keep the random order of the map they came from.
 func sortFilteredApplications(apps []*Application, sortType policies.SortPolicy, considerPriority bool, globalResource *resources.Resource) []*Application {
 	fair := sortType == policies.FairSortPolicy
 	keys := make([]appSortKey, 0, len(apps))
@@ -155,38 +156,56 @@ func sortFilteredApplications(apps []*Application, sortType policies.SortPolicy,
 }
 
 func sortApplicationsByFairnessAndPriority(keys []appSortKey) {
-	slices.SortStableFunc(keys, func(l, r appSortKey) int {
+	slices.SortFunc(keys, func(l, r appSortKey) int {
 		if comp := resources.CompareShares(l.shares, r.shares); comp != 0 {
 			return comp
 		}
-		return cmp.Compare(r.priority, l.priority)
+		if comp := cmp.Compare(r.priority, l.priority); comp != 0 {
+			return comp
+		}
+		if comp := l.submissionTime.Compare(r.submissionTime); comp != 0 {
+			return comp
+		}
+		return cmp.Compare(l.app.ApplicationID, r.app.ApplicationID)
 	})
 }
 
 func sortApplicationsByPriorityAndFairness(keys []appSortKey) {
-	slices.SortStableFunc(keys, func(l, r appSortKey) int {
+	slices.SortFunc(keys, func(l, r appSortKey) int {
 		if comp := cmp.Compare(r.priority, l.priority); comp != 0 {
 			return comp
 		}
-		return resources.CompareShares(l.shares, r.shares)
+		if comp := resources.CompareShares(l.shares, r.shares); comp != 0 {
+			return comp
+		}
+		if comp := l.submissionTime.Compare(r.submissionTime); comp != 0 {
+			return comp
+		}
+		return cmp.Compare(l.app.ApplicationID, r.app.ApplicationID)
 	})
 }
 
 func sortApplicationsBySubmissionTimeAndPriority(keys []appSortKey) {
-	slices.SortStableFunc(keys, func(l, r appSortKey) int {
+	slices.SortFunc(keys, func(l, r appSortKey) int {
 		if comp := l.submissionTime.Compare(r.submissionTime); comp != 0 {
 			return comp
 		}
-		return cmp.Compare(r.priority, l.priority)
+		if comp := cmp.Compare(r.priority, l.priority); comp != 0 {
+			return comp
+		}
+		return cmp.Compare(l.app.ApplicationID, r.app.ApplicationID)
 	})
 }
 
 func sortApplicationsByPriorityAndSubmissionTime(keys []appSortKey) {
-	slices.SortStableFunc(keys, func(l, r appSortKey) int {
+	slices.SortFunc(keys, func(l, r appSortKey) int {
 		if comp := cmp.Compare(r.priority, l.priority); comp != 0 {
 			return comp
 		}
-		return l.submissionTime.Compare(r.submissionTime)
+		if comp := l.submissionTime.Compare(r.submissionTime); comp != 0 {
+			return comp
+		}
+		return cmp.Compare(l.app.ApplicationID, r.app.ApplicationID)
 	})
 }
 

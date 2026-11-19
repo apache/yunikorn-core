@@ -2583,6 +2583,22 @@ func (sa *Application) GetAskMaxPriority() int32 {
 	return sa.askMaxPriority
 }
 
+// sortKey returns the values the application sort compares, read under one lock so they do not
+// change between comparisons. Shares are only built for the policies that use them.
+func (sa *Application) sortKey(total *resources.Resource, withShares bool) appSortKey {
+	sa.RLock()
+	defer sa.RUnlock()
+	key := appSortKey{
+		app:            sa,
+		priority:       sa.askMaxPriority,
+		submissionTime: sa.submissionTime,
+	}
+	if withShares {
+		key.shares = resources.GetShares(sa.allocatedResource, total)
+	}
+	return key
+}
+
 func (sa *Application) cleanupAsks() {
 	sa.requests = make(map[string]*Allocation)
 	sa.sortedRequests = nil

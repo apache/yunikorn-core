@@ -194,7 +194,7 @@ func filterOnPendingResources(apps map[string]*Application) []*Application {
 	filteredApps := make([]*Application, 0)
 	for _, app := range apps {
 		// Only look at app when pending-res > 0
-		if resources.StrictlyGreaterThanZero(app.GetPendingResource()) {
+		if app.HasPendingResource() {
 			filteredApps = append(filteredApps, app)
 		}
 	}

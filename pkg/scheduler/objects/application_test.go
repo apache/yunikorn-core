@@ -54,6 +54,12 @@ var (
 	}
 )
 
+// setTestPending replaces the application's pending resource: the Tracker has no setter
+func setTestPending(app *Application, res *resources.Resource) {
+	app.pending.Reset()
+	app.pending.Add(res)
+}
+
 func setupUGM() {
 	userManager := ugm.GetUserManager()
 	userManager.ClearUserTrackers()

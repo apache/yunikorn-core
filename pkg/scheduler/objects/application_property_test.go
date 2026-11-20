@@ -98,9 +98,13 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 	rng := rand.New(rand.NewSource(seed)) //nolint:gosec // deterministic PRNG is the point: reproducible fuzzing
 	appID := fmt.Sprintf("fuzz-app-%d", seed)
 	app := newApplication(appID, "default", "root.default")
-	queue, err := createRootQueue(nil)
+	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "queue create failed")
-	app.queue = queue
+	leaf, err := createManagedQueue(root, "default", false, nil)
+	assert.NilError(t, err, "leaf queue create failed")
+	// AddApplication does not set the queue on the application, the partition does that
+	app.queue = leaf
+	leaf.AddApplication(app)
 
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
 	// nextCreationTime hands out a strictly increasing, deterministic "creationTime" SI allocation
@@ -273,7 +277,24 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 					}
 				}
 			default:
-				// no-op filler so cases 5's sub-branches don't dominate step count; still asserted.
+				// UpdateAllocationResources on the lowest pending key, picked without an rng draw to keep the step stream.
+				lowest := ""
+				for k := range pendingKeys {
+					if lowest == "" || k < lowest {
+						lowest = k
+					}
+				}
+				if lowest != "" {
+					existing := app.GetAllocationAsk(lowest)
+					assert.Assert(t, existing != nil, "seed=%d step=%d: pending key %s missing from sa.requests", seed, i, lowest)
+					// toggle between two non-zero sizes so the delta is never zero
+					size := resources.Quantity(2)
+					if existing.GetAllocatedResource().Resources["first"] == 2 {
+						size = 1
+					}
+					updated := newFuzzAsk(lowest, appID, existing.GetTaskGroup(), resources.NewResourceFromMap(map[string]resources.Quantity{"first": size}), existing.IsPlaceholder(), keyPriority[lowest], "", nextCreationTime)
+					assert.NilError(t, app.UpdateAllocationResources(updated, false), "seed=%d step=%d: resource update of %s failed", seed, i, lowest)
+				}
 			}
 
 		case 6: // AddAllocation - confirm an allocated ask so it lands in sa.allocations
@@ -399,7 +420,7 @@ func runPropertyFuzz(t *testing.T, seed int64) int { //nolint:funlen
 			}
 		}
 
-		distinctPriorities := assertFuzzInvariants(t, app, keyPriority, pendingKeys, seed, i)
+		distinctPriorities := assertFuzzInvariants(t, app, leaf, keyPriority, pendingKeys, seed, i)
 
 		if len(pendingKeys) > maxPending {
 			maxPending = len(pendingKeys)
@@ -528,8 +549,18 @@ func snapshotAddState(app *Application, taskGroup string) (*resources.Resource, 
 // in the message so the failure is reproducible via `go test -run .../seed-<seed>`.
 // It returns the number of distinct pending priorities observed this step, so the caller can track
 // coverage high-water marks without a second pass over pendingKeys.
-func assertFuzzInvariants(t *testing.T, app *Application, keyPriority map[string]int32, pendingKeys map[string]bool, seed int64, step int) int {
+// pendingApps membership is held to equality: one goroutine, and the application never leaves the leaf.
+func assertFuzzInvariants(t *testing.T, app *Application, leaf *Queue, keyPriority map[string]int32, pendingKeys map[string]bool, seed int64, step int) int {
 	t.Helper()
+
+	pending := app.GetPendingResource()
+	leaf.RLock()
+	member, inSet := leaf.pendingApps[app.ApplicationID]
+	leaf.RUnlock()
+	assert.Equal(t, inSet, resources.StrictlyGreaterThanZero(pending), "seed=%d step=%d: pendingApps membership mismatch for pending %s", seed, step, pending)
+	if inSet {
+		assert.Assert(t, member == app, "seed=%d step=%d: pendingApps holds a different application object", seed, step)
+	}
 
 	wantHistogram := make(map[int32]int)
 	wantMax := configs.MinPriority

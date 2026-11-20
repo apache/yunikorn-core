@@ -438,6 +438,7 @@ func TestAddAllocAsk(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	app.disableStateChangeEvents()
 	app.resetAppEvents()
 	if app == nil || app.ApplicationID != appID1 {
@@ -489,7 +490,6 @@ func TestAddAllocAsk(t *testing.T) {
 	assert.Equal(t, aKey, record.ReferenceID, "incorrect reference ID, expected placeholder alloc ID")
 	assert.Equal(t, si.EventRecord_ADD, record.EventChangeType, "incorrect change type, expected add")
 	assert.Equal(t, si.EventRecord_APP_REQUEST, record.EventChangeDetail, "incorrect change detail, expected app request")
-	eventSystem.StopAndCleanConfigMapCallback()
 
 	// a second ask adds to the pending total
 	ask = newAllocationAsk(aKey2, appID1, res)

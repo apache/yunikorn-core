@@ -4792,6 +4792,7 @@ func TestNewQueueEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.StopAndCleanConfigMapCallback()
 
 	partition, err := newBasePartition()
 	assert.NilError(t, err)
@@ -6034,6 +6035,7 @@ func TestRemoveAllocationPlaceholderReplacedWithoutReplacement(t *testing.T) {
 
 func TestPartitionStates(t *testing.T) {
 	p := createPartitionContext(t)
+	defer p.userGroupCache.Stop()
 	err := p.handlePartitionEvent(objects.Stop)
 	if err != nil || !p.isStopped() {
 		t.Errorf("partition is not marked stopped: %v", err)

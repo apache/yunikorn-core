@@ -281,6 +281,13 @@ func (ec *EventSystemImpl) restart() {
 	ec.StartServiceWithPublisher(true)
 }
 
+// StopAndCleanConfigMapCallback stops the event system and removes its config callback.
+// VisibleForTesting
+func (ec *EventSystemImpl) StopAndCleanConfigMapCallback() {
+	configs.RemoveConfigMapCallback(ec.eventSystemId)
+	ec.Stop()
+}
+
 // CloseAllStreams closes all existing streams.
 // VisibleForTesting
 func (ec *EventSystemImpl) CloseAllStreams() {

@@ -401,11 +401,12 @@ func TestResolveRevivedQueueLimitsFromTags(t *testing.T) {
 				existing.SetResources(nil, ownMax)
 				existing.SetMaxRunningApps(1)
 			}
-			
 			assert.Assert(t, partition.resolveRevivedQueue(app), "queue should be resolved")
-			assert.Assert(t, resources.Equals(partition.GetQueue(tt.queuePath).GetGuaranteedResource(), tt.wantGuaranteed), "unexpected guaranteed resource")
-			assert.Assert(t, resources.Equals(partition.GetQueue(tt.queuePath).GetMaxResource(), tt.wantMax), "unexpected max resource")
-			assert.Equal(t, partition.GetQueue(tt.queuePath).GetMaxApps(), tt.wantMaxApps, "unexpected max apps")
+			queue := partition.GetQueue(tt.queuePath)
+			assert.Assert(t, queue != nil, "queue should be resolved")
+			assert.Assert(t, resources.Equals(queue.GetGuaranteedResource(), tt.wantGuaranteed), "unexpected guaranteed resource")
+			assert.Assert(t, resources.Equals(queue.GetMaxResource(), tt.wantMax), "unexpected max resource")
+			assert.Equal(t, queue.GetMaxApps(), tt.wantMaxApps, "unexpected max apps")
 		})
 	}
 }
@@ -462,10 +463,7 @@ func TestReviveCompletedApplicationQueueGoneReturnsToCompleted(t *testing.T) {
 	assert.NilError(t, err, "failed to wait for completion of application")
 	assert.Assert(t, partition.reviveCompletedApplication(appID1) == nil, "revival must fail when the queue cannot be restored")
 	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
-		if len(partition.GetCompletedApplications()) == 1 {
-			return true
-		}
-		return false
+		return len(partition.GetCompletedApplications()) == 1
 	})
 	assert.NilError(t, err, "failed to wait for completion of application")
 	assert.Assert(t, partition.getApplication(appID1) == nil, "app must not stay on the active list")

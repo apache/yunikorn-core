@@ -1915,7 +1915,7 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	// decide to complete in a single step under the application lock so it cannot race the revival.
 	queue, ok := app.DetachQueueForCompletion()
 	if !ok {
-		log.Log(log.SchedPartition).Info("Application was revived before cleanup, not removing it",
+		log.Log(log.SchedPartition).Info("Application is already under regular completion or revival process, not removing it",
 			zap.String("appID", appID),
 			zap.String("app status", app.CurrentState()))
 		return

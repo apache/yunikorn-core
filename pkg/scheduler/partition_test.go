@@ -3014,6 +3014,36 @@ func TestCompleteApp(t *testing.T) {
 	assert.Equal(t, 1, len(partition.GetCompletedApplications()), "the partition should have 1 completed app")
 }
 
+// The app to queue mapping is only kept for active applications: completing or failing removes it.
+func TestTerminatedAppRemovesQueueMapping(t *testing.T) {
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+	completed := newApplication("completed", "default", defQueue)
+	failed := newApplication("failed", "default", defQueue)
+	for _, app := range []*objects.Application{completed, failed} {
+		err = partition.AddApplication(app)
+		assert.NilError(t, err, "no error expected while adding the application")
+		assert.Equal(t, app.GetQueue(), partition.appQueueMapping.GetQueueByAppId(app.ApplicationID), "mapping not set for %s", app.ApplicationID)
+	}
+
+	completed.SetState(objects.Completing.String())
+	err = completeApplicationAndWait(completed, partition)
+	assert.NilError(t, err, "the completed application should have been processed")
+	currentCount := len(partition.GetCompletedApplications())
+	failed.SetState(objects.Failing.String())
+	err = failed.HandleApplicationEvent(objects.FailApplication)
+	assert.NilError(t, err, "no error expected while failing the application")
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
+		return len(partition.GetCompletedApplications()) == currentCount+1
+	})
+	assert.NilError(t, err, "the failed application should have been processed")
+
+	for _, app := range []*objects.Application{completed, failed} {
+		assert.Assert(t, partition.appQueueMapping.GetQueueByAppId(app.ApplicationID) == nil, "mapping left for %s", app.ApplicationID)
+	}
+}
+
 func TestCleanupFailedApps(t *testing.T) {
 	partition, err := newBasePartition()
 	assert.NilError(t, err, "partition create failed")
@@ -3033,6 +3063,8 @@ func TestCleanupFailedApps(t *testing.T) {
 	partition.cleanupExpiredApps()
 	assert.Equal(t, 1, len(partition.GetApplications()), "the partition should have 1 app")
 	assert.Equal(t, 0, len(partition.getAppsByState(objects.Expired.String())), "the partition should have 0 expired apps")
+	assert.Assert(t, partition.appQueueMapping.GetQueueByAppId("newApp1") == nil, "expired app should have lost its queue mapping")
+	assert.Assert(t, partition.appQueueMapping.GetQueueByAppId("newApp2") != nil, "active app should keep its queue mapping")
 }
 
 func TestCleanupCompletedApps(t *testing.T) {

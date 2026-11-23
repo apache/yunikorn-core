@@ -208,6 +208,7 @@ func TestMoveTerminatedAppSkipsAppRevivedMidFlight(t *testing.T) {
 	assert.Assert(t, partition.getApplication(appID1) == app, "revived app must stay on the active list")
 	assert.Assert(t, app.GetQueue() != nil, "revived app must keep its queue")
 	assert.Equal(t, len(partition.GetCompletedApplications()), 0, "revived app must not be filed as completed")
+	assert.Equal(t, partition.appQueueMapping.GetQueueByAppId(appID1), queue, "revived app must keep its queue mapping")
 }
 
 // The cleanup can win the race and file the app as completed before the revival restores its queue.
@@ -225,12 +226,14 @@ func TestRestoreAppQueueReclaimsCompletedApp(t *testing.T) {
 	assert.Assert(t, partition.getApplication(appID1) == nil, "app should be off the active list")
 	assert.Assert(t, app.GetQueue() == nil, "app should have lost its queue")
 	assert.Equal(t, len(partition.GetCompletedApplications()), 1)
+	assert.Assert(t, partition.appQueueMapping.GetQueueByAppId(appID1) == nil, "completed app should have lost its queue mapping")
 
 	// the revival that still holds the app pointer now restores its queue
 	assert.Assert(t, partition.restoreAppQueue(app), "queue should be restored")
 
 	assert.Assert(t, partition.getApplication(appID1) == app, "app must be back on the active list")
 	assert.Assert(t, app.GetQueue() != nil, "queue must be re-attached")
+	assert.Equal(t, partition.appQueueMapping.GetQueueByAppId(appID1), app.GetQueue(), "queue mapping must be restored")
 	assert.Assert(t, app.IsRevived(), "revived flag should be set")
 	assert.Equal(t, len(partition.GetCompletedApplications()), 0, "the completed generation must be dropped")
 }

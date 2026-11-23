@@ -281,6 +281,8 @@ func verifyNodeAddedAndQueueMaxSetEvents(t *testing.T, events []*si.EventRecord)
 	assert.Equal(t, "", events[1].ReferenceID)
 	assert.Equal(t, si.EventRecord_SET, events[1].EventChangeType)
 	assert.Equal(t, si.EventRecord_QUEUE_MAX, events[1].EventChangeDetail)
+	assert.Equal(t, int64(100000000), events[1].Resource.GetResources()["memory"].GetValue())
+	assert.Equal(t, int64(20000), events[1].Resource.GetResources()["vcore"].GetValue())
 
 	assert.Equal(t, "node-1:1234", events[2].ObjectID)
 	assert.Equal(t, "Node added to the scheduler, instanceType: "+objects.UnknownInstanceType, events[2].Message)

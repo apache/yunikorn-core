@@ -1666,7 +1666,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", max))
 		if !resources.Equals(sq.maxResource, max) && sq.queueEvents != nil {
-			sq.queueEvents.SendMaxResourceChangedEvent(sq.QueuePath, sq.maxResource)
+			sq.queueEvents.SendMaxResourceChangedEvent(sq.QueuePath, max)
 		}
 		sq.maxResource = max.Clone()
 		sq.updateMaxResourceMetrics()
@@ -1676,7 +1676,7 @@ func (sq *Queue) SetMaxResource(max *resources.Resource) {
 			zap.Stringer("current", sq.maxResource),
 			zap.Stringer("new", max))
 		if sq.queueEvents != nil {
-			sq.queueEvents.SendMaxResourceChangedEvent(sq.QueuePath, sq.maxResource)
+			sq.queueEvents.SendMaxResourceChangedEvent(sq.QueuePath, max)
 		}
 		sq.maxResource = nil
 		sq.updateMaxResourceMetrics()

@@ -484,6 +484,43 @@ func TestAppStateTransitionMetrics(t *testing.T) { //nolint:funlen
 	assertTotalAppsNewMetrics(t, 4)
 }
 
+func TestRevivingStateTransition(t *testing.T) {
+	appInfo := newApplication("app-00001", "default", "root.a")
+	assert.Equal(t, appInfo.CurrentState(), New.String())
+
+	// new to reviving
+	err := appInfo.EnsureAppRevivable()
+	assert.Assert(t, !err, "event reviveApplication inappropriate in current state New")
+
+	// new to accepted
+	err = appInfo.EnsureAppRunnable()
+	assert.Assert(t, err, "App should be accepted in current state Accepted")
+
+	// accepted to reviving
+	err = appInfo.EnsureAppRevivable()
+	assert.Assert(t, !err, "App should be accepted in current state Accepted")
+
+	// accepted to running
+	err = appInfo.EnsureAppRunnable()
+	assert.Assert(t, err, "App should be accepted in current state Running")
+
+	// running to reviving
+	err = appInfo.EnsureAppRevivable()
+	assert.Assert(t, err, "App should be accepted in current state Running")
+
+	// reviving to completed
+	err = appInfo.EnsureAppCompleted()
+	assert.Assert(t, err, "App should be accepted in current state Completed")
+
+	// completed to reviving
+	err = appInfo.EnsureAppRevivable()
+	assert.Assert(t, err, "App should be accepted in current state Reviving")
+
+	// reviving to running
+	err = appInfo.EnsureAppRunnable()
+	assert.Assert(t, err, "App should be accepted in current state Running")
+}
+
 func assertState(t testing.TB, app *Application, err error, expected string) {
 	t.Helper()
 	assert.NilError(t, err, fmt.Sprintf("no error expected when change state to %v", expected))

@@ -673,6 +673,49 @@ func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 	return nil
 }
 
+// getTemplate returns the child template of the queue. Lock protected.
+func (sq *Queue) getTemplate() *template.Template {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.template
+}
+
+// InheritTemplate re-applies the child template inheritance after ApplyConf during config reload,
+// mirroring addChildQueue: a parent queue without a child template in its config uses the template of its parent.
+// Dynamic parent queues below this queue are not updated by a config reload and always use the template of their
+// parent: they are updated with the new template. Existing dynamic leaf queues keep the values the template gave
+// them when they were created. Lock protected.
+func (sq *Queue) InheritTemplate() {
+	var parentTemplate *template.Template
+	if sq.parent != nil {
+		// get the parent template outside of the lock to avoid potential deadlocks with parent queue lock
+		parentTemplate = sq.parent.getTemplate()
+	}
+	sq.Lock()
+	if !sq.isLeaf && sq.template == nil {
+		sq.template = parentTemplate
+	}
+	t := sq.template
+	sq.Unlock()
+	sq.setDynamicChildTemplates(t)
+}
+
+// setDynamicChildTemplates sets the child template on the dynamic parent queues below this queue.
+// Lock protected, recursive.
+func (sq *Queue) setDynamicChildTemplates(t *template.Template) {
+	for _, child := range sq.GetCopyOfChildren() {
+		child.Lock()
+		dynamicParent := !child.isManaged && !child.isLeaf
+		if dynamicParent {
+			child.template = t
+		}
+		child.Unlock()
+		if dynamicParent {
+			child.setDynamicChildTemplates(t)
+		}
+	}
+}
+
 // resetProperties resets values derived from queue properties to their defaults.
 // This function MUST be called holding the lock for the queue.
 func (sq *Queue) resetProperties() {

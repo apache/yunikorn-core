@@ -1533,6 +1533,99 @@ func TestUpdateQueuesInheritedProperties(t *testing.T) {
 		"leaf should inherit updated property from parent on config reload")
 }
 
+// TestUpdateQueuesInheritedTemplate verifies that a parent queue without a child template keeps inheriting
+// the child template of its parent on config reload, and that a dynamic parent queue follows the change.
+func TestUpdateQueuesInheritedTemplate(t *testing.T) {
+	maxTemplate := func(maxVcore string, maxApps uint64) configs.ChildTemplate {
+		return configs.ChildTemplate{
+			MaxApplications: maxApps,
+			Resources:       configs.Resources{Max: map[string]string{"vcore": maxVcore}},
+		}
+	}
+	partitionConf := func(rootTemplate, parentTemplate configs.ChildTemplate) configs.PartitionConfig {
+		return configs.PartitionConfig{
+			Name: "test",
+			Queues: []configs.QueueConfig{
+				{
+					Name:          "root",
+					Parent:        true,
+					SubmitACL:     "*",
+					ChildTemplate: rootTemplate,
+					Queues: []configs.QueueConfig{
+						{
+							Name:          "parent",
+							Parent:        true,
+							ChildTemplate: parentTemplate,
+							Queues: []configs.QueueConfig{
+								{
+									Name:   "nested",
+									Parent: true,
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+	}
+	// creates a dynamic leaf queue and checks the limits it got from the template, no max vcore means no template
+	assertLeafLimits := func(t *testing.T, partition *PartitionContext, name string, maxVcore string, maxApps uint64) {
+		t.Helper()
+		leaf, err := partition.createQueue(name, security.UserGroup{})
+		assert.NilError(t, err, "dynamic queue create failed: %s", name)
+		var expected *resources.Resource
+		if maxVcore != "" {
+			expected, err = resources.NewResourceFromConf(map[string]string{"vcore": maxVcore})
+			assert.NilError(t, err, "resource from conf failed")
+		}
+		assert.Assert(t, resources.Equals(leaf.GetMaxResource(), expected), "unexpected max resource on %s: %s", name, leaf.GetMaxResource())
+		assert.Equal(t, leaf.GetMaxApps(), maxApps, "unexpected max applications on %s", name)
+	}
+
+	partition, err := newBasePartition()
+	assert.NilError(t, err, "partition create failed")
+	defer partition.userGroupCache.Stop()
+
+	// root.parent and root.parent.nested are created without a template: they inherit the template from root
+	err = partition.updatePartitionDetails(partitionConf(maxTemplate("10", 2), configs.ChildTemplate{}))
+	assert.NilError(t, err, "initial config update failed")
+	assertLeafLimits(t, partition, "root.parent.a", "10", 2)
+	assertLeafLimits(t, partition, "root.parent.nested.a", "10", 2)
+	assertLeafLimits(t, partition, "root.parent.dynamic.a", "10", 2)
+	assertLeafLimits(t, partition, "root.dynamic.a", "10", 2)
+
+	// reload with a lower max in the root template: all parent queues below root must use it
+	err = partition.updatePartitionDetails(partitionConf(maxTemplate("5", 2), configs.ChildTemplate{}))
+	assert.NilError(t, err, "config reload failed")
+	assertLeafLimits(t, partition, "root.parent.b", "5", 2)
+	assertLeafLimits(t, partition, "root.parent.nested.b", "5", 2)
+	assertLeafLimits(t, partition, "root.parent.dynamic.b", "5", 2)
+	assertLeafLimits(t, partition, "root.dynamic.b", "5", 2)
+
+	// reload with a template on root.parent: the parent queues below it must use that template
+	err = partition.updatePartitionDetails(partitionConf(maxTemplate("5", 2), maxTemplate("3", 1)))
+	assert.NilError(t, err, "config reload with a parent template failed")
+	assertLeafLimits(t, partition, "root.parent.c", "3", 1)
+	assertLeafLimits(t, partition, "root.parent.nested.c", "3", 1)
+	assertLeafLimits(t, partition, "root.parent.dynamic.c", "3", 1)
+	assertLeafLimits(t, partition, "root.dynamic.c", "5", 2)
+
+	// reload without the template on root.parent: it inherits the template from root again
+	err = partition.updatePartitionDetails(partitionConf(maxTemplate("5", 2), configs.ChildTemplate{}))
+	assert.NilError(t, err, "config reload removing the parent template failed")
+	assertLeafLimits(t, partition, "root.parent.d", "5", 2)
+	assertLeafLimits(t, partition, "root.parent.nested.d", "5", 2)
+	assertLeafLimits(t, partition, "root.parent.dynamic.d", "5", 2)
+
+	// reload without any template: no parent queue has a template left
+	err = partition.updatePartitionDetails(partitionConf(configs.ChildTemplate{}, configs.ChildTemplate{}))
+	assert.NilError(t, err, "config reload removing all templates failed")
+	assertLeafLimits(t, partition, "root.parent.e", "", 0)
+	assertLeafLimits(t, partition, "root.parent.nested.e", "", 0)
+	assertLeafLimits(t, partition, "root.parent.dynamic.e", "", 0)
+	assertLeafLimits(t, partition, "root.dynamic.e", "", 0)
+}
+
 func TestReAddQueues(t *testing.T) {
 	conf := []configs.QueueConfig{
 		{

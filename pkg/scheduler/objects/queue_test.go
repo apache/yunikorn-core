@@ -2021,7 +2021,7 @@ func TestMaxResourceEvent(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create basic root queue")
 	small, err := resources.NewResourceFromConf(map[string]string{"first": "10"})

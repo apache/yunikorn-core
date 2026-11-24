@@ -513,7 +513,8 @@ func (pc *PartitionContext) getOrReviveApplication(appID string) *objects.Applic
 		// moveTerminatedApp unsets the queue before it takes the partition lock, so an app can be
 		// visible here with no queue attached
 		if app.GetQueue() == nil {
-			if app.IsFailing() || app.IsFailed() || app.IsRejected() || app.IsExpired() {
+			// a failed app is being cleaned up and must not be revived
+			if app.IsFailed() {
 				return nil
 			}
 			if !pc.restoreAppQueue(app) {
@@ -545,9 +546,10 @@ func (pc *PartitionContext) reviveCompletedApplication(appID string) *objects.Ap
 	return app
 }
 
-// takeCompletedApplication selects the latest non-expired generation of appID and restores it to the
-// active list unless its state rejects new work. An ineligible generation is left alone without
-// falling back to an older Completed generation.
+// takeCompletedApplication removes the latest completed generation of appID from the completed list
+// and returns it. Expired applications are past the point of no return and are left alone. A failed
+// latest generation is not revived: it is checked after selection, so it cannot be skipped in favour
+// of an older generation.
 func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Application {
 	pc.Lock()
 	defer pc.Unlock()
@@ -572,7 +574,7 @@ func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Appl
 		return nil
 	}
 	app := pc.completedApplications[latestKey]
-	if app.IsFailing() || app.IsFailed() || app.IsRejected() || app.IsExpired() {
+	if app.IsFailed() {
 		return nil
 	}
 	delete(pc.completedApplications, latestKey)

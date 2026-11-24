@@ -374,49 +374,62 @@ func TestIsVictimQueueOverGuaranteed(t *testing.T) {
 
 func TestSortVictimsForPreemption(t *testing.T) {
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
-	regularPod := createAllocation("regularPod", "app1", nodeID1, true, false, 10, false, res)
-	originatorPod := createAllocation("originatorPod", "app1", nodeID1, true, true, 10, false, res)
-	optedOutPod := createAllocation("optedOutPod", "app1", nodeID1, false, false, 10, false, res)
-	optedOutOriginatorPod := createAllocation("optedOutOriginatorPod", "app1", nodeID1, false, true, 10, false, res)
-
-	allocationsByNode := map[string][]*Allocation{
-		nodeID1: {optedOutPod, originatorPod, regularPod, optedOutOriginatorPod},
-	}
-	sortVictimsForPreemption(allocationsByNode)
-
-	allocations := allocationsByNode[nodeID1]
-	assert.Equal(t, allocations[0].GetAllocationKey(), "regularPod")
-	assert.Equal(t, allocations[1].GetAllocationKey(), "optedOutPod")
-	assert.Equal(t, allocations[2].GetAllocationKey(), "originatorPod")
-	assert.Equal(t, allocations[3].GetAllocationKey(), "optedOutOriginatorPod")
-}
-
-func TestSortVictimsForPreemptionTieBreak(t *testing.T) {
-	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
 	createTime := time.Unix(1700000000, 0)
-	allocA := createAllocation("alloc-a", "app1", nodeID1, true, false, 10, false, res)
-	allocA.createTime = createTime
-	allocB := createAllocation("alloc-b", "app1", nodeID1, true, false, 10, false, res)
-	allocB.createTime = createTime
-	allocC := createAllocation("alloc-c", "app1", nodeID1, true, false, 10, false, res)
-	allocC.createTime = createTime
-	allocZ := createAllocation("alloc-z", "app1", nodeID1, true, false, 10, false, res)
-	allocZ.createTime = createTime.Add(time.Second)
+	newVictim := func(key string, allowPreemptSelf, originator bool, created time.Time) *Allocation {
+		victim := createAllocation(key, "app1", nodeID1, allowPreemptSelf, originator, 10, false, res)
+		victim.createTime = created
+		return victim
+	}
+	tests := []struct {
+		name     string
+		input    []*Allocation
+		expected []string
+	}{
+		{
+			name: "originator and allow-preempt-self ordering",
+			input: []*Allocation{
+				newVictim("optedOutPod", false, false, createTime),
+				newVictim("originatorPod", true, true, createTime),
+				newVictim("regularPod", true, false, createTime),
+				newVictim("optedOutOriginatorPod", false, true, createTime),
+			},
+			expected: []string{"regularPod", "optedOutPod", "originatorPod", "optedOutOriginatorPod"},
+		},
+		{
+			name: "creation time before allocation key",
+			input: []*Allocation{
+				newVictim("alloc-c", true, false, createTime),
+				newVictim("alloc-z", true, false, createTime.Add(time.Second)),
+				newVictim("alloc-a", true, false, createTime),
+				newVictim("alloc-b", true, false, createTime),
+			},
+			expected: []string{"alloc-z", "alloc-a", "alloc-b", "alloc-c"},
+		},
+		{
+			name: "same ordering with different input order",
+			input: []*Allocation{
+				newVictim("alloc-b", true, false, createTime),
+				newVictim("alloc-c", true, false, createTime),
+				newVictim("alloc-a", true, false, createTime),
+				newVictim("alloc-z", true, false, createTime.Add(time.Second)),
+			},
+			expected: []string{"alloc-z", "alloc-a", "alloc-b", "alloc-c"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			allocationsByNode := map[string][]*Allocation{
+				nodeID1: tt.input,
+			}
+			sortVictimsForPreemption(allocationsByNode)
 
-	for _, input := range [][]*Allocation{
-		{allocC, allocZ, allocA, allocB},
-		{allocB, allocC, allocA, allocZ},
-	} {
-		allocationsByNode := map[string][]*Allocation{
-			nodeID1: input,
-		}
-		sortVictimsForPreemption(allocationsByNode)
-
-		allocations := allocationsByNode[nodeID1]
-		assert.Equal(t, allocations[0].GetAllocationKey(), "alloc-z")
-		assert.Equal(t, allocations[1].GetAllocationKey(), "alloc-a")
-		assert.Equal(t, allocations[2].GetAllocationKey(), "alloc-b")
-		assert.Equal(t, allocations[3].GetAllocationKey(), "alloc-c")
+			allocations := allocationsByNode[nodeID1]
+			keys := make([]string, len(allocations))
+			for i, allocation := range allocations {
+				keys[i] = allocation.GetAllocationKey()
+			}
+			assert.DeepEqual(t, keys, tt.expected)
+		})
 	}
 }
 

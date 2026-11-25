@@ -507,11 +507,10 @@ func (pc *PartitionContext) getRejectedApplication(appID string) *objects.Applic
 // getOrReviveApplication returns the application to add work to, bringing it back from the completed
 // list if the shim sent work for it after the core had already finished it. Returns nil when no
 // revivable application exists.
-// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) getOrReviveApplication(appID string) *objects.Application {
-	if app := pc.getApplication(appID); app != nil {
-		// moveTerminatedApp unsets the queue before it takes the partition lock, so an app can be
-		// visible here with no queue attached
+	pc.Lock()
+	defer pc.Unlock()
+	if app := pc.applications[appID]; app != nil {
 		if app.GetQueue() == nil {
 			if !app.EnsureAppRevivable() {
 				return nil
@@ -531,7 +530,6 @@ func (pc *PartitionContext) getOrReviveApplication(appID string) *objects.Applic
 
 // reviveCompletedApplication moves the most recently completed generation of appID back into the
 // active application list and re-attaches its queue.
-// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) reviveCompletedApplication(appID string) *objects.Application {
 	app := pc.takeCompletedApplication(appID)
 	if app == nil {
@@ -559,8 +557,6 @@ func (pc *PartitionContext) reviveCompletedApplication(appID string) *objects.Ap
 // takeCompletedApplication removes the latest completed generation of appID from the completed list
 // and returns it. Expired applications are past the point of no return and are left alone.
 func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Application {
-	pc.Lock()
-	defer pc.Unlock()
 	// completed apps are re-keyed as appID + a negative unix timestamp, so the smallest suffix is
 	// the most recent generation. Compare keys to avoid taking an application lock under this one.
 	var latestKey string
@@ -592,11 +588,8 @@ func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Appl
 // All of this happens under the lock: the queue can be empty, so the cleaner could otherwise remove it before
 // the application is added. A recreated queue gets the limits from the application tags back, an existing
 // queue keeps its limits. Returns nil when no leaf queue can be resolved.
-// NOTE: this call takes the PartitionContext lock. It must NOT be called holding the lock.
 func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) bool {
 	queueName := app.GetQueuePath()
-	pc.Lock()
-	defer pc.Unlock()
 	queue := pc.getQueueInternal(queueName)
 	if queue == nil {
 		var err error

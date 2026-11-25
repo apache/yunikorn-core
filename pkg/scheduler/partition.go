@@ -1303,6 +1303,7 @@ func (pc *PartitionContext) cleanupExpiredApps() {
 	for _, appID := range pc.getAppsByState(objects.Expired.String()) {
 		pc.Lock()
 		delete(pc.applications, appID)
+		pc.appQueueMapping.RemoveAppQueueMapping(appID)
 		pc.Unlock()
 	}
 	for _, appID := range pc.getRejectedAppsByState(objects.Expired.String()) {
@@ -1953,6 +1954,8 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 		return
 	}
 	delete(pc.applications, appID)
+	// only active applications need the mapping, a revival adds it back in resolveRevivedQueue
+	pc.appQueueMapping.RemoveAppQueueMapping(appID)
 	pc.completedApplications[newID] = app
 }
 

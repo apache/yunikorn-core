@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -96,6 +97,7 @@ type Queue struct {
 	unschedAskBackoff        uint64
 	askBackoffDelay          time.Duration
 	reservationMaxTime       time.Duration // maximum time an ask can keep a node reserved
+	lastAllocationTime       time.Time     // creation or last allocation time, orders tied sibling queues
 
 	locking.RWMutex
 }
@@ -122,6 +124,7 @@ func newBlankQueue() *Queue {
 		quotaPreemptionStartTime: time.Time{},
 		askBackoffDelay:          configs.DefaultAskBackOffDelay,
 		reservationMaxTime:       configs.DefaultReservationMaxTime,
+		lastAllocationTime:       time.Now(),
 	}
 }
 
@@ -1004,6 +1007,13 @@ func (sq *Queue) GetPendingResource() *resources.Resource {
 	return sq.pending
 }
 
+// getLastAllocationTime returns when this queue last got an allocation, or its creation time if never.
+func (sq *Queue) getLastAllocationTime() time.Time {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.lastAllocationTime
+}
+
 // incPendingResource increments pending resource of this queue and its parents.
 func (sq *Queue) incPendingResource(delta *resources.Resource) {
 	// update the parent
@@ -1319,6 +1329,10 @@ func (sq *Queue) TryIncAllocatedResource(alloc *resources.Resource) error {
 	// all OK update this queue
 	sq.allocatedResource = resources.Add(sq.allocatedResource, alloc)
 	sq.updateAllocatedResourceMetrics()
+	// the root is never sorted and a negative delta is a placeholder replacement, not an allocation
+	if sq.parent != nil && !alloc.HasNegativeValue() {
+		sq.lastAllocationTime = time.Now()
+	}
 	return nil
 }
 
@@ -1506,9 +1520,11 @@ func (sq *Queue) sortQueues() []*Queue {
 		}
 		// queue must have pending resources to be considered for scheduling
 		if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
-			sortedQueues = append(sortedQueues, queueFairMax{queue: child, fairMax: child.GetFairMaxResource()})
+			sortedQueues = append(sortedQueues, queueFairMax{queue: child, fairMax: child.GetFairMaxResource(), lastAllocation: child.getLastAllocationTime()})
 		}
 	}
+	// give the stable sort a fixed input, longest waiting first
+	slices.SortFunc(sortedQueues, func(l, r queueFairMax) int { return l.lastAllocation.Compare(r.lastAllocation) })
 	// Sort the queues
 	return sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
 }

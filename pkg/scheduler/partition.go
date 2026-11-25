@@ -1931,6 +1931,11 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	app.LogAppSummary(pc.RmID)
 	pc.Lock()
 	defer pc.Unlock()
+	if app.IsReviving() {
+		log.Log(log.SchedPartition).Info("Application revived during cleanup, leaving it on the active list",
+			zap.String("appID", appID))
+		return
+	}
 	delete(pc.applications, appID)
 	// only active applications need the mapping, a revival adds it back in resolveRevivedQueue
 	pc.appQueueMapping.RemoveAppQueueMapping(appID)

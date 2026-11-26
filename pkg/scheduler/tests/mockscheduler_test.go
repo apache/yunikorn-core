@@ -89,6 +89,8 @@ func (m *mockScheduler) Init(config string, autoSchedule bool, withWebapp bool) 
 func (m *mockScheduler) Stop() {
 	if m.serviceContext != nil {
 		m.serviceContext.StopAll()
+		// StopAll already stopped the event system, the callback removal is what matters here
+		events.GetEventSystem().(*events.EventSystemImpl).StopAndCleanConfigMapCallback() //nolint:errcheck
 	}
 }
 

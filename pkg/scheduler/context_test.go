@@ -181,7 +181,7 @@ func TestContext_AddNode(t *testing.T) {
 		events.Init()
 		eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 		eventSystem.StartServiceWithPublisher(false)
-		defer eventSystem.Stop()
+		defer eventSystem.StopAndCleanConfigMapCallback()
 
 		context := createTestContext(t, pName)
 		// stop the context background processes

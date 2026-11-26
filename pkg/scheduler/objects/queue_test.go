@@ -2092,7 +2092,7 @@ func TestMaxResourceEvent(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
-	defer eventSystem.Stop()
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	root, err := createRootQueue(nil)
 	assert.NilError(t, err, "failed to create basic root queue")
 	small, err := resources.NewResourceFromConf(map[string]string{"first": "10"})
@@ -3140,6 +3140,7 @@ func TestNewConfiguredQueue(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	rootConfig := configs.QueueConfig{
 		Name: "root",
 	}
@@ -3549,6 +3550,7 @@ func TestQueueEvents(t *testing.T) {
 	events.Init()
 	eventSystem := events.GetEventSystem().(*events.EventSystemImpl) //nolint:errcheck
 	eventSystem.StartServiceWithPublisher(false)
+	defer eventSystem.StopAndCleanConfigMapCallback()
 	queue, err := createRootQueue(nil)
 	assert.NilError(t, err)
 	queue.Name = "testQueue"

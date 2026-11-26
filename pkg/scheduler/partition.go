@@ -885,6 +885,7 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 				if alloc.GetNodeID() != release.GetNodeID() {
 					// ignore the return as that is the same as alloc, the alloc is gone after this call
 					_ = app.ReplaceAllocation(allocationKey)
+					pc.decReservationCount(app.RemoveAllocationAsk(allocationKey))
 					// we need to check the resources equality
 					delta := resources.Sub(release.GetAllocatedResource(), alloc.GetAllocatedResource())
 					// Any negative value in the delta means that at least one of the requested resource in the
@@ -947,6 +948,8 @@ func (pc *PartitionContext) removeNodeAllocations(node *objects.Node) ([]*object
 				zap.String("nodeID", node.NodeID))
 			continue
 		}
+		// the ask must go with the allocation, the shim adds the allocation back if the pod survives the node removal
+		pc.decReservationCount(app.RemoveAllocationAsk(allocationKey))
 		if err := queue.DecAllocatedResource(alloc.GetAllocatedResource()); err != nil {
 			log.Log(log.SchedPartition).Warn("failed to release resources from queue",
 				zap.String("appID", alloc.GetApplicationID()),

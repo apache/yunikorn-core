@@ -29,15 +29,19 @@ import (
 	"github.com/apache/yunikorn-core/pkg/scheduler/policies"
 )
 
-// queueFairMax ties a queue to the fair max its usage is compared against. The sort moves the
-// queue and its own fair max as one element, an index into a second list does not follow a swap.
-type queueFairMax struct {
+// queueSortKey ties a queue to its sort inputs, all read by sortKey. The sort moves the queue and its
+// own inputs as one element, an index into a second list does not follow a swap.
+type queueSortKey struct {
 	queue          *Queue
 	fairMax        *resources.Resource
+	allocated      *resources.Resource
+	guaranteed     *resources.Resource
+	pending        *resources.Resource
+	priority       int32
 	lastAllocation time.Time // read once for the input order in sortQueues
 }
 
-func sortQueue(queues []queueFairMax, sortType policies.SortPolicy, considerPriority bool) []*Queue {
+func sortQueue(queues []queueSortKey, sortType policies.SortPolicy, considerPriority bool) []*Queue {
 	sortingStart := time.Now()
 	if sortType == policies.FairSortPolicy {
 		if considerPriority {
@@ -58,58 +62,39 @@ func sortQueue(queues []queueFairMax, sortType policies.SortPolicy, considerPrio
 	return sorted
 }
 
-func sortQueuesByPriority(queues []queueFairMax) {
+func sortQueuesByPriority(queues []queueSortKey) {
 	sort.SliceStable(queues, func(i, j int) bool {
-		l := queues[i].queue
-		r := queues[j].queue
-		lPriority := l.GetCurrentPriority()
-		rPriority := r.GetCurrentPriority()
-		return lPriority > rPriority
+		return queues[i].priority > queues[j].priority
 	})
 }
 
-func sortQueuesByPriorityAndFairness(queues []queueFairMax) {
+func sortQueuesByPriorityAndFairness(queues []queueSortKey) {
 	sort.SliceStable(queues, func(i, j int) bool {
-		l := queues[i].queue
-		r := queues[j].queue
-		lPriority := l.GetCurrentPriority()
-		rPriority := r.GetCurrentPriority()
-		if lPriority > rPriority {
-			return true
+		l := queues[i]
+		r := queues[j]
+		if comp := cmp.Compare(r.priority, l.priority); comp != 0 {
+			return comp < 0
 		}
-		if lPriority < rPriority {
-			return false
+		if comp := resources.CompUsageRatioSeparately(l.allocated, l.guaranteed, l.fairMax,
+			r.allocated, r.guaranteed, r.fairMax); comp != 0 {
+			return comp < 0
 		}
-
-		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(), queues[i].fairMax,
-			r.GetAllocatedResource(), r.GetGuaranteedResource(), queues[j].fairMax)
-
-		if comp == 0 {
-			return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
-		}
-		return comp < 0
+		return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
 	})
 }
 
-func sortQueuesByFairnessAndPriority(queues []queueFairMax) {
+func sortQueuesByFairnessAndPriority(queues []queueSortKey) {
 	sort.SliceStable(queues, func(i, j int) bool {
-		l := queues[i].queue
-		r := queues[j].queue
-
-		comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(), queues[i].fairMax,
-			r.GetAllocatedResource(), r.GetGuaranteedResource(), queues[j].fairMax)
-		if comp == 0 {
-			lPriority := l.GetCurrentPriority()
-			rPriority := r.GetCurrentPriority()
-			if lPriority > rPriority {
-				return true
-			}
-			if lPriority < rPriority {
-				return false
-			}
-			return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
+		l := queues[i]
+		r := queues[j]
+		if comp := resources.CompUsageRatioSeparately(l.allocated, l.guaranteed, l.fairMax,
+			r.allocated, r.guaranteed, r.fairMax); comp != 0 {
+			return comp < 0
 		}
-		return comp < 0
+		if comp := cmp.Compare(r.priority, l.priority); comp != 0 {
+			return comp < 0
+		}
+		return resources.StrictlyGreaterThan(resources.Sub(l.pending, r.pending), resources.Zero)
 	})
 }
 

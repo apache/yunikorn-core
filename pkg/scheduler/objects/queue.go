@@ -1004,7 +1004,14 @@ func (sq *Queue) GetPartitionQueueDAOInfo(include bool) dao.PartitionQueueDAOInf
 func (sq *Queue) GetPendingResource() *resources.Resource {
 	sq.RLock()
 	defer sq.RUnlock()
-	return sq.pending
+	return sq.pending.Clone()
+}
+
+// hasPending reports whether this queue has pending resources, without copying them.
+func (sq *Queue) hasPending() bool {
+	sq.RLock()
+	defer sq.RUnlock()
+	return resources.StrictlyGreaterThanZero(sq.pending)
 }
 
 // getLastAllocationTime returns when this queue last got an allocation, or its creation time if never.
@@ -1512,19 +1519,19 @@ func (sq *Queue) sortQueues() []*Queue {
 	}
 	// Create a list of the queues with pending resources
 	children := sq.GetCopyOfChildren()
-	sortedQueues := make([]queueFairMax, 0, len(children))
+	sortedQueues := make([]queueSortKey, 0, len(children))
 	for _, child := range children {
 		// a stopped queue cannot be scheduled
 		if child.IsStopped() {
 			continue
 		}
 		// queue must have pending resources to be considered for scheduling
-		if resources.StrictlyGreaterThanZero(child.GetPendingResource()) {
-			sortedQueues = append(sortedQueues, queueFairMax{queue: child, fairMax: child.GetFairMaxResource(), lastAllocation: child.getLastAllocationTime()})
+		if child.hasPending() {
+			sortedQueues = append(sortedQueues, child.sortKey())
 		}
 	}
 	// give the stable sort a fixed input, longest waiting first
-	slices.SortFunc(sortedQueues, func(l, r queueFairMax) int { return l.lastAllocation.Compare(r.lastAllocation) })
+	slices.SortFunc(sortedQueues, func(l, r queueSortKey) int { return l.lastAllocation.Compare(r.lastAllocation) })
 	// Sort the queues
 	return sortQueue(sortedQueues, sq.getSortType(), sq.IsPrioritySortEnabled())
 }
@@ -1600,18 +1607,18 @@ func (sq *Queue) cloneMaxResource() *resources.Resource {
 	return sq.maxResource.Clone()
 }
 
-// GetFairMaxResource computes the fair max resources for a given queue.
+// getFairMaxResource computes the fair max resources for a given queue.
 // Starting with the root, descend down to the target queue allowing children to override Resource values .
 // If the root includes an explicit 0 value for a Resource, do not include it in the accumulator and treat it as missing.
 // If no children provide a maximum capacity override, the resulting value will be the value found on the Root.
 // It is useful for fair-scheduling to allow a ratio to be produced representing the rough utilization % of a given queue.
-func (sq *Queue) GetFairMaxResource() *resources.Resource {
+func (sq *Queue) getFairMaxResource() *resources.Resource {
 	var limit *resources.Resource
 	if sq.parent == nil {
 		return sq.GetMaxResource().Clone()
 	}
 
-	limit = sq.parent.GetFairMaxResource()
+	limit = sq.parent.getFairMaxResource()
 	return sq.internalGetFairMaxResource(limit)
 }
 
@@ -2341,6 +2348,23 @@ func (sq *Queue) findPreemptionFenceRoot(priorityMap map[string]int64, currentPr
 		return sq
 	}
 	return sq.parent.findPreemptionFenceRoot(priorityMap, currentPriority, askResource)
+}
+
+// sortKey returns the values the queue sort compares, read under one lock so they do not change
+// between comparisons. The fair max is read first: it locks the queue and its parents.
+func (sq *Queue) sortKey() queueSortKey {
+	fairMax := sq.getFairMaxResource()
+	sq.RLock()
+	defer sq.RUnlock()
+	return queueSortKey{
+		queue:          sq,
+		fairMax:        fairMax,
+		priority:       sq.getCurrentPriority(),
+		allocated:      sq.allocatedResource.Clone(),
+		guaranteed:     sq.guaranteedResource.Clone(),
+		pending:        sq.pending.Clone(),
+		lastAllocation: sq.lastAllocationTime,
+	}
 }
 
 func (sq *Queue) GetCurrentPriority() int32 {

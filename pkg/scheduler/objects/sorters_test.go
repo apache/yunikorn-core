@@ -21,6 +21,7 @@ package objects
 import (
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -266,7 +267,6 @@ func inputOrder(queues []queueFairMax, order []int) []queueFairMax {
 func TestSortAppsNoPending(t *testing.T) {
 	var list []*Application
 
-	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
 	input := make(map[string]*Application, 4)
@@ -305,7 +305,6 @@ func TestSortAppsNoPending(t *testing.T) {
 func TestSortAppsFifo(t *testing.T) {
 	var list []*Application
 
-	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
@@ -339,7 +338,6 @@ func TestSortAppsFifo(t *testing.T) {
 func TestSortAppsPriorityFifo(t *testing.T) {
 	var list []*Application
 
-	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
@@ -364,7 +362,6 @@ func TestSortAppsPriorityFifo(t *testing.T) {
 }
 
 func TestSortAppsFair(t *testing.T) {
-	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
@@ -417,7 +414,6 @@ func TestSortAppsFair(t *testing.T) {
 }
 
 func TestSortAppsPriorityFair(t *testing.T) {
-	// stable sort is used so equal values stay where they were
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{
 		"vcore": resources.Quantity(100)})
 	// setup to sort descending: all apps have pending resources
@@ -499,6 +495,57 @@ func TestSortAppsPriorityInputOrder(t *testing.T) {
 	}
 }
 
+// apps tied on every other key come back by submission time then ID, whatever the input order
+func TestSortAppsTieOrder(t *testing.T) {
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{
+		"vcore": resources.Quantity(100)})
+	baseline := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	apps := make([]*Application, 0, 4)
+	for _, appID := range []string{"app-3", "app-1", "app-2", "app-0"} {
+		app := newApplication(appID, "partition", "queue")
+		app.pending = res
+		app.submissionTime = baseline
+		if appID == "app-0" {
+			app.submissionTime = baseline.Add(time.Second)
+		}
+		apps = append(apps, app)
+	}
+	expected := []string{"app-1", "app-2", "app-3", "app-0"}
+
+	var orders [][]*Application
+	var permute func(order, rest []*Application)
+	permute = func(order, rest []*Application) {
+		if len(rest) == 0 {
+			orders = append(orders, order)
+			return
+		}
+		for i := range rest {
+			permute(append(slices.Clone(order), rest[i]), slices.Concat(rest[:i], rest[i+1:]))
+		}
+	}
+	permute(nil, apps)
+	assert.Equal(t, 24, len(orders), "every input order of the four apps")
+
+	tests := []struct {
+		name             string
+		sortType         policies.SortPolicy
+		considerPriority bool
+	}{
+		{"fair", policies.FairSortPolicy, false},
+		{"fair and priority", policies.FairSortPolicy, true},
+		{"fifo", policies.FifoSortPolicy, false},
+		{"fifo and priority", policies.FifoSortPolicy, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			for perm, input := range orders {
+				list := sortFilteredApplications(input, tt.sortType, tt.considerPriority, nil)
+				assertAppListLength(t, list, expected, fmt.Sprintf("%s, permutation %d", tt.name, perm))
+			}
+		})
+	}
+}
+
 func queueNames(list []*Queue) string {
 	result := make([]string, 0)
 	for _, v := range list {
@@ -527,7 +574,6 @@ func assertAppListLength(t *testing.T, list []*Application, apps []string, name 
 func TestSortBySubmissionTime(t *testing.T) {
 	var list []*Application
 
-	// stable sort is used so equal values stay where they were
 	// let all resource have same resource but submissionTime is different
 	res := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(100)})
 	baseline := time.Now()
@@ -668,7 +714,16 @@ func TestSortApplicationsKeyEquivalence(t *testing.T) {
 					input := make([]*Application, len(apps))
 					copy(input, apps)
 					rng.Shuffle(len(input), func(i, j int) { input[i], input[j] = input[j], input[i] })
-					expected := refSortApplications(input, variant.sortType, variant.considerPriority, total.total)
+					// the stable reference over the input pre-sorted by the tie keys is the order the appended keys must produce
+					preSorted := make([]*Application, len(input))
+					copy(preSorted, input)
+					slices.SortFunc(preSorted, func(l, r *Application) int {
+						if comp := l.GetSubmissionTime().Compare(r.GetSubmissionTime()); comp != 0 {
+							return comp
+						}
+						return strings.Compare(l.ApplicationID, r.ApplicationID)
+					})
+					expected := refSortApplications(preSorted, variant.sortType, variant.considerPriority, total.total)
 					sorted := sortFilteredApplications(input, variant.sortType, variant.considerPriority, total.total)
 					assert.Equal(t, strings.Join(appIDs(sorted), ","), strings.Join(appIDs(expected), ","),
 						"order differs for %s, shuffle %d", total.name, shuffle)
@@ -682,18 +737,39 @@ func BenchmarkSortApplications(b *testing.B) {
 	// a guarantee on one resource type only: the shares mix a ratio and a raw usage
 	total := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100000})
 	pending := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 100})
-	for _, sortType := range []policies.SortPolicy{policies.FairSortPolicy, policies.FifoSortPolicy} {
+	baseline := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	fixtures := []struct {
+		name     string
+		sortType policies.SortPolicy
+		// overrides the generated priority and submission time to set how many apps tie
+		adjust func(app *Application, index int)
+	}{
+		{"fair", policies.FairSortPolicy, nil},
+		{"fifo", policies.FifoSortPolicy, nil},
+		{"fifo-tied", policies.FifoSortPolicy, func(app *Application, index int) {
+			app.askMaxPriority = 0
+			app.submissionTime = baseline
+		}},
+		{"fifo-distinct", policies.FifoSortPolicy, func(app *Application, index int) {
+			app.askMaxPriority = 0
+			app.submissionTime = baseline.Add(time.Duration(index) * time.Second)
+		}},
+	}
+	for _, fixture := range fixtures {
 		for _, count := range []int{100, 1000, 10000} {
 			rng := rand.New(rand.NewSource(42)) //nolint:gosec // deterministic PRNG is the point: the same apps every run
 			input := make(map[string]*Application, count)
-			for _, app := range newSortInputApps(rng, count) {
+			for index, app := range newSortInputApps(rng, count) {
+				if fixture.adjust != nil {
+					fixture.adjust(app, index)
+				}
 				app.allocatedResource = resources.Add(app.allocatedResource, pending)
 				app.pending = pending
 				input[app.ApplicationID] = app
 			}
-			b.Run(fmt.Sprintf("%s-%d", sortType.String(), count), func(b *testing.B) {
+			b.Run(fmt.Sprintf("%s-%d", fixture.name, count), func(b *testing.B) {
 				for i := 0; i < b.N; i++ {
-					sortApplications(input, sortType, false, total)
+					sortApplications(input, fixture.sortType, false, total)
 				}
 			})
 		}

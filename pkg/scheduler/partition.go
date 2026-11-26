@@ -1925,6 +1925,11 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	pc.Lock()
 	defer pc.Unlock()
 	if app.IsReviving() {
+		// Reverse the above Queue detachment and app removal
+		if queue != nil {
+			queue.AddApplication(app)
+			app.RestoreQueue(queue)
+		}
 		log.Log(log.SchedPartition).Info("Application revived during cleanup, leaving it on the active list",
 			zap.String("appID", appID))
 		return

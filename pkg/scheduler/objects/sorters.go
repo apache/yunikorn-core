@@ -32,8 +32,9 @@ import (
 // queueFairMax ties a queue to the fair max its usage is compared against. The sort moves the
 // queue and its own fair max as one element, an index into a second list does not follow a swap.
 type queueFairMax struct {
-	queue   *Queue
-	fairMax *resources.Resource
+	queue          *Queue
+	fairMax        *resources.Resource
+	lastAllocation time.Time // read once for the input order in sortQueues
 }
 
 func sortQueue(queues []queueFairMax, sortType policies.SortPolicy, considerPriority bool) []*Queue {

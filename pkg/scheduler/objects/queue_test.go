@@ -859,8 +859,6 @@ func TestSortQueuesFairMaxFollowsQueue(t *testing.T) {
 			// the leaves have no application, so they all sit at the same priority and both
 			// comparators fall through to the share: the setting itself is checked in
 			// TestSortQueuesPrioritySortDispatch.
-			// the input order comes from the children map, so this covers one order per run: the
-			// deterministic cover of every order is TestSortQueuesFairMaxInputOrder
 			assert.Equal(t, "leaf-80,leaf-40,leaf-10", queueNames(parent.sortQueues()), "lowest share must be first")
 		})
 	}
@@ -887,8 +885,7 @@ func TestSortQueuesPrioritySortDispatch(t *testing.T) {
 			for _, child := range parent.GetCopyOfChildren() {
 				child.currentPriority = priority[child.Name]
 			}
-			// both the priorities and the shares are distinct, so neither order depends on the
-			// input order the children map hands over
+			// both the priorities and the shares are distinct, so neither order depends on the input order
 			assert.Equal(t, tt.expected, queueNames(parent.sortQueues()), "sorted on the wrong key")
 		})
 	}
@@ -900,6 +897,80 @@ func TestSortQueuesFairMaxNotCappedMax(t *testing.T) {
 	// on the fair max leaf-1000 has the lowest share, 70/1000000, on the capped max the highest, 70/100000
 	parent := parentWithFairMaxLeaves(t, "100", map[string]resources.Quantity{"10": 6, "1000": 70}, nil)
 	assert.Equal(t, "leaf-1000,leaf-10", queueNames(parent.sortQueues()), "lowest share must be first")
+}
+
+// tied children keep one order across calls even when pending crosses, and equal ones sort the longest waiting first
+func TestSortQueuesTieOrder(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	var parent *Queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+
+	pending := []struct {
+		name string
+		res  map[string]resources.Quantity
+	}{
+		{"leaf-a", map[string]resources.Quantity{"first": 2, "second": 2}},
+		{"leaf-b", map[string]resources.Quantity{"first": 1, "second": 10}},
+		{"leaf-c", map[string]resources.Quantity{"first": 3, "second": 3}},
+	}
+	base := time.Now().Add(-time.Hour)
+	leaves := make([]*Queue, 0, len(pending))
+	for i, p := range pending {
+		var leaf *Queue
+		leaf, err = createManagedQueue(parent, p.name, false, nil)
+		assert.NilError(t, err, "failed to create leaf queue")
+		leaf.incPendingResource(resources.NewResourceFromMap(p.res))
+		leaf.lastAllocationTime = base.Add(time.Duration(i) * time.Minute)
+		leaves = append(leaves, leaf)
+	}
+	for i := 0; i < 100; i++ {
+		assert.Equal(t, "leaf-a,leaf-b,leaf-c", queueNames(parent.sortQueues()), "queue order changed between calls")
+	}
+
+	// two leaves with equal pending: the older allocation time sorts first
+	leaves[2].pending = resources.NewResource()
+	for _, l := range leaves[:2] {
+		l.pending = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+	}
+	leaves[0].lastAllocationTime = base
+	leaves[1].lastAllocationTime = base.Add(time.Minute)
+	assert.Equal(t, "leaf-a,leaf-b", queueNames(parent.sortQueues()), "older allocation time must sort first")
+	leaves[0].lastAllocationTime, leaves[1].lastAllocationTime = leaves[1].lastAllocationTime, leaves[0].lastAllocationTime
+	assert.Equal(t, "leaf-b,leaf-a", queueNames(parent.sortQueues()), "swapped times must swap the order")
+}
+
+// a positive allocation stamps the leaf and the parents below the root, a negative delta stamps none
+func TestTryIncAllocatedResourceLastAllocation(t *testing.T) {
+	root, err := createRootQueue(map[string]string{"first": "100"})
+	assert.NilError(t, err, "queue create failed")
+	var parent, leaf *Queue
+	parent, err = createManagedQueue(root, "parent", true, nil)
+	assert.NilError(t, err, "failed to create parent queue")
+	leaf, err = createManagedQueue(parent, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+
+	old := time.Now().Add(-time.Hour)
+	for _, q := range []*Queue{leaf, parent, root} {
+		q.lastAllocationTime = old
+	}
+	res := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	neg := resources.NewResourceFromMap(map[string]resources.Quantity{"first": -5})
+	err = leaf.TryIncAllocatedResource(res)
+	assert.NilError(t, err, "increment should not have failed")
+	assert.Assert(t, leaf.getLastAllocationTime().After(old), "leaf not stamped")
+	assert.Assert(t, parent.getLastAllocationTime().After(old), "parent not stamped")
+	assert.Assert(t, root.getLastAllocationTime().Equal(old), "root must not be stamped")
+
+	for _, q := range []*Queue{leaf, parent, root} {
+		q.lastAllocationTime = old
+	}
+	err = leaf.TryIncAllocatedResource(neg)
+	assert.NilError(t, err, "negative increment should not have failed")
+	for _, q := range []*Queue{leaf, parent, root} {
+		assert.Assert(t, q.getLastAllocationTime().Equal(old), "negative delta must not stamp %s", q.QueuePath)
+	}
 }
 
 // create a parent under a root with rootMax, holding a leaf per entry in usage named leaf-<max>. The

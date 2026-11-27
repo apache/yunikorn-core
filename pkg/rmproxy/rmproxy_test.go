@@ -19,12 +19,10 @@
 package rmproxy
 
 import (
-	"os"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	godeadlock "github.com/sasha-s/go-deadlock"
 	"gotest.tools/v3/assert"
 
 	"github.com/apache/yunikorn-core/pkg/mock"
@@ -42,12 +40,6 @@ func (c *recordingReleaseCallback) UpdateAllocation(
 ) error {
 	c.responses = append(c.responses, response)
 	return nil
-}
-
-func TestMain(m *testing.M) {
-	// Pooled deadlock timers cannot be reused across synctest bubbles.
-	godeadlock.Opts.TimerPool = godeadlock.TimerPoolDisabled
-	os.Exit(m.Run())
 }
 
 func TestRMProxy_StopUnblocksWaitingCaller(t *testing.T) {

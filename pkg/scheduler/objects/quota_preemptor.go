@@ -313,7 +313,6 @@ func (qpc *QuotaPreemptionContext) preemptVictims() {
 		zap.Stringer("guaranteed resources", qpc.guaranteedResource),
 		zap.Stringer("allocated resources", qpc.allocatedResource),
 		zap.Stringer("preemptable resources", qpc.preemptableResource),
-		zap.Bool("isGuaranteedSet", qpc.guaranteedResource.IsEmpty()),
 	)
 	qpc.results.selectedVictims = qpc.allocations
 	for _, victim := range qpc.allocations {

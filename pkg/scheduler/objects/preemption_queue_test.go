@@ -455,3 +455,81 @@ func getPreemptableResource(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ
 	cRemaining2 := qpsChild2.GetPreemptableResource()
 	return rootRemaining, pRemaining, cRemaining1, cRemaining2
 }
+
+func TestGetPreemptableResource_SharedAncestor(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2, childQ3 := setup(t)
+	tests := []struct {
+		testName            string
+		askQueue            *Queue
+		expectedChild2Preem *resources.Resource
+	}{
+		{
+			testName:            "NonSharedAncestor_CapsVictimQueuePreemptableByParent",
+			askQueue:            childQ3,
+			expectedChild2Preem: smallestRes,
+		},
+		{
+			testName:            "SharedAncestor_ExemptsVictimQueueFromParentCap",
+			askQueue:            childQ1,
+			expectedChild2Preem: smallestResDouble,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.testName, func(t *testing.T) {
+			resetQueueResources(rootQ, parentQ, childQ1, childQ2)
+			parentQ.guaranteedResource = smallestRes
+			childQ1.guaranteedResource = smallestRes
+			rootQ.allocatedResource = smallestResDouble
+			parentQ.allocatedResource = smallestResDouble
+			childQ2.allocatedResource = smallestResDouble
+
+			_, qpsParent, _, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2, tt.askQueue)
+			assert.Assert(t, resources.Equals(qpsParent.GetPreemptableResource(), smallestRes))
+			assert.Assert(t, resources.Equals(qpsChild2.GetPreemptableResource(), tt.expectedChild2Preem))
+		})
+	}
+}
+
+func TestQueuePreemptionSnapshot_IsAncestorOf(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2, _ := setup(t)
+	qpsRoot, qpsParent, qpsChild1, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2, nil)
+
+	var nilQPS *QueuePreemptionSnapshot
+	assert.Assert(t, !nilQPS.isAncestorOf(qpsChild1), "nil receiver cannot be ancestor")
+	assert.Assert(t, !qpsParent.isAncestorOf(nil), "cannot be ancestor of nil")
+	assert.Assert(t, !qpsParent.isAncestorOf(qpsParent), "queue cannot be its own ancestor")
+	assert.Assert(t, qpsParent.isAncestorOf(qpsChild1), "parent should be ancestor of child1")
+	assert.Assert(t, qpsParent.isAncestorOf(qpsChild2), "parent should be ancestor of child2")
+	assert.Assert(t, qpsRoot.isAncestorOf(qpsChild1), "root should be ancestor of child1")
+	assert.Assert(t, !qpsChild1.isAncestorOf(qpsParent), "child cannot be ancestor of parent")
+	assert.Assert(t, !qpsChild1.isAncestorOf(qpsChild2), "sibling cannot be ancestor of sibling")
+}
+
+func TestQueuePreemptionSnapshot_HasRemainingGuaranteed(t *testing.T) {
+	var nilQPS *QueuePreemptionSnapshot
+	assert.Assert(t, !nilQPS.hasRemainingGuaranteed(), "nil receiver has no remaining guaranteed")
+
+	qps := &QueuePreemptionSnapshot{}
+	assert.Assert(t, !qps.hasRemainingGuaranteed(), "empty guaranteed has no remaining guaranteed")
+
+	qps.GuaranteedResource = smallestRes
+	assert.Assert(t, qps.hasRemainingGuaranteed(), "guaranteed set has remaining guaranteed")
+}
+
+func TestQueuePreemptionSnapshot_IsAncestorOfStarvingAsk(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2, _ := setup(t)
+	parentQ.guaranteedResource = smallestRes
+	childQ1.guaranteedResource = smallestRes
+
+	var nilQPS *QueuePreemptionSnapshot
+	assert.Assert(t, !nilQPS.isAncestorOfStarvingAsk(), "nil receiver cannot be ancestor of starving ask")
+
+	_, qpsParentNoAsk, _, qpsChild1NoAsk := createQPSCache(rootQ, parentQ, childQ1, childQ2, nil)
+	assert.Assert(t, !qpsParentNoAsk.isAncestorOfStarvingAsk(), "nil AskQueue should return false")
+	assert.Assert(t, !qpsChild1NoAsk.isAncestorOfStarvingAsk(), "non-ancestor should return false")
+
+	_, qpsParentStarving, _, qpsChild1Starving := createQPSCache(rootQ, parentQ, childQ1, childQ2, childQ1)
+	assert.Assert(t, qpsParentStarving.isAncestorOfStarvingAsk(), "parent should be ancestor of starving child1")
+	assert.Assert(t, !qpsChild1Starving.isAncestorOfStarvingAsk(), "child1 is not ancestor of itself")
+}

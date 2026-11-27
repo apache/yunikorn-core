@@ -290,7 +290,7 @@ func TestSortAppsNoPending(t *testing.T) {
 
 	// set one app with pending
 	appID := "app-1"
-	input[appID].pending = res
+	setTestPending(input[appID], res)
 	list = sortApplications(input, policies.FairSortPolicy, false, nil)
 	assertAppListLength(t, list, []string{appID}, "fair one pending")
 	list = sortApplications(input, policies.FairSortPolicy, true, nil)
@@ -313,7 +313,7 @@ func TestSortAppsFifo(t *testing.T) {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
-		app.pending = res
+		setTestPending(app, res)
 		input[appID] = app
 		app.submissionTime = time.Unix(int64(i), 0)
 	}
@@ -346,7 +346,7 @@ func TestSortAppsPriorityFifo(t *testing.T) {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
-		app.pending = res
+		setTestPending(app, res)
 		input[appID] = app
 		// make sure the time stamps differ at least a bit (tracking in nano seconds)
 		time.Sleep(time.Nanosecond * 5)
@@ -371,7 +371,7 @@ func TestSortAppsFair(t *testing.T) {
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
 		app.allocatedResource = resources.Multiply(res, int64(i+1))
-		app.pending = res
+		setTestPending(app, res)
 		input[appID] = app
 	}
 	// nil resource: usage based sorting
@@ -423,7 +423,7 @@ func TestSortAppsPriorityFair(t *testing.T) {
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
 		app.allocatedResource = resources.Multiply(res, int64(i+1))
-		app.pending = res
+		setTestPending(app, res)
 		input[appID] = app
 	}
 
@@ -583,7 +583,7 @@ func TestSortBySubmissionTime(t *testing.T) {
 		num := strconv.Itoa(i)
 		appID := "app-" + num
 		app := newApplication(appID, "partition", "queue")
-		app.pending = res
+		setTestPending(app, res)
 		input[appID] = app
 		app.submissionTime = baseline.Add(-time.Minute * time.Duration(i))
 		input[appID] = app
@@ -764,7 +764,7 @@ func BenchmarkSortApplications(b *testing.B) {
 					fixture.adjust(app, index)
 				}
 				app.allocatedResource = resources.Add(app.allocatedResource, pending)
-				app.pending = pending
+				setTestPending(app, pending)
 				input[app.ApplicationID] = app
 			}
 			b.Run(fmt.Sprintf("%s-%d", fixture.name, count), func(b *testing.B) {

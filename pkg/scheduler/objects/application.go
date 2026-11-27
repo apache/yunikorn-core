@@ -43,6 +43,7 @@ import (
 	"github.com/apache/yunikorn-core/pkg/metrics"
 	"github.com/apache/yunikorn-core/pkg/rmproxy/rmevent"
 	schedEvt "github.com/apache/yunikorn-core/pkg/scheduler/objects/events"
+	"github.com/apache/yunikorn-core/pkg/scheduler/objects/internal/pendingresource"
 	"github.com/apache/yunikorn-core/pkg/scheduler/ugm"
 	siCommon "github.com/apache/yunikorn-scheduler-interface/lib/go/common"
 	"github.com/apache/yunikorn-scheduler-interface/lib/go/si"
@@ -90,14 +91,14 @@ type Application struct {
 
 	// Private mutable fields need protection
 	queuePath         string
-	queue             *Queue                  // queue the application is running in
-	pending           *resources.Resource     // pending resources from asks for the app
-	reservations      map[string]*reservation // a map of reservations
-	requests          map[string]*Allocation  // a map of allocations, pending or satisfied
-	sortedRequests    sortedRequests          // pending asks only, sorted by priority then age
-	user              security.UserGroup      // owner of the application
-	allocatedResource *resources.Resource     // total allocated resources
-	submissionTime    time.Time               // time application was submitted (based on the first ask)
+	queue             *Queue                   // queue the application is running in
+	pending           *pendingresource.Tracker // pending resources from asks; changes notify the queue's pending set
+	reservations      map[string]*reservation  // a map of reservations
+	requests          map[string]*Allocation   // a map of allocations, pending or satisfied
+	sortedRequests    sortedRequests           // pending asks only, sorted by priority then age
+	user              security.UserGroup       // owner of the application
+	allocatedResource *resources.Resource      // total allocated resources
+	submissionTime    time.Time                // time application was submitted (based on the first ask)
 
 	usedResource        *resources.TrackedResource // keep track of resource usage of the application
 	preemptedResource   *resources.TrackedResource // keep track of preempted resource usage of the application
@@ -142,7 +143,6 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		submissionTime:        time.Now(),
 		queuePath:             siApp.QueueName,
 		tags:                  siApp.Tags,
-		pending:               resources.NewResource(),
 		allocatedResource:     resources.NewResource(),
 		usedResource:          resources.NewTrackedResource(),
 		preemptedResource:     resources.NewTrackedResource(),
@@ -165,6 +165,7 @@ func NewApplication(siApp *si.AddApplicationRequest, ugi security.UserGroup, eve
 		runnableByUserLimit:   true,
 		runnableInQueue:       true,
 	}
+	app.pending = pendingresource.New(func(has bool) { app.queue.setAppPending(app, has) })
 	placeholderTimeout := common.ConvertSITimeoutWithAdjustment(siApp, defaultPlaceholderTimeout)
 	gangSchedStyle := siApp.GetGangSchedulingStyle()
 	if gangSchedStyle != Soft && gangSchedStyle != Hard {
@@ -641,7 +642,14 @@ func (sa *Application) GetPlaceholderAsk() *resources.Resource {
 func (sa *Application) GetPendingResource() *resources.Resource {
 	sa.RLock()
 	defer sa.RUnlock()
-	return sa.pending
+	return sa.pending.Clone()
+}
+
+// HasPendingResource returns true if the application has a pending resource greater than zero
+func (sa *Application) HasPendingResource() bool {
+	sa.RLock()
+	defer sa.RUnlock()
+	return sa.pending.HasPending()
 }
 
 // RemoveAllocationAsk removes one or more allocation asks from this application.
@@ -671,8 +679,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 		// clean up the queue reservation
 		sa.queue.UnReserve(sa.ApplicationID, toRelease)
 		// Cleanup total pending resource
-		deltaPendingResource = sa.pending
-		sa.pending = resources.NewResource()
+		deltaPendingResource = sa.pending.Reset()
 		for _, ask := range sa.requests {
 			sa.appEvents.SendRemoveAskEvent(sa.ApplicationID, ask.allocationKey, ask.GetAllocatedResource(), detail)
 		}
@@ -692,8 +699,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 		if ask := sa.requests[allocKey]; ask != nil {
 			if !ask.IsAllocated() {
 				deltaPendingResource = ask.GetAllocatedResource()
-				sa.pending = resources.Sub(sa.pending, deltaPendingResource)
-				sa.pending.Prune()
+				sa.pending.Sub(deltaPendingResource)
 				// the removed ask was pending: drop it from the priority histogram and from
 				// sortedRequests. An allocated ask needs neither: it left the slice at allocateAsk
 				// time, so scanning for it here would only ever be a guaranteed full-slice miss.
@@ -712,7 +718,7 @@ func (sa *Application) removeAsksInternal(allocKey string, detail si.EventRecord
 	// Change the state to completing.
 	// When the resource trackers are zero we should not expect anything to come in later.
 	hasPlaceHolderAllocations := len(sa.getPlaceholderAllocations()) > 0
-	if resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource) && !sa.IsFailing() && !sa.IsCompleting() && !hasPlaceHolderAllocations {
+	if sa.pending.IsZero() && resources.IsZero(sa.allocatedResource) && !sa.IsFailing() && !sa.IsCompleting() && !hasPlaceHolderAllocations {
 		if err := sa.HandleApplicationEvent(CompleteApplication); err != nil {
 			log.Log(log.SchedApplication).Warn("Application state not changed to Completing while updating ask(s)",
 				zap.String("currentState", sa.CurrentState()),
@@ -763,8 +769,7 @@ func (sa *Application) AddAllocationAsk(ask *Allocation) error {
 	sa.addAllocationAskInternal(ask)
 
 	// Update total pending resource
-	sa.pending = resources.Add(sa.pending, delta)
-	sa.pending.Prune()
+	sa.pending.Add(delta)
 	sa.queue.incPendingResource(delta)
 
 	log.Log(log.SchedApplication).Info("ask added successfully to application",
@@ -822,8 +827,7 @@ func (sa *Application) UpdateAllocationResources(alloc *Allocation, isQuotaPreem
 			zap.Stringer("delta", delta))
 	} else {
 		// update pending resources
-		sa.pending = resources.Add(sa.pending, delta)
-		sa.pending.Prune()
+		sa.pending.Add(delta)
 		sa.queue.incPendingResource(delta)
 		log.Log(log.SchedApplication).Info("updated pending resources for application",
 			zap.String("appID", sa.ApplicationID),
@@ -1023,8 +1027,7 @@ func (sa *Application) allocateAsk(ask *Allocation) (*resources.Resource, error)
 	sa.sortedRequests.remove(ask)
 
 	delta := ask.GetAllocatedResource()
-	sa.pending = resources.Sub(sa.pending, delta)
-	sa.pending.Prune()
+	sa.pending.Sub(delta)
 	// update the pending of the queue with the same delta
 	sa.queue.decPendingResource(delta)
 
@@ -1055,7 +1058,7 @@ func (sa *Application) deallocateAsk(ask *Allocation) (*resources.Resource, erro
 	}
 
 	delta := ask.GetAllocatedResource()
-	sa.pending = resources.Add(sa.pending, delta)
+	sa.pending.Add(delta)
 	// update the pending of the queue with the same delta
 	sa.queue.incPendingResource(delta)
 
@@ -2399,7 +2402,7 @@ func (sa *Application) removeAllocationInternal(allocationKey string, releaseTyp
 }
 
 func (sa *Application) hasZeroAllocations() bool {
-	return resources.IsZero(sa.pending) && resources.IsZero(sa.allocatedResource)
+	return sa.pending.IsZero() && resources.IsZero(sa.allocatedResource)
 }
 
 // RemoveAllAllocations removes all allocations from the application.
@@ -2425,7 +2428,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	// if an app doesn't have any allocations and the user doesn't have other applications,
 	// the user tracker is nonexistent. We don't want to decrease resource usage in this case.
 	if ugm.GetUserManager().GetUserTracker(sa.user.User) != nil {
-		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), resources.IsZero(sa.pending))
+		sa.decUserResourceUsage(resources.Add(sa.allocatedResource, sa.allocatedPlaceholder), sa.pending.IsZero())
 	}
 	// cleanup allocated resource for app (placeholders and normal)
 	sa.allocatedResource = resources.NewResource()
@@ -2433,7 +2436,7 @@ func (sa *Application) RemoveAllAllocations() []*Allocation {
 	sa.allocations = make(map[string]*Allocation)
 
 	// When the resource trackers are zero we should not expect anything to come in later.
-	if resources.IsZero(sa.pending) {
+	if sa.pending.IsZero() {
 		event := CompleteApplication
 		if sa.IsFailing() {
 			event = FailApplication

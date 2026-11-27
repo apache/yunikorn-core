@@ -300,10 +300,21 @@ func TestRemoveNodeWithAllocations(t *testing.T) {
 	assert.Equal(t, 1, len(released), "node did not release correct allocation")
 	assert.Equal(t, 0, len(confirmed), "node did not confirm correct allocation")
 	assert.Equal(t, released[0].GetAllocationKey(), allocAllocationKey, "allocationKey returned by release not the same as on allocation")
+	assert.Assert(t, app.GetAllocationAsk(allocAllocationKey) == nil, "ask was not removed with the allocation")
 	// zero resource should be pruned
 	assertLimits(t, getTestUserGroup(), nil)
 
 	assert.NilError(t, err, "the event should have been processed")
+
+	// add the node back with the allocation of the pod that survived the node removal
+	node = newNodeMaxResource(nodeID1, nodeRes)
+	err = partition.AddNode(node)
+	assert.NilError(t, err, "add node to partition should not have failed")
+	_, allocCreated, err = partition.UpdateAllocation(newAllocation(allocAllocationKey, appID1, nodeID1, appRes))
+	assert.NilError(t, err)
+	assert.Check(t, allocCreated, "allocation was not added back")
+	assert.Assert(t, node.GetAllocation(allocAllocationKey) != nil, "allocation was not added back to the node")
+	assertLimits(t, getTestUserGroup(), appRes)
 }
 
 // test with a replacement of a placeholder: placeholder and real on the same node that gets removed
@@ -367,6 +378,7 @@ func TestRemoveNodeWithPlaceholders(t *testing.T) {
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 0, len(allocs), "expected no allocations for the app")
 	assert.Assert(t, resources.Equals(app.GetPendingResource(), appRes), "app should have updated pending resources")
+	assert.Assert(t, app.GetAllocationAsk(ph.GetAllocationKey()) == nil, "placeholder ask was not removed with the allocation")
 	// check the interim state of the placeholder involved
 	assert.Check(t, !ph.HasRelease(), "placeholder should not have release linked anymore")
 	// zero resource should be pruned
@@ -802,6 +814,8 @@ func TestRemoveNodeWithReplacement(t *testing.T) {
 	assert.Equal(t, alloc.GetAllocationKey(), confirmed[0].GetAllocationKey(), "allocationKey returned by confirmed not the same as the real allocation")
 	assert.Assert(t, resources.IsZero(app.GetPendingResource()), "app should not have pending resources")
 	assert.Assert(t, !app.IsCompleting(), "app should not be COMPLETING after confirming allocation")
+	assert.Assert(t, app.GetAllocationAsk(ph.GetAllocationKey()) == nil, "placeholder ask was not removed with the allocation")
+	assert.Assert(t, app.GetAllocationAsk(allocKey) != nil, "ask of the real allocation should not be removed")
 	allocs = app.GetAllAllocations()
 	assert.Equal(t, 1, len(allocs), "expected one allocation for the app (real)")
 	assert.Equal(t, alloc.GetAllocationKey(), allocs[0].GetAllocationKey(), "allocationKey for the app is not the same as the real allocation")

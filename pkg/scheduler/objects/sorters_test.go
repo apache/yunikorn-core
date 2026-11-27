@@ -161,8 +161,8 @@ func TestSortQueuesNoGuarantees(t *testing.T) {
 		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "vcore": 1000}),
 		resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 1000, "vcore": 1000}),
 	}
-	// the sort reorders the list in place, so re-sorting the same list chains on the result of the
-	// previous sort while every queue keeps its own fair max
+	// the sort reorders the list in place, so the second sort of each pair chains on the result of
+	// the first while every queue keeps its own fair max
 	list := fairMaxList(queues, fairMaxResources)
 	sorted := sortQueue(list, policies.FairSortPolicy, false)
 	assert.Equal(t, queueNames(sorted), queueNames([]*Queue{q3, q2, q1, q0}), "fair no gaurantees first")
@@ -173,6 +173,7 @@ func TestSortQueuesNoGuarantees(t *testing.T) {
 	q0.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 200, "vcore": 200})
 	q1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"memory": 300, "vcore": 300})
 
+	list = fairMaxList(queues, fairMaxResources)
 	sorted = sortQueue(list, policies.FairSortPolicy, false)
 	assert.Equal(t, queueNames(sorted), queueNames([]*Queue{q3, q2, q0, q1}), "fair no gaurantees second")
 
@@ -223,6 +224,9 @@ func TestSortQueuesFairMaxEqualShare(t *testing.T) {
 	queues := createQueuesWithFairMax(t, root, []int64{50, 100, 200}, []int64{100, 200, 400})
 	for i, priority := range []int32{1, 3, 2} {
 		queues[i].queue.currentPriority = priority
+		fairMax := queues[i].fairMax
+		queues[i] = queues[i].queue.sortKey()
+		queues[i].fairMax = fairMax
 	}
 	allOrders := [][]int{{0, 1, 2}, {0, 2, 1}, {1, 0, 2}, {1, 2, 0}, {2, 0, 1}, {2, 1, 0}}
 
@@ -233,35 +237,194 @@ func TestSortQueuesFairMaxEqualShare(t *testing.T) {
 }
 
 // create a leaf queue per usage value, named q0, q1, ..., paired with the fair max to compare it against
-func createQueuesWithFairMax(t *testing.T, root *Queue, usage, limit []int64) []queueFairMax {
-	queues := make([]queueFairMax, 0, len(usage))
+func createQueuesWithFairMax(t *testing.T, root *Queue, usage, limit []int64) []queueSortKey {
+	queues := make([]queueSortKey, 0, len(usage))
 	for i, used := range usage {
 		queue, err := createManagedQueue(root, "q"+strconv.Itoa(i), false, nil)
 		assert.NilError(t, err, "failed to create leaf queue")
 		queue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(used)})
-		queues = append(queues, queueFairMax{
-			queue:   queue,
-			fairMax: resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(limit[i])}),
-		})
+		key := queue.sortKey()
+		key.fairMax = resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": resources.Quantity(limit[i])})
+		queues = append(queues, key)
 	}
 	return queues
 }
 
 // pair each queue with the fair max at the same position in the list
-func fairMaxList(queues []*Queue, fairMax []*resources.Resource) []queueFairMax {
-	list := make([]queueFairMax, 0, len(queues))
+func fairMaxList(queues []*Queue, fairMax []*resources.Resource) []queueSortKey {
+	list := make([]queueSortKey, 0, len(queues))
 	for i, queue := range queues {
-		list = append(list, queueFairMax{queue: queue, fairMax: fairMax[i]})
+		key := queue.sortKey()
+		key.fairMax = fairMax[i]
+		list = append(list, key)
 	}
 	return list
 }
 
-func inputOrder(queues []queueFairMax, order []int) []queueFairMax {
-	list := make([]queueFairMax, 0, len(order))
+func inputOrder(queues []queueSortKey, order []int) []queueSortKey {
+	list := make([]queueSortKey, 0, len(order))
 	for _, idx := range order {
 		list = append(list, queues[idx])
 	}
 	return list
+}
+
+// reference order: the comparators over the queues themselves, which the key sort must match
+func refSortQueues(keys []queueSortKey, sortType policies.SortPolicy, considerPriority bool) []*Queue {
+	queues := make([]queueSortKey, len(keys))
+	copy(queues, keys)
+	if sortType == policies.FairSortPolicy {
+		if considerPriority {
+			sort.SliceStable(queues, func(i, j int) bool {
+				l := queues[i].queue
+				r := queues[j].queue
+				lPriority := l.GetCurrentPriority()
+				rPriority := r.GetCurrentPriority()
+				if lPriority > rPriority {
+					return true
+				}
+				if lPriority < rPriority {
+					return false
+				}
+
+				comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(), queues[i].fairMax,
+					r.GetAllocatedResource(), r.GetGuaranteedResource(), queues[j].fairMax)
+
+				if comp == 0 {
+					return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
+				}
+				return comp < 0
+			})
+		} else {
+			sort.SliceStable(queues, func(i, j int) bool {
+				l := queues[i].queue
+				r := queues[j].queue
+
+				comp := resources.CompUsageRatioSeparately(l.GetAllocatedResource(), l.GetGuaranteedResource(), queues[i].fairMax,
+					r.GetAllocatedResource(), r.GetGuaranteedResource(), queues[j].fairMax)
+				if comp == 0 {
+					lPriority := l.GetCurrentPriority()
+					rPriority := r.GetCurrentPriority()
+					if lPriority > rPriority {
+						return true
+					}
+					if lPriority < rPriority {
+						return false
+					}
+					return resources.StrictlyGreaterThan(resources.Sub(l.GetPendingResource(), r.GetPendingResource()), resources.Zero)
+				}
+				return comp < 0
+			})
+		}
+	} else if considerPriority {
+		sort.SliceStable(queues, func(i, j int) bool {
+			return queues[i].queue.GetCurrentPriority() > queues[j].queue.GetCurrentPriority()
+		})
+	}
+	sorted := make([]*Queue, 0, len(queues))
+	for _, entry := range queues {
+		sorted = append(sorted, entry.queue)
+	}
+	return sorted
+}
+
+// repeated priorities, zero usage, guarantees on some and crossing pending make ties and near ties
+func newSortInputQueues(t *testing.T, rng *rand.Rand, count int) []queueSortKey {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	keys := make([]queueSortKey, 0, count)
+	for i := 0; i < count; i++ {
+		queue, cerr := createManagedQueue(root, "q"+strconv.Itoa(i), false, nil)
+		assert.NilError(t, cerr, "failed to create leaf queue")
+		if rng.Intn(4) != 0 {
+			queue.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+				"vcore": resources.Quantity(rng.Intn(4) * 100), "memory": resources.Quantity(rng.Intn(4) * 100)})
+		}
+		if rng.Intn(3) == 0 {
+			queue.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+				"vcore": resources.Quantity(200 + rng.Intn(3)*100), "memory": resources.Quantity(200 + rng.Intn(3)*100)})
+		}
+		queue.currentPriority = int32(rng.Intn(3)) //nolint:gosec // range is small and positive
+		queue.pending = resources.NewResourceFromMap(map[string]resources.Quantity{
+			"vcore": resources.Quantity(1 + rng.Intn(3)), "memory": resources.Quantity(1 + rng.Intn(3))})
+		key := queue.sortKey()
+		key.fairMax = resources.NewResourceFromMap(map[string]resources.Quantity{
+			"vcore": resources.Quantity(1000 * (1 + rng.Intn(2))), "memory": resources.Quantity(1000 * (1 + rng.Intn(2)))})
+		keys = append(keys, key)
+	}
+	return keys
+}
+
+func TestSortQueuesKeyEquivalence(t *testing.T) {
+	rng := rand.New(rand.NewSource(42)) //nolint:gosec // deterministic PRNG is the point: a reproducible input set
+	keys := newSortInputQueues(t, rng, 50)
+	variants := []struct {
+		name             string
+		sortType         policies.SortPolicy
+		considerPriority bool
+	}{
+		{"fair", policies.FairSortPolicy, false},
+		{"fair and priority", policies.FairSortPolicy, true},
+		{"fifo", policies.FifoSortPolicy, false},
+		{"fifo and priority", policies.FifoSortPolicy, true},
+	}
+	for _, variant := range variants {
+		t.Run(variant.name, func(t *testing.T) {
+			for shuffle := 0; shuffle < 5; shuffle++ {
+				input := make([]queueSortKey, len(keys))
+				copy(input, keys)
+				rng.Shuffle(len(input), func(i, j int) { input[i], input[j] = input[j], input[i] })
+				expected := refSortQueues(input, variant.sortType, variant.considerPriority)
+				sorted := sortQueue(input, variant.sortType, variant.considerPriority)
+				assert.Equal(t, queueNames(sorted), queueNames(expected), "order differs for shuffle %d", shuffle)
+			}
+		})
+	}
+}
+
+func BenchmarkSortQueues(b *testing.B) {
+	for _, state := range []string{"shares-differ", "idle", "sparse"} {
+		for _, count := range []int{1000, 5000, 10000} {
+			root, err := createRootQueue(map[string]string{"vcore": "100000000", "memory": "1000000000"})
+			if err != nil {
+				b.Fatal(err)
+			}
+			parent, err := createManagedQueue(root, "parent", true, nil)
+			if err != nil {
+				b.Fatal(err)
+			}
+			rng := rand.New(rand.NewSource(42)) //nolint:gosec // deterministic PRNG is the point: the same queues every run
+			for i := 0; i < count; i++ {
+				child, cerr := createManagedQueue(parent, "team-"+strconv.Itoa(i), false, nil)
+				if cerr != nil {
+					b.Fatal(cerr)
+				}
+				if state != "sparse" || i%10 == 0 {
+					child.pending = resources.NewResourceFromMap(map[string]resources.Quantity{
+						"vcore": resources.Quantity(1 + rng.Intn(50)), "memory": resources.Quantity(1 + rng.Intn(50))})
+				}
+				if state == "shares-differ" {
+					child.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+						"vcore": resources.Quantity(1 + rng.Intn(100000)), "memory": resources.Quantity(1 + rng.Intn(1000000))})
+					if i%2 == 0 {
+						child.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{
+							"vcore": resources.Quantity(1 + rng.Intn(100000)), "memory": resources.Quantity(1 + rng.Intn(1000000))})
+					}
+				}
+			}
+			expected := count
+			if state == "sparse" {
+				expected = (count + 9) / 10
+			}
+			b.Run(fmt.Sprintf("%s-%d", state, count), func(b *testing.B) {
+				for i := 0; i < b.N; i++ {
+					if len(parent.sortQueues()) != expected {
+						b.Fatal("unexpected queue count")
+					}
+				}
+			})
+		}
+	}
 }
 
 func TestSortAppsNoPending(t *testing.T) {

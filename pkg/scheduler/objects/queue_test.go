@@ -458,6 +458,23 @@ func TestPriorityCalc(t *testing.T) {
 	assert.Equal(t, leaf.GetCurrentPriority(), configs.MinPriority, "final leaf priority wrong")
 }
 
+func TestPendingResourceIsCopy(t *testing.T) {
+	root, err := createRootQueue(nil)
+	assert.NilError(t, err, "queue create failed")
+	leaf, err := createManagedQueue(root, "leaf", false, nil)
+	assert.NilError(t, err, "failed to create leaf queue")
+	pending := resources.NewResourceFromMap(map[string]resources.Quantity{"vcore": 10})
+	leaf.pending = pending
+
+	got := leaf.GetPendingResource()
+	got.Resources["vcore"] = 99
+	assert.Equal(t, resources.Quantity(10), leaf.pending.Resources["vcore"], "GetPendingResource result aliases the queue")
+
+	key := leaf.sortKey()
+	key.pending.Resources["vcore"] = 99
+	assert.Equal(t, resources.Quantity(10), leaf.pending.Resources["vcore"], "sortKey pending aliases the queue")
+}
+
 func TestPendingCalc(t *testing.T) {
 	// Reset existing metric storage; otherwise this unit test would get metrics populated by other UTs.
 	// In long run, to make the metrics code more testable, we should pass instantiable Metrics obj to Queue
@@ -1363,7 +1380,7 @@ func TestGetFairMaxResource(t *testing.T) {
 			assert.NilError(t, err, "failed to create 'tier1' queue")
 
 			if tc.Tier0Expectation != nil {
-				actualTier0Max := tier0.GetFairMaxResource()
+				actualTier0Max := tier0.getFairMaxResource()
 				expectedTier0Max, err := resources.NewResourceFromConf(tc.Tier0Expectation)
 				assert.NilError(t, err, "failed to create resource")
 
@@ -1372,7 +1389,7 @@ func TestGetFairMaxResource(t *testing.T) {
 				}
 			}
 			if tc.Tier1Expectation != nil {
-				actualTier1Max := tier1.GetFairMaxResource()
+				actualTier1Max := tier1.getFairMaxResource()
 				expectedTier1Max, err := resources.NewResourceFromConf(tc.Tier1Expectation)
 				assert.NilError(t, err, "failed to create resource")
 

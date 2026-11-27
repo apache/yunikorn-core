@@ -507,13 +507,21 @@ func (pc *PartitionContext) getRejectedApplication(appID string) *objects.Applic
 // getOrReviveApplication returns the application to add work to, bringing it back from the completed
 // list if the shim sent work for it after the core had already finished it. Returns nil when no
 // revivable application exists.
-// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) getOrReviveApplication(appID string) *objects.Application {
-	if app := pc.getApplication(appID); app != nil {
-		// moveTerminatedApp unsets the queue before it takes the partition lock, so an app can be
-		// visible here with no queue attached
-		if app.GetQueue() == nil && !pc.restoreAppQueue(app) {
-			return nil
+	pc.Lock()
+	defer pc.Unlock()
+	if app := pc.applications[appID]; app != nil {
+		if app.GetQueue() == nil {
+			if !app.EnsureAppRevivable() {
+				return nil
+			}
+			resolve := pc.resolveRevivedQueue(app)
+
+			// Reset the app state once revive is over; Move to running
+			app.EnsureAppRunnable()
+			if !resolve {
+				return nil
+			}
 		}
 		return app
 	}
@@ -522,29 +530,33 @@ func (pc *PartitionContext) getOrReviveApplication(appID string) *objects.Applic
 
 // reviveCompletedApplication moves the most recently completed generation of appID back into the
 // active application list and re-attaches its queue.
-// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
 func (pc *PartitionContext) reviveCompletedApplication(appID string) *objects.Application {
 	app := pc.takeCompletedApplication(appID)
 	if app == nil {
 		return nil
 	}
-	if !pc.restoreAppQueue(app) {
+	if !app.EnsureAppRevivable() {
+		return nil
+	}
+	if !pc.resolveRevivedQueue(app) {
 		// no queue to run in: hand it back to the completed list so it is not lost
-		pc.moveTerminatedApp(appID)
+		// Reset the app state only if revive fails; Move to completed
+		app.EnsureAppCompleted()
 		return nil
 	}
 	log.Log(log.SchedPartition).Info("reviving completed application for new work from the shim",
 		zap.String("partitionName", pc.Name),
 		zap.String("appID", appID),
 		zap.String("queue", app.GetQueuePath()))
+
+	// Move the app state to running as app has been revived successfully
+	app.EnsureAppRunnable()
 	return app
 }
 
 // takeCompletedApplication removes the latest completed generation of appID from the completed list
 // and returns it. Expired applications are past the point of no return and are left alone.
 func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Application {
-	pc.Lock()
-	defer pc.Unlock()
 	// completed apps are re-keyed as appID + a negative unix timestamp, so the smallest suffix is
 	// the most recent generation. Compare keys to avoid taking an application lock under this one.
 	var latestKey string
@@ -571,44 +583,12 @@ func (pc *PartitionContext) takeCompletedApplication(appID string) *objects.Appl
 	return app
 }
 
-// restoreAppQueue re-attaches a leaf queue to an application that lost it on completion, recreating
-// the queue when it was cleaned up in the meantime. Returns false when no queue can be resolved.
-// NOTE: this is a lock free call. It must NOT be called holding the PartitionContext lock.
-func (pc *PartitionContext) restoreAppQueue(app *objects.Application) bool {
-	if pc.resolveRevivedQueue(app) == nil {
-		return false
-	}
-	// A moveTerminatedApp running concurrently can file this app as completed while we revive it; put
-	// it back on the active list and drop that completed generation so the maps stay consistent.
-	pc.ensureAppActive(app)
-	return true
-}
-
-// ensureAppActive makes the partition tracking consistent for a freshly revived application: it puts
-// the application back on the active list and drops any completed generation that still points at the
-// same application, covering a moveTerminatedApp that filed it as completed while the revival was in
-// flight.
-func (pc *PartitionContext) ensureAppActive(app *objects.Application) {
-	pc.Lock()
-	defer pc.Unlock()
-	appID := app.ApplicationID
-	pc.applications[appID] = app
-	for key, completed := range pc.completedApplications {
-		if completed == app {
-			delete(pc.completedApplications, key)
-		}
-	}
-}
-
 // resolveRevivedQueue resolves (recreating when needed) the leaf queue for a reviving application, records
 // the app-to-queue mapping, re-attaches the queue to the application and adds the application to the queue.
 // All of this happens under the lock: the queue can be empty, so the cleaner could otherwise remove it before
 // the application is added. A recreated queue gets the limits from the application tags back, an existing
 // queue keeps its limits. Returns nil when no leaf queue can be resolved.
-// NOTE: this call takes the PartitionContext lock. It must NOT be called holding the lock.
-func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) *objects.Queue {
-	pc.Lock()
-	defer pc.Unlock()
+func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) bool {
 	queueName := app.GetQueuePath()
 	queue := pc.getQueueInternal(queueName)
 	if queue == nil {
@@ -624,7 +604,7 @@ func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) *objec
 				zap.String("appID", app.ApplicationID),
 				zap.String("queue", queueName),
 				zap.Error(err))
-			return nil
+			return false
 		}
 		setQueueLimitsFromTags(queue, app)
 	}
@@ -633,12 +613,12 @@ func (pc *PartitionContext) resolveRevivedQueue(app *objects.Application) *objec
 			zap.String("partitionName", pc.Name),
 			zap.String("appID", app.ApplicationID),
 			zap.String("queue", queueName))
-		return nil
+		return false
 	}
 	pc.appQueueMapping.AddAppQueueMapping(app.ApplicationID, queue)
 	app.RestoreQueue(queue)
 	queue.AddApplication(app)
-	return queue
+	return true
 }
 
 // GetQueue returns queue from the structure based on the fully qualified name.
@@ -1928,7 +1908,7 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	// decide to complete in a single step under the application lock so it cannot race the revival.
 	queue, ok := app.DetachQueueForCompletion()
 	if !ok {
-		log.Log(log.SchedPartition).Info("Application was revived before cleanup, not removing it",
+		log.Log(log.SchedPartition).Info("Application is already under regular completion or revival process, not removing it",
 			zap.String("appID", appID),
 			zap.String("app status", app.CurrentState()))
 		return
@@ -1944,11 +1924,12 @@ func (pc *PartitionContext) moveTerminatedApp(appID string) {
 	app.LogAppSummary(pc.RmID)
 	pc.Lock()
 	defer pc.Unlock()
-	// A revival can start the moment the queue is detached above (the shim sees an app with no queue)
-	// and re-attach a queue through restoreAppQueue/ensureAppActive. The revived flag is read lock
-	// free, so it is safe to check while holding the partition lock: leave a revived app active and
-	// let the revival own the active-list entry.
-	if app.IsRevived() {
+	if app.IsReviving() {
+		// Reverse the above Queue detachment and app removal
+		if queue != nil {
+			queue.AddApplication(app)
+			app.RestoreQueue(queue)
+		}
 		log.Log(log.SchedPartition).Info("Application revived during cleanup, leaving it on the active list",
 			zap.String("appID", appID))
 		return

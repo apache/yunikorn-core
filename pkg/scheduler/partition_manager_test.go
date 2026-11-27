@@ -167,7 +167,7 @@ func TestCleanQueuesReviveApplication(t *testing.T) {
 		// completing the application empties the queue so the cleaner can remove it
 		app.SetState(objects.Completed.String())
 		p.moveTerminatedApp(appID)
-		assert.Assert(t, p.reviveCompletedApplication(appID) == app, "application %s should be revived", appID)
+		assert.Assert(t, p.getOrReviveApplication(appID) == app, "application %s should be revived", appID)
 		assert.Assert(t, app.GetQueue() == p.GetQueue(queueName), "application %s revived into a queue that is not in the hierarchy", appID)
 		assert.Assert(t, app.GetQueue().GetApplication(appID) == app, "application %s should be in the queue", appID)
 		// empty the queue again so the cleaner can remove it

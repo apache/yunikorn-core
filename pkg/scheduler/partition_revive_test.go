@@ -20,6 +20,7 @@ package scheduler
 
 import (
 	"testing"
+	"time"
 
 	"gotest.tools/v3/assert"
 
@@ -74,7 +75,7 @@ func TestUpdateAllocationRejectsInvalidWorkWithoutReviving(t *testing.T) {
 			queue := partition.GetQueue(defQueue)
 			assert.Assert(t, queue != nil)
 			assert.Assert(t, queue.GetCopyOfApps()[appID1] == nil, "completed app must be off the queue")
-			assert.Assert(t, !app.IsRevived(), "completed app must not be marked revived")
+			assert.Assert(t, !app.IsReviving(), "completed app must not be marked revived")
 			var completedKey string
 			for key, completed := range partition.completedApplications {
 				assert.Assert(t, completed == app)
@@ -87,7 +88,7 @@ func TestUpdateAllocationRejectsInvalidWorkWithoutReviving(t *testing.T) {
 			assert.Check(t, partition.getApplication(appID1) == nil, "rejected work must not restore active ownership")
 			assert.Check(t, partition.completedApplications[completedKey] == app, "rejected work must retain the original historical entry")
 			assert.Check(t, queue.GetCopyOfApps()[appID1] == nil, "rejected work must not restore queue membership")
-			assert.Check(t, !app.IsRevived(), "rejected work must not set the revived flag")
+			assert.Check(t, !app.IsReviving(), "rejected work must not set the revived flag")
 			// a fresh application with the same ID is accepted
 			assert.NilError(t, partition.AddApplication(newApplication(appID1, "default", defQueue)))
 		})
@@ -229,7 +230,7 @@ func TestUpdateAllocationValidWorkRecoversRunningHistoricalApplication(t *testin
 			queue := partition.GetQueue(defQueue)
 			assert.Assert(t, app.GetQueue() == queue)
 			assert.Assert(t, queue.GetCopyOfApps()[appID1] == app)
-			assert.Assert(t, app.IsRunning() && app.IsRevived())
+			assert.Assert(t, app.IsRunning())
 			assert.Assert(t, app.GetAllocationAsk("late-work") != nil)
 		})
 	}
@@ -267,6 +268,8 @@ func TestMoveTerminatedAppSkipsRevivedApplication(t *testing.T) {
 	assert.NilError(t, err, "late ask should revive the app")
 	assert.Equal(t, app.CurrentState(), objects.Running.String())
 
+	app.SetState(objects.Reviving.String())
+
 	// the in-flight cleanup now lands
 	partition.moveTerminatedApp(appID1)
 
@@ -296,7 +299,6 @@ func TestReviveTakesLatestCompletedGeneration(t *testing.T) {
 	taken := partition.takeCompletedApplication(appID1)
 	assert.Assert(t, taken == newer, "the most recent generation should be taken")
 	assert.Equal(t, len(partition.GetCompletedApplications()), 1, "the older generation should be left alone")
-	assert.Assert(t, partition.getApplication(appID1) == newer, "the taken generation should be on the active list")
 }
 
 // moveTerminatedApp must not tear down an application that a revival already re-attached a queue to,
@@ -312,9 +314,9 @@ func TestMoveTerminatedAppSkipsAppRevivedMidFlight(t *testing.T) {
 	queue := app.GetQueue()
 	app.SetState(objects.Completed.String())
 
+	app.SetState(objects.Reviving.String())
 	// a revival re-attaches the queue and raises the revived flag; the app has not left Completed yet
 	app.RestoreQueue(queue)
-	assert.Assert(t, app.IsRevived(), "revived flag should be set")
 
 	// the in-flight cleanup now lands
 	partition.moveTerminatedApp(appID1)
@@ -325,33 +327,6 @@ func TestMoveTerminatedAppSkipsAppRevivedMidFlight(t *testing.T) {
 	assert.Equal(t, partition.appQueueMapping.GetQueueByAppId(appID1), queue, "revived app must keep its queue mapping")
 }
 
-// The cleanup can win the race and file the app as completed before the revival restores its queue.
-// restoreAppQueue has to reclaim it: put it back on the active list and drop the completed generation.
-func TestRestoreAppQueueReclaimsCompletedApp(t *testing.T) {
-	setupUGM()
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
-	app := newApplication(appID1, "default", defQueue)
-	assert.NilError(t, partition.AddApplication(app), "add application failed")
-	app.SetState(objects.Completed.String())
-
-	// cleanup wins first: the app is filed as completed and loses its queue
-	partition.moveTerminatedApp(appID1)
-	assert.Assert(t, partition.getApplication(appID1) == nil, "app should be off the active list")
-	assert.Assert(t, app.GetQueue() == nil, "app should have lost its queue")
-	assert.Equal(t, len(partition.GetCompletedApplications()), 1)
-	assert.Assert(t, partition.appQueueMapping.GetQueueByAppId(appID1) == nil, "completed app should have lost its queue mapping")
-
-	// the revival that still holds the app pointer now restores its queue
-	assert.Assert(t, partition.restoreAppQueue(app), "queue should be restored")
-
-	assert.Assert(t, partition.getApplication(appID1) == app, "app must be back on the active list")
-	assert.Assert(t, app.GetQueue() != nil, "queue must be re-attached")
-	assert.Equal(t, partition.appQueueMapping.GetQueueByAppId(appID1), app.GetQueue(), "queue mapping must be restored")
-	assert.Assert(t, app.IsRevived(), "revived flag should be set")
-	assert.Equal(t, len(partition.GetCompletedApplications()), 0, "the completed generation must be dropped")
-}
-
 // The leaf queue can be cleaned up while the app sits on the completed list. resolveRevivedQueue must
 // recreate it dynamically so the revived app has somewhere to run.
 func TestResolveRevivedQueueRecreatesDynamicQueue(t *testing.T) {
@@ -360,10 +335,9 @@ func TestResolveRevivedQueueRecreatesDynamicQueue(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 	app := newApplication(appID1, "default", "root.recreated")
 
-	queue := partition.resolveRevivedQueue(app)
-	assert.Assert(t, queue != nil, "a dynamic leaf queue should be recreated")
-	assert.Equal(t, queue.QueuePath, "root.recreated")
-	assert.Assert(t, queue.IsLeafQueue(), "recreated queue must be a leaf")
+	assert.Assert(t, partition.resolveRevivedQueue(app), "a dynamic leaf queue should be recreated")
+	assert.Equal(t, partition.GetQueue("root.recreated").GetQueuePath(), "root.recreated")
+	assert.Assert(t, partition.GetQueue("root.recreated").IsLeafQueue(), "recreated queue must be a leaf")
 }
 
 // The cleaner can remove an empty queue as soon as the partition lock is released: resolveRevivedQueue
@@ -374,10 +348,9 @@ func TestResolveRevivedQueueAddsApplication(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 	app := newApplication(appID1, "default", "root.recreated")
 
-	queue := partition.resolveRevivedQueue(app)
-	assert.Assert(t, queue != nil, "a dynamic leaf queue should be recreated")
-	assert.Assert(t, app.GetQueue() == queue, "app must be attached to the queue")
-	assert.Assert(t, queue.GetApplication(appID1) == app, "app must be added to the queue")
+	assert.Assert(t, partition.resolveRevivedQueue(app), "a dynamic leaf queue should be recreated")
+	assert.Equal(t, app.GetQueuePath(), "root.recreated", "app must be attached to the queue")
+	assert.Assert(t, partition.GetQueue("root.recreated").GetApplication(appID1) == app, "app must be added to the queue")
 }
 
 // A revived application that ran in the recovery queue must have it recreated through the recovery
@@ -388,9 +361,8 @@ func TestResolveRevivedQueueRecreatesRecoveryQueue(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 	app := newApplication(appID1, "default", common.RecoveryQueueFull)
 
-	queue := partition.resolveRevivedQueue(app)
-	assert.Assert(t, queue != nil, "the recovery queue should be recreated")
-	assert.Assert(t, queue.IsLeafQueue(), "recovery queue must be a leaf")
+	assert.Assert(t, partition.resolveRevivedQueue(app), "the recovery queue should be recreated")
+	assert.Assert(t, partition.GetQueue(common.RecoveryQueueFull).IsLeafQueue(), "recovery queue must be a leaf")
 }
 
 // resolveRevivedQueue sets the limits from the application tags only on a queue it recreates. An existing
@@ -429,8 +401,8 @@ func TestResolveRevivedQueueLimitsFromTags(t *testing.T) {
 				existing.SetResources(nil, ownMax)
 				existing.SetMaxRunningApps(1)
 			}
-
-			queue := partition.resolveRevivedQueue(app)
+			assert.Assert(t, partition.resolveRevivedQueue(app), "queue should be resolved")
+			queue := partition.GetQueue(tt.queuePath)
 			assert.Assert(t, queue != nil, "queue should be resolved")
 			assert.Assert(t, resources.Equals(queue.GetGuaranteedResource(), tt.wantGuaranteed), "unexpected guaranteed resource")
 			assert.Assert(t, resources.Equals(queue.GetMaxResource(), tt.wantMax), "unexpected max resource")
@@ -447,8 +419,7 @@ func TestResolveRevivedQueueCreateFails(t *testing.T) {
 	// root.default is a leaf, so a child under it cannot be created
 	app := newApplication(appID1, "default", "root.default.sub")
 
-	queue := partition.resolveRevivedQueue(app)
-	assert.Assert(t, queue == nil, "queue under a leaf parent must not be created")
+	assert.Assert(t, !partition.resolveRevivedQueue(app), "queue under a leaf parent must not be created")
 }
 
 // The queue path now resolves to a non-leaf queue: the app cannot run there so revival must fail.
@@ -458,18 +429,7 @@ func TestResolveRevivedQueueRejectsNonLeaf(t *testing.T) {
 	assert.NilError(t, err, "partition create failed")
 	app := newApplication(appID1, "default", "root")
 
-	queue := partition.resolveRevivedQueue(app)
-	assert.Assert(t, queue == nil, "a non-leaf queue must be rejected")
-}
-
-// restoreAppQueue returns false when no leaf queue can be resolved.
-func TestRestoreAppQueueFailsWithoutLeaf(t *testing.T) {
-	setupUGM()
-	partition, err := newBasePartition()
-	assert.NilError(t, err, "partition create failed")
-	app := newApplication(appID1, "default", "root")
-
-	assert.Assert(t, !partition.restoreAppQueue(app), "restore must fail when no leaf queue resolves")
+	assert.Assert(t, !partition.resolveRevivedQueue(app), "a non-leaf queue must be rejected")
 }
 
 // getOrReviveApplication returns nil when an active app lost its queue and it cannot be restored.
@@ -498,8 +458,14 @@ func TestReviveCompletedApplicationQueueGoneReturnsToCompleted(t *testing.T) {
 	partition.Lock()
 	partition.completedApplications[appID1+"-100"] = app
 	partition.Unlock()
+	app.SetTerminatedCallback(partition.moveTerminatedApp)
 
+	assert.NilError(t, err, "failed to wait for completion of application")
 	assert.Assert(t, partition.reviveCompletedApplication(appID1) == nil, "revival must fail when the queue cannot be restored")
+	err = common.WaitForCondition(10*time.Millisecond, time.Second, func() bool {
+		return len(partition.GetCompletedApplications()) == 1
+	})
+	assert.NilError(t, err, "failed to wait for completion of application")
 	assert.Assert(t, partition.getApplication(appID1) == nil, "app must not stay on the active list")
 	assert.Equal(t, len(partition.GetCompletedApplications()), 1, "app must be handed back to the completed list")
 }

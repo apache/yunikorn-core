@@ -3544,3 +3544,245 @@ func TestPreemptor_hasPreemptionShortfall(t *testing.T) {
 		})
 	}
 }
+
+//nolint:funlen // Table-driven test cases co-located for preemption guaranteed floor scenarios.
+func TestTryPreemption_VictimQueueGuaranteedFloorViolation(t *testing.T) {
+	testCases := []struct {
+		name                 string
+		nodeResource         map[string]resources.Quantity
+		rootMax              map[string]string
+		parentMax            map[string]string
+		parentGuaranteed     map[string]string
+		child1Guaranteed     map[string]string
+		child2Guaranteed     map[string]string
+		victimResources      []map[string]resources.Quantity
+		askResource          map[string]resources.Quantity
+		expectedCalcIndex    int
+		expectedCalcVictims  []string
+		expectedPreemptOk    bool
+		expectedPreemptedKey string
+	}{
+		{
+			name:                 "all candidate victims exceed preemptable quota",
+			nodeResource:         map[string]resources.Quantity{"first": 14, "second": 2},
+			rootMax:              map[string]string{"first": "14", "second": "2"},
+			parentMax:            map[string]string{"first": "14", "second": "2"},
+			parentGuaranteed:     nil,
+			child1Guaranteed:     map[string]string{"first": "10"},
+			child2Guaranteed:     map[string]string{"first": "4", "second": "2"},
+			victimResources:      []map[string]resources.Quantity{{"first": 6}, {"first": 6}},
+			askResource:          map[string]resources.Quantity{"first": 4},
+			expectedCalcIndex:    -1,
+			expectedCalcVictims:  nil,
+			expectedPreemptOk:    false,
+			expectedPreemptedKey: "",
+		},
+		{
+			name:                 "oversized victims skipped in first pass to select smaller fitting victim",
+			nodeResource:         map[string]resources.Quantity{"first": 14, "second": 2},
+			rootMax:              map[string]string{"first": "14", "second": "2"},
+			parentMax:            map[string]string{"first": "14", "second": "2"},
+			parentGuaranteed:     nil,
+			child1Guaranteed:     map[string]string{"first": "10"},
+			child2Guaranteed:     map[string]string{"first": "4", "second": "2"},
+			victimResources:      []map[string]resources.Quantity{{"first": 6}, {"first": 4}, {"first": 2, "second": 2}},
+			askResource:          map[string]resources.Quantity{"first": 4},
+			expectedCalcIndex:    0,
+			expectedCalcVictims:  []string{"alloc-3"},
+			expectedPreemptOk:    true,
+			expectedPreemptedKey: "alloc-3",
+		},
+		{
+			name:                 "second pass filters tail victim exceeding remaining preemptable quota",
+			nodeResource:         map[string]resources.Quantity{"first": 14, "second": 2},
+			rootMax:              map[string]string{"first": "14", "second": "2"},
+			parentMax:            map[string]string{"first": "14", "second": "2"},
+			parentGuaranteed:     nil,
+			child1Guaranteed:     map[string]string{"first": "6"},
+			child2Guaranteed:     map[string]string{"first": "8", "second": "2"},
+			victimResources:      []map[string]resources.Quantity{{"first": 6}, {"first": 4}, {"first": 2, "second": 2}},
+			askResource:          map[string]resources.Quantity{"first": 2, "second": 2},
+			expectedCalcIndex:    0,
+			expectedCalcVictims:  []string{"alloc-3", "alloc-2"},
+			expectedPreemptOk:    true,
+			expectedPreemptedKey: "alloc-3",
+		},
+		{
+			name:                 "non-ask resource dimension protected from dropping below guaranteed floor",
+			nodeResource:         map[string]resources.Quantity{"first": 12, "second": 12},
+			rootMax:              map[string]string{"first": "20", "second": "20"},
+			parentMax:            map[string]string{"first": "20", "second": "20"},
+			parentGuaranteed:     nil,
+			child1Guaranteed:     map[string]string{"first": "10", "second": "10"},
+			child2Guaranteed:     map[string]string{"first": "10"},
+			victimResources:      []map[string]resources.Quantity{{"first": 10, "second": 9}, {"first": 2, "second": 3}},
+			askResource:          map[string]resources.Quantity{"first": 2},
+			expectedCalcIndex:    -1,
+			expectedCalcVictims:  nil,
+			expectedPreemptOk:    false,
+			expectedPreemptedKey: "",
+		},
+		{
+			name:                 "under-guaranteed non-ask dimension does not block over-guaranteed ask dimension reclaim",
+			nodeResource:         map[string]resources.Quantity{"first": 14, "second": 2},
+			rootMax:              map[string]string{"first": "30", "second": "30"},
+			parentMax:            map[string]string{"first": "30", "second": "30"},
+			parentGuaranteed:     nil,
+			child1Guaranteed:     map[string]string{"first": "10", "second": "20"},
+			child2Guaranteed:     map[string]string{"first": "10"},
+			victimResources:      []map[string]resources.Quantity{{"first": 10}, {"first": 4, "second": 2}},
+			askResource:          map[string]resources.Quantity{"first": 4},
+			expectedCalcIndex:    0,
+			expectedCalcVictims:  []string{"alloc-2"},
+			expectedPreemptOk:    true,
+			expectedPreemptedKey: "alloc-2",
+		},
+		{
+			name:                 "parent queue guaranteed floor violation rejected",
+			nodeResource:         map[string]resources.Quantity{"first": 26},
+			rootMax:              map[string]string{"first": "30"},
+			parentMax:            map[string]string{"first": "30"},
+			parentGuaranteed:     map[string]string{"first": "20"},
+			child1Guaranteed:     nil,
+			child2Guaranteed:     nil,
+			victimResources:      []map[string]resources.Quantity{{"first": 18}, {"first": 8}},
+			askResource:          map[string]resources.Quantity{"first": 4},
+			expectedCalcIndex:    -1,
+			expectedCalcVictims:  nil,
+			expectedPreemptOk:    false,
+			expectedPreemptedKey: "",
+		},
+		{
+			name:                 "shared ancestor with guaranteed ask queue exempt from parent floor",
+			nodeResource:         map[string]resources.Quantity{"first": 6},
+			rootMax:              map[string]string{"first": "30"},
+			parentMax:            map[string]string{"first": "30"},
+			parentGuaranteed:     map[string]string{"first": "20"},
+			child1Guaranteed:     nil,
+			child2Guaranteed:     map[string]string{"first": "4"},
+			victimResources:      []map[string]resources.Quantity{{"first": 6}},
+			askResource:          map[string]resources.Quantity{"first": 4},
+			expectedCalcIndex:    0,
+			expectedCalcVictims:  []string{"alloc-1"},
+			expectedPreemptOk:    true,
+			expectedPreemptedKey: "alloc-1",
+		},
+		{
+			name:                 "shared ancestor without guaranteed ask queue enforces parent floor",
+			nodeResource:         map[string]resources.Quantity{"first": 6},
+			rootMax:              map[string]string{"first": "30"},
+			parentMax:            map[string]string{"first": "30"},
+			parentGuaranteed:     map[string]string{"first": "20"},
+			child1Guaranteed:     nil,
+			child2Guaranteed:     nil,
+			victimResources:      []map[string]resources.Quantity{{"first": 6}},
+			askResource:          map[string]resources.Quantity{"first": 4},
+			expectedCalcIndex:    -1,
+			expectedCalcVictims:  nil,
+			expectedPreemptOk:    false,
+			expectedPreemptedKey: "",
+		},
+		{
+			name:                 "unguaranteed resource type with positive usage reclaimed",
+			nodeResource:         map[string]resources.Quantity{"first": 12, "third": 2},
+			rootMax:              map[string]string{"first": "20", "third": "10"},
+			parentMax:            map[string]string{"first": "20", "third": "10"},
+			parentGuaranteed:     nil,
+			child1Guaranteed:     map[string]string{"first": "10"},
+			child2Guaranteed:     map[string]string{"first": "4"},
+			victimResources:      []map[string]resources.Quantity{{"first": 12}, {"third": 2}},
+			askResource:          map[string]resources.Quantity{"third": 2},
+			expectedCalcIndex:    0,
+			expectedCalcVictims:  []string{"alloc-2"},
+			expectedPreemptOk:    true,
+			expectedPreemptedKey: "alloc-2",
+		},
+		{
+			name:                 "unguaranteed resource type ignores victim touching guaranteed floor",
+			nodeResource:         map[string]resources.Quantity{"first": 16, "third": 1},
+			rootMax:              map[string]string{"first": "20", "third": "10"},
+			parentMax:            map[string]string{"first": "20", "third": "10"},
+			parentGuaranteed:     nil,
+			child1Guaranteed:     map[string]string{"first": "12"},
+			child2Guaranteed:     map[string]string{"first": "4"},
+			victimResources:      []map[string]resources.Quantity{{"first": 10}, {"first": 6, "third": 1}},
+			askResource:          map[string]resources.Quantity{"third": 1},
+			expectedCalcIndex:    -1,
+			expectedCalcVictims:  nil,
+			expectedPreemptOk:    false,
+			expectedPreemptedKey: "",
+		},
+		{
+			name:                 "insufficient head victims leave ask unmet and return nil",
+			nodeResource:         map[string]resources.Quantity{"first": 12},
+			rootMax:              map[string]string{"first": "20"},
+			parentMax:            map[string]string{"first": "20"},
+			parentGuaranteed:     nil,
+			child1Guaranteed:     map[string]string{"first": "10"},
+			child2Guaranteed:     map[string]string{"first": "4"},
+			victimResources:      []map[string]resources.Quantity{{"first": 10}, {"first": 2}},
+			askResource:          map[string]resources.Quantity{"first": 4},
+			expectedCalcIndex:    -1,
+			expectedCalcVictims:  nil,
+			expectedPreemptOk:    false,
+			expectedPreemptedKey: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			appQueueMapping := NewAppQueueMapping()
+			node1 := newNode(nodeID1, tc.nodeResource)
+			iterator := getNodeIteratorFn(node1)
+			rootQ, err := createRootQueue(tc.rootMax)
+			assert.NilError(t, err)
+			parentQ, err := createManagedQueueGuaranteed(rootQ, "parent", true, tc.parentMax, tc.parentGuaranteed, appQueueMapping)
+			assert.NilError(t, err)
+			childQ1, err := createManagedQueueGuaranteed(parentQ, "child1", false, tc.parentMax, tc.child1Guaranteed, appQueueMapping)
+			assert.NilError(t, err)
+			childQ2, err := createManagedQueueGuaranteed(parentQ, "child2", false, tc.parentMax, tc.child2Guaranteed, appQueueMapping)
+			assert.NilError(t, err)
+
+			app1 := newApplication(appID1, "default", "root.parent.child1")
+			app1.SetQueue(childQ1)
+			childQ1.AddApplication(app1)
+			appQueueMapping.AddAppQueueMapping(app1.ApplicationID, childQ1)
+
+			allocs := make([]*Allocation, 0, len(tc.victimResources))
+			for i, resMap := range tc.victimResources {
+				key := fmt.Sprintf("alloc-%d", i+1)
+				res := resources.NewResourceFromMap(resMap)
+				ask := newAllocationAsk(key, appID1, res)
+				ask.createTime = time.Now().Add(-time.Duration(i+1) * time.Hour)
+				assert.NilError(t, app1.AddAllocationAsk(ask))
+				alloc := newAllocationWithKey(key, appID1, nodeID1, res)
+				alloc.createTime = ask.createTime
+				assert.NilError(t, app1.AddAllocation(alloc))
+				assert.Check(t, node1.TryAddAllocation(alloc), "node1 alloc failed")
+				assert.NilError(t, childQ1.TryIncAllocatedResource(res))
+				allocs = append(allocs, alloc)
+			}
+
+			app2, preemptorAsk, err := creatApp2(childQ2, tc.askResource, "preemptor", appQueueMapping)
+			assert.NilError(t, err)
+			headRoom := childQ2.getHeadRoom()
+
+			calcPreemptor := NewPreemptor(app2, headRoom, 30*time.Second, preemptorAsk, iterator(), false)
+			calcPreemptor.initWorkingState()
+			calcIndex, calcVictims := calcPreemptor.calculateVictimsByNode(node1.GetAvailableResource(), allocs)
+			assert.Equal(t, tc.expectedCalcIndex, calcIndex)
+			assert.Equal(t, len(tc.expectedCalcVictims), len(calcVictims))
+			for i, expectedKey := range tc.expectedCalcVictims {
+				assert.Equal(t, expectedKey, calcVictims[i].GetAllocationKey())
+			}
+
+			preemptor := NewPreemptor(app2, headRoom, 30*time.Second, preemptorAsk, iterator(), false)
+			result, ok := preemptor.TryPreemption()
+			assert.Equal(t, tc.expectedPreemptOk, ok)
+			assert.Equal(t, tc.expectedPreemptOk, result != nil)
+			for _, alloc := range allocs {
+				assert.Equal(t, alloc.GetAllocationKey() == tc.expectedPreemptedKey, alloc.IsPreempted())
+			}
+		})
+	}
+}

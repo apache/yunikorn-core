@@ -455,3 +455,208 @@ func getPreemptableResource(rootQ *Queue, parentQ *Queue, childQ1 *Queue, childQ
 	cRemaining2 := qpsChild2.GetPreemptableResource()
 	return rootRemaining, pRemaining, cRemaining1, cRemaining2
 }
+
+//nolint:funlen // Table-driven test cases co-located for canPreemptAllocation scenarios.
+func TestCanPreemptAllocation(t *testing.T) {
+	var nilQPS *QueuePreemptionSnapshot
+
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
+	rootQ.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20})
+	parentQ.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	childQ1.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10, "fourth": 10})
+	childQ2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4})
+
+	rootQ.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20, "third": 2, "fourth": 4})
+	parentQ.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20, "third": 2, "fourth": 4})
+	childQ1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12, "third": 2, "fourth": 4})
+	childQ2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})
+
+	qpsRoot, qpsParent, qpsChild1, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2, childQ2)
+	assert.Assert(t, qpsRoot != nil && qpsParent != nil && qpsChild1 != nil && qpsChild2 != nil)
+
+	qpsChild1WithPreempting := qpsChild1.Duplicate(make(map[string]*QueuePreemptionSnapshot))
+	qpsChild1WithPreempting.PreemptingResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1})
+
+	qpsChild1NoAskGuarantee := qpsChild1.Duplicate(make(map[string]*QueuePreemptionSnapshot))
+	qpsChild1NoAskGuarantee.AskQueue = &QueuePreemptionSnapshot{QueuePath: childQ2.QueuePath}
+
+	exemptTests := []struct {
+		name     string
+		qps      *QueuePreemptionSnapshot
+		ancestor *QueuePreemptionSnapshot
+		expected bool
+	}{
+		{name: "nil ask queue", qps: &QueuePreemptionSnapshot{}, ancestor: qpsParent, expected: false},
+		{name: "empty ask queue guaranteed", qps: &QueuePreemptionSnapshot{AskQueue: &QueuePreemptionSnapshot{GuaranteedResource: resources.NewResource()}}, ancestor: qpsParent, expected: false},
+		{name: "ask queue parent exempt", qps: qpsChild1, ancestor: qpsParent, expected: true},
+		{name: "ask queue root exempt", qps: qpsChild1, ancestor: qpsRoot, expected: true},
+		{name: "non-ancestor sibling not exempt", qps: qpsChild1, ancestor: qpsChild1, expected: false},
+	}
+	for _, tc := range exemptTests {
+		t.Run("isExemptAncestor/"+tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, tc.qps.isExemptAncestor(tc.ancestor))
+		})
+	}
+
+	preemptTests := []struct {
+		name     string
+		qps      *QueuePreemptionSnapshot
+		victim   *resources.Resource
+		ask      *resources.Resource
+		expected bool
+	}{
+		{
+			name:     "nil snapshot",
+			qps:      nilQPS,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			expected: false,
+		},
+		{
+			name:     "safe and helpful within excess",
+			qps:      qpsChild1,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}),
+			expected: true,
+		},
+		{
+			name:     "unhelpful ask resource mismatch",
+			qps:      qpsChild1,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"second": 2}),
+			expected: false,
+		},
+		{
+			name:     "unhelpful victim lacks ask resource",
+			qps:      qpsChild1,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"third": 1}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			expected: false,
+		},
+		{
+			name:     "helpful unguaranteed positive usage",
+			qps:      qpsChild1,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"third": 1}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"third": 1}),
+			expected: true,
+		},
+		{
+			name:     "unsafe exceeds guaranteed floor",
+			qps:      qpsChild1,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"first": 3}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			expected: false,
+		},
+		{
+			name:     "unreclaimable below guaranteed floor",
+			qps:      qpsChild1,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"fourth": 1}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"fourth": 1}),
+			expected: false,
+		},
+		{
+			name:     "preempting resource reduces available excess",
+			qps:      qpsChild1WithPreempting,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			expected: false,
+		},
+		{
+			name:     "preempting resource still allows remaining excess",
+			qps:      qpsChild1WithPreempting,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			expected: true,
+		},
+		{
+			name:     "non-exempt ancestor at guaranteed floor blocks victim",
+			qps:      qpsChild1NoAskGuarantee,
+			victim:   resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			ask:      resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}),
+			expected: false,
+		},
+	}
+	for _, tc := range preemptTests {
+		t.Run("canPreemptAllocation/"+tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, tc.qps.canPreemptAllocation(tc.victim, tc.ask))
+		})
+	}
+}
+
+func TestCanPreemptVictimLookup(t *testing.T) {
+	rootQ, parentQ, childQ1, childQ2 := setupQueueStructure(t)
+	rootQ.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 20})
+	childQ1.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 10})
+	childQ2.guaranteedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4})
+
+	childQ1.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 12})
+	childQ2.allocatedResource = resources.NewResourceFromMap(map[string]resources.Quantity{"first": 8})
+
+	qpsRoot, qpsParent, qpsChild1, qpsChild2 := createQPSCache(rootQ, parentQ, childQ1, childQ2, childQ2)
+	assert.Assert(t, qpsRoot != nil && qpsParent != nil && qpsChild1 != nil && qpsChild2 != nil)
+
+	ask := newAllocationAsk("ask1", appID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+	alloc := newAllocationWithKey("alloc1", appID1, nodeID1, resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2}))
+
+	tests := []struct {
+		name         string
+		queueByAlloc map[string]*QueuePreemptionSnapshot
+		snapMap      map[string]*QueuePreemptionSnapshot
+		expectedSnap *QueuePreemptionSnapshot
+		expectedOk   bool
+	}{
+		{
+			name:         "missing alloc in queueByAlloc",
+			queueByAlloc: make(map[string]*QueuePreemptionSnapshot),
+			snapMap:      map[string]*QueuePreemptionSnapshot{childQ1.QueuePath: qpsChild1},
+			expectedSnap: nil,
+			expectedOk:   false,
+		},
+		{
+			name:         "missing queuePath in snapshot map",
+			queueByAlloc: map[string]*QueuePreemptionSnapshot{alloc.GetAllocationKey(): qpsChild1},
+			snapMap:      make(map[string]*QueuePreemptionSnapshot),
+			expectedSnap: nil,
+			expectedOk:   false,
+		},
+		{
+			name:         "present in both maps and valid",
+			queueByAlloc: map[string]*QueuePreemptionSnapshot{alloc.GetAllocationKey(): qpsChild1},
+			snapMap:      map[string]*QueuePreemptionSnapshot{childQ1.QueuePath: qpsChild1},
+			expectedSnap: qpsChild1,
+			expectedOk:   true,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			preemptor := &Preemptor{
+				ask:          ask,
+				queueByAlloc: tc.queueByAlloc,
+			}
+			snap, ok := preemptor.canPreemptVictim(tc.snapMap, alloc, ask.GetAllocatedResource())
+			assert.Equal(t, tc.expectedSnap, snap)
+			assert.Equal(t, tc.expectedOk, ok)
+		})
+	}
+}
+
+func TestReducesNodeShortfall(t *testing.T) {
+	ask := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 4, "second": 2})
+	avail := resources.NewResourceFromMap(map[string]resources.Quantity{"first": 2, "second": 2})
+
+	tests := []struct {
+		name     string
+		ask      *resources.Resource
+		victim   *resources.Resource
+		expected bool
+	}{
+		{name: "frees resource in shortfall", ask: ask, victim: resources.NewResourceFromMap(map[string]resources.Quantity{"first": 1}), expected: true},
+		{name: "frees already satisfied resource", ask: ask, victim: resources.NewResourceFromMap(map[string]resources.Quantity{"second": 1}), expected: false},
+		{name: "frees unrelated resource", ask: ask, victim: resources.NewResourceFromMap(map[string]resources.Quantity{"third": 1}), expected: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.expected, reducesNodeShortfall(tc.ask, avail, tc.victim))
+		})
+	}
+}

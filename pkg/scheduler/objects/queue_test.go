@@ -3210,7 +3210,7 @@ func TestTemplateIsNotOverrideByParent(t *testing.T) {
 	assert.Assert(t, !reflect.DeepEqual(leaf.template, parent.template))
 }
 
-func TestInheritTemplate(t *testing.T) {
+func TestApplyConfChildTemplate(t *testing.T) {
 	templateConf := func(maxApps uint64) configs.ChildTemplate {
 		return configs.ChildTemplate{MaxApplications: maxApps}
 	}
@@ -3233,25 +3233,30 @@ func TestInheritTemplate(t *testing.T) {
 	// a new template on root: the managed parent below root is not changed until its own config is applied
 	_, err = root.ApplyConf(configs.QueueConfig{Parent: true, ChildTemplate: templateConf(2)})
 	assert.NilError(t, err, "root applyConf failed")
-	root.InheritTemplate()
 	assert.Equal(t, root.getTemplate().GetMaxApplications(), uint64(2), "root should use its own template")
 	assert.Equal(t, parent.getTemplate().GetMaxApplications(), uint64(1), "managed parent should not be changed by root")
 
 	// no template in the parent config: inherit from root and set it on the dynamic parents
 	_, err = parent.ApplyConf(configs.QueueConfig{Parent: true})
 	assert.NilError(t, err, "parent applyConf failed")
-	assert.Assert(t, parent.getTemplate() == nil, "applyConf should clear the inherited template")
-	parent.InheritTemplate()
 	assert.Equal(t, parent.getTemplate(), root.getTemplate(), "parent should inherit the template from root")
+	parent.UpdateDynamicChildTemplates()
 	assert.Equal(t, dynamicParent.getTemplate(), root.getTemplate(), "dynamic parent should get the inherited template")
 	assert.Equal(t, dynamicChild.getTemplate(), root.getTemplate(), "nested dynamic parent should get the inherited template")
 	assert.Assert(t, leaf.getTemplate() == nil, "managed leaf should not get a template")
 	assert.Assert(t, dynamicLeaf.getTemplate() == nil, "dynamic leaf should not get a template")
 
+	// a new template on root: an inherited template must not be kept
+	_, err = root.ApplyConf(configs.QueueConfig{Parent: true, ChildTemplate: templateConf(4)})
+	assert.NilError(t, err, "root applyConf failed")
+	_, err = parent.ApplyConf(configs.QueueConfig{Parent: true})
+	assert.NilError(t, err, "parent applyConf failed")
+	assert.Equal(t, parent.getTemplate().GetMaxApplications(), uint64(4), "parent should inherit the new template from root")
+
 	// own template in the parent config: keep it and set it on the dynamic parents
 	_, err = parent.ApplyConf(configs.QueueConfig{Parent: true, ChildTemplate: templateConf(3)})
 	assert.NilError(t, err, "parent applyConf failed")
-	parent.InheritTemplate()
+	parent.UpdateDynamicChildTemplates()
 	assert.Equal(t, parent.getTemplate().GetMaxApplications(), uint64(3), "parent should use its own template")
 	assert.Equal(t, dynamicParent.getTemplate(), parent.getTemplate(), "dynamic parent should get the parent template")
 	assert.Equal(t, dynamicChild.getTemplate(), parent.getTemplate(), "nested dynamic parent should get the parent template")
@@ -3259,10 +3264,9 @@ func TestInheritTemplate(t *testing.T) {
 	// no template anywhere: the dynamic parents are cleared
 	_, err = root.ApplyConf(configs.QueueConfig{Parent: true})
 	assert.NilError(t, err, "root applyConf failed")
-	root.InheritTemplate()
 	_, err = parent.ApplyConf(configs.QueueConfig{Parent: true})
 	assert.NilError(t, err, "parent applyConf failed")
-	parent.InheritTemplate()
+	parent.UpdateDynamicChildTemplates()
 	assert.Assert(t, parent.getTemplate() == nil, "parent should not have a template")
 	assert.Assert(t, dynamicParent.getTemplate() == nil, "dynamic parent should not have a template")
 	assert.Assert(t, dynamicChild.getTemplate() == nil, "nested dynamic parent should not have a template")

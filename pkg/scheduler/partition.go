@@ -206,7 +206,7 @@ func (pc *PartitionContext) updatePartitionDetails(conf configs.PartitionConfig)
 	if _, err = root.ApplyConf(queueConf); err != nil {
 		return err
 	}
-	root.InheritTemplate()
+	root.UpdateDynamicChildTemplates()
 	root.UpdateQueueProperties(nil)
 	// update the rest of the queues recursively
 	if err = pc.updateQueues(queueConf.Queues, root); err != nil {
@@ -259,8 +259,8 @@ func (pc *PartitionContext) updateQueues(config []configs.QueueConfig, parent *o
 				// ApplyConf sets sq.properties to only this queue's config properties; merge uses
 				// those properties directly instead of passing config again.
 				queue.MergeParentProperties()
-				// ApplyConf also sets the child template to only this queue's config template
-				queue.InheritTemplate()
+				// dynamic parent queues are not in the config and must follow the child template of this queue
+				queue.UpdateDynamicChildTemplates()
 			}
 		}
 		if err != nil {

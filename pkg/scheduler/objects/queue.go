@@ -347,11 +347,21 @@ func unschedulableAskBackoff(value string) (uint64, error) {
 	return intValue, nil
 }
 
-// ApplyConf is the locked version of applyConf
+// ApplyConf is the locked version of applyConf.
+// Mirroring addChildQueue, a parent queue without a child template in its config uses the template of its parent.
 func (sq *Queue) ApplyConf(conf configs.QueueConfig) (*resources.Resource, error) {
+	var parentTemplate *template.Template
+	if sq.parent != nil {
+		// get the parent template outside of the lock to avoid potential deadlocks with parent queue lock
+		parentTemplate = sq.parent.getTemplate()
+	}
 	sq.Lock()
 	defer sq.Unlock()
-	return sq.applyConf(conf, false)
+	oldMax, err := sq.applyConf(conf, false)
+	if err == nil && !sq.isLeaf && sq.template == nil {
+		sq.template = parentTemplate
+	}
+	return oldMax, err
 }
 
 // applyConf applies all the properties to the queue from the config.
@@ -674,6 +684,36 @@ func (sq *Queue) setTemplate(conf configs.ChildTemplate) error {
 	}
 	sq.template = t
 	return nil
+}
+
+// getTemplate returns the child template of the queue. Lock protected.
+func (sq *Queue) getTemplate() *template.Template {
+	sq.RLock()
+	defer sq.RUnlock()
+	return sq.template
+}
+
+// UpdateDynamicChildTemplates sets the child template of this queue on the dynamic parent queues below it.
+// Dynamic parent queues are not updated by a config reload and always use the template of their parent.
+// Existing dynamic leaf queues keep the values the template gave them when they were created. Lock protected.
+func (sq *Queue) UpdateDynamicChildTemplates() {
+	sq.setDynamicChildTemplates(sq.getTemplate())
+}
+
+// setDynamicChildTemplates sets the child template on the dynamic parent queues below this queue.
+// Lock protected, recursive.
+func (sq *Queue) setDynamicChildTemplates(t *template.Template) {
+	for _, child := range sq.GetCopyOfChildren() {
+		child.Lock()
+		dynamicParent := !child.isManaged && !child.isLeaf
+		if dynamicParent {
+			child.template = t
+		}
+		child.Unlock()
+		if dynamicParent {
+			child.setDynamicChildTemplates(t)
+		}
+	}
 }
 
 // resetProperties resets values derived from queue properties to their defaults.
